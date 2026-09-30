@@ -415,6 +415,77 @@ test_publish_rejects_bad_arguments() {
   [ -z "$(git -C "$remote" for-each-ref)" ] || die "remote changed"
 }
 
+# ---------- require-on-main.sh ----------
+# A tagged commit may only be published if it is on main.
+
+REQUIRE="$HERE/require-on-main.sh"
+
+# A repo with main (two commits) and an unmerged side branch.
+make_history_repo() {
+  local d
+  d="$(mktemp -d "$WORK/hist.XXXXXX")"
+  git init -q -b main "$d"
+  gc() { git -C "$d" -c user.name=test -c user.email=test@example.invalid -c commit.gpgsign=false "$@"; }
+  echo 1 >"$d/f"; gc add f; gc commit -qm one
+  echo 2 >"$d/f"; gc commit -qam two
+  gc checkout -q -b side
+  echo 3 >"$d/f"; gc commit -qam unmerged
+  gc checkout -q main
+  echo "$d"
+}
+
+test_on_main_commit_on_main_accepted() {
+  local d; d="$(make_history_repo)"
+  bash "$REQUIRE" "$d" "$(git -C "$d" rev-parse main)" main >/dev/null || die "tip of main rejected"
+  bash "$REQUIRE" "$d" "$(git -C "$d" rev-parse main~1)" main >/dev/null || die "older main commit rejected"
+}
+
+test_on_main_unmerged_commit_rejected() {
+  local d; d="$(make_history_repo)"
+  if bash "$REQUIRE" "$d" "$(git -C "$d" rev-parse side)" main 2>"$WORK/rerr" >/dev/null; then
+    die "unmerged commit accepted"
+  fi
+  grep -qF "is not on main" "$WORK/rerr" || { cat "$WORK/rerr" >&2; die "bad message"; }
+}
+
+test_on_main_unknown_commit_rejected() {
+  local d; d="$(make_history_repo)"
+  if bash "$REQUIRE" "$d" "$SHA" main 2>"$WORK/rerr" >/dev/null; then
+    die "unknown commit accepted"
+  fi
+  grep -qF "not found" "$WORK/rerr" || { cat "$WORK/rerr" >&2; die "bad message"; }
+}
+
+test_on_main_missing_ref_rejected() {
+  local d; d="$(make_history_repo)"
+  if bash "$REQUIRE" "$d" "$(git -C "$d" rev-parse main)" origin/main 2>"$WORK/rerr" >/dev/null; then
+    die "missing ref accepted"
+  fi
+  grep -qF "ref origin/main not found" "$WORK/rerr" || { cat "$WORK/rerr" >&2; die "bad message"; }
+}
+
+test_on_main_bad_arguments_rejected() {
+  local d; d="$(make_history_repo)"
+  ! bash "$REQUIRE" "$d" abc main 2>/dev/null || die "bad commit accepted"
+  ! bash "$REQUIRE" "$d" "$(git -C "$d" rev-parse main)" 2>/dev/null || die "missing arg accepted"
+  ! bash "$REQUIRE" "$WORK/nope" "$SHA" main 2>/dev/null || die "missing repo accepted"
+}
+
+test_workflow_publish_requires_commit_on_main() {
+  # The publish job must run the check against origin/main with full
+  # history, before building or publishing.
+  local wf="$REPO/.github/workflows/bootstrapper.yml"
+  grep -qF 'fetch-depth: 0' "$wf" || die "publish checkout lacks fetch-depth: 0"
+  grep -qE 'bootstrap/require-on-main\.sh .*origin/main' "$wf" || die "publish does not run require-on-main.sh against origin/main"
+  awk '/require-on-main\.sh/ { c = NR } /bootstrap\/publish\.sh/ { p = NR } END { exit !(c && p && c < p) }' "$wf" \
+    || die "on-main check does not come before publish.sh"
+}
+
+test_workflow_test_job_named_bootstrapper_test() {
+  grep -qE '^  bootstrapper-test:' "$REPO/.github/workflows/bootstrapper.yml" || die "no bootstrapper-test job"
+  grep -qE 'needs: bootstrapper-test' "$REPO/.github/workflows/bootstrapper.yml" || die "publish does not need bootstrapper-test"
+}
+
 # ---------- run ----------
 
 TESTS=$(declare -F | awk '{print $3}' | grep '^test_')
