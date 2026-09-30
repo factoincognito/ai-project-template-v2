@@ -14,10 +14,12 @@ this repo: `CLAUDE.md` is the entry point.
 - A GitHub account, and git
 
 ### Creating a project from the template
-1. Create the repo from `sugose/ai-project-template-v2`. GitHub's
-   "Use this template" button only appears once the template repo has
-   **Template repository** ticked in its settings; until then, create an
-   empty repo and push a copy of the template to it.
+1. Create the repo from the bootstrapper, `sugose/ai-project-bootstrap`,
+   with "Use this template". The bootstrapper is built from this repo by
+   a release pipeline (backlog PBI-1.10) and does not exist until that
+   pipeline's first release; until then there is no clean way to
+   bootstrap, and a copy of this repo would carry the template's own
+   backlog, changelog and decisions.
 2. Copy in the language pack you need from `languages/` (`node` or
    `web`). The bootstrap wizard that will do this for you is not written
    yet (backlog PBI-1.4), so by hand:

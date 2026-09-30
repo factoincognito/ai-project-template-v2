@@ -135,7 +135,7 @@ get a working project in any supported language.
   memory. Docs only.
 
 - **[NEXT] PBI-1.10** — Build pipeline that produces the bootstrapper.
-  Intent approved by Adam in chat, 2026-09-30.
+  Intent approved by Adam in chat, 2026-09-30 (recorded on PR #58).
 
   **Why.** A project bootstrapped from this repo must not inherit the
   template's own working files (backlog, changelog, decisions, session
@@ -146,55 +146,86 @@ get a working project in any supported language.
   repository. Projects are bootstrapped from there ("Use this
   template"), never from this repo and never by forking.
 
-  **What ships.** A manifest, `bootstrap/manifest.txt`, lists every
-  path copied from this repo as is: at least `CLAUDE.md`, `.gitattributes`,
-  `.gitignore`, `.github/PULL_REQUEST_TEMPLATE.md`, the workflows
-  `ci.yml`, `review.yml` and `changelog.yml` (listed by file, so
-  template-only workflows are never shipped), `memory/roles.md`,
-  `memory/standards.md`, `docs/CROG_ONBOARDING.md`, `docs/ROUTINES.md`,
-  `docs/SPEC.md`, `docs/decisions/0001-rebuild-workflow.md` and
-  `languages/`. Files that exist in both but must start clean come from
-  `bootstrap/stubs/`, mirroring their paths: `README.md` (placeholders
-  plus the after-bootstrap steps: copy a language pack, turn on branch
-  protection, fill in placeholders), `CHANGELOG.md`, `docs/BACKLOG.md`,
-  `docs/NEXT_SESSION.md`, `memory/context.md`, `memory/decisions.md`,
-  `memory/project.md`. Nothing else ships: in particular not
-  `docs/RELEASE_NOTES.md`, `bootstrap/` itself, or this repo's
-  history.
+  **Manifest.** `bootstrap/manifest.txt` lists every path copied from
+  this repo as is. Format: one path per line, relative to the repo root;
+  blank lines and lines starting with `#` are ignored; no globs; a path
+  that is a directory is copied recursively with everything in it; a
+  listed path that does not exist is a build error. Initial content:
+  `CLAUDE.md`, `.gitattributes`, `.gitignore`,
+  `.github/PULL_REQUEST_TEMPLATE.md`, `.github/workflows/ci.yml`,
+  `.github/workflows/review.yml`, `.github/workflows/changelog.yml`
+  (workflows listed by file, so template-only workflows never ship),
+  `memory/roles.md`, `memory/standards.md`, `docs/CROG_ONBOARDING.md`,
+  `docs/ROUTINES.md`, `docs/SPEC.md`,
+  `docs/decisions/0001-rebuild-workflow.md`, `languages`. When the
+  bootstrap wizard (PBI-1.4, `BOOTSTRAP.md`) exists, it is added here.
 
-  **Version stamp.** The stub `CHANGELOG.md` contains placeholders that
-  the build replaces with the template version (the release tag, e.g.
-  `v2.1.0`) and the full commit SHA it was built from, so every
-  bootstrapped project records its origin in its first changelog entry.
-  No other link back.
+  **Stubs.** `bootstrap/stubs/` mirrors the output layout and holds the
+  clean starting version of each file that must not ship with this
+  repo's content: `README.md` (placeholders plus the after-bootstrap
+  steps: copy in a language pack, turn on branch protection including
+  any extra required checks, fill in placeholders, delete the steps),
+  `CHANGELOG.md`, `docs/BACKLOG.md`, `docs/NEXT_SESSION.md`,
+  `memory/context.md`, `memory/decisions.md`, `memory/project.md`. A
+  stub may not have the same path as a manifest entry or sit inside a
+  manifest directory (build error: ambiguous source).
 
-  **Build and checks.** A script, `bootstrap/build.sh <out-dir>
-  <version> <commit>`, assembles the bootstrapper and fails (non-zero
-  exit, clear message) if: a manifest path does not exist; a stub has
-  no matching manifest-or-stub slot; the output contains any file that
-  is neither in the manifest nor a stub; any version placeholder is
-  left unreplaced; or the output contains a template-only marker (e.g.
-  `docs/RELEASE_NOTES.md`, template changelog entries like `(PR #`,
-  Routine trigger IDs `trig_`). Tests for the script run in CI on every
-  PR, so a broken manifest fails the PR, not the release.
+  **Version stamp.** The stub `CHANGELOG.md` contains the exact
+  placeholders `{{TEMPLATE_VERSION}}` and `{{TEMPLATE_COMMIT}}`; the
+  build replaces them with the release tag (e.g. `v2.1.0`) and the full
+  40-character commit SHA it was built from. That entry is the only link
+  back to this repo.
 
-  **Publish.** A workflow in this repo, triggered by pushing a tag
-  `v*`, runs the build and pushes the result to
-  `sugose/ai-project-bootstrap` as one new commit per release (history
-  kept there, one commit per version) plus the same tag. It
-  authenticates with a fine-grained token scoped to that repo only,
-  stored as the Actions secret `BOOTSTRAP_PUSH_TOKEN`. The workflow is
-  not in the manifest.
+  **Build.** `bootstrap/build.sh <out-dir> <version> <commit>` writes
+  the bootstrapper into `<out-dir>` (which must be empty or absent) and
+  exits non-zero with a clear message if: a manifest path is missing; a
+  stub overlaps a manifest path; `<version>` is not `vMAJOR.MINOR.PATCH`
+  or `<commit>` is not 40 hex characters; a `{{TEMPLATE_` placeholder
+  remains anywhere in the output; the output contains
+  `docs/RELEASE_NOTES.md` or anything under `bootstrap/`; or any output
+  file contains one of these exact strings: `trig_`, `(PR #`,
+  `PBI-[0-9]` (regex), `open question [0-9]` (regex). The output
+  contains exactly the manifest paths plus the stubs, nothing else.
+  Shipped files must therefore be self-contained: where they need to
+  refer to this repo's backlog or decisions, they link to this repo by
+  URL instead (`docs/ROUTINES.md` does not yet, and is fixed in its own
+  PR before the first release).
+
+  **Tests.** Tests for `build.sh` (including each failure case above)
+  run in a separate workflow, `.github/workflows/bootstrapper.yml`,
+  which is not in the manifest (the shipped `ci.yml` must not reference
+  `bootstrap/`, since bootstrapped projects have none). It runs on every
+  PR and push, and its check is added to the required checks on `main`
+  once it has run green once.
+
+  **Publish.** The same workflow, on a pushed tag `v*`: runs the tests,
+  builds, then makes the default branch of `sugose/ai-project-bootstrap`
+  match the build output exactly (files not in the output are deleted),
+  as one new commit per release (history kept there) with message
+  `Bootstrapper <version> from sugose/ai-project-template-v2@<commit>`,
+  and pushes the same tag there. If the bootstrap repo is empty, that
+  commit is its first. If the tag already exists there, the publish
+  fails rather than overwriting. It authenticates with the Actions
+  secret `BOOTSTRAP_PUSH_TOKEN`.
 
   **Setup by Adam (cannot be done by an agent here).** Create
-  `sugose/ai-project-bootstrap` (public, empty), tick "Template
-  repository", create the token (Contents: read and write, that repo
-  only) and save it as the secret.
+  `sugose/ai-project-bootstrap` (public, empty, no README) and tick
+  "Template repository". Create a fine-grained token with access to that
+  repo only and permissions **Contents: read and write** and **Workflows:
+  read and write** (GitHub rejects pushes that add or change files in
+  `.github/workflows/` without the latter), and save it as the secret
+  `BOOTSTRAP_PUSH_TOKEN` in this repo. Fine-grained tokens expire: Adam
+  sets the expiry and renews it; an expired token makes the publish
+  fail visibly, nothing else breaks.
+
+  **Known limitation.** The shipped workflow files still name Adam as
+  the product owner throughout; making them product-owner-neutral is a
+  separate item ("De-Adamify", docs/NEXT_SESSION.md item 4).
 
   **Done when.** Tagging `v2.1.0` publishes a bootstrapper whose file
-  list matches the manifest plus stubs exactly, whose CHANGELOG names
-  v2.1.0 and its commit, and from which "Use this template" creates a
-  repo with no template history.
+  list is exactly the manifest plus stubs, whose CHANGELOG names v2.1.0
+  and its commit, and from which "Use this template" creates a repo
+  with no template history.
 
 ---
 
