@@ -17,16 +17,13 @@ workarounds rather than to the underlying problem.
   alone, without Adam providing orientation
 
 **Definition of done for this phase:**
-The skeleton is committed and a real project (python-blackjack-v2) has
-been successfully bootstrapped from it, proving the template works end
-to end including the GitHub Actions review trigger and reviewer isolation.
+The skeleton is committed and a real project has been bootstrapped from
+it, proving the template works end to end. The pilot is acuteping
+(the sonar calculator, first project created from v2), decided
+2026-09-30; it replaced python-blackjack-v2, which stays in the backlog
+with no date.
 
 ## Migration source
 N/A — this is the template repo itself, not a migration.
 The reference implementation is sugose/ai-project-template (v1).
 v1 is the source of learning, not the source of files.
-
-## Active workstream as of 2026-06-27
-Skeleton prompt has been executed by Crog. Repo now exists.
-Next step: open Cowork, set working folder to this repo clone,
-begin first Cowork-Clead session.
