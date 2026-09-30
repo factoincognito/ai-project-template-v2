@@ -293,6 +293,17 @@ test_leftover_placeholder_rejected() {
   [ ! -e "$out" ] || die "failed build left output behind"
 }
 
+test_changelog_stub_without_placeholders_rejected() {
+  # The stamp is the only link back to the template; losing it silently
+  # would be worse than failing.
+  local fx; fx="$(make_fixture)"
+  printf '# Changelog\n\n## Created from template {{TEMPLATE_VERSION}}\n' \
+    >"$fx/bootstrap/stubs/CHANGELOG.md"
+  expect_build_fail "$fx" "CHANGELOG.md stub lacks {{TEMPLATE_COMMIT}}" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+  rm "$fx/bootstrap/stubs/CHANGELOG.md"
+  expect_build_fail "$fx" "CHANGELOG.md stub not found" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+}
+
 test_placeholder_outside_changelog_not_replaced() {
   # Only the CHANGELOG stub is stamped; the same placeholder anywhere
   # else is left in and therefore fails the build.
@@ -327,6 +338,7 @@ test_forbidden_string_in_dotfile_rejected() {
 }
 
 # ---------- publish.sh (against local bare repos) ----------
+# Bare repos are created with HEAD on main, like a new empty GitHub repo.
 
 make_bootstrap_output() {
   local fx out
@@ -337,21 +349,21 @@ make_bootstrap_output() {
 
 test_publish_to_empty_repo_creates_first_commit_and_tag() {
   local remote out clone
-  remote="$WORK/remote.$RANDOM.git"; git init -q --bare "$remote"
+  remote="$WORK/remote.$RANDOM.git"; git init -q --bare -b main "$remote"
   out="$(make_bootstrap_output v1.0.0)"
   bash "$PUBLISH" "$out" v1.0.0 "$SHA" "$remote" >/dev/null || die "publish failed"
   clone="$WORK/clone.$RANDOM"; git clone -q "$remote" "$clone"
   [ "$(git -C "$clone" rev-list --count HEAD)" = 1 ] || die "expected exactly one commit"
   [ "$(git -C "$clone" log -1 --format=%s)" = \
     "Bootstrapper v1.0.0 from sugose/ai-project-template-v2@$SHA" ] || die "bad commit message"
-  [ "$(git -C "$clone" rev-parse v1.0.0^{commit})" = "$(git -C "$clone" rev-parse HEAD)" ] \
+  [ "$(git -C "$clone" rev-parse "v1.0.0^{commit}")" = "$(git -C "$clone" rev-parse HEAD)" ] \
     || die "tag does not point at the release commit"
   diff <(git -C "$clone" ls-files | LC_ALL=C sort) <(list_files "$out") || die "tree differs"
 }
 
 test_publish_second_release_mirrors_output_and_keeps_history() {
   local remote out1 out2 clone
-  remote="$WORK/remote.$RANDOM.git"; git init -q --bare "$remote"
+  remote="$WORK/remote.$RANDOM.git"; git init -q --bare -b main "$remote"
   out1="$(make_bootstrap_output v1.0.0)"
   echo "obsolete" >"$out1/obsolete.md"
   bash "$PUBLISH" "$out1" v1.0.0 "$SHA" "$remote" >/dev/null || die "publish 1 failed"
@@ -367,7 +379,7 @@ test_publish_second_release_mirrors_output_and_keeps_history() {
 
 test_publish_uses_existing_default_branch() {
   local remote seed out
-  remote="$WORK/remote.$RANDOM.git"; git init -q --bare "$remote"
+  remote="$WORK/remote.$RANDOM.git"; git init -q --bare -b main "$remote"
   git -C "$remote" symbolic-ref HEAD refs/heads/trunk
   seed="$WORK/seed.$RANDOM"; git init -q -b trunk "$seed"
   echo seed >"$seed/seed.txt"; git -C "$seed" add .; git -C "$seed" commit -qm seed
@@ -380,7 +392,7 @@ test_publish_uses_existing_default_branch() {
 
 test_publish_fails_if_tag_exists_and_changes_nothing() {
   local remote out before
-  remote="$WORK/remote.$RANDOM.git"; git init -q --bare "$remote"
+  remote="$WORK/remote.$RANDOM.git"; git init -q --bare -b main "$remote"
   out="$(make_bootstrap_output v1.0.0)"
   bash "$PUBLISH" "$out" v1.0.0 "$SHA" "$remote" >/dev/null || die "publish 1 failed"
   before="$(git -C "$remote" for-each-ref)"
@@ -394,7 +406,7 @@ test_publish_fails_if_tag_exists_and_changes_nothing() {
 
 test_publish_rejects_bad_arguments() {
   local remote out
-  remote="$WORK/remote.$RANDOM.git"; git init -q --bare "$remote"
+  remote="$WORK/remote.$RANDOM.git"; git init -q --bare -b main "$remote"
   out="$(make_bootstrap_output v1.0.0)"
   ! bash "$PUBLISH" "$out" 1.0.0 "$SHA" "$remote" 2>/dev/null || die "bad version accepted"
   ! bash "$PUBLISH" "$out" v1.0.0 abc "$remote" 2>/dev/null || die "bad commit accepted"
