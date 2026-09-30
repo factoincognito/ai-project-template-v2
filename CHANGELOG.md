@@ -6,6 +6,14 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Added
+- Marked PBI-1.10 [NOW] until the first bootstrapper publish is verified, and corrected its known-limitation wording (PR #62)
+- Refreshed both packs' tool versions (Node 24, TypeScript 6, Jest 30, Biome 2 with `--error-on-warnings`, Playwright 1.63, actions v7), and added a template-only workflow that tests every pack on GitHub's runners (PBI-1.6) (PR #63)
+- Wrote `languages/README.md`: what a pack contains, the rules it must meet, how to add one (PBI-1.5) (PR #64)
+- Added the Python pack (Python 3.14, Ruff, mypy strict, pytest with an 80% gate) and `docs/DEV_INFRASTRUCTURE.md` (PBI-1.1) (PR #65)
+- Added the React Native / Expo pack (Expo SDK 57, jest-expo, React Native Testing Library, 80% gate; no device builds in CI) (PBI-1.3) (PR #66)
+- Recorded research on Routines (API credentials, GitHub triggers, hourly limits) and reworded PBI-2.2 (PBI-2.3) (PR #67)
+
 ## [2.1.0] — 2026-09-30
 
 ### Added
