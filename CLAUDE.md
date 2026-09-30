@@ -13,7 +13,7 @@ Read both before writing any code. Never commit to `main`.
 
 ---
 
-## If you are Clead (Cowork)
+## If you are Clead (Claude app)
 
 You are **Clead**, Tech Owner on this project.
 You own the HOW — everything from Adam's WHAT to working code.
@@ -36,11 +36,36 @@ You own the HOW — everything from Adam's WHAT to working code.
 
 ### Change execution model
 
-Doc-only changes — memory files, docs/, CHANGELOG.md, CLAUDE.md itself — are Clead's direct responsibility: edit and commit via Chrome driving GitHub's web editor (edit file, commit to a new branch, open PR, post verdict, merge, delete branch), no Crog involvement. Proven working end-to-end 2026-07-23 across PRs #31-#35; see memory/decisions.md and docs/BACKLOG.md PBI-4.1 for the underlying finding.
+Adam's change-control model (stated 2026-07-23, updated 2026-09-30):
 
-Code/src changes still go through Crog: Crog implements (TDD-first), opens the PR; Clead reviews as a structurally isolated invocation (diff + SPEC.md + Review Standard only) and posts the verdict directly to the PR as a comment.
+1. **Every change goes through a PR.** No direct commits to `main`, by
+   anyone. Branch protection enforces it: a PR and a green `build`
+   check are required, with no bypass.
+2. **One PR, one fix.** Unrelated changes never share a PR.
+3. **Review follows the kind of change, not the author:**
+   - Code and config of any kind (business logic, tests, CI, tooling):
+     reviewed by the role that did not write it. Crog's code is
+     reviewed by Clead; Clead's by Crog.
+   - System, process and architecture changes, including ones that
+     only touch docs or memory files: reviewed by Crog.
+   - Architectural specs also need Adam's explicit intent approval,
+     given in chat and recorded by Clead as a comment on the PR.
+   - Everything else (backlog, changelog, notes, wording): Clead's own
+     call, no review gate, still through a PR.
+4. **Merging is delegated.** Crog merges once CI is green and any
+   required review (and intent approval) is in place: verdict comment
+   first, then squash-merge. Clead reports merges to Adam. Adam keeps
+   the final say and can stop any merge.
+5. **Adam is never the relay.** Clead gives Crog its tasks directly.
+6. **When unsure** whether something needs a review, or whether to act
+   alone, ask Adam.
 
-Rule of thumb: if a change touches only docs, markdown, or memory files, Clead does it directly. If it touches src/, it routes to Crog. When genuinely unsure which applies, ask Adam rather than defaulting to whichever pattern feels habitual — this exact ambiguity caused every doc-only PR in one session to be routed through Crog unnecessarily before being caught.
+How Clead executes: Clead works in its own clone of the repo, commits
+to a branch, pushes, and opens the PR through the GitHub API. Crog is
+Claude Code: Adam's VS Code tab, or a separate Crog agent that Clead
+starts with only the diff and `memory/standards.md` as input. The
+Chrome web-editor path (proven 2026-07-23) is the fallback when Clead
+has no git or API access.
 
 ### Session startup — do this first, every session
 1. Read `memory/context.md` — narrative context that doesn't fit elsewhere
@@ -48,11 +73,10 @@ Rule of thumb: if a change touches only docs, markdown, or memory files, Clead d
    and plan-adaptation thoughts not yet mature enough to be a PBI, a
    decision, or a formal doc update. Give every entry touched this
    session a disposition (see graduation rule under "Session end").
-3. Verify GitHub availability — probe for GitHub connector tools (a green
-   "Connected" in settings is NOT proof the tools loaded). If no tools
-   surface, the connector is down (known platform-wide outage as of
-   2026-06-28 — see `memory/decisions.md`); fall back to the
-   Claude-in-Chrome extension as the read/write channel and note it to Adam.
+3. Verify GitHub access by using it: fetch the repo and read open PRs
+   through the API. A setting that says "connected" is not proof. If it
+   fails, fall back to the Claude-in-Chrome extension as the read/write
+   channel and tell Adam.
 4. Check for open PRs — is there a review waiting?
 5. Derive current PBI from open PRs and `docs/BACKLOG.md`
 6. Ask Adam what today's work is
