@@ -25,11 +25,14 @@ Remote Control from a cloud Clead session: not reachable).
 
 - PR opened: a workflow triggers Clead's review without Clead having to
   notice the PR.
-- Clead's task comment on a PR triggers Crog (Path B in
-  `memory/decisions.md`, open question 2).
+- Clead's task comment on a PR triggers Crog from GitHub Actions, with
+  Crog's token held as an Actions secret so it never appears in any
+  Claude context.
 
-Both depend on firing a Routine from GitHub Actions with its token held
-as an Actions secret; not yet built or tested (backlog PBI-2.2, 4.4).
+Neither is built or tested yet. The design, the dead ends already
+investigated and the related backlog items are in the template repo:
+https://github.com/sugose/ai-project-template-v2 (`memory/decisions.md`,
+"Path B").
 
 ## Review Routine — input contract (hard constraint)
 
