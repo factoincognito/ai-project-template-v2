@@ -1,8 +1,12 @@
 # Changelog
 
-All notable changes to [PROJECT NAME] are documented here.
+All notable changes to ai-project-template-v2 are documented here.
+Each release is tagged in git (`v2.1.0` and so on); bootstrapped projects
+record the tag they were built from.
 
 ## [Unreleased]
+
+## [2.1.0] — 2026-09-30
 
 ### Added
 - Operational lessons from a live fomo-f session folded into docs/BACKLOG.md
@@ -70,7 +74,22 @@ All notable changes to [PROJECT NAME] are documented here.
 - Added the web language pack (`languages/web/`) for static single-file web apps: Vite single-file build, Jest, and Playwright against the built file at phone and desktop width in light and dark (PR #45)
 - Added an optional Cloudflare deploy workflow (`deploy.yml`, `wrangler.jsonc`) to the web pack; checked with `wrangler deploy --dry-run`, not yet with a real deploy (PR #46)
 
-## [0.1.0] — 2026-06-27
+- Added CHANGELOG entries for PRs #39-#46 (PR #47)
+- Recorded the 2026-09-30 decisions: "complete" means every claim is true, acuteping as pilot, Cloudflare, Clead in the Claude app and Crog in Claude Code, Adam never the relay, reviews and merges delegated, branch protection, no Copilot recommendation (PR #48)
+- Ignored `.wrangler/` in the web pack's gitignore (PR #49)
+- Defined the escalation message format for the 3-round review cap in the Review Standard (PR #50)
+- Documented the change-control model in CLAUDE.md; PBI-P.1 done (PR #51)
+- Made CROG_ONBOARDING match how PRs actually flow (PR #52)
+- Described the review and Crog triggering as it works today in ROUTINES.md (PR #53)
+- Rewrote the README setup to match how the template is used; PBI-1.9 done (PR #54)
+- Corrected the v2.0.0 release notes, which described planned items as delivered (PR #55)
+- Marked stale backlog items and context notes; PBI-2.1 and 4.3 superseded (PR #56)
+- Added `.gitattributes` pinning LF line endings (PR #57)
+- Specified the bootstrapper pipeline, PBI-1.10 (PR #58)
+- Made ROUTINES.md self-contained so it can ship to bootstrapped projects (PR #59)
+- Added the bootstrapper pipeline: manifest, stubs, build and publish scripts with tests, and a workflow that publishes a clean bootstrapper to sugose/ai-project-bootstrap on a `v*` tag (PR #60)
+
+## [2.0.0] — 2026-06-27
 
 ### Added
 - Initial project setup from ai-project-template-v2
