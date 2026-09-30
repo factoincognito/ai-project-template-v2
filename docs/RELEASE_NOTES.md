@@ -148,7 +148,9 @@ directory and `BOOTSTRAP.md` for the content to adapt.
 
 ## Known issues
 
-**Routine daily limit constrains sprint pace**
+**Routine daily limit constrains sprint pace** *(out of date as of
+2026-09-30: Routines now have hourly limits, see docs/BACKLOG.md
+PBI-2.3)*
 Max plan: 15 Routine executions per day. At 2 executions per PR
 (Clead only, Crog as CLI): ~7 PRs/day. At sprint pace (10+ PRs/day)
 CLI mode is the only compliant option. Path B (PBI-2.2) may
