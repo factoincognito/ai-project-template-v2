@@ -13,6 +13,11 @@ A bootstrapped project records the tag it was built from.
 - Added the Python pack (Python 3.14, Ruff, mypy strict, pytest with an 80% gate) and `docs/DEV_INFRASTRUCTURE.md` (PBI-1.1) (PR #65)
 - Added the React Native / Expo pack (Expo SDK 57, jest-expo, React Native Testing Library, 80% gate; no device builds in CI) (PBI-1.3) (PR #66)
 - Recorded research on Routines (API credentials, GitHub triggers, hourly limits) and reworded PBI-2.2 (PBI-2.3) (PR #67)
+- Marked PBI-1.1, 1.3, 1.5 and 1.6 done in the backlog (PR #68)
+- Added CHANGELOG entries for PRs #62-#67 (PR #69)
+- Recorded the 2026-09-30 session: three decisions, a context section, and NEXT_SESSION items 8 and 9 plus a proposal for item 6 (PR #70)
+- Stated only the observed tag-push refusal in NEXT_SESSION (PR #71)
+- Added CHANGELOG entries for PRs #68-#71 (PR #72)
 
 ## [2.1.0] — 2026-09-30
 
