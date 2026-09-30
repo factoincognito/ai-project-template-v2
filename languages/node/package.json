@@ -1,0 +1,25 @@
+{
+  "name": "[project-name]",
+  "version": "0.1.0",
+  "description": "[project-description]",
+  "scripts": {
+    "test": "jest --coverage",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "ci": "biome ci . && jest --coverage --coverageThreshold='{\"global\":{\"lines\":80}}'"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4",
+    "jest": "29.7.0",
+    "@types/jest": "29.5.14",
+    "ts-jest": "29.2.5",
+    "typescript": "5.7.3"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testPathIgnorePatterns": ["/node_modules/", "/dist/"],
+    "coverageDirectory": "coverage",
+    "collectCoverageFrom": ["src/**/*.ts", "!src/**/*.test.ts"]
+  }
+}
