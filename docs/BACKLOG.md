@@ -114,11 +114,11 @@ get a working project in any supported language.
   because that build's Chromium is the one the verification
   environment can run; refresh under PBI-1.6. Not verified there: the
   CI step that installs the browser (`npx playwright install
-  --with-deps chromium`). Deploy workflow: the WHAT (Adam) is that the
-  calculator is served from an address he owns, that this is not
-  permanent, and that it is not divbyzero.se (his AB's official
-  domain). Working assumption, unconfirmed: `sonar.sugo.se` via GitHub
-  Pages. The deploy workflow waits on that confirmation.
+  --with-deps chromium`). Deploy workflow: Cloudflare (Adam, 2026-09-30),
+  where the calculator will be served as acuteping.com. `deploy.yml`
+  uploads `dist/` as the static assets of a Worker configured by
+  `wrangler.jsonc`; checked with `wrangler deploy --dry-run` only, a
+  real deploy is not yet verified.
 
 - **[LATER] PBI-1.8** — Licence choice at project setup: the template
   offers a set of licences (PolyForm Noncommercial among them) and the
