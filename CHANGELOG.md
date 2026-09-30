@@ -1,8 +1,8 @@
 # Changelog
 
 All notable changes to ai-project-template-v2 are documented here.
-Each release is tagged in git (`v2.1.0` and so on); bootstrapped projects
-record the tag they were built from.
+Releases from v2.1.0 on are tagged in git; v2.0.0 predates tagging.
+A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
