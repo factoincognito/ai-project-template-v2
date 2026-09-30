@@ -134,7 +134,8 @@ get a working project in any supported language.
   holds: one project per repository, and the repo files are Clead's
   memory. Docs only.
 
-- **[NEXT] PBI-1.10** — Build pipeline that produces the bootstrapper.
+- **[DONE] PBI-1.10** (2026-09-30, PR #60; first publish verified at
+  the v2.1.0 release) — Build pipeline that produces the bootstrapper.
   Intent approved by Adam in chat, 2026-09-30 (recorded on PR #58).
 
   **Why.** A project bootstrapped from this repo must not inherit the
@@ -218,8 +219,9 @@ get a working project in any supported language.
   sets the expiry and renews it; an expired token makes the publish
   fail visibly, nothing else breaks.
 
-  **Known limitation.** The shipped workflow files still name Adam as
-  the product owner throughout; making them product-owner-neutral is a
+  **Known limitation.** The shipped process docs (CLAUDE.md,
+  memory/roles.md and others) still name Adam as the product owner
+  throughout; making them product-owner-neutral is a
   separate item ("De-Adamify", docs/NEXT_SESSION.md item 4).
 
   **Done when.** Tagging `v2.1.0` publishes a bootstrapper whose file
