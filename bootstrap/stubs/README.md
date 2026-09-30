@@ -13,20 +13,23 @@ This repo was created from the bootstrapper with "Use this template".
 The template version it came from is recorded in `CHANGELOG.md`. Do
 these steps once, then delete this whole section.
 
-1. **Copy in a language pack** from `languages/` (`node` or `web`). A
-   bootstrap wizard that does this for you is planned but not written
-   yet, so by hand:
+1. **Copy in a language pack** from `languages/` (`node`, `web` or
+   `python`). A bootstrap wizard that does this for you is planned but
+   not written yet, so by hand:
 
    | Pack file | Goes to |
    |---|---|
    | `ci.yml` | `.github/workflows/ci.yml` (replaces the stub, which only checks out the code) |
    | `gitignore` | `.gitignore` (merge with the template's) |
    | `vscode-settings.json`, `vscode-extensions.json` | `.vscode/settings.json`, `.vscode/extensions.json` |
-   | `package.json`, `tsconfig.json`, `biome.json` | project root |
+   | node, web: `package.json`, `tsconfig.json`, `biome.json` | project root |
    | node: `placeholder.test.ts` | `src/` |
    | web: `index.html`, `vite.config.mts`, `playwright.config.ts` | project root |
    | web: `starter/src/`, `starter/e2e/` | `src/`, `e2e/` |
    | web, optional: `deploy.yml`, `wrangler.jsonc` | `.github/workflows/deploy.yml`, project root |
+   | python: `pyproject.toml`, `requirements.txt`, `requirements-dev.txt` | project root |
+   | python: `pre-commit-config.yaml` | `.pre-commit-config.yaml` |
+   | python: `starter/src/` | `src/` |
 
    Then follow the pack's `code-standards.md` ("First-time setup"). Once
    the pack is in place you can delete the `languages/` folder.

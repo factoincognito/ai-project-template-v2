@@ -12,6 +12,7 @@ project changes them as it needs to.
 |---|---|---|
 | `node/` | Node.js and TypeScript code: libraries, services, tools | Biome lint and format, TypeScript type check, Jest with an 80% line coverage gate |
 | `web/` | A static web page built into one self-contained HTML file | Everything in `node/`, plus a Vite build and Playwright browser tests at phone and desktop width, in light and dark mode |
+| `python/` | Python 3.14 code: libraries, services, tools | Ruff lint and format, mypy in strict mode, pytest with an 80% line coverage gate |
 
 The web pack also has an optional deploy to Cloudflare (`deploy.yml`,
 `wrangler.jsonc`). Where each file goes is listed in the project's
@@ -21,7 +22,7 @@ bootstrapping" in a bootstrapped project), and each pack's
 
 ## What every pack contains
 
-Both packs follow the same shape. A new pack should too:
+Every pack follows the same shape. A new pack should too:
 
 | File | Purpose |
 |---|---|
@@ -29,7 +30,7 @@ Both packs follow the same shape. A new pack should too:
 | `code-standards.md` | The rules for code in this language, with "First-time setup" and "Running the project" sections giving the commands to install and to run the checks locally. It is read in place, not copied into the project layout. |
 | `gitignore` | Entries to merge into the project's `.gitignore`. Named without the dot so it doesn't act on the template itself. |
 | `vscode-settings.json`, `vscode-extensions.json` | Editor settings and recommended extensions, copied to `.vscode/`. Recommend only what the pack needs. |
-| The language's own manifest and config | For example `package.json`, `tsconfig.json` and `biome.json`. Tool versions are pinned exactly, so every project starts from a known, tested combination. |
+| The language's own manifest and config | For example `package.json`, `tsconfig.json` and `biome.json`, or `pyproject.toml` and the `requirements` files. Tool versions are pinned exactly, so every project starts from a known, tested combination. |
 | A placeholder or starter test | Keeps the coverage gate green on day one. The project replaces it with its own code and tests. |
 
 ## Rules for a pack
@@ -45,6 +46,9 @@ Both packs follow the same shape. A new pack should too:
 - **No lockfile in the pack.** The first `npm install` (or the
   language's equivalent) in the project creates it, and the project
   commits it. `code-standards.md` says so under "First-time setup".
+  The Python pack has no lockfile step: its requirements files pin the
+  direct dependencies, and its `code-standards.md` says what that
+  leaves unpinned.
 - **Every file has a place.** Each file in a pack except
   `code-standards.md` must appear in the placement table in the README,
   so nothing is copied by guesswork.

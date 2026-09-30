@@ -81,6 +81,59 @@ test_web_layout_matches_readme_table() {
   diff <(list_files "$out") <(echo "$expected") || die "web layout differs from the README table"
 }
 
+test_python_layout_matches_readme_table() {
+  local out="$WORK/python.$RANDOM" expected
+  bash "$LAYOUT" python "$out" >/dev/null || die "layout failed"
+  expected="$( {
+    printf '%s\n' .github/workflows/ci.yml .gitignore .vscode/extensions.json \
+      .vscode/settings.json pyproject.toml requirements.txt requirements-dev.txt \
+      .pre-commit-config.yaml
+    (cd "$REPO/languages/python/starter" && find src -type f)
+  } | LC_ALL=C sort)"
+  diff <(list_files "$out") <(echo "$expected") || die "python layout differs from the README table"
+  [ -f "$out/src/tests/test_placeholder.py" ] || die "no placeholder test in src/tests/"
+}
+
+test_python_files_are_byte_identical_to_the_pack() {
+  local out="$WORK/python.$RANDOM" p="$REPO/languages/python"
+  bash "$LAYOUT" python "$out" >/dev/null
+  cmp -s "$p/ci.yml" "$out/.github/workflows/ci.yml" || die "ci.yml differs"
+  cmp -s "$p/pre-commit-config.yaml" "$out/.pre-commit-config.yaml" || die "pre-commit config differs"
+  cmp -s "$p/pyproject.toml" "$out/pyproject.toml" || die "pyproject.toml differs"
+  cmp -s "$p/starter/src/tests/test_placeholder.py" "$out/src/tests/test_placeholder.py" \
+    || die "placeholder test differs"
+  [ ! -e "$out/code-standards.md" ] || die "code-standards.md laid out"
+  [ ! -e "$out/starter" ] || die "starter/ copied as is"
+}
+
+test_python_pack_has_no_lockfile() {
+  local f
+  for f in requirements.lock poetry.lock uv.lock Pipfile.lock pdm.lock; do
+    [ ! -e "$REPO/languages/python/$f" ] || die "lockfile in the pack: $f"
+  done
+}
+
+test_python_pack_pins_every_requirement_exactly() {
+  local f line n=0
+  for f in requirements.txt requirements-dev.txt; do
+    while IFS= read -r line; do
+      n=$((n + 1))
+      [[ "$line" =~ ^[A-Za-z0-9._-]+==[0-9][0-9A-Za-z.]*$ ]] || die "$f: not pinned exactly: $line"
+    done < <(grep -vE '^[[:space:]]*(#|$)' "$REPO/languages/python/$f")
+  done
+  [ "$n" -ge 4 ] || die "found only $n requirements; the parser is broken"
+}
+
+test_python_pre_commit_ruff_matches_the_pinned_ruff() {
+  # The hook and CI must run the same Ruff, or a commit that passes the
+  # hook can fail CI.
+  local p="$REPO/languages/python" pinned rev
+  pinned="$(sed -n 's/^ruff==//p' "$p/requirements-dev.txt")"
+  [ -n "$pinned" ] || die "ruff not pinned in requirements-dev.txt"
+  rev="$(grep -A1 'astral-sh/ruff-pre-commit' "$p/pre-commit-config.yaml" | sed -n 's/^ *rev: v//p')"
+  [ "$rev" = "$pinned" ] || die "pre-commit ruff rev v$rev != requirements-dev ruff==$pinned"
+}
+
 test_files_are_byte_identical_to_the_pack() {
   local out="$WORK/web.$RANDOM"
   bash "$LAYOUT" web "$out" >/dev/null
@@ -124,7 +177,7 @@ test_wrong_arg_count_fails_with_usage() {
 }
 
 test_unknown_pack_fails() {
-  expect_fail "unknown pack: python" python "$WORK/o.$RANDOM"
+  expect_fail "unknown pack: ruby" ruby "$WORK/o.$RANDOM"
   expect_fail "unknown pack: ../node" ../node "$WORK/o.$RANDOM"
 }
 
@@ -162,19 +215,26 @@ test_missing_pack_file_fails() {
 # ---------- the README and the workflow agree with the script ----------
 
 test_readme_table_names_every_laid_out_file() {
-  local f
-  for f in ci.yml gitignore vscode-settings.json vscode-extensions.json package.json \
-    tsconfig.json biome.json placeholder.test.ts index.html vite.config.mts \
-    playwright.config.ts 'starter/src/' 'starter/e2e/'; do
-    grep -qF "\`$f\`" "$REPO/README.md" || die "README table lacks $f"
+  # Both placement tables: the template's README and the bootstrapper's.
+  local f readme
+  for readme in "$REPO/README.md" "$REPO/bootstrap/stubs/README.md"; do
+    for f in ci.yml gitignore vscode-settings.json vscode-extensions.json package.json \
+      tsconfig.json biome.json placeholder.test.ts index.html vite.config.mts \
+      playwright.config.ts 'starter/src/' 'starter/e2e/' pyproject.toml requirements.txt \
+      requirements-dev.txt pre-commit-config.yaml '.pre-commit-config.yaml'; do
+      grep -qF "\`$f\`" "$readme" || die "$readme table lacks $f"
+    done
+    grep -qE '^ *\| python: ' "$readme" || die "$readme table has no python row"
   done
 }
 
-test_packs_workflow_uses_the_script_for_both_packs() {
+test_packs_workflow_uses_the_script_for_every_pack() {
   local wf="$REPO/.github/workflows/packs.yml"
   [ -f "$wf" ] || die "no packs.yml"
   grep -qE '^  pack-node:' "$wf" || die "no pack-node job"
   grep -qE '^  pack-web:' "$wf" || die "no pack-web job"
+  grep -qE '^  pack-python:' "$wf" || die "no pack-python job"
+  grep -qE 'tools/layout-pack\.sh python ' "$wf" || die "pack-python does not use layout-pack.sh"
   grep -qE 'tools/layout-pack\.sh node ' "$wf" || die "pack-node does not use layout-pack.sh"
   grep -qE 'tools/layout-pack\.sh web ' "$wf" || die "pack-web does not use layout-pack.sh"
   grep -qF 'npx playwright install --with-deps chromium' "$wf" || die "no browser install"
@@ -190,25 +250,43 @@ test_packs_workflow_node_version_matches_pack_ci() {
   done
 }
 
+test_packs_workflow_python_version_matches_pack_ci() {
+  local wf="$REPO/.github/workflows/packs.yml" v
+  v="$(grep -oE 'python-version: "[0-9.]+"' "$REPO/languages/python/ci.yml")" \
+    || die "python ci.yml has no python-version"
+  grep -qF "$v" "$wf" || die "packs.yml lacks $v from the python pack"
+}
+
+test_pack_ci_steps_are_single_line() {
+  # The drift test below reads `run:` lines one at a time; a multi-line
+  # `run: |` block would slip past it.
+  local p
+  for p in node web python; do
+    [ -f "$REPO/languages/$p/ci.yml" ] || die "no $p ci.yml"
+    ! grep -nE '^ *run: *[|>]' "$REPO/languages/$p/ci.yml" || die "$p ci.yml has a multi-line run"
+  done
+}
+
 test_packs_workflow_runs_every_pack_ci_step() {
   # packs.yml must run each pack's CI commands verbatim, so the two
   # cannot drift apart. `npm ci` is the one it may precede with
   # `npm install`, because the template has no lockfile.
   local wf="$REPO/.github/workflows/packs.yml" p cmd n=0
-  for p in node web; do
+  for p in node web python; do
     while IFS= read -r cmd; do
       n=$((n + 1))
       grep -qF -- "run: $cmd" "$wf" || die "packs.yml lacks the $p pack step: $cmd"
     done < <(sed -n 's/^ *run: //p' "$REPO/languages/$p/ci.yml")
   done
-  [ "$n" -ge 9 ] || die "found only $n pack CI steps; the parser is broken"
+  [ "$n" -ge 13 ] || die "found only $n pack CI steps; the parser is broken"
 }
 
 test_packs_workflow_uses_the_pack_ci_action_versions() {
   local wf="$REPO/.github/workflows/packs.yml" u
   while IFS= read -r u; do
     grep -qF -- "$u" "$wf" || die "packs.yml lacks $u from the pack ci.yml"
-  done < <(grep -hoE 'uses: [^ ]+' "$REPO/languages/node/ci.yml" "$REPO/languages/web/ci.yml" | sort -u)
+  done < <(grep -hoE 'uses: [^ ]+' "$REPO/languages/node/ci.yml" "$REPO/languages/web/ci.yml" \
+    "$REPO/languages/python/ci.yml" | sort -u)
 }
 
 test_template_only_files_are_not_in_the_manifest() {

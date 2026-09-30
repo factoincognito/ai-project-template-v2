@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Lays out a language pack in a project directory, exactly as the README
 # table "Creating a project from the template", step 2, says to by hand.
-# Usage: bash tools/layout-pack.sh <node|web> <target-dir>
+# Usage: bash tools/layout-pack.sh <node|web|python> <target-dir>
 #
 # Template-only: tools/ is not in bootstrap/manifest.txt. Used by
 # .github/workflows/packs.yml to test each pack on a fresh project.
@@ -11,7 +11,7 @@
 # PACKS_DIR overrides where the packs are read from (for tests).
 set -euo pipefail
 
-usage() { echo "usage: $0 <node|web> <target-dir>" >&2; exit 2; }
+usage() { echo "usage: $0 <node|web|python> <target-dir>" >&2; exit 2; }
 fail() { echo "layout-pack: $*" >&2; exit 1; }
 
 [ "$#" -eq 2 ] || usage
@@ -26,19 +26,21 @@ PACKS_DIR="${PACKS_DIR:-$HERE/../languages}"
 COMMON="ci.yml .github/workflows/ci.yml
 gitignore .gitignore
 vscode-settings.json .vscode/settings.json
-vscode-extensions.json .vscode/extensions.json
-package.json package.json
+vscode-extensions.json .vscode/extensions.json"
+TYPESCRIPT="package.json package.json
 tsconfig.json tsconfig.json
 biome.json biome.json"
 
 case "$PACK" in
   node)
     TABLE="$COMMON
+$TYPESCRIPT
 placeholder.test.ts src/placeholder.test.ts"
     NOT_LAID_OUT="code-standards.md"
     ;;
   web)
     TABLE="$COMMON
+$TYPESCRIPT
 index.html index.html
 vite.config.mts vite.config.mts
 playwright.config.ts playwright.config.ts
@@ -46,7 +48,16 @@ starter/src/ src/
 starter/e2e/ e2e/"
     NOT_LAID_OUT="code-standards.md deploy.yml wrangler.jsonc"
     ;;
-  *) fail "unknown pack: $PACK (expected node or web)" ;;
+  python)
+    TABLE="$COMMON
+pyproject.toml pyproject.toml
+requirements.txt requirements.txt
+requirements-dev.txt requirements-dev.txt
+pre-commit-config.yaml .pre-commit-config.yaml
+starter/src/ src/"
+    NOT_LAID_OUT="code-standards.md"
+    ;;
+  *) fail "unknown pack: $PACK (expected node, web or python)" ;;
 esac
 
 SRC="$PACKS_DIR/$PACK"
