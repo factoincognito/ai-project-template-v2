@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "description": "[project-description]",
   "scripts": {
+    "typecheck": "tsc --noEmit",
     "test": "jest --coverage",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "ci": "biome ci . && jest --coverage --coverageThreshold='{\"global\":{\"lines\":80}}'"
+    "ci": "biome ci . && npm run typecheck && jest --coverage --coverageThreshold='{\"global\":{\"lines\":80}}'"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",

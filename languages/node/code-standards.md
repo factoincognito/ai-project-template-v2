@@ -26,6 +26,9 @@ npm ci
 # Run tests
 npx jest --coverage
 
+# Type check
+npm run typecheck
+
 # Lint and format check
 npx biome ci .
 
