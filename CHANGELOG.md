@@ -16,7 +16,8 @@ A bootstrapped project records the tag it was built from.
 - Marked PBI-1.1, 1.3, 1.5 and 1.6 done in the backlog (PR #68)
 - Added CHANGELOG entries for PRs #62-#67 (PR #69)
 - Recorded the 2026-09-30 session: three decisions, a context section, and NEXT_SESSION items 8 and 9 plus a proposal for item 6 (PR #70)
-- Added CHANGELOG entries for PRs #68-#70 (PR #72)
+- Stated only the observed tag-push refusal in NEXT_SESSION (PR #71)
+- Added CHANGELOG entries for PRs #68-#71 (PR #72)
 
 ## [2.1.0] — 2026-09-30
 
