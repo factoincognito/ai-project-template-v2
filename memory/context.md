@@ -238,3 +238,37 @@ Short session, mostly orientation and process. Four things worth keeping:
    recommendation not a menu, hold caveats unless asked. Saved to Cowork
    auto-memory; recorded here too so it survives across machines/clones
    (auto-memory is local-only). Default to concise.
+
+---
+
+## Session 2026-09-30 (Clead in a Claude app cloud session)
+
+A long session that started as work on acuteping (the sonar calculator)
+and turned into making this template complete by its own definition
+before bootstrapping acuteping from it. The rule Adam set: everything
+the template says it has or does must be true, and anything not built
+must be clearly marked as backlog. An audit found false or stale
+claims; they were fixed through PRs #42-#62, with Crog reviewing
+Clead's process and config changes and catching several overclaims.
+
+Along the way: acuteping replaced blackjack-v2 as the pilot; reviews and
+merges were delegated to Clead and Crog; branch protection was turned on
+(on a free plan it only exists for public repos); a release pipeline now
+builds a clean bootstrapper into sugose/ai-project-bootstrap, since a
+bootstrapped project should not inherit the template's own files, only
+the version it came from ("bootstrap", not "fork"). v2.1.0 was released
+and its output verified. Overnight, on Adam's general instruction, the
+remaining Phase 1 and 2 items that needed no decision were done (PRs
+#63-#67): tool refresh, languages README, Python and React Native packs,
+Routines research.
+
+How the work ran: Clead has git and GitHub API access in the cloud
+session and starts Crog as separate agents (Adam is never the relay, and
+Clead cannot reach the Crog in Adam's VS Code). Adam works with
+the Claude app beside VS Code. He wants visible progress while agents
+work, and no role of his as a message relay.
+
+What is private stays out of this repo; acuteping's private notes live
+in a separate private repo until acuteping is
+bootstrapped.
+

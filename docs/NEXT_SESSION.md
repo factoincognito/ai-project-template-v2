@@ -1,6 +1,6 @@
 # [PROJECT NAME] — Next Session Planning
 
-**Last Updated:** 2026-07-23
+**Last Updated:** 2026-09-30
 **Author:** Clead (Tech Owner)
 **Purpose:** Staging area for reasoning, revised assumptions, and plan-adaptation thoughts that aren't yet mature enough to be a PBI, a decision, a strategy update, or a vision-doc change. Complements `docs/BACKLOG.md` — it does not replace it. Discrete, scoped, actionable work belongs in the backlog as a PBI, not here.
 
@@ -10,7 +10,14 @@
 
 ## Current situation summary
 
-The Chrome-web-editor direct-commit path for doc-only changes (memory/, docs/, CHANGELOG.md, CLAUDE.md itself) is proven end-to-end and now documented in CLAUDE.md's "Change execution model" section (PR #36), cross-referenced from docs/ROUTINES.md (PR #38). CHANGELOG.md is current through PR #38. A "verify live state before asserting routing/authority/process facts" discipline has been added to Clead's role rules in memory/roles.md (PR #37), ported from local Cowork auto-memory so it's no longer session-local-only. The six items below were pinned mid-session on 2026-07-23 and are being promoted here verbatim, unprocessed, because Adam had to end the session before triaging them — none have been evaluated or actioned yet.
+As of the end of 2026-09-30: v2.1.0 is released and the bootstrapper is
+published to sugose/ai-project-bootstrap (verified identical to a local
+build). The template has four language packs (node, web, python,
+react-native), each tested on GitHub's runners on every PR. Reviews and
+merges are delegated (CLAUDE.md, "Change execution model"). Apart from the PR
+carrying this update, no PRs are open. The next big step is Adam bootstrapping acuteping, which also
+closes PBI-1.10. Items 1-7 below are from July; 6 got a proposal this
+session, the rest were not touched. Items 8 and 9 are new.
 
 ---
 
@@ -55,6 +62,7 @@ The Chrome-web-editor direct-commit path for doc-only changes (memory/, docs/, C
 **Previous assumption:** the graduation rule (every NEXT_SESSION.md entry gets a disposition each touched session) and the `..wrap` stop-word flush are both load-bearing parts of the session-end process.
 **Revised assessment:** not yet evaluated — Adam is questioning whether these are still needed or have become obsolete, possibly given how much more is now committed directly and verifiably via PRs rather than relying on end-of-session memory flushes.
 **Action:** discuss with Adam — he clarified the doubt is specifically about how the graduation rule and `..wrap` interact with the Clean Session End State checklist (e.g. whether CSES verification already covers what graduation/`..wrap` are meant to catch, making one of them redundant). Worth revisiting once these six items have their first real graduation cycle.
+**Proposal (Clead, 2026-09-30), awaiting Adam:** make `..wrap` the end-of-session *check* rather than a memory dump, and fold the graduation rule into it. Decisions are committed as they are made (cheap now that Clead uses git and the API), and typing `..wrap` means: run the Clean session end state checklist, open PRs for anything agreed but not yet written down, then report clean or say what is open. One ritual instead of three. Disposition this session: re-affirmed as next, with this proposal.
 
 ---
 
@@ -67,7 +75,31 @@ The Chrome-web-editor direct-commit path for doc-only changes (memory/, docs/, C
 
 ---
 
+### 8. Backlog decisions waiting for Adam — new (2026-09-30)
+
+Clead worked through every Phase 1 and 2 item that needed no decision. What is left needs Adam:
+- **PBI-1.4 bootstrap wizard:** keep LATER? The bootstrapper plus `tools/layout-pack.sh` already cover most of it; a small "lay out pack X" step in the bootstrapper could replace the wizard.
+- **PBI-1.8 licence choice at setup, and the template's own licence** (it has no licence file).
+- **PBI-2.2 review Routine:** approve the idea, and accept or reject its two design points (independence by prompt only; posting as Adam).
+- **PBI-4.2 event-driven memory writes:** check against what CLAUDE.md already requires; may be mostly done.
+- **Remove the Routine trigger IDs** from `memory/decisions.md` (public repo; unusable without tokens, but no reason to publish them).
+- **A public-repo rule in CLAUDE.md:** never write private information into memory/ or docs/ (agreed for acuteping; the template has no such line yet).
+- **Branch prefixes:** CROG_ONBOARDING and DEV_INFRASTRUCTURE say `feature/`, practice is `feat/`, `docs/`, `fix/`. Align one way.
+- **Repo setting "Automatically delete head branches":** agents cannot delete branches (403); 41 branches besides `main` remain on the remote (counted 2026-09-30). Turning the setting on is one click for Adam.
+- **Next tool refresh:** Node 26 becomes LTS on 2026-10-28; TypeScript 7 once ts-jest supports it; Expo SDK moves Jest for the react-native pack.
+**Action:** Adam decides each; Clead turns decisions into PBIs or doc changes.
+
+---
+
+### 9. Autonomous batches work — new (2026-09-30)
+
+**What happened:** Adam gave one general instruction before sleeping ("pick up whatever you can from phase 1 and 2 which does not require my involvement; work until you get stuck"). Clead and Crog shipped five PRs (#63-#67) through the normal review loop: Crog wrote #63, #65 and #66 and Clead reviewed them; Clead wrote #64 and #67 and Crog reviewed them. Each role caught real errors in the other's work (a docs claim that overstated a pack in #65; a wrong conclusion about API credentials in #67). Progress was posted as it happened.
+**Revised assessment:** a scoped general instruction plus the delegated review/merge rules is enough to run unattended. The stop rule (park anything that needs Adam here) held.
+**Action:** decide whether to write this up as a documented working mode in CLAUDE.md.
+
+---
+
 ## Items that do not change
 
-- The Chrome-web-editor direct-commit path (edit, commit to new branch, open PR, post verdict comment, squash-merge, delete branch) is confirmed working for doc-only changes, no Crog, no local git. See PBI-4.1 in docs/BACKLOG.md and memory/decisions.md.
-- Code/src changes still route through Crog (implements TDD-first, opens PR); Clead reviews as a structurally isolated invocation and posts the verdict on the PR.
+- Every change goes through a PR; reviews follow the kind of change; merges are delegated to Crog once review passes and CI is green (CLAUDE.md, "Change execution model").
+- Clead works with git and the GitHub API; the Chrome web editor is the fallback. Agents in cloud sessions cannot delete branches or push tags (403); Adam creates release tags from the Releases page.
