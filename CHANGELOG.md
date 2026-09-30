@@ -61,6 +61,14 @@ All notable changes to [PROJECT NAME] are documented here.
 - Added an explicit "Change execution model" section to CLAUDE.md distinguishing Clead-direct doc-only changes from Crog-implemented code changes (PR #36)
 - Added a "verify live state before asserting routing/authority/process facts" discipline to Clead's role rules in memory/roles.md, ported from local Cowork auto-memory so it persists in the repo (PR #37)
 - Added a scope note to docs/ROUTINES.md clarifying it describes the Crog PR flow only, cross-referencing CLAUDE.md's Change execution model section for doc-only changes (PR #38)
+- Added CHANGELOG entries for PRs #31-#38 (PR #39)
+- Promoted six mid-session pins to docs/NEXT_SESSION.md as untriaged items (PR #40)
+- Added item 7 to docs/NEXT_SESSION.md: judgment-call routing between Clead-direct and Crog-delegated execution (PR #41)
+- Added the Node/TypeScript language pack (`languages/node/`), ported from v1 and fixed so a fresh project's CI is green on day one; PBI-1.2 done (PR #42)
+- Enforced the Node pack's documented strictness: `noImplicitReturns` and `noUncheckedIndexedAccess` in tsconfig, and a `tsc --noEmit` typecheck step in CI (PR #43)
+- Added PBI-1.6 (refresh pinned tool versions), PBI-1.7 (web pack), PBI-1.8 (licence choice at project setup) and PBI-1.9 (README setup wording) to the backlog (PR #44)
+- Added the web language pack (`languages/web/`) for static single-file web apps: Vite single-file build, Jest, and Playwright against the built file at phone and desktop width in light and dark (PR #45)
+- Added an optional Cloudflare deploy workflow (`deploy.yml`, `wrangler.jsonc`) to the web pack; checked with `wrangler deploy --dry-run`, not yet with a real deploy (PR #46)
 
 ## [0.1.0] — 2026-06-27
 
