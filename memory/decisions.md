@@ -359,6 +359,12 @@ docs/decisions/0001-rebuild-workflow.md.
    4. If Path B works: implement session mode router in Clead
    5. If Path B fails: CLI mode is the default, Routines for
       low-cadence work only
+   *Note added 2026-09-30: the limits in this section are out of date
+   (current docs give hourly limits, not 15 per day). Environment API
+   credentials do not help here: the proxy never attaches them to
+   api.anthropic.com, so dead ends B and C still stand. Routines can now
+   also start on GitHub pull-request events, with no token held by
+   Claude; untested. See docs/BACKLOG.md PBI-2.3.*
 3. Spec-author blind spot: Clead writes the spec and reviews against it.
    A flawed spec passes compliance invisibly. Adam's intent gate helps
    but does not fully resolve this. Tracked as open.

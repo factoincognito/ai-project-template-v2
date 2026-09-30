@@ -245,24 +245,61 @@ autonomy. Use a real project as the pilot: acuteping (decided
   diffs. The `review.yml` workflow posts a marker comment — confirm
   this fires correctly and Clead can read it to trigger review.
 
-- **[LATER] PBI-2.2** — Wire Clead review invocation: once write access
-  is confirmed, replace the manual "Adam pastes PR URL to Clead" step
-  with an automated trigger. Clead's review Routine receives the PR
-  diff, SPEC.md, and Review Standard as scoped inputs only.
-  Implementation note (confirmed in fomo-f, 2026-07-23): when Clead
-  fetches PR state via Claude-in-Chrome (the Chrome fallback channel, see
-  decisions.md), Clead itself must append an incrementing cache-busting
-  query param on every fetch (e.g. `?i=1`, `?i=2`...) — GitHub PR pages
-  can otherwise serve a stale cached view, showing an old commit/diff as
-  current. This is Clead's own fetch-time responsibility only — Crog does
-  NOT need to add this param when reporting a PR URL back; a plain URL is
-  fine, Clead appends the cache-buster itself when it fetches. Cross-check
-  against local `git log`/`git diff` where a shared working directory is
-  available — more reliable than the browser alone.
+- **[LATER] PBI-2.2** — Start Clead's review automatically when a PR
+  opens, instead of Clead having to notice it. Reworded 2026-09-30:
+  the original premise (confirm the GitHub connector can write) is
+  superseded; see PBI-2.3's findings. Possible mechanism, not built or
+  tested: a Clead review Routine with **GitHub triggers** on
+  `pull_request` (one trigger per action, or all actions with filters:
+  base branch `main`, not draft), whose saved prompt is the Review
+  Standard and which posts its verdict on the PR. Open design points
+  for Adam's intent approval before building:
+  - **Independence would be by prompt only.** A Routine clones the
+    whole repo on every run, `memory/` included, so "reads only the
+    diff, `docs/SPEC.md` and `memory/standards.md`" would be an
+    instruction, not a structural limit as `memory/standards.md` §7
+    requires.
+  - **Identity.** A Routine acts on GitHub as its owner, so verdicts
+    would be posted under Adam's account, as all PR activity already is.
+  Setup it needs from Adam: install the Claude GitHub App on the repo
+  and create the Routine (web, Desktop app or CLI `/schedule`; GitHub
+  triggers from the CLI need Claude Code v2.1.225 or later). Fallback
+  channel note, still valid: when Clead reads PR pages through Chrome,
+  it appends an incrementing cache-busting parameter (`?i=1`,
+  `?i=2`...) to each fetch, because GitHub can serve a stale cached
+  view. Git and the API do not need this.
 
-- **[LATER] PBI-2.3** — Confirm Routines secret injection timeline with
-  Anthropic. Once available, wire Clead→Crog trigger so Adam is no
-  longer involved in firing Crog.
+- **[DONE] PBI-2.3** (research, 2026-09-30) — Confirm whether Routines
+  can use a secret without exposing it. Findings from the current
+  Claude Code docs (code.claude.com/docs/en/routines and
+  /cloud-environments; Routines are in research preview, so this can
+  change):
+  - **API credentials** (Pro and Max plans, not Team or Enterprise
+    yet): a key stored on a cloud environment is attached by
+    Anthropic's agent proxy to requests for the hosts you list; "the
+    key never reaches Claude, the commands it runs, or the session's
+    environment variables". **But the proxy never attaches a credential
+    to requests for `api.anthropic.com`**, which is where a Routine's
+    `/fire` endpoint lives. So API credentials do **not** let a Clead
+    Routine fire Crog's Routine with a hidden token; dead ends B and C
+    (memory/decisions.md, open question 2) still stand for that. API
+    credentials only help with third-party APIs.
+  - **Triggers:** schedule, API (`/fire` with a per-routine bearer
+    token), and **GitHub events** (pull requests and releases, with
+    filters; needs the Claude GitHub App on the repo). A GitHub trigger
+    starts a Routine without any token held by Claude, so it is a
+    documented, untested alternative both for starting reviews
+    (PBI-2.2) and for starting Crog, e.g. on a label.
+  - **Limits are hourly now, not 15 per day:** scheduled runs 100 per
+    hour per account; Run now and API fires together 30 per hour per
+    routine; API fires 100 per hour per account (counted separately
+    from Run now); GitHub events have per-routine and per-account
+    hourly caps without published numbers. Runs draw on subscription
+    usage like interactive sessions.
+  - Environment variables, unlike API credentials, are readable by
+    anyone using the environment, so they are not for secrets.
+  Next step (Adam's call): whether to try GitHub-triggered Routines for
+  reviews (PBI-2.2) or for starting Crog (PBI-4.4).
 
 ---
 
