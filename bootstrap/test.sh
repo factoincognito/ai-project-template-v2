@@ -382,7 +382,7 @@ test_publish_uses_existing_default_branch() {
   remote="$WORK/remote.$RANDOM.git"; git init -q --bare -b main "$remote"
   git -C "$remote" symbolic-ref HEAD refs/heads/trunk
   seed="$WORK/seed.$RANDOM"; git init -q -b trunk "$seed"
-  echo seed >"$seed/seed.txt"; git -C "$seed" add .; git -C "$seed" commit -qm seed
+  echo seed >"$seed/seed.txt"; git -C "$seed" add .; git -C "$seed" -c user.name=test -c user.email=test@example.invalid commit -qm seed
   git -C "$seed" push -q "$remote" trunk
   out="$(make_bootstrap_output v1.0.0)"
   bash "$PUBLISH" "$out" v1.0.0 "$SHA" "$remote" >/dev/null || die "publish failed"
