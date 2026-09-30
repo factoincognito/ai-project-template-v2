@@ -95,6 +95,41 @@ get a working project in any supported language.
   supports the new Jest and TypeScript majors is unverified; Node 22's
   remaining support window against the current LTS is unverified.
   Whichever Node version the pack targets must also match `ci.yml`.
+  Also covers the web pack's pins (PBI-1.7), notably Playwright 1.56.1
+  (npm latest on 2026-09-30: 1.63.0).
+
+- **[NEXT] PBI-1.7** — Write the web pack (`languages/web/`) for static
+  single-file web apps; the sonar calculator is its first user. It is
+  self-contained like the other packs: the Node pack plus web
+  additions, with starter files under `starter/` mirroring the project
+  layout (`src/`, `e2e/`). Build: Vite + vite-plugin-singlefile produce
+  one `dist/index.html` with no external requests. Checks: Jest for
+  pure logic; Playwright against the built file in four projects
+  (phone 375px and desktop 1280px, each in light and dark) that fail
+  on console or uncaught errors, sideways scroll, a wrong colour
+  scheme, or any request beyond the page itself. Verified on a scratch
+  project with five deliberate breakages (console error, uncaught
+  exception, 600px element, missing dark mode, external image): each
+  failed exactly the checks it should. Playwright is pinned at 1.56.1
+  because that build's Chromium is the one the verification
+  environment can run; refresh under PBI-1.6. Not verified there: the
+  CI step that installs the browser (`npx playwright install
+  --with-deps chromium`). Deploy workflow: the WHAT (Adam) is that the
+  calculator is served from an address he owns, that this is not
+  permanent, and that it is not divbyzero.se (his AB's official
+  domain). Working assumption, unconfirmed: `sonar.sugo.se` via GitHub
+  Pages. The deploy workflow waits on that confirmation.
+
+- **[LATER] PBI-1.8** — Licence choice at project setup: the template
+  offers a set of licences (PolyForm Noncommercial among them) and the
+  project picks one at start. Depends on the wizard (PBI-1.4), unless
+  the licence texts are first added as files under `licenses/`.
+
+- **[NEXT] PBI-1.9** — Fix the README setup steps, which still say to
+  "Create a Cowork project" (README.md lines 19-27 and 48-53, plus the
+  Team table). Cowork is now part of Claude itself. Keep what still
+  holds: one project per repository, and the repo files are Clead's
+  memory. Docs only.
 
 ---
 
