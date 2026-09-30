@@ -3,9 +3,10 @@
 # ships to bootstrapped projects.
 #
 # - Every push and pull request: run the build.sh / publish.sh tests.
-# - A pushed v* tag: run the tests, build, and publish the output to the
-#   default branch of sugose/ai-project-bootstrap as one commit, then
-#   push the same tag there. Needs the Actions secret
+# - A pushed v* tag: run the tests, refuse unless the tagged commit is on
+#   main, build, and publish the output to the default branch of
+#   sugose/ai-project-bootstrap as one commit, then push the same tag
+#   there. Needs the Actions secret
 #   BOOTSTRAP_PUSH_TOKEN (fine-grained, that repo only, Contents and
 #   Workflows: read and write).
 name: Bootstrapper
@@ -21,7 +22,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  bootstrapper-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,7 +31,7 @@ jobs:
 
   publish:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: test
+    needs: bootstrapper-test
     runs-on: ubuntu-latest
     concurrency:
       group: bootstrapper-publish
@@ -41,6 +42,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          # Full history of all branches, so origin/main is available
+          # for the on-main check.
+          fetch-depth: 0
+
+      - name: Require the tagged commit to be on main
+        run: |
+          set -euo pipefail
+          bash bootstrap/require-on-main.sh . "$(git rev-parse HEAD)" origin/main
 
       - name: Build
         env:
