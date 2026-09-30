@@ -29,7 +29,9 @@ get a working project in any supported language.
   requirements.txt, requirements-dev.txt, pre-commit-config.yaml,
   gitignore, vscode settings, placeholder test. Adapt to v2 structure.
   Also create `docs/DEV_INFRASTRUCTURE.md` covering:
-  - **`.gitattributes` with an explicit line-ending policy (e.g.
+  - **Done 2026-09-30 (#57): the template root now has this
+    `.gitattributes`, which new projects inherit.** Original text:
+    **`.gitattributes` with an explicit line-ending policy (e.g.
     `* text=auto eol=lf`), committed as part of initial scaffolding —
     not optional, not added later.** Justification: fomo-f (running v1
     workflow) hit three separate rounds of full-file corruption on the
