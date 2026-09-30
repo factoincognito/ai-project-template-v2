@@ -1,3 +1,6 @@
 {
-  "recommendations": ["biomejs.biome", "ms-vscode.vscode-typescript-next", "github.copilot"]
+  "recommendations": [
+    "biomejs.biome",
+    "ms-vscode.vscode-typescript-next"
+  ]
 }
