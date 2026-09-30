@@ -66,6 +66,17 @@ npm run test:e2e
 npm run ci
 ```
 
+### Deploying (GitHub Pages)
+
+`deploy.yml` (copy to `.github/workflows/deploy.yml`) builds on every push to `main` and publishes `dist/` to GitHub Pages. It is optional: skip it if the page is served some other way. It does not re-run the tests, because `main` is protected and only takes merges with CI green.
+
+One-off setup, done by the repo owner in GitHub (not something an agent can do):
+
+1. Repository Settings, Pages, Source: **GitHub Actions**.
+2. Pages, Custom domain: enter the address, for example `sonar.example.se`.
+3. At the DNS provider, add a `CNAME` record from that name to `<github-user>.github.io`.
+4. Once GitHub has issued the certificate, tick **Enforce HTTPS**.
+
 ### Pre-commit equivalent
 
 Web projects use Biome's CI command in the CI pipeline rather than pre-commit hooks. Optionally add `lint-staged` + `husky` for local pre-commit enforcement — not included by default.
