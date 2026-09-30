@@ -125,7 +125,7 @@ get a working project in any supported language.
   project picks one at start. Depends on the wizard (PBI-1.4), unless
   the licence texts are first added as files under `licenses/`.
 
-- **[NEXT] PBI-1.9** — Fix the README setup steps, which still say to
+- **[DONE] PBI-1.9** (2026-09-30) — Fix the README setup steps, which still say to
   "Create a Cowork project" (README.md lines 19-27 and 48-53, plus the
   Team table). Cowork is now part of Claude itself. Keep what still
   holds: one project per repository, and the repo files are Clead's
