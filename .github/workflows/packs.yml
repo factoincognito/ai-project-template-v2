@@ -7,9 +7,11 @@
 # (tools/layout-pack.sh), then runs that pack's own CI steps. The steps
 # below copy the pack's ci.yml commands verbatim;
 # tools/test-layout-pack.sh fails if they drift apart. The template has
-# no lockfile, so `npm install` creates one first ("First-time setup" in
-# the pack's code-standards.md), then `npm ci` runs as a project's CI
-# would.
+# no lockfile, so the Node packs run `npm install` to create one first
+# ("First-time setup" in the pack's code-standards.md), then `npm ci`
+# runs as a project's CI would. The Python pack has no lockfile to
+# create; pack-python leaves out the pip cache of the pack's ci.yml,
+# which would look for requirements files in the template checkout.
 name: Packs
 
 on:
@@ -112,3 +114,38 @@ jobs:
           name: playwright-report
           path: project/playwright-report/
           retention-days: 7
+
+  pack-python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: project
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: template
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Lay out the python pack
+        working-directory: .
+        run: bash template/tools/layout-pack.sh python project
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Format check
+        run: ruff format --check .
+
+      - name: Type check
+        run: mypy
+
+      - name: Test with coverage
+        run: pytest --cov=src --cov-fail-under=80

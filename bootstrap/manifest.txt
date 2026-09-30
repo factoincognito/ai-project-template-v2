@@ -19,6 +19,7 @@ memory/roles.md
 memory/standards.md
 
 docs/CROG_ONBOARDING.md
+docs/DEV_INFRASTRUCTURE.md
 docs/ROUTINES.md
 docs/SPEC.md
 docs/decisions/0001-rebuild-workflow.md

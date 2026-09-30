@@ -20,20 +20,23 @@ this repo: `CLAUDE.md` is the entry point.
    pipeline's first release; until then there is no clean way to
    bootstrap, and a copy of this repo would carry the template's own
    backlog, changelog and decisions.
-2. Copy in the language pack you need from `languages/` (`node` or
-   `web`). The bootstrap wizard that will do this for you is not written
-   yet (backlog PBI-1.4), so by hand:
+2. Copy in the language pack you need from `languages/` (`node`,
+   `web` or `python`). The bootstrap wizard that will do this for you is
+   not written yet (backlog PBI-1.4), so by hand:
 
    | Pack file | Goes to |
    |---|---|
    | `ci.yml` | `.github/workflows/ci.yml` (replaces the stub, which only checks out the code) |
    | `gitignore` | `.gitignore` (merge with the template's) |
    | `vscode-settings.json`, `vscode-extensions.json` | `.vscode/settings.json`, `.vscode/extensions.json` |
-   | `package.json`, `tsconfig.json`, `biome.json` | project root |
+   | node, web: `package.json`, `tsconfig.json`, `biome.json` | project root |
    | node: `placeholder.test.ts` | `src/` |
    | web: `index.html`, `vite.config.mts`, `playwright.config.ts` | project root |
    | web: `starter/src/`, `starter/e2e/` | `src/`, `e2e/` |
    | web, optional: `deploy.yml`, `wrangler.jsonc` | `.github/workflows/deploy.yml`, project root |
+   | python: `pyproject.toml`, `requirements.txt`, `requirements-dev.txt` | project root |
+   | python: `pre-commit-config.yaml` | `.pre-commit-config.yaml` |
+   | python: `starter/src/` | `src/` |
 
    Then follow the pack's `code-standards.md` ("First-time setup").
 3. Turn on branch protection for `main` (Settings, Branches): require a
