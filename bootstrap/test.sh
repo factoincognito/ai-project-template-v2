@@ -173,6 +173,8 @@ test_real_repo_build_matches_manifest_plus_stubs() {
   [ ! -e "$out/docs/RELEASE_NOTES.md" ] || die "RELEASE_NOTES shipped"
   [ ! -e "$out/bootstrap" ] || die "bootstrap/ shipped"
   [ ! -e "$out/.github/workflows/bootstrapper.yml" ] || die "bootstrapper.yml shipped"
+  [ ! -e "$out/.github/workflows/packs.yml" ] || die "packs.yml shipped"
+  [ ! -e "$out/tools" ] || die "tools/ shipped"
 }
 
 test_real_stubs_have_no_forbidden_strings() {

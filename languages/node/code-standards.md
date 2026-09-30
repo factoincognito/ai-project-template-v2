@@ -1,8 +1,10 @@
 ## Node/TypeScript Code Standards
 
-- **Node.js 22 LTS** — use modern ES2022+ features
+- **Node.js 24 LTS** — use modern ES2022+ features
 - **TypeScript strict mode** — no `any`, no implicit returns, no unchecked array access
-- **Biome** for linting and formatting — `npx biome ci .` must be clean before pushing
+- **Biome** for linting and formatting — `npx biome ci --error-on-warnings .` must be clean before pushing
+- **Biome warnings fail CI** — Biome 2 reports several recommended rules (for example `useConst`, `noNonNullAssertion`, unused variables and imports) as warnings, so CI runs `biome ci --error-on-warnings`. `noExplicitAny` is set to error in `biome.json`, so `any` fails even without the flag.
+- **Global types are listed** — TypeScript 6 no longer loads every installed `@types` package, so `tsconfig.json` lists them in `types` (`jest` by default). Add any you install, e.g. `node` after `npm install -D @types/node`.
 - **Jest + ts-jest** for testing — minimum 80% line coverage enforced in CI
 - **No hardcoded values** — everything configurable via environment variables or config files
 - **Error handling** — always type-narrow errors; never `catch (e: any)`
@@ -30,7 +32,7 @@ npx jest --coverage
 npm run typecheck
 
 # Lint and format check
-npx biome ci .
+npx biome ci --error-on-warnings .
 
 # Format (auto-fix)
 npx biome format --write .

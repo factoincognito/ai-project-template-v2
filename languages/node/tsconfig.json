@@ -6,6 +6,7 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
+    "types": ["jest"],
     "noImplicitReturns": true,
     "noUncheckedIndexedAccess": true,
     "esModuleInterop": true,
