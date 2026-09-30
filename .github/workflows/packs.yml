@@ -7,11 +7,12 @@
 # (tools/layout-pack.sh), then runs that pack's own CI steps. The steps
 # below copy the pack's ci.yml commands verbatim;
 # tools/test-layout-pack.sh fails if they drift apart. The template has
-# no lockfile, so the Node packs run `npm install` to create one first
-# ("First-time setup" in the pack's code-standards.md), then `npm ci`
-# runs as a project's CI would. The Python pack has no lockfile to
-# create; pack-python leaves out the pip cache of the pack's ci.yml,
-# which would look for requirements files in the template checkout.
+# no lockfile, so the npm-based packs (node, web, react-native) run
+# `npm install` to create one first ("First-time setup" in the pack's
+# code-standards.md), then `npm ci` runs as a project's CI would. The
+# Python pack has no lockfile to create; pack-python leaves out the pip
+# cache of the pack's ci.yml, which would look for requirements files in
+# the template checkout.
 name: Packs
 
 on:
@@ -149,3 +150,38 @@ jobs:
 
       - name: Test with coverage
         run: pytest --cov=src --cov-fail-under=80
+
+  pack-react-native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: project
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: template
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Lay out the react-native pack
+        working-directory: .
+        run: bash template/tools/layout-pack.sh react-native project
+
+      - name: Create the lockfile
+        run: npm install --no-audit --no-fund
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint and format check
+        run: npx biome ci --error-on-warnings .
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Test with coverage
+        run: npx jest --coverage --coverageThreshold='{"global":{"lines":80}}'

@@ -21,15 +21,15 @@ this repo: `CLAUDE.md` is the entry point.
    bootstrap, and a copy of this repo would carry the template's own
    backlog, changelog and decisions.
 2. Copy in the language pack you need from `languages/` (`node`,
-   `web` or `python`). The bootstrap wizard that will do this for you is
-   not written yet (backlog PBI-1.4), so by hand:
+   `web`, `python` or `react-native`). The bootstrap wizard that will do
+   this for you is not written yet (backlog PBI-1.4), so by hand:
 
    | Pack file | Goes to |
    |---|---|
    | `ci.yml` | `.github/workflows/ci.yml` (replaces the stub, which only checks out the code) |
    | `gitignore` | `.gitignore` (merge with the template's) |
    | `vscode-settings.json`, `vscode-extensions.json` | `.vscode/settings.json`, `.vscode/extensions.json` |
-   | node, web: `package.json`, `tsconfig.json`, `biome.json` | project root |
+   | node, web, react-native: `package.json`, `tsconfig.json`, `biome.json` | project root |
    | node: `placeholder.test.ts` | `src/` |
    | web: `index.html`, `vite.config.mts`, `playwright.config.ts` | project root |
    | web: `starter/src/`, `starter/e2e/` | `src/`, `e2e/` |
@@ -37,6 +37,8 @@ this repo: `CLAUDE.md` is the entry point.
    | python: `pyproject.toml`, `requirements.txt`, `requirements-dev.txt` | project root |
    | python: `pre-commit-config.yaml` | `.pre-commit-config.yaml` |
    | python: `starter/src/` | `src/` |
+   | react-native: `app.json` | project root |
+   | react-native: `starter/src/` | `src/` |
 
    Then follow the pack's `code-standards.md` ("First-time setup").
 3. Turn on branch protection for `main` (Settings, Branches): require a

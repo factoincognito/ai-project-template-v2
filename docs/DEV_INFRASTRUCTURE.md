@@ -29,7 +29,8 @@ pack.
 1. Install git and VS Code. For Crog, install the Claude Code extension
    in VS Code.
 2. Install the runtime for the project's language pack (Part 2):
-   Node.js 24 for `node` and `web`, Python 3.14 for `python`.
+   Node.js 24 for `node`, `web` and `react-native`, Python 3.14 for
+   `python`.
 3. Clone the repo and open the folder in VS Code. Accept the
    recommended extensions when VS Code offers them
    (`.vscode/extensions.json`, from the pack).
@@ -241,3 +242,21 @@ commands: `languages/node/code-standards.md`.
 Everything in the `node` pack, plus a Vite build into one
 self-contained HTML file and Playwright browser tests. Setup, commands
 and the optional Cloudflare deploy: `languages/web/code-standards.md`.
+
+### Mobile app (`react-native` pack)
+
+Expo SDK 57 with React Native 0.86 and React 19.2, TypeScript strict
+mode, Biome, and Jest through the `jest-expo` preset with React Native
+Testing Library for components, under an 80% line coverage gate. The
+first `npm install` creates `package-lock.json`, which the project
+commits. The Expo, React, React Native, Jest and TypeScript versions
+move together with the SDK: add libraries with `npx expo install`, and
+upgrade the SDK as one change.
+
+CI checks only what runs in Node on a Linux runner: lint and format,
+the type check, and the tests. It does not build the app for Android
+or iOS, run it on a device or simulator, or use EAS, which need
+platform tooling (Xcode needs macOS) or an Expo account. Try changes
+the tests cannot see on a phone with Expo Go. Setup, commands and the
+full list of what CI does not check:
+`languages/react-native/code-standards.md`.

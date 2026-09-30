@@ -94,6 +94,64 @@ test_python_layout_matches_readme_table() {
   [ -f "$out/src/tests/test_placeholder.py" ] || die "no placeholder test in src/tests/"
 }
 
+test_react_native_layout_matches_readme_table() {
+  local out="$WORK/rn.$RANDOM" expected
+  bash "$LAYOUT" react-native "$out" >/dev/null || die "layout failed"
+  expected="$( {
+    printf '%s\n' .github/workflows/ci.yml .gitignore .vscode/extensions.json \
+      .vscode/settings.json biome.json package.json tsconfig.json app.json
+    (cd "$REPO/languages/react-native/starter" && find src -type f)
+  } | LC_ALL=C sort)"
+  diff <(list_files "$out") <(echo "$expected") || die "react-native layout differs from the README table"
+  [ -f "$out/src/App.test.tsx" ] || die "no starter test in src/"
+}
+
+test_react_native_files_are_byte_identical_to_the_pack() {
+  local out="$WORK/rn.$RANDOM" p="$REPO/languages/react-native"
+  bash "$LAYOUT" react-native "$out" >/dev/null
+  cmp -s "$p/ci.yml" "$out/.github/workflows/ci.yml" || die "ci.yml differs"
+  cmp -s "$p/gitignore" "$out/.gitignore" || die "gitignore differs"
+  cmp -s "$p/app.json" "$out/app.json" || die "app.json differs"
+  cmp -s "$p/package.json" "$out/package.json" || die "package.json differs"
+  cmp -s "$p/starter/src/App.tsx" "$out/src/App.tsx" || die "starter App differs"
+  cmp -s "$p/starter/src/index.ts" "$out/src/index.ts" || die "starter entry differs"
+  [ ! -e "$out/code-standards.md" ] || die "code-standards.md laid out"
+  [ ! -e "$out/starter" ] || die "starter/ copied as is"
+}
+
+test_react_native_entry_point_is_laid_out() {
+  # package.json "main" must name a file the layout creates, or the app
+  # has no entry point.
+  local out="$WORK/rn.$RANDOM" main
+  bash "$LAYOUT" react-native "$out" >/dev/null
+  main="$(sed -n 's/^ *"main": "\([^"]*\)".*/\1/p' "$out/package.json")"
+  [ -n "$main" ] || die "package.json has no main"
+  [ -f "$out/$main" ] || die "package.json main $main is not laid out"
+}
+
+test_npm_packs_have_no_lockfile() {
+  local p f
+  for p in node web react-native; do
+    for f in package-lock.json yarn.lock pnpm-lock.yaml bun.lockb; do
+      [ ! -e "$REPO/languages/$p/$f" ] || die "lockfile in the $p pack: $f"
+    done
+  done
+}
+
+test_npm_packs_pin_every_dependency_exactly() {
+  local p n=0 v
+  for p in node web react-native; do
+    while IFS= read -r v; do
+      n=$((n + 1))
+      [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "$p package.json: not pinned exactly: $v"
+    done < <(node -e '
+      const pkg = require(process.argv[1]);
+      for (const d of [pkg.dependencies, pkg.devDependencies]) for (const v of Object.values(d || {})) console.log(v);
+    ' "$REPO/languages/$p/package.json")
+  done
+  [ "$n" -ge 15 ] || die "found only $n dependencies; the parser is broken"
+}
+
 test_python_files_are_byte_identical_to_the_pack() {
   local out="$WORK/python.$RANDOM" p="$REPO/languages/python"
   bash "$LAYOUT" python "$out" >/dev/null
@@ -221,10 +279,13 @@ test_readme_table_names_every_laid_out_file() {
     for f in ci.yml gitignore vscode-settings.json vscode-extensions.json package.json \
       tsconfig.json biome.json placeholder.test.ts index.html vite.config.mts \
       playwright.config.ts 'starter/src/' 'starter/e2e/' pyproject.toml requirements.txt \
-      requirements-dev.txt pre-commit-config.yaml '.pre-commit-config.yaml'; do
+      requirements-dev.txt pre-commit-config.yaml '.pre-commit-config.yaml' app.json; do
       grep -qF "\`$f\`" "$readme" || die "$readme table lacks $f"
     done
     grep -qE '^ *\| python: ' "$readme" || die "$readme table has no python row"
+    grep -qE '^ *\| react-native: ' "$readme" || die "$readme table has no react-native row"
+    grep -qE '^ *\|[^|]*react-native[^|]*: [^|]*`package.json`' "$readme" \
+      || die "$readme table does not place react-native's package.json"
   done
 }
 
@@ -234,6 +295,8 @@ test_packs_workflow_uses_the_script_for_every_pack() {
   grep -qE '^  pack-node:' "$wf" || die "no pack-node job"
   grep -qE '^  pack-web:' "$wf" || die "no pack-web job"
   grep -qE '^  pack-python:' "$wf" || die "no pack-python job"
+  grep -qE '^  pack-react-native:' "$wf" || die "no pack-react-native job"
+  grep -qE 'tools/layout-pack\.sh react-native ' "$wf" || die "pack-react-native does not use layout-pack.sh"
   grep -qE 'tools/layout-pack\.sh python ' "$wf" || die "pack-python does not use layout-pack.sh"
   grep -qE 'tools/layout-pack\.sh node ' "$wf" || die "pack-node does not use layout-pack.sh"
   grep -qE 'tools/layout-pack\.sh web ' "$wf" || die "pack-web does not use layout-pack.sh"
@@ -244,7 +307,7 @@ test_packs_workflow_uses_the_script_for_every_pack() {
 
 test_packs_workflow_node_version_matches_pack_ci() {
   local wf="$REPO/.github/workflows/packs.yml" v
-  for p in node web; do
+  for p in node web react-native; do
     v="$(grep -oE 'node-version: "[0-9]+"' "$REPO/languages/$p/ci.yml")" || die "$p ci.yml has no node-version"
     grep -qF "$v" "$wf" || die "packs.yml lacks $v from the $p pack"
   done
@@ -261,7 +324,7 @@ test_pack_ci_steps_are_single_line() {
   # The drift test below reads `run:` lines one at a time; a multi-line
   # `run: |` block would slip past it.
   local p
-  for p in node web python; do
+  for p in node web python react-native; do
     [ -f "$REPO/languages/$p/ci.yml" ] || die "no $p ci.yml"
     ! grep -nE '^ *run: *[|>]' "$REPO/languages/$p/ci.yml" || die "$p ci.yml has a multi-line run"
   done
@@ -272,13 +335,13 @@ test_packs_workflow_runs_every_pack_ci_step() {
   # cannot drift apart. `npm ci` is the one it may precede with
   # `npm install`, because the template has no lockfile.
   local wf="$REPO/.github/workflows/packs.yml" p cmd n=0
-  for p in node web python; do
+  for p in node web python react-native; do
     while IFS= read -r cmd; do
       n=$((n + 1))
       grep -qF -- "run: $cmd" "$wf" || die "packs.yml lacks the $p pack step: $cmd"
     done < <(sed -n 's/^ *run: //p' "$REPO/languages/$p/ci.yml")
   done
-  [ "$n" -ge 13 ] || die "found only $n pack CI steps; the parser is broken"
+  [ "$n" -ge 17 ] || die "found only $n pack CI steps; the parser is broken"
 }
 
 test_packs_workflow_uses_the_pack_ci_action_versions() {
@@ -286,7 +349,7 @@ test_packs_workflow_uses_the_pack_ci_action_versions() {
   while IFS= read -r u; do
     grep -qF -- "$u" "$wf" || die "packs.yml lacks $u from the pack ci.yml"
   done < <(grep -hoE 'uses: [^ ]+' "$REPO/languages/node/ci.yml" "$REPO/languages/web/ci.yml" \
-    "$REPO/languages/python/ci.yml" | sort -u)
+    "$REPO/languages/python/ci.yml" "$REPO/languages/react-native/ci.yml" | sort -u)
 }
 
 test_template_only_files_are_not_in_the_manifest() {

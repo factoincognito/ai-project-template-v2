@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Lays out a language pack in a project directory, exactly as the README
 # table "Creating a project from the template", step 2, says to by hand.
-# Usage: bash tools/layout-pack.sh <node|web|python> <target-dir>
+# Usage: bash tools/layout-pack.sh <node|web|python|react-native> <target-dir>
 #
 # Template-only: tools/ is not in bootstrap/manifest.txt. Used by
 # .github/workflows/packs.yml to test each pack on a fresh project.
@@ -11,7 +11,7 @@
 # PACKS_DIR overrides where the packs are read from (for tests).
 set -euo pipefail
 
-usage() { echo "usage: $0 <node|web|python> <target-dir>" >&2; exit 2; }
+usage() { echo "usage: $0 <node|web|python|react-native> <target-dir>" >&2; exit 2; }
 fail() { echo "layout-pack: $*" >&2; exit 1; }
 
 [ "$#" -eq 2 ] || usage
@@ -57,7 +57,14 @@ pre-commit-config.yaml .pre-commit-config.yaml
 starter/src/ src/"
     NOT_LAID_OUT="code-standards.md"
     ;;
-  *) fail "unknown pack: $PACK (expected node, web or python)" ;;
+  react-native)
+    TABLE="$COMMON
+$TYPESCRIPT
+app.json app.json
+starter/src/ src/"
+    NOT_LAID_OUT="code-standards.md"
+    ;;
+  *) fail "unknown pack: $PACK (expected node, web, python or react-native)" ;;
 esac
 
 SRC="$PACKS_DIR/$PACK"

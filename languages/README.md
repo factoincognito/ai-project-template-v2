@@ -13,6 +13,7 @@ project changes them as it needs to.
 | `node/` | Node.js and TypeScript code: libraries, services, tools | Biome lint and format, TypeScript type check, Jest with an 80% line coverage gate |
 | `web/` | A static web page built into one self-contained HTML file | Everything in `node/`, plus a Vite build and Playwright browser tests at phone and desktop width, in light and dark mode |
 | `python/` | Python 3.14 code: libraries, services, tools | Ruff lint and format, mypy in strict mode, pytest with an 80% line coverage gate |
+| `react-native/` | A mobile app for Android and iOS, built with React Native and Expo | Biome lint and format, TypeScript type check, Jest (jest-expo) unit and component tests with an 80% line coverage gate. No device, simulator or app-store builds |
 
 The web pack also has an optional deploy to Cloudflare (`deploy.yml`,
 `wrangler.jsonc`). Where each file goes is listed in the project's
