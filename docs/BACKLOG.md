@@ -81,6 +81,56 @@ get a working project in any supported language.
 - **[LATER] PBI-1.5** — Write `languages/README.md` — how to add a
   new language pack to v2.
 
+- **[LATER] PBI-1.6** — Refresh the Node pack's tool versions.
+  PBI-1.2 ported v1's pins unchanged: Biome 1.9.4, Jest 29.7.0,
+  @types/jest 29.5.14, ts-jest 29.2.5, TypeScript 5.7.3, Node 22. On
+  2026-09-30 npm's latest were Biome 2.5.14, Jest 30.5.2, @types/jest
+  30.0.0, ts-jest 29.4.14 and TypeScript 7.0.2. Do not bump blindly:
+  test the new combination on a fresh project with the same checks
+  PBI-1.2 used (`npm ci`, `biome ci`, jest with the 80% coverage gate,
+  `tsc`, and that the strictness flags still reject violations), then
+  bump in one PR. Known or unverified points: Biome 2 changes the
+  config format (`files.ignore` in `biome.json` moves to
+  `files.includes`; `biome migrate` exists for this); whether ts-jest
+  supports the new Jest and TypeScript majors is unverified; Node 22's
+  remaining support window against the current LTS is unverified.
+  Whichever Node version the pack targets must also match `ci.yml`.
+  Also covers the web pack's pins (PBI-1.7), notably Playwright 1.56.1
+  (npm latest on 2026-09-30: 1.63.0).
+
+- **[NEXT] PBI-1.7** — Write the web pack (`languages/web/`) for static
+  single-file web apps; the sonar calculator is its first user. It is
+  self-contained like the other packs: the Node pack plus web
+  additions, with starter files under `starter/` mirroring the project
+  layout (`src/`, `e2e/`). Build: Vite + vite-plugin-singlefile produce
+  one `dist/index.html` with no external requests. Checks: Jest for
+  pure logic; Playwright against the built file in four projects
+  (phone 375px and desktop 1280px, each in light and dark) that fail
+  on console or uncaught errors, sideways scroll, a wrong colour
+  scheme, or any request beyond the page itself. Verified on a scratch
+  project with five deliberate breakages (console error, uncaught
+  exception, 600px element, missing dark mode, external image): each
+  failed exactly the checks it should. Playwright is pinned at 1.56.1
+  because that build's Chromium is the one the verification
+  environment can run; refresh under PBI-1.6. Not verified there: the
+  CI step that installs the browser (`npx playwright install
+  --with-deps chromium`). Deploy workflow: Cloudflare (Adam, 2026-09-30),
+  where the calculator will be served as acuteping.com. `deploy.yml`
+  uploads `dist/` as the static assets of a Worker configured by
+  `wrangler.jsonc`; checked with `wrangler deploy --dry-run` only, a
+  real deploy is not yet verified.
+
+- **[LATER] PBI-1.8** — Licence choice at project setup: the template
+  offers a set of licences (PolyForm Noncommercial among them) and the
+  project picks one at start. Depends on the wizard (PBI-1.4), unless
+  the licence texts are first added as files under `licenses/`.
+
+- **[NEXT] PBI-1.9** — Fix the README setup steps, which still say to
+  "Create a Cowork project" (README.md lines 19-27 and 48-53, plus the
+  Team table). Cowork is now part of Claude itself. Keep what still
+  holds: one project per repository, and the repo files are Clead's
+  memory. Docs only.
+
 ---
 
 ## Phase 2 — Validate unproven pieces
