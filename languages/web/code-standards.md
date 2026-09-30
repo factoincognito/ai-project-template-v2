@@ -66,16 +66,19 @@ npm run test:e2e
 npm run ci
 ```
 
-### Deploying (GitHub Pages)
+### Deploying (Cloudflare)
 
-`deploy.yml` (copy to `.github/workflows/deploy.yml`) builds on every push to `main` and publishes `dist/` to GitHub Pages. It is optional: skip it if the page is served some other way. It does not re-run the tests, because `main` is protected and only takes merges with CI green.
+Optional: skip it if the page is served some other way. `deploy.yml` (copy to `.github/workflows/deploy.yml`) builds on every push to `main` and uploads `dist/` to Cloudflare as the static assets of a Worker, configured in `wrangler.jsonc` (copy to the project root and set `name`). There is no Worker script; Cloudflare serves the file as is.
 
-One-off setup, done by the repo owner in GitHub (not something an agent can do):
+The workflow does not re-run the tests. That is only safe when `main` requires CI to pass before a merge (a branch protection setting in GitHub); turn that on before adding this workflow.
 
-1. Repository Settings, Pages, Source: **GitHub Actions**.
-2. Pages, Custom domain: enter the address, for example `sonar.example.se`.
-3. At the DNS provider, add a `CNAME` record from that name to `<github-user>.github.io`.
-4. Once GitHub has issued the certificate, tick **Enforce HTTPS**.
+One-off setup, done by the repo owner:
+
+1. In Cloudflare, create an API token from the **Edit Cloudflare Workers** template.
+2. In GitHub, add two repository secrets: `CLOUDFLARE_API_TOKEN` (the token) and `CLOUDFLARE_ACCOUNT_ID` (shown in the Cloudflare dashboard).
+3. For your own domain (it must be a zone in the same Cloudflare account), uncomment `routes` in `wrangler.jsonc` and enter it (Cloudflare calls this a Workers Custom Domain).
+
+Verified so far: `wrangler deploy --dry-run` (Wrangler 4.145.0) accepts `wrangler.jsonc`, with and without `routes`, and reads the built `dist/index.html`. Not verified: a real deploy, which needs the secrets above.
 
 ### Pre-commit equivalent
 
