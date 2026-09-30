@@ -49,7 +49,13 @@ anything.)
 - Verdict posted directly as a PR comment. No relay through Adam.
 - Fix prompts posted directly to the PR for Crog to pick up.
 - After 3 review cycles without resolution: escalate to Adam.
-  This is a safety control, not relay work.
+  This is a safety control, not relay work. The escalation message
+  opens with the reason and gives Adam what he needs to decide:
+  1. Why he is getting it: "Escalated after 3 review rounds on #N
+     without agreement."
+  2. What the reviewer and author disagree on, in plain words.
+  3. Each side's position, one or two lines each.
+  4. The decision needed, as a question he can answer directly.
 
 ## 7. Reviewer independence — hard constraint
 The review must run as a separate invocation from the implementation
