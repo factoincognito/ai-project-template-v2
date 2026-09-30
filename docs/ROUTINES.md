@@ -1,30 +1,35 @@
 # Routines and Trigger Wiring
 
-*Scope note: this document describes the Crog-implemented, code/src PR flow only. Doc-only changes (memory/, docs/, CHANGELOG.md, CLAUDE.md itself) skip all of the below — Clead edits and commits them directly via Chrome driving GitHub's web editor, no Crog, no review dispatch. See CLAUDE.md's "Change execution model" section for the routing rule.*
+*Scope note: this document describes how reviews and Crog's work are triggered. Which changes need which review is in CLAUDE.md's "Change execution model" section.*
 
-## Current state (transitional)
+## Current state (2026-09-30)
 
-Until GitHub Actions review dispatch and Routines secret injection
-are both confirmed and in place, the trigger flow is:
+1. The author opens the PR (Crog for code, Clead for docs, process and
+   its own config changes).
+2. Clead starts the review directly. No automation triggers it yet:
+   `review.yml` only posts a `<!-- clead-review-ready -->` marker
+   comment on PRs that touch `src/`, and nothing reads it.
+3. The reviewer posts the verdict on the PR. Fix loop until approved,
+   escalating to Adam after 3 rounds.
+4. Crog merges once CI is green and the review has passed.
+5. `changelog.yml` posts a reminder on every merge to open a CHANGELOG
+   PR.
 
-1. Crog opens PR, posts pr_done comment
-2. Adam pastes the review trigger to Clead (one paste — not relay)
-3. Clead reviews, posts verdict directly to PR
-4. Adam merges on approval
+Adam is not in this loop and never relays messages. How Clead reaches
+Crog today: by starting Crog as a separate agent from its own session,
+with only the diff and `memory/standards.md` as input. Clead cannot
+reach a Crog session running in Adam's VS Code (tested 2026-09-30 with
+Remote Control from a cloud Clead session: not reachable).
 
 ## Target state
 
-- PR opened → `.github/workflows/review.yml` dispatches review Routine
-- Review approved → workflow notifies Adam
-- PR merged → `.github/workflows/changelog.yml` triggers changelog step
+- PR opened: a workflow triggers Clead's review without Clead having to
+  notice the PR.
+- Clead's task comment on a PR triggers Crog (Path B in
+  `memory/decisions.md`, open question 2).
 
-## Assumptions to validate before target state is live
-
-1. GitHub connector can **write** PR comments (not just fetch diffs)
-2. Routines secret injection available from Anthropic
-
-Both are load-bearing for full autonomy. Do not claim two Adam
-touchpoints until both are confirmed.
+Both depend on firing a Routine from GitHub Actions with its token held
+as an Actions secret; not yet built or tested (backlog PBI-2.2, 4.4).
 
 ## Review Routine — input contract (hard constraint)
 
@@ -56,6 +61,7 @@ When Clead hands Crog a prompt, it is wrapped in a delimiter block:
   one for every subsequent Crog prompt in that same Clead session,
   regardless of which repo or PR the prompt concerns. Clead maintains
   this counter itself — it is not Adam's manual bookkeeping.
-- **Purpose** — lets Adam identify at a glance what's meant to be
-  pasted to Crog versus commentary, and lets either party refer back
-  to a specific prompt unambiguously (e.g. "see CROG PROMPT 10:47 #1").
+- **Purpose** — lets anyone refer back to a specific prompt
+  unambiguously (e.g. "see CROG PROMPT 10:47 #1"). Since 2026-09-30
+  Clead sends prompts to Crog itself; when Adam chooses to run a task
+  in his own Crog tab, the delimiters show him exactly what to paste.
