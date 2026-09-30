@@ -2,7 +2,6 @@
   "recommendations": [
     "biomejs.biome",
     "ms-vscode.vscode-typescript-next",
-    "github.copilot",
     "ms-playwright.playwright"
   ]
 }
