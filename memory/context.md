@@ -59,6 +59,10 @@ response is to adapt, not to defend.
 
 ## The migration plan for python-blackjack-v2
 
+*2026-09-30: blackjack-v2 is no longer the pilot; acuteping is (see
+memory/decisions.md). The plan below still stands for whenever
+blackjack-v2 is migrated, with no date set.*
+
 After this template is proven, the plan is:
 
 1. Bootstrap python-blackjack-v2 from this template

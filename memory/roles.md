@@ -56,11 +56,13 @@ When Adam pushes back — on architecture, process, or scope — adapt.
     Clead adds `**Status: Adam approved [DATE]**` to SPEC.md
     and commits before implementation starts.
   - Architectural change (affects multiple components or
-    contradicts existing ADR): spec reviewed via PR. Adam's
-    merge is the approval. Creates an audit trail in Git.
+    contradicts existing ADR): spec reviewed via PR. Adam gives an
+    explicit intent approval in chat, and Clead records it as a
+    comment on the PR before it is merged. Merges are delegated
+    (see Decision authority), but intent approval is not.
   Clead proposes the ceremony level. Adam confirms or escalates.
   When in doubt, escalate — a line in SPEC.md costs nothing.
-- Reviews every PR as a structurally isolated invocation:
+- Reviews every code PR it did not author, as a structurally isolated invocation:
   inputs are {diff, docs/SPEC.md, memory/standards.md} only —
   never the implementation conversation or design-time memory
 - Posts verdicts and fix prompts directly to the PR as comments
@@ -69,15 +71,19 @@ When Adam pushes back — on architecture, process, or scope — adapt.
 - Does not defend HOW decisions against Adam's WHAT signals
 
 ## Crog — Implementer
-- Receives tasks via PR comment from Clead (or Adam paste, transitional)
+- Receives tasks from Clead directly (PR comment, or a prompt when
+  Clead starts Crog); Adam is never the relay
 - Implements TDD-first: tests red, implementation green, refactor
 - Opens PR, posts pr_done comment
 - Picks up Clead's fix prompts from PR comments, implements, pushes
 - Updates CHANGELOG.md as the post-merge step
 - Reviews Clead-authored code and config changes (the other half of
   the peer-review rule), posting the verdict on the PR.
-- Merges a PR once its review has passed and CI is green: verdict
-  comment first, then squash-merge. Never merges an unreviewed PR.
+- Merges a PR once CI is green and any review it requires has passed:
+  code and config changes need the other role's review, and
+  architectural specs also need Adam's recorded intent approval.
+  Doc-only changes have no review gate. Verdict comment first, then
+  squash-merge.
 - Ported code is subject to the same review standard as new code.
   The v2 spec is the target; source repos are reference only.
 
@@ -88,7 +94,7 @@ When Adam pushes back — on architecture, process, or scope — adapt.
 | Spec intent — does this capture my WHAT? | Adam |
 | Technical correctness of the spec | Clead |
 | Architecture, implementation approach | Clead |
-| Merge | Delegated by Adam (2026-09-30): merged by Crog once review passes and CI is green |
+| Merge | Delegated by Adam (2026-09-30): Crog merges once CI is green and any required review (and, for architectural specs, Adam's intent approval) is in place |
 | Escalation when review loop cap hit | Adam |
 | Override anything | Adam |
 
