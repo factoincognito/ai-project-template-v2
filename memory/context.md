@@ -247,8 +247,8 @@ A long session that started as work on acuteping (the sonar calculator)
 and turned into making this template complete by its own definition
 before bootstrapping acuteping from it. The rule Adam set: everything
 the template says it has or does must be true, and anything not built
-must be clearly marked as backlog. An audit found about 18 false or
-stale claims; all were fixed through PRs #42-#62, with Crog reviewing
+must be clearly marked as backlog. An audit found false or stale
+claims; they were fixed through PRs #42-#62, with Crog reviewing
 Clead's process and config changes and catching several overclaims.
 
 Along the way: acuteping replaced blackjack-v2 as the pilot; reviews and
@@ -263,12 +263,12 @@ remaining Phase 1 and 2 items that needed no decision were done (PRs
 Routines research.
 
 How the work ran: Clead has git and GitHub API access in the cloud
-session and starts Crog as separate agents (Adam cannot be reached for
-relaying, and Clead cannot reach Adam's VS Code Crog). Adam works with
+session and starts Crog as separate agents (Adam is never the relay, and
+Clead cannot reach the Crog in Adam's VS Code). Adam works with
 the Claude app beside VS Code. He wants visible progress while agents
 work, and no role of his as a message relay.
 
 What is private stays out of this repo; acuteping's private notes live
-in the private repo sugose/acuteping-harbor until acuteping is
+in a separate private repo until acuteping is
 bootstrapped.
 

@@ -75,13 +75,11 @@ session, the rest were not touched. Items 8 and 9 are new.
 
 ---
 
----
-
 ### 8. Backlog decisions waiting for Adam — new (2026-09-30)
 
 Clead worked through every Phase 1 and 2 item that needed no decision. What is left needs Adam:
 - **PBI-1.4 bootstrap wizard:** keep LATER? The bootstrapper plus `tools/layout-pack.sh` already cover most of it; a small "lay out pack X" step in the bootstrapper could replace the wizard.
-- **PBI-1.8 licence choice at setup, and the template's own licence** (it has none; "fork it" in the talk material is not accurate until it does).
+- **PBI-1.8 licence choice at setup, and the template's own licence** (it has no licence file).
 - **PBI-2.2 review Routine:** approve the idea, and accept or reject its two design points (independence by prompt only; posting as Adam).
 - **PBI-4.2 event-driven memory writes:** check against what CLAUDE.md already requires; may be mostly done.
 - **Remove the Routine trigger IDs** from `memory/decisions.md` (public repo; unusable without tokens, but no reason to publish them).
@@ -95,7 +93,7 @@ Clead worked through every Phase 1 and 2 item that needed no decision. What is l
 
 ### 9. Autonomous batches work — new (2026-09-30)
 
-**What happened:** Adam gave one general instruction before sleeping ("pick up whatever you can from phase 1 and 2 which does not require my involvement; work until you get stuck"). Clead and Crog shipped five PRs (#63-#67) through the normal review loop: Crog implemented, Clead reviewed, and each role caught real errors in the other's work (a docs claim that overstated a pack in #65; a wrong conclusion about API credentials in #67). Progress was posted as it happened.
+**What happened:** Adam gave one general instruction before sleeping ("pick up whatever you can from phase 1 and 2 which does not require my involvement; work until you get stuck"). Clead and Crog shipped five PRs (#63-#67) through the normal review loop: Crog wrote #63, #65 and #66 and Clead reviewed them; Clead wrote #64 and #67 and Crog reviewed them. Each role caught real errors in the other's work (a docs claim that overstated a pack in #65; a wrong conclusion about API credentials in #67). Progress was posted as it happened.
 **Revised assessment:** a scoped general instruction plus the delegated review/merge rules is enough to run unattended. The stop rule (park anything that needs Adam here) held.
 **Action:** decide whether to write this up as a documented working mode in CLAUDE.md.
 
