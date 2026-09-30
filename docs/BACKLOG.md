@@ -61,7 +61,7 @@ get a working project in any supported language.
   Reference: sugose/ai-project-template `docs/DEV_INFRASTRUCTURE.md`
   for the full v1 content to inform (not copy) this document.
 
-- **[NEXT] PBI-1.2** — Port Node/TypeScript language pack from v1
+- **[DONE] PBI-1.2** — Port Node/TypeScript language pack from v1
   (`languages/node/`) — ci.yml, code-standards.md, package.json,
   tsconfig.json, biome.json, gitignore, vscode settings, placeholder
   test. Adapt to v2 structure.
