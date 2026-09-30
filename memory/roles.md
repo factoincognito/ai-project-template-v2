@@ -74,7 +74,7 @@ When Adam pushes back — on architecture, process, or scope — adapt.
 - Receives tasks from Clead directly (PR comment, or a prompt when
   Clead starts Crog); Adam is never the relay
 - Implements TDD-first: tests red, implementation green, refactor
-- Opens PR, posts pr_done comment
+- Opens the PR
 - Picks up Clead's fix prompts from PR comments, implements, pushes
 - Updates CHANGELOG.md as the post-merge step
 - Reviews Clead-authored code, config, process and architecture
