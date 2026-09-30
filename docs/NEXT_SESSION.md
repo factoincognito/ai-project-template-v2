@@ -102,4 +102,4 @@ Clead worked through every Phase 1 and 2 item that needed no decision. What is l
 ## Items that do not change
 
 - Every change goes through a PR; reviews follow the kind of change; merges are delegated to Crog once review passes and CI is green (CLAUDE.md, "Change execution model").
-- Clead works with git and the GitHub API; the Chrome web editor is the fallback. Agents in cloud sessions cannot delete branches or push tags (403); Adam creates release tags from the Releases page.
+- Clead works with git and the GitHub API; the Chrome web editor is the fallback. From Clead's cloud session, branch deletion returns 403 and a tag push was refused (2026-09-30); Adam creates release tags from the Releases page.
