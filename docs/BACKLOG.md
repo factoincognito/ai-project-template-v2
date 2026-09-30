@@ -136,7 +136,8 @@ get a working project in any supported language.
 ## Phase 2 — Validate unproven pieces
 
 **Goal:** Prove the two load-bearing assumptions before claiming full
-autonomy. Use a real project (python-blackjack-v2) as the pilot.
+autonomy. Use a real project as the pilot: acuteping (decided
+2026-09-30; previously python-blackjack-v2, see Phase 3).
 
 - **[LATER] PBI-2.1** — Confirm GitHub connector write access: verify
   that Cowork's GitHub connector can post PR comments, not just fetch
@@ -166,8 +167,10 @@ autonomy. Use a real project (python-blackjack-v2) as the pilot.
 
 ## Phase 3 — python-blackjack-v2 migration
 
-**Goal:** Migrate python-blackjack from v1 to v2, proving the template
-works on a real, complex project.
+**Goal:** Migrate python-blackjack from v1 to v2.
+
+**Status:** undated. No longer the template's pilot; acuteping took
+that role on 2026-09-30.
 
 - **[LATER] PBI-3.1** — Bootstrap python-blackjack-v2 from v2 template
 
