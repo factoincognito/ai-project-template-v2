@@ -49,8 +49,9 @@ endings in the repo and in every checkout, on every OS. Why it is
 mandatory: in an earlier project, an editor set to "auto" line endings
 silently rewrote whole files between LF and CRLF when edits made on
 Windows and elsewhere touched the same file. It happened three separate
-times on one pull request, and the fix came only after the damage. With the policy pinned from the first commit, that class of
-bug cannot happen. Do not remove it or override it per file without a
+times on one pull request, and the fix came only after the damage.
+With the policy pinned from the first commit, that class of bug cannot
+happen. Do not remove it or override it per file without a
 reason recorded in `memory/decisions.md`.
 
 **`docs/NEXT_SESSION.md`** is the staging area for reasoning, revised
@@ -119,9 +120,10 @@ The rules every pack's CI follows:
   states a rule a tool can check (types, lint, formatting, the 80% line
   coverage gate), CI fails when it is broken. Rules no tool checks are
   for review.
-- **The same commands locally and in CI.** Each pack's
-  `code-standards.md` lists the commands CI runs, in order; run them
-  before pushing.
+- **The same checks locally and in CI.** Each pack's
+  `code-standards.md` gives the commands to run the checks locally.
+  Before pushing, run the same steps as the project's `ci.yml`, in
+  order.
 - **Pinned versions.** Tool versions are pinned exactly and refreshed
   together, in one change, with a full CI run.
 
@@ -140,7 +142,9 @@ tests, so it is only safe once branch protection requires `build`.
   with multicast support`. Bad: `Added stuff`, `WIP`, `fix`.
 - **Squash merge.** A PR lands on `main` as one commit, titled after the
   PR, so the PR title follows the same convention. Delete the branch
-  after the merge.
+  after the merge, or turn on "Automatically delete head branches" in
+  the repo settings (Settings, General, Pull Requests) so GitHub does
+  it.
 
 ### 7. Deliberately left out
 
