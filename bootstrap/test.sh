@@ -1,0 +1,418 @@
+#!/usr/bin/env bash
+# Tests for bootstrap/build.sh and bootstrap/publish.sh.
+# Usage: bash bootstrap/test.sh
+# Each test builds into its own temp dir. Fixture repos are small fake
+# source trees with a copy of build.sh in their bootstrap/ folder, so the
+# failure cases do not depend on this repo's real content.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$HERE/.." && pwd)"
+BUILD="$HERE/build.sh"
+PUBLISH="$HERE/publish.sh"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+SHA="0123456789abcdef0123456789abcdef01234567"
+PASSED=0
+FAILED=0
+FAILED_NAMES=()
+
+# ---------- harness ----------
+
+run_test() {
+  local name="$1"
+  local log="$WORK/$name.log" rc
+  # Not inside an `if`: errexit is ignored in condition context.
+  set +e
+  ( set -euo pipefail; "$name" ) >"$log" 2>&1
+  rc=$?
+  set -e
+  if [ "$rc" -eq 0 ]; then
+    PASSED=$((PASSED + 1))
+    echo "ok   $name"
+  else
+    FAILED=$((FAILED + 1))
+    FAILED_NAMES+=("$name")
+    echo "FAIL $name"
+    sed 's/^/     | /' "$log"
+  fi
+}
+
+die() { echo "assertion failed: $*" >&2; exit 1; }
+
+# expect_build_fail <fixture> <expected-stderr-substring> <out> <version> <commit>
+expect_build_fail() {
+  local fx="$1" msg="$2"; shift 2
+  local err="$WORK/err.$RANDOM"
+  if bash "$fx/bootstrap/build.sh" "$@" 2>"$err" >/dev/null; then
+    die "build succeeded, expected failure containing: $msg"
+  fi
+  grep -qF -- "$msg" "$err" || { cat "$err" >&2; die "stderr lacks: $msg"; }
+}
+
+build_ok() {
+  local fx="$1"; shift
+  bash "$fx/bootstrap/build.sh" "$@" >/dev/null || die "build failed: $*"
+}
+
+# Sorted list of all files (and symlinks) under a dir, relative paths.
+list_files() {
+  (cd "$1" && find . \( -type f -o -type l \) | sed 's|^\./||' | LC_ALL=C sort)
+}
+
+# A small fake source repo with build.sh in bootstrap/.
+make_fixture() {
+  local d
+  d="$(mktemp -d "$WORK/fx.XXXXXX")"
+  mkdir -p "$d/bootstrap/stubs/docs" "$d/docs" "$d/lang/a" "$d/.github/workflows"
+  cp "$BUILD" "$d/bootstrap/build.sh"
+  cat >"$d/bootstrap/manifest.txt" <<'EOF'
+# comment line, ignored
+
+CLAUDE.md
+.gitignore
+lang/
+.github/workflows/ci.yml
+EOF
+  echo "entry point" >"$d/CLAUDE.md"
+  echo "*.tmp" >"$d/.gitignore"
+  echo "x" >"$d/lang/a/x.txt"
+  echo "b" >"$d/lang/b.txt"
+  echo "hidden" >"$d/lang/.hidden"
+  echo "name: CI" >"$d/.github/workflows/ci.yml"
+  echo "name: template-only" >"$d/.github/workflows/other.yml"
+  echo "release notes" >"$d/docs/RELEASE_NOTES.md"
+  echo "not listed" >"$d/unlisted.md"
+  printf '# Changelog\n\n## Created from template {{TEMPLATE_VERSION}} ({{TEMPLATE_COMMIT}})\n' \
+    >"$d/bootstrap/stubs/CHANGELOG.md"
+  printf '# Backlog\n\n## Open questions\n' >"$d/bootstrap/stubs/docs/BACKLOG.md"
+  echo "$d"
+}
+
+# ---------- build.sh: happy path ----------
+
+test_fixture_output_is_exactly_manifest_plus_stubs() {
+  local fx out
+  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  build_ok "$fx" "$out" v1.2.3 "$SHA"
+  diff <(list_files "$out") <(printf '%s\n' \
+    .github/workflows/ci.yml .gitignore CHANGELOG.md CLAUDE.md \
+    docs/BACKLOG.md lang/.hidden lang/a/x.txt lang/b.txt | LC_ALL=C sort) \
+    || die "output file list differs from manifest plus stubs"
+}
+
+test_copied_files_are_byte_identical() {
+  local fx out
+  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  build_ok "$fx" "$out" v1.2.3 "$SHA"
+  for f in CLAUDE.md .gitignore lang/a/x.txt lang/.hidden .github/workflows/ci.yml; do
+    cmp -s "$fx/$f" "$out/$f" || die "$f differs from source"
+  done
+  cmp -s "$fx/bootstrap/stubs/docs/BACKLOG.md" "$out/docs/BACKLOG.md" \
+    || die "stub docs/BACKLOG.md differs"
+}
+
+test_placeholders_replaced_with_version_and_commit() {
+  local fx out
+  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  build_ok "$fx" "$out" v1.2.3 "$SHA"
+  grep -qF "## Created from template v1.2.3 ($SHA)" "$out/CHANGELOG.md" \
+    || { cat "$out/CHANGELOG.md" >&2; die "CHANGELOG not stamped"; }
+  ! grep -rqF '{{TEMPLATE_' "$out" || die "placeholder left"
+}
+
+test_absent_out_dir_is_created() {
+  local fx out
+  fx="$(make_fixture)"; out="$WORK/new.$RANDOM/nested"
+  build_ok "$fx" "$out" v1.2.3 "$SHA"
+  [ -f "$out/CLAUDE.md" ] || die "out-dir not created"
+}
+
+test_empty_existing_out_dir_is_accepted() {
+  local fx out
+  fx="$(make_fixture)"; out="$WORK/empty.$RANDOM"; mkdir "$out"
+  build_ok "$fx" "$out" v1.2.3 "$SHA"
+  [ -f "$out/CLAUDE.md" ] || die "nothing written"
+}
+
+test_uppercase_hex_commit_is_accepted() {
+  local fx out
+  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  build_ok "$fx" "$out" v10.0.12 "0123456789ABCDEF0123456789ABCDEF01234567"
+}
+
+test_open_questions_heading_is_not_a_false_positive() {
+  # "Open questions" (no number) and "PBI-x" (no digit) must pass.
+  local fx out
+  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  printf 'open questions\nPBI-x\nPR #3\ntrig\n' >>"$fx/CLAUDE.md"
+  build_ok "$fx" "$out" v1.2.3 "$SHA"
+}
+
+test_real_repo_build_matches_manifest_plus_stubs() {
+  # Build this repo for real and compare against git-tracked files.
+  local out expected
+  out="$WORK/real.$RANDOM"
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  expected="$WORK/expected.$RANDOM"
+  {
+    grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | while read -r p; do
+      p="${p%/}"
+      if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
+        git -C "$REPO" ls-files -- "$p"
+      else
+        (cd "$REPO" && find "$p" -type f)
+      fi
+    done
+    (cd "$REPO/bootstrap/stubs" && find . -type f | sed 's|^\./||')
+  } | LC_ALL=C sort -u >"$expected"
+  diff <(list_files "$out") "$expected" || die "real output differs from manifest plus stubs"
+  grep -qF "v2.1.0" "$out/CHANGELOG.md" || die "real CHANGELOG lacks version"
+  grep -qF "$SHA" "$out/CHANGELOG.md" || die "real CHANGELOG lacks commit"
+  [ ! -e "$out/docs/RELEASE_NOTES.md" ] || die "RELEASE_NOTES shipped"
+  [ ! -e "$out/bootstrap" ] || die "bootstrap/ shipped"
+  [ ! -e "$out/.github/workflows/bootstrapper.yml" ] || die "bootstrapper.yml shipped"
+}
+
+test_real_stubs_have_no_forbidden_strings() {
+  ! grep -rnE 'trig_|PBI-[0-9]|open question [0-9]' "$REPO/bootstrap/stubs" || die "forbidden regex in stubs"
+  ! grep -rnF '(PR #' "$REPO/bootstrap/stubs" || die "(PR # in stubs"
+}
+
+test_shipped_ci_does_not_reference_bootstrap() {
+  ! grep -n 'bootstrap/' "$REPO/.github/workflows/ci.yml" || die "ci.yml references bootstrap/"
+}
+
+# ---------- build.sh: argument errors ----------
+
+test_wrong_arg_count_fails_with_usage() {
+  local fx; fx="$(make_fixture)"
+  expect_build_fail "$fx" "usage:" "$WORK/o.$RANDOM" v1.2.3
+  expect_build_fail "$fx" "usage:" "$WORK/o.$RANDOM" v1.2.3 "$SHA" extra
+}
+
+test_bad_version_rejected() {
+  local fx v; fx="$(make_fixture)"
+  for v in 1.2.3 v1.2 v1.2.3-rc1 V1.2.3 "v1.2.3 " "" v1.2.x; do
+    expect_build_fail "$fx" "is not vMAJOR.MINOR.PATCH" "$WORK/o.$RANDOM" "$v" "$SHA"
+  done
+}
+
+test_bad_commit_rejected() {
+  local fx c; fx="$(make_fixture)"
+  for c in "${SHA:0:39}" "${SHA}0" "g${SHA:1}" "" "${SHA:0:7}"; do
+    expect_build_fail "$fx" "is not a 40-character hex SHA" "$WORK/o.$RANDOM" v1.2.3 "$c"
+  done
+}
+
+test_non_empty_out_dir_rejected_and_untouched() {
+  local fx out; fx="$(make_fixture)"; out="$WORK/full.$RANDOM"
+  mkdir "$out"; echo keep >"$out/.existing"
+  expect_build_fail "$fx" "is not empty" "$out" v1.2.3 "$SHA"
+  [ "$(list_files "$out")" = ".existing" ] || die "out-dir was modified"
+}
+
+test_out_dir_that_is_a_file_rejected() {
+  local fx out; fx="$(make_fixture)"; out="$WORK/file.$RANDOM"
+  echo x >"$out"
+  expect_build_fail "$fx" "is not a directory" "$out" v1.2.3 "$SHA"
+}
+
+# ---------- build.sh: manifest and stub errors ----------
+
+test_missing_manifest_path_rejected() {
+  local fx out; fx="$(make_fixture)"; out="$WORK/o.$RANDOM"
+  echo "docs/NOPE.md" >>"$fx/bootstrap/manifest.txt"
+  expect_build_fail "$fx" "manifest path does not exist: docs/NOPE.md" "$out" v1.2.3 "$SHA"
+  [ ! -e "$out" ] || die "failed build left output behind"
+}
+
+test_missing_manifest_file_rejected() {
+  local fx; fx="$(make_fixture)"
+  rm "$fx/bootstrap/manifest.txt"
+  expect_build_fail "$fx" "manifest not found" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+}
+
+test_manifest_path_escaping_repo_rejected() {
+  local fx p; fx="$(make_fixture)"
+  for p in /etc/passwd ../outside lang/../CLAUDE.md; do
+    fx="$(make_fixture)"
+    echo "$p" >>"$fx/bootstrap/manifest.txt"
+    expect_build_fail "$fx" "must be relative" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+  done
+}
+
+test_manifest_glob_is_not_expanded() {
+  local fx; fx="$(make_fixture)"
+  echo "lang/*.txt" >>"$fx/bootstrap/manifest.txt"
+  expect_build_fail "$fx" "manifest path does not exist: lang/*.txt" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+}
+
+test_stub_same_path_as_manifest_entry_rejected() {
+  local fx; fx="$(make_fixture)"
+  echo "stub" >"$fx/bootstrap/stubs/CLAUDE.md"
+  expect_build_fail "$fx" "stub overlaps manifest path (ambiguous source): CLAUDE.md" \
+    "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+}
+
+test_stub_inside_manifest_directory_rejected() {
+  local fx; fx="$(make_fixture)"
+  mkdir -p "$fx/bootstrap/stubs/lang/a"
+  echo "stub" >"$fx/bootstrap/stubs/lang/a/new.txt"
+  expect_build_fail "$fx" "stub overlaps manifest path (ambiguous source): lang/a/new.txt" \
+    "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+}
+
+# ---------- build.sh: output checks ----------
+
+test_release_notes_in_output_rejected() {
+  local fx out; fx="$(make_fixture)"; out="$WORK/o.$RANDOM"
+  echo "docs/RELEASE_NOTES.md" >>"$fx/bootstrap/manifest.txt"
+  expect_build_fail "$fx" "forbidden path in output: docs/RELEASE_NOTES.md" "$out" v1.2.3 "$SHA"
+  [ ! -e "$out" ] || die "failed build left output behind"
+}
+
+test_bootstrap_dir_in_output_rejected() {
+  local fx; fx="$(make_fixture)"
+  echo "bootstrap" >>"$fx/bootstrap/manifest.txt"
+  expect_build_fail "$fx" "forbidden path in output: bootstrap/" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+}
+
+test_bootstrap_stub_in_output_rejected() {
+  local fx; fx="$(make_fixture)"
+  mkdir -p "$fx/bootstrap/stubs/bootstrap"
+  echo x >"$fx/bootstrap/stubs/bootstrap/x.sh"
+  expect_build_fail "$fx" "forbidden path in output: bootstrap/" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+}
+
+test_leftover_placeholder_rejected() {
+  local fx out; fx="$(make_fixture)"; out="$WORK/o.$RANDOM"
+  echo "built on {{TEMPLATE_DATE}}" >>"$fx/lang/b.txt"
+  expect_build_fail "$fx" "placeholder left in output: lang/b.txt" "$out" v1.2.3 "$SHA"
+  [ ! -e "$out" ] || die "failed build left output behind"
+}
+
+test_placeholder_outside_changelog_not_replaced() {
+  # Only the CHANGELOG stub is stamped; the same placeholder anywhere
+  # else is left in and therefore fails the build.
+  local fx; fx="$(make_fixture)"
+  echo "{{TEMPLATE_VERSION}}" >>"$fx/CLAUDE.md"
+  expect_build_fail "$fx" "placeholder left in output: CLAUDE.md" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+}
+
+check_forbidden_in_manifest_file() {
+  local s="$1" fx out
+  fx="$(make_fixture)"; out="$WORK/o.$RANDOM"
+  printf 'line with %s inside\n' "$s" >>"$fx/lang/a/x.txt"
+  expect_build_fail "$fx" "in output file: lang/a/x.txt" "$out" v1.2.3 "$SHA"
+  [ ! -e "$out" ] || die "failed build left output behind"
+}
+
+test_forbidden_trig_rejected()          { check_forbidden_in_manifest_file 'trig_abc123'; }
+test_forbidden_pr_ref_rejected()        { check_forbidden_in_manifest_file 'see (PR #58)'; }
+test_forbidden_pbi_id_rejected()        { check_forbidden_in_manifest_file 'PBI-1.10'; }
+test_forbidden_open_question_rejected() { check_forbidden_in_manifest_file 'open question 3'; }
+
+test_forbidden_string_in_stub_rejected() {
+  local fx; fx="$(make_fixture)"
+  echo "see PBI-4" >>"$fx/bootstrap/stubs/docs/BACKLOG.md"
+  expect_build_fail "$fx" "in output file: docs/BACKLOG.md" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+}
+
+test_forbidden_string_in_dotfile_rejected() {
+  local fx; fx="$(make_fixture)"
+  echo "trig_x" >>"$fx/lang/.hidden"
+  expect_build_fail "$fx" "in output file: lang/.hidden" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+}
+
+# ---------- publish.sh (against local bare repos) ----------
+
+make_bootstrap_output() {
+  local fx out
+  fx="$(make_fixture)"; out="$WORK/pubout.$RANDOM"
+  build_ok "$fx" "$out" "$1" "$SHA"
+  echo "$out"
+}
+
+test_publish_to_empty_repo_creates_first_commit_and_tag() {
+  local remote out clone
+  remote="$WORK/remote.$RANDOM.git"; git init -q --bare "$remote"
+  out="$(make_bootstrap_output v1.0.0)"
+  bash "$PUBLISH" "$out" v1.0.0 "$SHA" "$remote" >/dev/null || die "publish failed"
+  clone="$WORK/clone.$RANDOM"; git clone -q "$remote" "$clone"
+  [ "$(git -C "$clone" rev-list --count HEAD)" = 1 ] || die "expected exactly one commit"
+  [ "$(git -C "$clone" log -1 --format=%s)" = \
+    "Bootstrapper v1.0.0 from sugose/ai-project-template-v2@$SHA" ] || die "bad commit message"
+  [ "$(git -C "$clone" rev-parse v1.0.0^{commit})" = "$(git -C "$clone" rev-parse HEAD)" ] \
+    || die "tag does not point at the release commit"
+  diff <(git -C "$clone" ls-files | LC_ALL=C sort) <(list_files "$out") || die "tree differs"
+}
+
+test_publish_second_release_mirrors_output_and_keeps_history() {
+  local remote out1 out2 clone
+  remote="$WORK/remote.$RANDOM.git"; git init -q --bare "$remote"
+  out1="$(make_bootstrap_output v1.0.0)"
+  echo "obsolete" >"$out1/obsolete.md"
+  bash "$PUBLISH" "$out1" v1.0.0 "$SHA" "$remote" >/dev/null || die "publish 1 failed"
+  out2="$(make_bootstrap_output v1.1.0)"
+  bash "$PUBLISH" "$out2" v1.1.0 "$SHA" "$remote" >/dev/null || die "publish 2 failed"
+  clone="$WORK/clone.$RANDOM"; git clone -q "$remote" "$clone"
+  [ "$(git -C "$clone" rev-list --count HEAD)" = 2 ] || die "history not kept"
+  [ ! -e "$clone/obsolete.md" ] || die "file not in output was not deleted"
+  diff <(git -C "$clone" ls-files | LC_ALL=C sort) <(list_files "$out2") || die "tree differs"
+  git -C "$clone" rev-parse -q --verify refs/tags/v1.0.0 >/dev/null || die "v1.0.0 tag gone"
+  git -C "$clone" rev-parse -q --verify refs/tags/v1.1.0 >/dev/null || die "v1.1.0 tag missing"
+}
+
+test_publish_uses_existing_default_branch() {
+  local remote seed out
+  remote="$WORK/remote.$RANDOM.git"; git init -q --bare "$remote"
+  git -C "$remote" symbolic-ref HEAD refs/heads/trunk
+  seed="$WORK/seed.$RANDOM"; git init -q -b trunk "$seed"
+  echo seed >"$seed/seed.txt"; git -C "$seed" add .; git -C "$seed" commit -qm seed
+  git -C "$seed" push -q "$remote" trunk
+  out="$(make_bootstrap_output v1.0.0)"
+  bash "$PUBLISH" "$out" v1.0.0 "$SHA" "$remote" >/dev/null || die "publish failed"
+  [ "$(git -C "$remote" rev-list --count trunk)" = 2 ] || die "did not commit on trunk"
+  ! git -C "$remote" rev-parse -q --verify refs/heads/main >/dev/null || die "created a main branch"
+}
+
+test_publish_fails_if_tag_exists_and_changes_nothing() {
+  local remote out before
+  remote="$WORK/remote.$RANDOM.git"; git init -q --bare "$remote"
+  out="$(make_bootstrap_output v1.0.0)"
+  bash "$PUBLISH" "$out" v1.0.0 "$SHA" "$remote" >/dev/null || die "publish 1 failed"
+  before="$(git -C "$remote" for-each-ref)"
+  echo changed >"$out/CLAUDE.md"
+  if bash "$PUBLISH" "$out" v1.0.0 "$SHA" "$remote" 2>"$WORK/perr" >/dev/null; then
+    die "publish succeeded although tag exists"
+  fi
+  grep -qF "tag v1.0.0 already exists" "$WORK/perr" || { cat "$WORK/perr" >&2; die "bad message"; }
+  [ "$(git -C "$remote" for-each-ref)" = "$before" ] || die "remote refs changed"
+}
+
+test_publish_rejects_bad_arguments() {
+  local remote out
+  remote="$WORK/remote.$RANDOM.git"; git init -q --bare "$remote"
+  out="$(make_bootstrap_output v1.0.0)"
+  ! bash "$PUBLISH" "$out" 1.0.0 "$SHA" "$remote" 2>/dev/null || die "bad version accepted"
+  ! bash "$PUBLISH" "$out" v1.0.0 abc "$remote" 2>/dev/null || die "bad commit accepted"
+  ! bash "$PUBLISH" "$WORK/nope" v1.0.0 "$SHA" "$remote" 2>/dev/null || die "missing out-dir accepted"
+  ! bash "$PUBLISH" "$out" v1.0.0 "$SHA" 2>/dev/null || die "missing remote accepted"
+  [ -z "$(git -C "$remote" for-each-ref)" ] || die "remote changed"
+}
+
+# ---------- run ----------
+
+TESTS=$(declare -F | awk '{print $3}' | grep '^test_')
+for t in $TESTS; do
+  run_test "$t"
+done
+
+echo
+echo "$PASSED passed, $FAILED failed"
+if [ "$FAILED" -ne 0 ]; then
+  printf '  %s\n' "${FAILED_NAMES[@]}"
+  exit 1
+fi
