@@ -134,6 +134,68 @@ get a working project in any supported language.
   holds: one project per repository, and the repo files are Clead's
   memory. Docs only.
 
+- **[NEXT] PBI-1.10** — Build pipeline that produces the bootstrapper.
+  Intent approved by Adam in chat, 2026-09-30.
+
+  **Why.** A project bootstrapped from this repo must not inherit the
+  template's own working files (backlog, changelog, decisions, session
+  notes, release notes); it should only record which template version
+  it came from. This repo stays the development repo; a pipeline builds
+  a clean bootstrapper from it and publishes it to a separate repo,
+  `sugose/ai-project-bootstrap`, which is marked as a GitHub template
+  repository. Projects are bootstrapped from there ("Use this
+  template"), never from this repo and never by forking.
+
+  **What ships.** A manifest, `bootstrap/manifest.txt`, lists every
+  path copied from this repo as is: at least `CLAUDE.md`, `.gitattributes`,
+  `.gitignore`, `.github/PULL_REQUEST_TEMPLATE.md`, the workflows
+  `ci.yml`, `review.yml` and `changelog.yml` (listed by file, so
+  template-only workflows are never shipped), `memory/roles.md`,
+  `memory/standards.md`, `docs/CROG_ONBOARDING.md`, `docs/ROUTINES.md`,
+  `docs/SPEC.md`, `docs/decisions/0001-rebuild-workflow.md` and
+  `languages/`. Files that exist in both but must start clean come from
+  `bootstrap/stubs/`, mirroring their paths: `README.md` (placeholders
+  plus the after-bootstrap steps: copy a language pack, turn on branch
+  protection, fill in placeholders), `CHANGELOG.md`, `docs/BACKLOG.md`,
+  `docs/NEXT_SESSION.md`, `memory/context.md`, `memory/decisions.md`,
+  `memory/project.md`. Nothing else ships: in particular not
+  `docs/RELEASE_NOTES.md`, `bootstrap/` itself, or this repo's
+  history.
+
+  **Version stamp.** The stub `CHANGELOG.md` contains placeholders that
+  the build replaces with the template version (the release tag, e.g.
+  `v2.1.0`) and the full commit SHA it was built from, so every
+  bootstrapped project records its origin in its first changelog entry.
+  No other link back.
+
+  **Build and checks.** A script, `bootstrap/build.sh <out-dir>
+  <version> <commit>`, assembles the bootstrapper and fails (non-zero
+  exit, clear message) if: a manifest path does not exist; a stub has
+  no matching manifest-or-stub slot; the output contains any file that
+  is neither in the manifest nor a stub; any version placeholder is
+  left unreplaced; or the output contains a template-only marker (e.g.
+  `docs/RELEASE_NOTES.md`, template changelog entries like `(PR #`,
+  Routine trigger IDs `trig_`). Tests for the script run in CI on every
+  PR, so a broken manifest fails the PR, not the release.
+
+  **Publish.** A workflow in this repo, triggered by pushing a tag
+  `v*`, runs the build and pushes the result to
+  `sugose/ai-project-bootstrap` as one new commit per release (history
+  kept there, one commit per version) plus the same tag. It
+  authenticates with a fine-grained token scoped to that repo only,
+  stored as the Actions secret `BOOTSTRAP_PUSH_TOKEN`. The workflow is
+  not in the manifest.
+
+  **Setup by Adam (cannot be done by an agent here).** Create
+  `sugose/ai-project-bootstrap` (public, empty), tick "Template
+  repository", create the token (Contents: read and write, that repo
+  only) and save it as the secret.
+
+  **Done when.** Tagging `v2.1.0` publishes a bootstrapper whose file
+  list matches the manifest plus stubs exactly, whose CHANGELOG names
+  v2.1.0 and its commit, and from which "Use this template" creates a
+  repo with no template history.
+
 ---
 
 ## Phase 2 — Validate unproven pieces
