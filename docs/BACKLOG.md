@@ -81,6 +81,21 @@ get a working project in any supported language.
 - **[LATER] PBI-1.5** — Write `languages/README.md` — how to add a
   new language pack to v2.
 
+- **[LATER] PBI-1.6** — Refresh the Node pack's tool versions.
+  PBI-1.2 ported v1's pins unchanged: Biome 1.9.4, Jest 29.7.0,
+  @types/jest 29.5.14, ts-jest 29.2.5, TypeScript 5.7.3, Node 22. On
+  2026-09-30 npm's latest were Biome 2.5.14, Jest 30.5.2, @types/jest
+  30.0.0, ts-jest 29.4.14 and TypeScript 7.0.2. Do not bump blindly:
+  test the new combination on a fresh project with the same checks
+  PBI-1.2 used (`npm ci`, `biome ci`, jest with the 80% coverage gate,
+  `tsc`, and that the strictness flags still reject violations), then
+  bump in one PR. Known or unverified points: Biome 2 changes the
+  config format (`files.ignore` in `biome.json` moves to
+  `files.includes`; `biome migrate` exists for this); whether ts-jest
+  supports the new Jest and TypeScript majors is unverified; Node 22's
+  remaining support window against the current LTS is unverified.
+  Whichever Node version the pack targets must also match `ci.yml`.
+
 ---
 
 ## Phase 2 — Validate unproven pieces
