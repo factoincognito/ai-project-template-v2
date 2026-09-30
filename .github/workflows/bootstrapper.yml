@@ -1,0 +1,79 @@
+# Builds and publishes the bootstrapper (spec: docs/BACKLOG.md, PBI-1.10).
+# Template-only: this workflow is not in bootstrap/manifest.txt and never
+# ships to bootstrapped projects.
+#
+# - Every push and pull request: run the build.sh / publish.sh tests.
+# - A pushed v* tag: run the tests, refuse unless the tagged commit is on
+#   main, build, and publish the output to the default branch of
+#   sugose/ai-project-bootstrap as one commit, then push the same tag
+#   there. Needs the Actions secret
+#   BOOTSTRAP_PUSH_TOKEN (fine-grained, that repo only, Contents and
+#   Workflows: read and write).
+name: Bootstrapper
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrapper-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test build.sh and publish.sh
+        run: bash bootstrap/test.sh
+
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: bootstrapper-test
+    runs-on: ubuntu-latest
+    concurrency:
+      group: bootstrapper-publish
+      cancel-in-progress: false
+    env:
+      BOOTSTRAP_REPO: sugose/ai-project-bootstrap
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          # Full history of all branches, so origin/main is available
+          # for the on-main check.
+          fetch-depth: 0
+
+      - name: Require the tagged commit to be on main
+        run: |
+          set -euo pipefail
+          bash bootstrap/require-on-main.sh . "$(git rev-parse HEAD)" origin/main
+
+      - name: Build
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          COMMIT="$(git rev-parse HEAD)"
+          echo "COMMIT=$COMMIT" >> "$GITHUB_ENV"
+          bash bootstrap/build.sh "$RUNNER_TEMP/bootstrapper" "$VERSION" "$COMMIT"
+
+      - name: Publish to ${{ env.BOOTSTRAP_REPO }}
+        env:
+          VERSION: ${{ github.ref_name }}
+          TOKEN: ${{ secrets.BOOTSTRAP_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Secret BOOTSTRAP_PUSH_TOKEN is not set; nothing was published."
+            exit 1
+          fi
+          # The token goes in an auth header, not the URL, so git never
+          # prints it. Actions also masks secrets in the log.
+          BASIC="$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          echo "::add-mask::$BASIC"
+          git config --global "http.https://github.com/.extraheader" "AUTHORIZATION: basic $BASIC"
+          bash bootstrap/publish.sh "$RUNNER_TEMP/bootstrapper" "$VERSION" "$COMMIT" \
+            "https://github.com/$BOOTSTRAP_REPO.git"

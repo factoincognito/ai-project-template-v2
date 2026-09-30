@@ -1,0 +1,26 @@
+# Paths copied as is from this repo into the bootstrapper.
+# One path per line, relative to the repo root. Blank lines and lines
+# starting with # are ignored. No globs. A directory is copied
+# recursively. A listed path that does not exist is a build error.
+# Files that must ship with clean content live in bootstrap/stubs/.
+# Spec: docs/BACKLOG.md, PBI-1.10.
+
+CLAUDE.md
+.gitattributes
+.gitignore
+.github/PULL_REQUEST_TEMPLATE.md
+
+# Workflows are listed by file so template-only workflows never ship.
+.github/workflows/ci.yml
+.github/workflows/review.yml
+.github/workflows/changelog.yml
+
+memory/roles.md
+memory/standards.md
+
+docs/CROG_ONBOARDING.md
+docs/ROUTINES.md
+docs/SPEC.md
+docs/decisions/0001-rebuild-workflow.md
+
+languages
