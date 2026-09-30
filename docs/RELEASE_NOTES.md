@@ -1,5 +1,9 @@
 # Release Notes — v2.0.0
 
+> **Corrected 2026-09-30.** Some items below were described as
+> delivered but were plans. They are now marked as such, and
+> "Status as of 2026-09-30" at the end lists what has changed since.
+
 **Date:** 2026-06-27
 **Replaces:** sugose/ai-project-template (v1)
 
@@ -13,16 +17,18 @@ Cold-start loads automatically via Cowork's working folder. No
 dump file, no paste ritual, no orientation script required.
 
 **GitHub Actions event bus**
-Three workflows drive the loop without a polling session:
-- `review.yml` — posts review-ready marker on PR open
-- `changelog.yml` — triggers CHANGELOG update on merge
-- `ci.yml` — lint, format, tests, coverage on every push
+Three workflows:
+- `review.yml` — posts a review-ready marker on PRs touching `src/`
+  (nothing reads it yet)
+- `changelog.yml` — posts a reminder to update the CHANGELOG on merge
+- `ci.yml` — a stub that only checks out the code; lint, format, tests
+  and coverage come from a language pack's `ci.yml`
 
-**Session mode router**
-Clead checks Routine credit balance and expected PR volume at
-session start and recommends Routine, Hybrid, or CLI mode for
-the day. Credit tracking via GitHub repository variable (both
-Clead and Crog increment on every execution).
+**Session mode router (designed, not built)**
+The design: Clead checks Routine credit balance and expected PR
+volume at session start and recommends Routine, Hybrid, or CLI mode
+for the day, with credit tracking via a GitHub repository variable.
+Only the design exists (`memory/decisions.md`, open question 2).
 
 **Three-tier spec approval ceremony**
 Ceremony scales with change significance:
@@ -65,10 +71,9 @@ surface. No context-switching between tools.
 
 **Review trigger: Adam relay → GitHub Actions marker**
 Previously: Adam copied PR URL and pasted it to Clead.
-Now: `review.yml` posts a marker comment on PR open. Clead
-picks it up directly. Adam is not in the loop.
-Note: GitHub connector write access not yet confirmed —
-transitional manual paste still required until PBI-2.1 validates.
+Planned: `review.yml` posts a marker comment and Clead picks it up.
+At release nothing read the marker, so Adam still pasted the PR URL
+to Clead.
 
 **Fix prompts and verdicts: Adam relay → direct PR comments**
 Previously: Clead produced a prompt, Adam copied it, pasted it
@@ -90,8 +95,8 @@ Now: `changelog.yml` triggers Crog to update after merge.
 Copi is absent from v2 by deliberate starting position, not
 permanent exclusion. In v1, Clead and Copi covered complementary
 blind spots (diff-only vs full-file). In v2, Clead fetches diffs
-and files directly via GitHub connector, which may eliminate the
-structural reason for Copi's role. Decision deferred until
+and files directly, which may eliminate the structural reason for
+Copi's role. Decision deferred until
 Clead's solo review performance is observed on a real project.
 See `memory/decisions.md` open question #4.
 
@@ -112,7 +117,7 @@ folder automatically. First message is today's work.
 | `tools/pr_dump.sh` | Replaced by Clead's direct GitHub fetch. Retained in v1 as non-load-bearing fallback for Chat-only sessions. |
 | `docs/TEAM_STRUCTURE.md` | Contained workaround documentation, not principles. Replaced by one-page rules in `docs/CROG_ONBOARDING.md` and `memory/roles.md`. |
 | `docs/CLEAD_ONBOARDING.md` | Replaced by `memory/` files |
-| `docs/NEXT_SESSION.md` | Replaced by `memory/` files |
+| `docs/NEXT_SESSION.md` | Replaced by `memory/` files. Reintroduced 2026-07-23 in a new role: a staging area read at session start (PR #22). |
 | `?i=1` re-report convention | Existed only to track clipboard relay iterations. Gone with the relay. |
 | Hard-stop rule | Existed to gate implementer on Adam between iterations. Gone — Clead communicates directly with Crog via PR comments. Safety function retained as 3-cycle loop cap with escalation to Adam. |
 | STOP-and-wait scaffolding | Same root cause as hard-stop rule |
@@ -121,6 +126,9 @@ folder automatically. First message is today's work.
 ---
 
 ## What's not ready yet
+
+*As of the release. For the current state see "Status as of
+2026-09-30" below.*
 
 | Item | Status | PBI |
 |---|---|---|
@@ -159,3 +167,20 @@ usage to a separate monthly credit. This change was paused on
 June 15, 2026. Current subscription limits unchanged. Expect it
 to land eventually — when it does, Path B (GitHub Actions firing
 Crog) will consume from the Agent SDK credit, not the subscription.
+
+---
+
+## Status as of 2026-09-30
+
+- **Language packs:** Node/TypeScript (PBI-1.2) and web (PBI-1.7,
+  with an optional Cloudflare deploy) are in `languages/`. Python
+  (1.1) and React Native (1.3) are not started. The bootstrap wizard
+  (1.4) is not written; packs are copied in by hand.
+- **GitHub connector:** written off 2026-06-28. Clead now works through
+  git and the GitHub API; Chrome is the fallback. PBI-2.1 is superseded.
+- **Review and merge:** delegated by Adam. Clead and Crog review each
+  other's work; Crog merges once the review passes and CI is green.
+  Adam is not a relay. See CLAUDE.md, "Change execution model".
+- **Branch protection:** on for `main` (PR and `build` check required,
+  no bypass).
+- **Pilot project:** acuteping, replacing python-blackjack-v2.
