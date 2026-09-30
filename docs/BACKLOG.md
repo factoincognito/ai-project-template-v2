@@ -24,7 +24,7 @@
 **Goal:** Make v2 a fully usable template — clone it, run the wizard,
 get a working project in any supported language.
 
-- **[NEXT] PBI-1.1** — Port Python language pack from v1
+- **[DONE] PBI-1.1** (2026-09-30, PR #65) — Port Python language pack from v1
   (`languages/python/`) — ci.yml, code-standards.md, pyproject.toml,
   requirements.txt, requirements-dev.txt, pre-commit-config.yaml,
   gitignore, vscode settings, placeholder test. Adapt to v2 structure.
@@ -69,7 +69,7 @@ get a working project in any supported language.
   tsconfig.json, biome.json, gitignore, vscode settings, placeholder
   test. Adapt to v2 structure.
 
-- **[NEXT] PBI-1.3** — Port React Native / Expo language pack from v1
+- **[DONE] PBI-1.3** (2026-09-30, PR #66) — Port React Native / Expo language pack from v1
   (`languages/react-native/`) — ci.yml, code-standards.md, package.json,
   app.json, tsconfig.json, biome.json, gitignore, vscode settings,
   placeholder test. Adapt to v2 structure.
@@ -81,10 +81,10 @@ get a working project in any supported language.
   Adam's WHAT call on v1 backlog items, sequencing (spec first, then
   tests, then src).
 
-- **[LATER] PBI-1.5** — Write `languages/README.md` — how to add a
+- **[DONE] PBI-1.5** (2026-09-30, PR #64) — Write `languages/README.md` — how to add a
   new language pack to v2.
 
-- **[LATER] PBI-1.6** — Refresh the Node pack's tool versions.
+- **[DONE] PBI-1.6** (2026-09-30, PR #63; Node 26 and TypeScript 7 left for a later refresh) — Refresh the Node pack's tool versions.
   PBI-1.2 ported v1's pins unchanged: Biome 1.9.4, Jest 29.7.0,
   @types/jest 29.5.14, ts-jest 29.2.5, TypeScript 5.7.3, Node 22. On
   2026-09-30 npm's latest were Biome 2.5.14, Jest 30.5.2, @types/jest
