@@ -15,6 +15,7 @@
 | [IDEA] | Unvalidated — needs discussion |
 | [BLOCKED] | Waiting on dependency or decision |
 | [DONE] | Completed and merged |
+| [SUPERSEDED] | No longer needed; the reason is given inline |
 
 ---
 
@@ -28,7 +29,9 @@ get a working project in any supported language.
   requirements.txt, requirements-dev.txt, pre-commit-config.yaml,
   gitignore, vscode settings, placeholder test. Adapt to v2 structure.
   Also create `docs/DEV_INFRASTRUCTURE.md` covering:
-  - **`.gitattributes` with an explicit line-ending policy (e.g.
+  - **Done 2026-09-30 (#57): the template root now has this
+    `.gitattributes`, which new projects inherit.** Original text:
+    **`.gitattributes` with an explicit line-ending policy (e.g.
     `* text=auto eol=lf`), committed as part of initial scaffolding —
     not optional, not added later.** Justification: fomo-f (running v1
     workflow) hit three separate rounds of full-file corruption on the
@@ -98,7 +101,7 @@ get a working project in any supported language.
   Also covers the web pack's pins (PBI-1.7), notably Playwright 1.56.1
   (npm latest on 2026-09-30: 1.63.0).
 
-- **[NEXT] PBI-1.7** — Write the web pack (`languages/web/`) for static
+- **[DONE] PBI-1.7** (2026-09-30, PRs #45, #46) — Write the web pack (`languages/web/`) for static
   single-file web apps; the sonar calculator is its first user. It is
   self-contained like the other packs: the Node pack plus web
   additions, with starter files under `starter/` mirroring the project
@@ -139,7 +142,9 @@ get a working project in any supported language.
 autonomy. Use a real project as the pilot: acuteping (decided
 2026-09-30; previously python-blackjack-v2, see Phase 3).
 
-- **[LATER] PBI-2.1** — Confirm GitHub connector write access: verify
+- **[SUPERSEDED] PBI-2.1** (the connector was written off 2026-06-28;
+  Clead now uses git and the GitHub API, see memory/decisions.md; also
+  duplicated PBI-4.3) — Confirm GitHub connector write access: verify
   that Cowork's GitHub connector can post PR comments, not just fetch
   diffs. The `review.yml` workflow posts a marker comment — confirm
   this fires correctly and Clead can read it to trigger review.
@@ -308,7 +313,8 @@ third-layer reviewer for complex src PRs.
   can commit directly or must go through Crog. Either path works —
   the event-driven write rules are the same regardless.
 
-- **[LATER] PBI-4.3** — Verify GitHub connector write access.
+- **[SUPERSEDED] PBI-4.3** (duplicate of PBI-2.1, superseded the same
+  way) — Verify GitHub connector write access.
   Confirm Cowork's GitHub connector can post PR comments, not just
   fetch diffs. Load-bearing for the autonomous review trigger (PR
   comment as event bus signal). If confirmed, enables Cowork-Clead

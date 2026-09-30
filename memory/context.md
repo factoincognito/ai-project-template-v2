@@ -89,6 +89,14 @@ spec. The v2 backlog is not a copy of v1's with migration items prepended.
 Everything in this template is designed but not all of it is proven.
 Two things must be validated before claiming full autonomy:
 
+*2026-09-30: both are overtaken as written. The connector never
+loaded and was written off; Clead posts to PRs through the GitHub API
+(and Chrome before that). Adam no longer fires Crog with a token:
+Clead starts Crog directly. What is still unbuilt is firing Crog from
+GitHub Actions with no one involved (Path B, PBI-2.2 and 4.4). The
+blackjack-v2 references below are superseded too: acuteping is the
+pilot. See memory/decisions.md.*
+
 **1. GitHub connector write access**
 The review workflow posts a marker comment on PR open. This assumes
 the GitHub connector can write PR comments, not just fetch diffs.
