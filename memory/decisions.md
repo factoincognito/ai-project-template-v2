@@ -49,13 +49,7 @@ docs/decisions/0001-rebuild-workflow.md.
    above. Reframes PBI-2.1/4.3 from "confirm connector write access" to
    "Chrome is the channel; revisit connector only if it starts working."
 2. Clead→Crog direct firing — full findings, dead ends documented,
-   one viable path remaining.
-
-   *2026-09-30: the limits in this section are out of date (current docs:
-   hourly limits, not 15 per day), and on Pro and Max plans an
-   environment's API credentials let a session call an API without seeing
-   the key, which removes the root cause of dead ends B and C. Neither is
-   tested. See docs/BACKLOG.md PBI-2.3 for the findings and sources.* Complete history below so future Clead
+   one viable path remaining. Complete history below so future Clead
    can execute without reconstructing the reasoning.
 
    ## What was built and confirmed working
@@ -365,6 +359,12 @@ docs/decisions/0001-rebuild-workflow.md.
    4. If Path B works: implement session mode router in Clead
    5. If Path B fails: CLI mode is the default, Routines for
       low-cadence work only
+   *Note added 2026-09-30: the limits in this section are out of date
+   (current docs give hourly limits, not 15 per day). Environment API
+   credentials do not help here: the proxy never attaches them to
+   api.anthropic.com, so dead ends B and C still stand. Routines can now
+   also start on GitHub pull-request events, with no token held by
+   Claude; untested. See docs/BACKLOG.md PBI-2.3.*
 3. Spec-author blind spot: Clead writes the spec and reviews against it.
    A flawed spec passes compliance invisibly. Adam's intent gate helps
    but does not fully resolve this. Tracked as open.
