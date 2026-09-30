@@ -19,10 +19,21 @@ this repo: `CLAUDE.md` is the entry point.
    **Template repository** ticked in its settings; until then, create an
    empty repo and push a copy of the template to it.
 2. Copy in the language pack you need from `languages/` (`node` or
-   `web`). Each pack's `code-standards.md` says which file goes where;
-   its `ci.yml` replaces the stub `.github/workflows/ci.yml`, which only
-   checks out the code. The bootstrap wizard that will do this for you
-   is not written yet (backlog PBI-1.4).
+   `web`). The bootstrap wizard that will do this for you is not written
+   yet (backlog PBI-1.4), so by hand:
+
+   | Pack file | Goes to |
+   |---|---|
+   | `ci.yml` | `.github/workflows/ci.yml` (replaces the stub, which only checks out the code) |
+   | `gitignore` | `.gitignore` (merge with the template's) |
+   | `vscode-settings.json`, `vscode-extensions.json` | `.vscode/settings.json`, `.vscode/extensions.json` |
+   | `package.json`, `tsconfig.json`, `biome.json` | project root |
+   | node: `placeholder.test.ts` | `src/` |
+   | web: `index.html`, `vite.config.mts`, `playwright.config.ts` | project root |
+   | web: `starter/src/`, `starter/e2e/` | `src/`, `e2e/` |
+   | web, optional: `deploy.yml`, `wrangler.jsonc` | `.github/workflows/deploy.yml`, project root |
+
+   Then follow the pack's `code-standards.md` ("First-time setup").
 3. Turn on branch protection for `main` (Settings, Branches): require a
    pull request with **no** required approvals (every PR is opened under
    your own account, and GitHub does not let authors approve their own
@@ -36,6 +47,11 @@ from the repo. Before the first task, ask Clead to summarise
 `memory/context.md`: if it can describe the project, the decisions made
 and the open questions, it is oriented. In VS Code, open your clone and
 use a Claude Code tab if you want to run Crog yourself.
+
+Keep one Claude project per repo, so what Clead learns in one project
+never mixes with another (`docs/decisions/0001-rebuild-workflow.md`,
+§6, "Cowork project setup"; written for Cowork, the reasoning is the
+same).
 
 ### Starting later sessions
 Start a new chat and give it the repo. Clead follows the session
