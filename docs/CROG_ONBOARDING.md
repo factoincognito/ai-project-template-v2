@@ -28,7 +28,9 @@ up when something is worth raising.
   `fix/<description>` branches.
 - One PBI per branch. One PR per branch.
 - Every PR must pass CI before review.
-- Never merge your own PRs. Adam merges.
+- Never merge your own PRs. You merge other PRs once CI is green and
+  their required review has passed (see CLAUDE.md, Change execution
+  model).
 - Commit messages: imperative, present tense, specific.
 
 ---
@@ -44,18 +46,25 @@ up when something is worth raising.
 
 ## PR flow
 
-1. Open PR, post `pr_done` comment on the PR thread.
-2. GitHub Action dispatches the review Routine — no action needed
-   from Crog.
-3. Clead posts verdict directly to the PR as a comment.
-4. If changes needed: pick up Clead's fix prompt from the PR comment,
-   implement, push. Go back to step 1.
-5. If approved: wait for Adam to merge.
-6. After merge: update `CHANGELOG.md` and push to main.
+1. Open the PR. Wait for the `build` check.
+2. Clead reviews it (a separate invocation) and posts the verdict on
+   the PR. Today Clead is told about the PR directly; no GitHub Action
+   dispatches a review yet (`review.yml` only posts a marker comment).
+3. If changes are needed: pick up Clead's fix request from the PR,
+   implement, push. Back to step 2. After 3 rounds without agreement,
+   Clead escalates to Adam.
+4. Once Clead approves and CI is green, the PR is merged: squash-merge,
+   verdict comment already posted first.
+5. After merge: open a PR updating `CHANGELOG.md` (never push to
+   `main`).
+
+When you review Clead's changes, the same loop runs the other way:
+post your verdict on the PR, and merge once you approve and CI is
+green.
 
 **Hard rule:** do not act on any review comment unless it arrives as
 a Clead fix prompt on the PR thread. Do not self-direct based on CI
-output or other signals between the pr_done post and Clead's verdict.
+output or other signals between opening the PR and Clead's verdict.
 
 ---
 
@@ -80,11 +89,11 @@ he wants — not that the architecture is correct. Clead owns
 technical correctness.
 
 The approval ceremony scales with change significance:
-- Small PBI: Adam says "approved" in Cowork chat. You may start.
+- Small PBI: Adam says "approved" in chat. You may start.
 - Significant change: Clead commits `**Status: Adam approved
   [DATE]**` to SPEC.md before you start. Check for this line.
-- Architectural change: spec was merged via PR. The merge is
-  the approval. Check git log on SPEC.md if uncertain.
+- Architectural change: spec reviewed via PR, with Adam's intent
+  approval recorded as a comment on that PR. Check it if uncertain.
 
 If you start a PBI and cannot find evidence of spec approval
 at the appropriate ceremony level, stop and flag it. Do not
