@@ -28,9 +28,10 @@ up when something is worth raising.
   `fix/<description>` branches.
 - One PBI per branch. One PR per branch.
 - Every PR must pass CI before review.
-- Never merge your own PRs. You merge other PRs once CI is green and
-  their required review has passed (see CLAUDE.md, Change execution
-  model).
+- You do the merging, for your own PRs and Clead's, but only once CI
+  is green and the PR's required review has passed (see CLAUDE.md,
+  Change execution model). Never merge a PR of yours that Clead has not
+  approved.
 - Commit messages: imperative, present tense, specific.
 
 ---
@@ -47,14 +48,16 @@ up when something is worth raising.
 ## PR flow
 
 1. Open the PR. Wait for the `build` check.
-2. Clead reviews it (a separate invocation) and posts the verdict on
-   the PR. Today Clead is told about the PR directly; no GitHub Action
-   dispatches a review yet (`review.yml` only posts a marker comment).
+2. Report the PR number to Clead (in your final report when Clead
+   started you, otherwise as a comment on the PR). Clead reviews it (a
+   separate invocation) and posts the verdict on the PR. No GitHub
+   Action dispatches a review yet (`review.yml` only posts a marker
+   comment).
 3. If changes are needed: pick up Clead's fix request from the PR,
    implement, push. Back to step 2. After 3 rounds without agreement,
    Clead escalates to Adam.
-4. Once Clead approves and CI is green, the PR is merged: squash-merge,
-   verdict comment already posted first.
+4. Once Clead approves and CI is green, you merge it: squash-merge.
+   Clead's verdict comment is already on the PR.
 5. After merge: open a PR updating `CHANGELOG.md` (never push to
    `main`).
 
