@@ -177,6 +177,16 @@ test_real_repo_build_matches_manifest_plus_stubs() {
   [ ! -e "$out/tools" ] || die "tools/ shipped"
 }
 
+test_real_build_ships_the_generic_docs() {
+  # Generic docs every project needs ship; the template's own do not.
+  local out="$WORK/real.$RANDOM"
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  [ -f "$out/docs/DEV_INFRASTRUCTURE.md" ] || die "DEV_INFRASTRUCTURE.md not shipped"
+  [ -f "$out/languages/python/code-standards.md" ] || die "python pack not shipped"
+  cmp -s "$REPO/docs/DEV_INFRASTRUCTURE.md" "$out/docs/DEV_INFRASTRUCTURE.md" \
+    || die "DEV_INFRASTRUCTURE.md shipped altered"
+}
+
 test_real_stubs_have_no_forbidden_strings() {
   ! grep -rnE 'trig_|PBI-[0-9]|open question [0-9]' "$REPO/bootstrap/stubs" || die "forbidden regex in stubs"
   ! grep -rnF '(PR #' "$REPO/bootstrap/stubs" || die "(PR # in stubs"
