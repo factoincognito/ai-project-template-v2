@@ -134,8 +134,9 @@ get a working project in any supported language.
   holds: one project per repository, and the repo files are Clead's
   memory. Docs only.
 
-- **[DONE] PBI-1.10** (2026-09-30, PR #60; first publish verified at
-  the v2.1.0 release) — Build pipeline that produces the bootstrapper.
+- **[NOW] PBI-1.10** (pipeline built in PR #60; done once the v2.1.0
+  publish passes the "Done when" checks below) — Build pipeline that
+  produces the bootstrapper.
   Intent approved by Adam in chat, 2026-09-30 (recorded on PR #58).
 
   **Why.** A project bootstrapped from this repo must not inherit the
