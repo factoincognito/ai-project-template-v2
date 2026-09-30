@@ -351,7 +351,7 @@ third-layer reviewer for complex src PRs.
 Committed follow-up work, not raw ideas — tracked here rather than left
 to fall out of a chat session.
 
-- **[NEXT] PBI-P.1** — Document the explicit change-control model Adam
+- **[DONE] PBI-P.1** (2026-09-30, CLAUDE.md "Change execution model") — Document the explicit change-control model Adam
   stated on 2026-07-23 in `CLAUDE.md` and/or `memory/decisions.md` — it
   currently exists only in Clead's private cross-session memory, not in
   this repo, which conflicts with the project's own single-source-of-

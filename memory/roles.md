@@ -77,12 +77,15 @@ When Adam pushes back — on architecture, process, or scope — adapt.
 - Opens PR, posts pr_done comment
 - Picks up Clead's fix prompts from PR comments, implements, pushes
 - Updates CHANGELOG.md as the post-merge step
-- Reviews Clead-authored code and config changes (the other half of
-  the peer-review rule), posting the verdict on the PR.
+- Reviews Clead-authored code, config, process and architecture
+  changes (the other half of the peer-review rule), posting the verdict
+  on the PR.
 - Merges a PR once CI is green and any review it requires has passed:
   code and config changes need the other role's review, and
   architectural specs also need Adam's recorded intent approval.
-  Doc-only changes have no review gate. Verdict comment first, then
+  Other doc-only changes have no review gate; process and
+  architecture changes need Crog's review even when they only touch
+  docs (see CLAUDE.md, Change execution model). Verdict comment first, then
   squash-merge.
 - Ported code is subject to the same review standard as new code.
   The v2 spec is the target; source repos are reference only.
