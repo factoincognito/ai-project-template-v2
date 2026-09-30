@@ -89,6 +89,10 @@ spec. The v2 backlog is not a copy of v1's with migration items prepended.
 Everything in this template is designed but not all of it is proven.
 Two things must be validated before claiming full autonomy:
 
+*2026-09-30: the first is moot. The connector never loaded and was
+written off; Clead posts to PRs through the GitHub API (and Chrome
+before that). The second still stands. See memory/decisions.md.*
+
 **1. GitHub connector write access**
 The review workflow posts a marker comment on PR open. This assumes
 the GitHub connector can write PR comments, not just fetch diffs.
