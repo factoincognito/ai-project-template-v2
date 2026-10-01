@@ -72,6 +72,25 @@ starts with only the diff and `memory/standards.md` as input. The
 Chrome web-editor path (proven 2026-07-23) is the fallback when Clead
 has no git or API access.
 
+### Model and effort
+
+Which model and effort each role runs on (Adam, 2026-10-01):
+
+- **Default.** Clead sessions run on Sonnet at High effort. Medium is
+  fine for a purely mechanical batch (docs, backlog, changelog, merges).
+- **Opus for review and design.** Code reviews, architecture reviews
+  and architecture design drafts run in a separate agent started on
+  Opus, including the Crog agents Clead starts to review. Merge-only
+  and docs runs use the default model.
+- **Clead recommends the switch.** Clead cannot read or change the
+  model or effort of its own session. Before a task that warrants a
+  different setting, Clead says which one it recommends and waits for
+  Adam to switch or say proceed. When the work changes character, Clead
+  says when to switch back.
+- **Who sets what.** Clead sets the model of the agents it starts.
+  Adam sets the model and effort of the Claude app session and of the
+  Crog tab in VS Code.
+
 ### Session startup — do this first, every session
 1. Read `memory/context.md` — narrative context that doesn't fit elsewhere
 2. Read and triage `docs/NEXT_SESSION.md` — staging area for reasoning
