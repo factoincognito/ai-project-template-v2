@@ -305,6 +305,26 @@ test_packs_workflow_uses_the_script_for_every_pack() {
   grep -qF 'bash tools/test-layout-pack.sh' "$wf" || die "script tests not run"
 }
 
+test_packs_workflow_tests_the_pack_from_the_built_bootstrapper() {
+  # Chain test: every pack job builds the bootstrapper, lays the pack out
+  # from the build output's languages/ folder, and makes the project from
+  # that output, with languages/ deleted.
+  local wf="$REPO/.github/workflows/packs.yml" p n
+  for p in node web python react-native; do
+    grep -qE "PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack\\.sh $p pack" "$wf" \
+      || die "pack-$p does not lay out from the built bootstrapper"
+  done
+  n="$(grep -cF 'bash template/bootstrap/build.sh bootstrapper v0.0.0' "$wf")"
+  [ "$n" -eq 4 ] || die "expected 4 bootstrapper builds in packs.yml, found $n"
+  n="$(grep -cF 'cp -a bootstrapper project' "$wf")"
+  [ "$n" -eq 4 ] || die "expected 4 project copies from the bootstrapper, found $n"
+  n="$(grep -cF 'cp -a pack/. project/' "$wf")"
+  [ "$n" -eq 4 ] || die "expected 4 pack overlays onto the project, found $n"
+  n="$(grep -cF 'rm -rf project/languages' "$wf")"
+  [ "$n" -eq 4 ] || die "expected 4 languages/ deletions, found $n"
+  ! grep -qE 'layout-pack\.sh [a-z-]+ project' "$wf" || die "a pack job still lays out straight from the template"
+}
+
 test_packs_workflow_node_version_matches_pack_ci() {
   local wf="$REPO/.github/workflows/packs.yml" v
   for p in node web react-native; do

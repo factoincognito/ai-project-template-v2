@@ -511,7 +511,17 @@ test_workflow_publish_requires_commit_on_main() {
 
 test_workflow_test_job_named_bootstrapper_test() {
   grep -qE '^  bootstrapper-test:' "$REPO/.github/workflows/bootstrapper.yml" || die "no bootstrapper-test job"
-  grep -qE 'needs: bootstrapper-test' "$REPO/.github/workflows/bootstrapper.yml" || die "publish does not need bootstrapper-test"
+  grep -qE 'needs: \[bootstrapper-test, packs\]' "$REPO/.github/workflows/bootstrapper.yml" || die "publish does not need bootstrapper-test and packs"
+}
+
+test_workflow_publish_needs_the_pack_chain_test() {
+  # The chain test (packs.yml) is a reusable workflow called on a tag,
+  # and publish needs it, so a bootstrapper whose packs fail in a project
+  # made from it is never published.
+  local wf="$REPO/.github/workflows/bootstrapper.yml"
+  grep -qE '^  packs:' "$wf" || die "no packs job in bootstrapper.yml"
+  grep -qF 'uses: ./.github/workflows/packs.yml' "$wf" || die "packs job does not call packs.yml"
+  grep -qE '^  workflow_call:' "$REPO/.github/workflows/packs.yml" || die "packs.yml is not callable"
 }
 
 # ---------- run ----------

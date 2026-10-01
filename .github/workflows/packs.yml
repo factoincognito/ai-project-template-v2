@@ -1,11 +1,18 @@
-# Tests the language packs on real GitHub runners (PBI-1.6).
+# Tests the language packs on real GitHub runners (PBI-1.6) and the whole
+# chain template -> bootstrapper -> project (PBI-1.15).
 # Template-only: this workflow is not in bootstrap/manifest.txt and never
 # ships to bootstrapped projects.
 #
-# Each pack job lays the pack out in a fresh project next to the
-# template checkout, exactly as the README table says
-# (tools/layout-pack.sh), then runs that pack's own CI steps. The steps
-# below copy the pack's ci.yml commands verbatim;
+# Each pack job builds the bootstrapper from this checkout
+# (bootstrap/build.sh), creates a project from that output (the
+# bootstrapper's files, plus the pack laid out from the bootstrapper's
+# own languages/ folder with tools/layout-pack.sh, plus deleting
+# languages/), then runs that pack's own CI steps. This follows the
+# bootstrapper README's manual steps with two differences: the pack's
+# .gitignore replaces the bootstrapper's instead of being merged into
+# it (nothing here reads it), and languages/ is deleted, where the README
+# only says you can. The
+# steps below copy the pack's ci.yml commands verbatim;
 # tools/test-layout-pack.sh fails if they drift apart. The template has
 # no lockfile, so the npm-based packs (node, web, react-native) run
 # `npm install` to create one first ("First-time setup" in the pack's
@@ -13,6 +20,12 @@
 # Python pack has no lockfile to create; pack-python leaves out the pip
 # cache of the pack's ci.yml, which would look for requirements files in
 # the template checkout.
+#
+# languages/ is deleted because it must be: left in a project, Biome
+# fails on the nested pack configs and Jest runs the other packs' tests.
+#
+# This workflow also runs as part of a release: bootstrapper.yml calls it
+# on a pushed v* tag and the publish job needs it to pass.
 name: Packs
 
 on:
@@ -20,6 +33,7 @@ on:
     branches: ["**"]
   pull_request:
     branches: [main]
+  workflow_call:
 
 permissions:
   contents: read
@@ -48,9 +62,18 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Lay out the node pack
+      - name: Build the bootstrapper
         working-directory: .
-        run: bash template/tools/layout-pack.sh node project
+        run: bash template/bootstrap/build.sh bootstrapper v0.0.0 "$(git -C template rev-parse HEAD)"
+
+      - name: Create the project from it with the node pack
+        working-directory: .
+        run: |
+          set -euo pipefail
+          PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh node pack
+          cp -a bootstrapper project
+          cp -a pack/. project/
+          rm -rf project/languages
 
       - name: Create the lockfile
         run: npm install --no-audit --no-fund
@@ -83,9 +106,18 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Lay out the web pack
+      - name: Build the bootstrapper
         working-directory: .
-        run: bash template/tools/layout-pack.sh web project
+        run: bash template/bootstrap/build.sh bootstrapper v0.0.0 "$(git -C template rev-parse HEAD)"
+
+      - name: Create the project from it with the web pack
+        working-directory: .
+        run: |
+          set -euo pipefail
+          PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh web pack
+          cp -a bootstrapper project
+          cp -a pack/. project/
+          rm -rf project/languages
 
       - name: Create the lockfile
         run: npm install --no-audit --no-fund
@@ -132,9 +164,18 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Lay out the python pack
+      - name: Build the bootstrapper
         working-directory: .
-        run: bash template/tools/layout-pack.sh python project
+        run: bash template/bootstrap/build.sh bootstrapper v0.0.0 "$(git -C template rev-parse HEAD)"
+
+      - name: Create the project from it with the python pack
+        working-directory: .
+        run: |
+          set -euo pipefail
+          PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh python pack
+          cp -a bootstrapper project
+          cp -a pack/. project/
+          rm -rf project/languages
 
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
@@ -167,9 +208,18 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Lay out the react-native pack
+      - name: Build the bootstrapper
         working-directory: .
-        run: bash template/tools/layout-pack.sh react-native project
+        run: bash template/bootstrap/build.sh bootstrapper v0.0.0 "$(git -C template rev-parse HEAD)"
+
+      - name: Create the project from it with the react-native pack
+        working-directory: .
+        run: |
+          set -euo pipefail
+          PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh react-native pack
+          cp -a bootstrapper project
+          cp -a pack/. project/
+          rm -rf project/languages
 
       - name: Create the lockfile
         run: npm install --no-audit --no-fund
