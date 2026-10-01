@@ -524,6 +524,27 @@ test_workflow_publish_needs_the_pack_chain_test() {
   grep -qE '^  workflow_call:' "$REPO/.github/workflows/packs.yml" || die "packs.yml is not callable"
 }
 
+test_workflow_bootstrapper_test_runs_the_require_test_change_tests() {
+  # The check's own tests must run in a required check from the first PR
+  # that adds them: the template-only bootstrapper-test job.
+  local wf="$REPO/.github/workflows/bootstrapper.yml"
+  awk '/^  bootstrapper-test:/ { inj = 1; next }
+       /^  [a-z][a-z-]*:/ { inj = 0 }
+       inj && /run: bash tools\/test-require-test-change\.sh/ { found = 1 }
+       END { exit !found }' "$wf" \
+    || die "bootstrapper-test does not run tools/test-require-test-change.sh"
+}
+
+test_real_build_ships_the_require_test_change_script() {
+  # The shared check ships byte for byte, through the manifest. The
+  # tools/ folder that holds its tests does not.
+  local out="$WORK/real.$RANDOM" f=".github/scripts/require-test-change.sh"
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  [ -f "$out/$f" ] || die "$f not shipped"
+  cmp -s "$REPO/$f" "$out/$f" || die "$f shipped altered"
+  [ ! -e "$out/tools" ] || die "tools/ shipped"
+}
+
 # ---------- run ----------
 
 TESTS=$(declare -F | awk '{print $3}' | grep '^test_')
