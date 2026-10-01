@@ -60,14 +60,14 @@ docs/decisions/0001-rebuild-workflow.md.
    Two Claude Code Routines exist at claude.ai/code/routines:
 
    **Clead Routine (Tech Owner)**
-   - Fire URL: https://api.anthropic.com/v1/claude_code/routines/trig_01YML4ytE4BkmnHV8oG3duJt/fire
+   - Fire URL: kept out of this public repo (see the private notes)
    - NO repositories attached — mandatory, see Dead End A below
    - Standing prompt: includes ADAM-AUTH verification, task drafting,
      curl production, and "never attempt outbound HTTP POST" rule
      (see Dead End B below — this rule exists for a reason)
 
    **Crog Routine (Task Executor)**
-   - Fire URL: https://api.anthropic.com/v1/claude_code/routines/trig_01GPaZsSxuy1xamYuF1uRVnC/fire
+   - Fire URL: kept out of this public repo (see the private notes)
    - All sugose repos attached
    - Token: regenerated multiple times — always store current token
      in password manager immediately; regenerating invalidates previous
