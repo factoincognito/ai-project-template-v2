@@ -6,6 +6,8 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.3.0] — 2026-10-02
+
 ### Added
 - Prepared the 2.2.0 changelog: renamed the Unreleased section and listed PRs #73-#75 (PR #76)
 - Removed the two Routine trigger IDs from `memory/decisions.md`; they stay in git history (PR #77)
@@ -54,6 +56,8 @@ A bootstrapped project records the tag it was built from.
 - Added the "what waits for what" table and the product-office handoff to NEXT_SESSION (PR #121)
 - Recorded the move to the `factoincognito` org and the rule never to recreate the old names under `sugose` in `memory/decisions.md` (PR #122)
 - Added the 2026-10-01 evening and 2026-10-02 entry to `memory/context.md` (PR #123)
+- Added CHANGELOG entries for PRs #113-#123 (PR #124)
+- Recorded the decision to release v2.3.0 before PBI-1.14, with no further tag until its slice S15 merges (PR #125)
 
 ## [2.2.0] — 2026-10-01
 
