@@ -14,6 +14,13 @@ A bootstrapped project records the tag it was built from.
 - Added PBI-1.11 (backlog visualiser) and PBI-1.12 (delegation level option for the bootstrapper) as ideas (PR #80)
 - Added PBI-1.13: the next tool refresh, as a dated LATER item (PR #81)
 - Resolved NEXT_SESSION item 8 after Adam's decisions; only his branch-cleanup click remains (PR #82)
+- Added CHANGELOG entries for PRs #76-#82 (PR #83)
+- Removed NEXT_SESSION item 8: the head-branch setting is on and the merged branches are deleted (PR #84)
+- Added "Model and effort" to CLAUDE.md: Sonnet at High by default, Opus agents for reviews and architecture design, Clead recommends switches it cannot make itself (PR #85)
+- Made `..wrap` the end-of-session check instead of a memory flush, with the graduation rule folded in; recorded in decisions.md (PR #86)
+- Removed NEXT_SESSION item 7 as obsolete (PR #87)
+- Added "Working unattended" to CLAUDE.md and graduated NEXT_SESSION item 9 (PR #88)
+- Applied the reviewers' wording notes from #85, #86 and #88 to CLAUDE.md and the decisions row (PR #89)
 
 ## [2.2.0] — 2026-10-01
 
