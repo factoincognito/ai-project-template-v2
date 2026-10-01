@@ -10,14 +10,18 @@
 
 ## Current situation summary
 
-As of the end of 2026-09-30: v2.1.0 is released and the bootstrapper is
-published to sugose/ai-project-bootstrap (verified identical to a local
-build). The template has four language packs (node, web, python,
-react-native), each tested on GitHub's runners on every PR. Reviews and
-merges are delegated (CLAUDE.md, "Change execution model"). Apart from the PR
-carrying this update, no PRs are open. The next big step is Adam bootstrapping acuteping, which also
-closes PBI-1.10. Items below are open staging entries; resolved ones are
-removed as they graduate (see the rule above).
+As of 2026-10-02: v2.1.0 and v2.2.0 are released. Both repos live under
+`factoincognito/` (item 7). The four language packs are tested on GitHub's
+runners on every PR; reviews and merges are delegated (CLAUDE.md, "Change
+execution model"). The test-first rule is in force at every level: the
+shared check, the template's `build`, the pack CIs and the docs are all
+merged. PBI-1.14 (the turn-key bootstrap script) is planned in 17 slices
+and not built (item 8). Adam's order: PBI-1.14, then acuteping; no release
+tag until item 7 closes. Several sessions worked on the template in
+parallel on 2026-10-01 and 2026-10-02; Adam consolidates them into one new
+session, which starts by reading this file, the open PRs and the branches.
+Items below are open staging entries; resolved ones are removed as they
+graduate (see the rule above).
 
 ---
 
@@ -74,6 +78,10 @@ removed as they graduate (see the rule above).
 **Not verified (Clead's session cannot read Actions settings or secrets):**
 - the Actions secret `BOOTSTRAP_PUSH_TOKEN` exists on the template repo, and its token can still push to `factoincognito/ai-project-bootstrap`. PR #112 says a new token was to be created for the new path; Adam checks the token's own settings.
 - Actions is enabled on both repos.
+**Update 2026-10-02 (Clead session on the moved repo, by API):**
+- Adam reported (item 9, from another session) that `BOOTSTRAP_PUSH_TOKEN` is set and Actions is enabled on both repos. No agent can read either setting (the access proxy returns 403 on the Actions and secrets endpoints), so this stays Adam-reported. Whether the token can push is proven only by a push: `publish` runs only on a pushed `v*` tag and has no manual trigger. A failed push there is safe (`publish.sh` stops with "nothing was published").
+- **The bootstrapper's `main` protection, as Adam set it on 2026-10-01 evening, would reject that push.** Read through the API: a pull request is required (0 approvals), the status check `build` is required, admins cannot bypass, force-push and deletion are blocked. `publish.sh` makes one atomic push of a new commit and the tag straight to `main`, which a required PR or a required check rejects when admins cannot bypass. Not tested by an actual push. PBI-1.16 Part 1 asked for only the force-push and deletion blocks, with no PR requirement. Fix, by Adam in that repo's branch settings: untick "Require a pull request before merging", untick "Require status checks to pass", untick the admin-bypass block; keep the force-push and deletion blocks. Then re-read it through the API. Also: the `build` job there is the stub CI, which has no steps, so requiring it protects nothing.
+- A way to prove the token without a release: a manually run job in `bootstrapper.yml` that pushes a throwaway branch to the bootstrapper repo with the secret and deletes it. A small code PR, test-first, Crog reviews. Not started; Adam has not decided whether he wants it.
 **Hold until those are confirmed:** the next release tag (a pushed `v*` tag runs publish against the bootstrapper repo), Adam's end-to-end runs on throwaway repos, and creating acuteping.
 **Do not** create a repository under `sugose` named `ai-project-template-v2` or `ai-project-bootstrap`: GitHub deletes the redirect permanently.
 **Action:** when Adam confirms the token and Actions, record it here and delete this item. If the token cannot push, fix it before any tag.
@@ -96,7 +104,34 @@ removed as they graduate (see the rule above).
 **Questions for Adam (neither blocks S1):**
 1. `--resume` on a repo stamped by an older bootstrapper version (including repos already made with "Use this template"): refuse, or finish with the current script's tables? Blocks only S15.
 2. No release tag before S15 merges (a tag would publish a half-built script as the latest). Is that acceptable? It means acuteping waits for PBI-1.14 or is set up by hand.
-**Not started:** no slice is built yet.
+**Not started:** no slice is built yet. Adam answers the two questions and says go; then S1 and S3 start (S3 is independent), with an Opus Crog as implementer and an Opus reviewer for the code.
+
+
+### 9. Pending from the previous Clead session (PBI-1.17 build), staged on Adam's request — new (2026-10-02)
+
+**Why this exists:** Adam, 2026-10-02: too many parallel sessions work on the template, so every session stages what it has pending here and one new session consolidates. The session that wrote this was bound to the old `sugose/` path and cannot reach the moved repo's API, so it pushed this as a branch and could not open the PR.
+**Already done, so not pending (checked against `main` d5c0f76, 2026-10-02):** #113 (CHANGELOG for #95 to #112), #114 (PBI-1.15 marked done), #116 (PBI-1.17 PR 4: the docs, the spec text fix and the decision row).
+**Still pending:**
+- **Item 7 can close.** Adam reported on 2026-10-02 that `BOOTSTRAP_PUSH_TOKEN` is set and Actions is enabled on both repos. That settles the first two conditions. The third (the token can still push to the bootstrapper repo) is only proven by the first publish: publish runs only on a pushed `v*` tag and has no manual trigger. Whoever closes item 7 lifts the hold, and looks at the first publish run before calling the token good.
+- **Release prep.** `CHANGELOG.md` Unreleased does not list #113 to #116 or anything later. At release time, rename it to the next version and date it, as was done for 2.2.0. Clead's proposal is 2.3.0 (minor: bootstrapped projects gain the check and the pack CIs run it). The tags v2.1.0 and v2.2.0 exist, and publish refuses an existing tag. Agreed order (Adam, 2026-10-01): PBI-1.14 build, then Adam cuts the release tag, then Adam's end-to-end runs on throwaway repos, then acuteping.
+- **PBI-1.17 stays `[NEXT]`** until Adam's end-to-end runs show the red-then-exempt PR behaving as specified (see its "Done when").
+- **Not proven by any run yet (nothing claimed until one has run):** a real `pull_request` inside a bootstrapped project; the tag-push and `workflow_call` path of `packs.yml` (first release-tag run); real bash 3.2 and macOS/Windows git; the rendered job summary. The backlog already lists the first, third and fourth; the tag-push path is not in the backlog yet.
+- **By Adam, by hand** (agent sessions get 403 on both): delete the branch `throwaway-red-check-pr` (from the closed #109), and push the release tag. PBI-1.16 Part 1 (protect `main` on the bootstrapper repo) is still open.
+- **Process fact:** a session bound to the old owner path cannot attach the moved repo (same-name checkout clash), and the access proxy ignores any token it is given. Start a new session with `factoincognito/ai-project-template-v2` as its source. The "Current situation summary" above is stale (it says "as of the end of 2026-09-30").
+
+### 10. Pending from the Clead session that built PBI-1.17 PR 4 and the PBI-1.14 plan — new (2026-10-02)
+
+Written on Adam's request to consolidate parallel sessions. Item 9 is the other session's list; nothing here repeats it.
+- **Decision row missing:** `memory/decisions.md` has no row for the move to the `factoincognito` org (Adam decided it in chat on 2026-10-01; PR #112 describes it) or for the rule never to create a `sugose` repo with the moved names (item 7). A notes PR, Clead's own call.
+- **`memory/context.md` has no entry** for the evening of 2026-10-01 and 2026-10-02: the repo move, PBI-1.15 and PBI-1.17 done, the parallel-sessions problem and this consolidation, and why a session bound to the old path could not reach the new repo. Write it as a PR.
+- **CHANGELOG Unreleased** lists nothing after #112. Missing: #113 to #117, and whatever merges after this file's PR (see item 9 for the release plan).
+- **Item 6** (the four CLAUDE.md wording nits) is still open; fold it into the next change that touches those sections. Two more non-blocking notes from Crog's review of #116, to fold into the next docs change: the decisions row says the script is "the first step of `build`" (it is the first step after the checkout), and one edited line in `docs/DEV_INFRASTRUCTURE.md` runs past the wrap width.
+- **PBI-1.16 text** in the backlog says Part 1 needs "no pull-request requirement". Adam's actual protection differs (item 7). Either the setting changes (recommended) or the text does; decide when item 7 is dealt with.
+- **PBI-1.14 spec meets the changed repo** in the places listed in item 8; the spec text itself is not corrected yet. Fix it in the slice that touches each place, not in a bulk edit.
+- **Adam's PC clone** of the template was fast-forwarded to `01d39e4` on 2026-10-01 and is now behind; its `origin` points at the org. Agents cannot delete files in his connected folder unless he grants it per session: a failed pull left a stale `.git/index.lock` that needed that grant. Clean-up needed next time: fast-forward again.
+- **Stale branches Adam deletes by hand** (agents get 403): `throwaway-red-check-pr` and `docs/next-session-old-clead-pending` (its content is in item 9; its PR was never opened).
+- **Process question for Adam:** two sessions each wrote an item numbered 8 within hours, and a session on the old path wrote to a side branch. Does he want a rule in CLAUDE.md that only one Clead session works on the template at a time, and that every session starts by listing open PRs and non-main branches? Not written; his call.
+- **Working practice that held up, kept as a reminder for the next session:** Crog agents on Opus review process, code and config changes and also merge; Sonnet Crog agents do merge-only runs; every merge is re-verified against the GitHub API by Clead, not taken from the agent's report.
 
 ---
 
