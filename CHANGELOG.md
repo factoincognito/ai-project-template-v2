@@ -43,6 +43,17 @@ A bootstrapped project records the tag it was built from.
 - PBI-1.17 PR 3: each pack's CI runs the test-first check; a chain test proves it (PR #110)
 - Made PBI-1.11 (backlog visualiser) a pointer: it is its own project, not a template feature (PR #111)
 - Pointed the template and bootstrapper paths at the `factoincognito` org (PR #112)
+- Added CHANGELOG entries for PRs #95-#112 (PR #113)
+- Marked PBI-1.15 done in the backlog (PR #114)
+- Staged the repo-move handoff in NEXT_SESSION (PR #115)
+- PBI-1.17 PR 4: the test-first rule in the docs (PR #116)
+- Staged the PBI-1.14 build plan in NEXT_SESSION (PR #117)
+- Consolidated the parallel sessions' pending work in NEXT_SESSION (PR #118)
+- Added Adam's to-do list to NEXT_SESSION (PR #119)
+- Recorded in NEXT_SESSION how a Clead cloud session reaches GitHub (PR #120)
+- Added the "what waits for what" table and the product-office handoff to NEXT_SESSION (PR #121)
+- Recorded the move to the `factoincognito` org and the rule never to recreate the old names under `sugose` in `memory/decisions.md` (PR #122)
+- Added the 2026-10-01 evening and 2026-10-02 entry to `memory/context.md` (PR #123)
 
 ## [2.2.0] — 2026-10-01
 
