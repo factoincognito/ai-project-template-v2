@@ -187,6 +187,22 @@ test_real_build_ships_the_generic_docs() {
     || die "DEV_INFRASTRUCTURE.md shipped altered"
 }
 
+test_real_build_ships_the_template_licence() {
+  # The template's own files are PolyForm Noncommercial 1.0.0. The text
+  # must ship unaltered, with a Required Notice line, in licenses/ and
+  # never as a root LICENSE (which projects would inherit as their own).
+  local out="$WORK/real.$RANDOM" lic="licenses/PolyForm-Noncommercial-1.0.0.md" sum
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  [ -f "$out/$lic" ] || die "$lic not shipped"
+  sum="$(sha256sum "$out/$lic" | cut -d' ' -f1)"
+  [ "$sum" = "c0ea4a896d2c8c394b29f9427589996db826cd501c512279ff0ed3ef48fabbe5" ] \
+    || die "$lic differs from the official PolyForm Noncommercial 1.0.0 text"
+  grep -qE '^Required Notice: Copyright .+' "$out/licenses/NOTICE" \
+    || die "licenses/NOTICE lacks a Required Notice line"
+  [ ! -e "$out/LICENSE" ] || die "root LICENSE shipped"
+  [ ! -e "$out/LICENSE.md" ] || die "root LICENSE.md shipped"
+}
+
 test_real_stubs_have_no_forbidden_strings() {
   ! grep -rnE 'trig_|PBI-[0-9]|open question [0-9]' "$REPO/bootstrap/stubs" || die "forbidden regex in stubs"
   ! grep -rnF '(PR #' "$REPO/bootstrap/stubs" || die "(PR # in stubs"
