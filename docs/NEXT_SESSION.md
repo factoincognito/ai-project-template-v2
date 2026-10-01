@@ -67,6 +67,17 @@ removed as they graduate (see the rule above).
 - Rule 3 says "System, process and architecture changes"; the model wording says "process and architecture" and drops "system".
 **Action:** fold these into the next change that touches those CLAUDE.md sections, or drop them if Adam judges them not worth a PR. Delete this item when done.
 
+### 7. Repo move to the `factoincognito` org: publish setup not yet verified — new (2026-10-01)
+
+**What happened:** both repos moved from `sugose/` to `factoincognito/` on 2026-10-01 (`ai-project-template-v2` and `ai-project-bootstrap`). GitHub redirects the old paths. All live references were repointed in PR #112. `sugose/ai-project-template` (v1) did not move.
+**Verified through the GitHub API on 2026-10-01:** template `main` protection survived (PR required; `build` and `bootstrapper-test` required; applies to admins; no force-push or deletion); "delete head branches on merge" is on; the bootstrapper is still a template repository with identical refs (`main` 567ed2e, tags v2.1.0 and v2.2.0); the bootstrapper's `main` is not protected (it was not before the move; PBI-1.16 Part 1).
+**Not verified (Clead's session cannot read Actions settings or secrets):**
+- the Actions secret `BOOTSTRAP_PUSH_TOKEN` exists on the template repo, and its token can still push to `factoincognito/ai-project-bootstrap`. PR #112 says a new token was to be created for the new path; Adam checks the token's own settings.
+- Actions is enabled on both repos.
+**Hold until those are confirmed:** the next release tag (a pushed `v*` tag runs publish against the bootstrapper repo), Adam's end-to-end runs on throwaway repos, and creating acuteping.
+**Do not** create a repository under `sugose` named `ai-project-template-v2` or `ai-project-bootstrap`: GitHub deletes the redirect permanently.
+**Action:** when Adam confirms the token and Actions, record it here and delete this item. If the token cannot push, fix it before any tag.
+
 ---
 
 ## Items that do not change
