@@ -220,7 +220,7 @@ has already replaced `socket.socket` with a mock. Build the mock before
 the patch and hand it in:
 
 ```python
-mock_sock = MagicMock(spec=socket.socket)   # before the patch
+mock_sock = MagicMock(spec=socket.socket)  # before the patch
 with patch("socket.socket", return_value=mock_sock):
     ...
 ```
