@@ -209,7 +209,25 @@ test_real_stubs_have_no_forbidden_strings() {
 }
 
 test_shipped_ci_does_not_reference_bootstrap() {
-  ! grep -n 'bootstrap/' "$REPO/.github/workflows/ci.yml" || die "ci.yml references bootstrap/"
+  # What ships is the stub (the template's own ci.yml does not ship).
+  local stub="$REPO/bootstrap/stubs/.github/workflows/ci.yml"
+  [ -f "$stub" ] || die "no stub ci.yml at bootstrap/stubs/.github/workflows/ci.yml"
+  ! grep -n 'bootstrap/' "$stub" || die "stub ci.yml references bootstrap/"
+  ! grep -n 'tools/' "$stub" || die "stub ci.yml references tools/"
+  ! grep -n 'require-test-change' "$stub" || die "stub ci.yml runs the check (a project with no pack has no src/ to define)"
+}
+
+test_real_build_ships_the_stub_ci_unchanged() {
+  local out="$WORK/real.$RANDOM" f=".github/workflows/ci.yml"
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  cmp -s "$REPO/bootstrap/stubs/$f" "$out/$f" || die "shipped ci.yml differs from the stub"
+  ! grep -q 'require-test-change' "$out/$f" || die "shipped ci.yml runs the template's check"
+  grep -qE '^  build:' "$out/$f" || die "shipped ci.yml has no job named build"
+}
+
+test_template_ci_is_not_in_the_manifest() {
+  ! grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -qxF '.github/workflows/ci.yml' \
+    || die "the template's own ci.yml is listed in the manifest, so it would ship"
 }
 
 # ---------- build.sh: argument errors ----------
