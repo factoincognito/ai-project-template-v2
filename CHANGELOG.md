@@ -26,6 +26,23 @@ A bootstrapped project records the tag it was built from.
 - Recorded that the Clead and Crog Routines were deleted (PR #92)
 - Recorded two decisions in `memory/decisions.md`: the licence, and Crog agents staying inside Clead's session (PR #93)
 - Added the 2026-10-01 session to `memory/context.md` (PR #94)
+- Added CHANGELOG entries for PRs #90-#94 (PR #95)
+- Named this repo's README after the repo (PR #96)
+- Proposed PBI-1.14, the turn-key bootstrap script (spec) (PR #97)
+- Recorded Adam's approval of PBI-1.14 (PR #98)
+- Added PBI-1.15 and PBI-1.16 to the backlog (PR #99)
+- Gated the acuteping bootstrap on a verified toolchain (PR #100)
+- Tested the chain: build the bootstrapper, make a project from it, run each pack (PBI-1.15) (PR #101)
+- Fixed the Python code block spacing that ruff 0.16.9 reformats (PR #102)
+- Said that cleaning up `languages/` is required, not optional (PR #103)
+- Recorded how test-first applies in this template repo (PR #104)
+- Added PBI-1.17: test-first applies by default at every level (PR #105)
+- Specified PBI-1.17 (PR #106)
+- PBI-1.17 PR 1: added the require-test-change check and its tests (PR #107)
+- PBI-1.17 PR 2: the template build runs the test-first check; the stub `ci.yml` moved to stubs (PR #108)
+- PBI-1.17 PR 3: each pack's CI runs the test-first check; a chain test proves it (PR #110)
+- Made PBI-1.11 (backlog visualiser) a pointer: it is its own project, not a template feature (PR #111)
+- Pointed the template and bootstrapper paths at the `factoincognito` org (PR #112)
 
 ## [2.2.0] — 2026-10-01
 
