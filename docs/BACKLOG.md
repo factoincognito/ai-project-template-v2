@@ -531,6 +531,36 @@ get a working project in any supported language.
 
   Confirmed (and, after the Crog review, also `[project-description]` in three `package.json` files, `[project-name]` in `wrangler.jsonc`, `bootstrapper-test` as a required check in `docs/DEV_INFRASTRUCTURE.md`, and `review.yml` firing on `src/**`): `npm ci` in the node, web and react-native `ci.yml`; every pack's `ci.yml` has a single job `build`; `[DATE]` is a real placeholder in `docs/SPEC.md` and the stub `docs/NEXT_SESSION.md`, and a format token in `memory/roles.md` and `docs/CROG_ONBOARDING.md`; `docs/DEV_INFRASTRUCTURE.md` links `languages/<pack>/code-standards.md`; the stub README says "(step 2 above)"; `tools/layout-pack.sh` has the layout table and leaves out `code-standards.md` and the web deploy files; `bootstrapper-test` runs on `ubuntu-latest` only today (the spec adds a matrix); "Adam" is hard-coded in the shipped docs.
 
+- **[LATER] PBI-1.15** (Adam, 2026-10-01) — Test the whole chain before publishing:
+  build the bootstrapper, instantiate it, and prove the instance works.
+  **Why.** Today the template's CI tests `build.sh` output (shape only) and
+  the packs (laid out from the template checkout, not from the build
+  output). Nothing builds the bootstrapper and then creates a project from
+  that output, so a bad release could be published. **What.** A job in the
+  template's CI builds the bootstrapper into a temp folder, lays out each
+  pack from that output (`tools/layout-pack.sh`, or the script's layout
+  subcommand once PBI-1.14 exists), and runs the pack's CI steps, replacing
+  the template-checkout layout in `packs.yml`. The `publish` job needs it.
+  If it becomes a required check, the existing required-check rules apply
+  (a matrix renames checks; see PBI-1.14). **Done when.** A change that
+  breaks a shipped pack file or the layout fails CI before any tag is
+  published.
+
+- **[LATER] PBI-1.16** (Adam, 2026-10-01; he reports `main` on
+  `sugose/ai-project-bootstrap` is not protected) — Protect the
+  bootstrapper repo's default branch. **What.** Part 1, to do by Adam in
+  that repo's settings: block force-pushes and deletion on `main`, with no
+  pull-request requirement, so release history stays intact and the direct
+  publish push still works. Part 2, research first: whether a ruleset or a
+  bypass allowance can limit writes to the publish token on a user-owned
+  repo. The docs say push `restrictions` are organisation-only; whether
+  `bypass_pull_request_allowances` or a ruleset works on a user-owned repo
+  is not verified. If neither works, PBI-1.15 carries the verification.
+  Optional later layer: a post-publish check inside the bootstrapper repo,
+  which would have to be guarded
+  (`if: github.repository == 'sugose/ai-project-bootstrap'`) so projects do
+  not inherit a failing or pointless job.
+
 ---
 
 ## Phase 2 — Validate unproven pieces
