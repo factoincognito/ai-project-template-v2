@@ -16,8 +16,8 @@ build). The template has four language packs (node, web, python,
 react-native), each tested on GitHub's runners on every PR. Reviews and
 merges are delegated (CLAUDE.md, "Change execution model"). Apart from the PR
 carrying this update, no PRs are open. The next big step is Adam bootstrapping acuteping, which also
-closes PBI-1.10. Items 1-7 below are from July; 6 got a proposal this
-session, the rest were not touched. Items 8 and 9 are new.
+closes PBI-1.10. Items below are open staging entries; resolved ones are
+removed as they graduate (see the rule above).
 
 ---
 

@@ -108,22 +108,23 @@ Which model and effort each role runs on (Adam, 2026-10-01):
 ### Session end — type `..wrap` to check the session is clean
 `..wrap` is the stop word that signals end of session. There is no
 automatic session-end hook: closing the session without `..wrap` checks
-nothing. Decisions are committed as they are made, so `..wrap` is a
-check, not a memory dump. When Adam types `..wrap`, before responding:
-1. Run the Clean session end state checklist below. Each condition is
-   checked directly this session, not carried over from an earlier
-   report.
-2. Give every `docs/NEXT_SESSION.md` entry touched this session a
+nothing. Event-based writes are the main mechanism (persist when a
+decision is made and when a PR opens, whether or not `..wrap` is
+typed); `..wrap` is the check that catches what they missed. When Adam
+types `..wrap`, before responding:
+1. Give every `docs/NEXT_SESSION.md` entry touched this session a
    disposition (graduation rule below).
-3. Open PRs for anything agreed in the session but not yet written
+2. Open PRs for anything agreed in the session but not yet written
    down: decisions to `memory/decisions.md`; session reasoning that
    cannot be derived from the repo to `memory/context.md`; changes of
    scope or goals to `memory/project.md`.
-4. Report: clean, or what is open and why. Show Adam the diff of every
-   memory file touched.
-
-Keep event-based writes as the backstop: persist when a decision is
-made and when a PR opens, whether or not `..wrap` is typed.
+3. Run the Clean session end state checklist below, last, so it checks
+   the state after steps 1 and 2. Each condition is checked directly
+   this session, not carried over from an earlier report. A PR opened
+   in step 2 must be merged and verified, or left open with Adam's
+   knowledge and a stated reason, before the session counts as clean.
+4. Report: clean, or what is open and why. Link the PRs from step 2 and
+   show Adam the diff of every memory file touched.
 
 **Graduation rule:** every `docs/NEXT_SESSION.md` entry touched this
 session must be promoted (to a PBI, a decision, or a formal doc update),
