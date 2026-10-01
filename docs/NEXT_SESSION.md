@@ -1,6 +1,6 @@
 # [PROJECT NAME] — Next Session Planning
 
-**Last Updated:** 2026-10-01
+**Last Updated:** 2026-10-02
 **Author:** Clead (Tech Owner)
 **Purpose:** Staging area for reasoning, revised assumptions, and plan-adaptation thoughts that aren't yet mature enough to be a PBI, a decision, a strategy update, or a vision-doc change. Complements `docs/BACKLOG.md` — it does not replace it. Discrete, scoped, actionable work belongs in the backlog as a PBI, not here.
 
@@ -20,6 +20,26 @@ Written 2026-10-02 so nothing depends on anyone remembering. **The next Clead se
 6. **Decide two small things** (item 10): whether CLAUDE.md should say that only one Clead session works on the template at a time (and that every session starts by listing open PRs and non-main branches); and, for PBI-1.16, whether the setting changes (recommended, step 3) or the backlog text does.
 7. **Later, when PBI-1.14 is built:** the end-to-end runs on throwaway repos, including PBI-1.17's red-then-`Test-exempt` pull request in a real project (PBI-1.17 stays `[NEXT]` until then); and pushing the release tag, which agents cannot do. No tag before items 3 and 4 are done.
 8. **If an agent has to change files in your connected PC folder,** it asks for delete permission once per session (a failed pull left a stale `.git/index.lock` last time). Your PC clone of the template is behind main and its `origin` points at the org; the session fast-forwards it after you grant that.
+9. **After the first release has published successfully (not before):** delete the old publish token `bootstrap-publish` in your GitHub token settings (the product-office session told you to wait for a successful release; which token that is was not checked), and tell the product-office session that the release is out. It waits for it and has no access to this repo's state except through you or this file (item 11).
+
+---
+
+## What waits for what
+
+Written 2026-10-02 so the order does not have to be re-derived. "Clead" is the next Clead session.
+
+| Step | Who | Blocked by |
+|---|---|---|
+| PBI-1.14 slices S1 and S3 | Clead (Opus Crog implementer) | Adam's two answers and "go" (to-do 2) |
+| Rest of PBI-1.14, S15 last | Clead | S1 and S3 merged; each slice follows the PR loop |
+| Bootstrapper `main` protection fixed | Adam | Nothing (to-do 3); Clead re-reads it through the API afterwards |
+| Publish token confirmed | Adam | Nothing (to-do 4); only a real push proves it |
+| Release prep PR (rename Unreleased, date it, add #113 to #120 and later) | Clead | Nothing, but write it just before the tag so it is complete |
+| Release tag `v*` | Adam, from the Releases page | Release prep merged; to-do 3 and 4 done; **and Adam's answer to question 2(b)**: his 2026-10-01 order held the tag until PBI-1.14 is built, while the product-office session's handoff recommends releasing sooner. Do not pick between them. |
+| Release verified | Clead, through the API: the workflow run succeeded, bootstrapper `main` has the new commit, the tag exists | The tag. An auth error in the publish step means the token: fix that before anything else is built on the pipeline. |
+| Old token deleted, product-office session told | Adam | A verified release (to-do 9) |
+| End-to-end runs on throwaway repos; PBI-1.17 to `[DONE]` | Adam runs, Clead reads the results | PBI-1.14 built (to-do 7) |
+| acuteping created | Adam | The end-to-end runs |
 
 ---
 
@@ -128,18 +148,18 @@ graduate (see the rule above).
 **Already done, so not pending (checked against `main` d5c0f76, 2026-10-02):** #113 (CHANGELOG for #95 to #112), #114 (PBI-1.15 marked done), #116 (PBI-1.17 PR 4: the docs, the spec text fix and the decision row).
 **Still pending:**
 - **Item 7 can close.** Adam reported on 2026-10-02 that `BOOTSTRAP_PUSH_TOKEN` is set and Actions is enabled on both repos. That settles the first two conditions. The third (the token can still push to the bootstrapper repo) is only proven by the first publish: publish runs only on a pushed `v*` tag and has no manual trigger. Whoever closes item 7 lifts the hold, and looks at the first publish run before calling the token good.
-- **Release prep.** `CHANGELOG.md` Unreleased does not list #113 to #116 or anything later. At release time, rename it to the next version and date it, as was done for 2.2.0. Clead's proposal is 2.3.0 (minor: bootstrapped projects gain the check and the pack CIs run it). The tags v2.1.0 and v2.2.0 exist, and publish refuses an existing tag. Agreed order (Adam, 2026-10-01): PBI-1.14 build, then Adam cuts the release tag, then Adam's end-to-end runs on throwaway repos, then acuteping.
+- **Release prep.** `CHANGELOG.md` Unreleased does not list #113 to #120 (see item 10) or anything later. At release time, rename it to the next version and date it, as was done for 2.2.0. Clead's proposal is 2.3.0 (minor: bootstrapped projects gain the check and the pack CIs run it). The tags v2.1.0 and v2.2.0 exist, and publish refuses an existing tag. Agreed order (Adam, 2026-10-01): PBI-1.14 build, then Adam cuts the release tag, then Adam's end-to-end runs on throwaway repos, then acuteping.
 - **PBI-1.17 stays `[NEXT]`** until Adam's end-to-end runs show the red-then-exempt PR behaving as specified (see its "Done when").
 - **Not proven by any run yet (nothing claimed until one has run):** a real `pull_request` inside a bootstrapped project; the tag-push and `workflow_call` path of `packs.yml` (first release-tag run); real bash 3.2 and macOS/Windows git; the rendered job summary. The backlog already lists the first, third and fourth; the tag-push path is not in the backlog yet.
 - **By Adam, by hand** (agent sessions get 403 on both): delete the branch `throwaway-red-check-pr` (from the closed #109), and push the release tag. PBI-1.16 Part 1 (protect `main` on the bootstrapper repo) is still open.
-- **Process fact:** a session bound to the old owner path cannot attach the moved repo (same-name checkout clash), and the access proxy ignores any token it is given. Start a new session with `factoincognito/ai-project-template-v2` as its source. The "Current situation summary" above is stale (it says "as of the end of 2026-09-30").
+- **Process fact:** a session bound to the old owner path cannot attach the moved repo (same-name checkout clash), and the access proxy ignores any token it is given. Start a new session with `factoincognito/ai-project-template-v2` as its source.
 
 ### 10. Pending from the Clead session that built PBI-1.17 PR 4 and the PBI-1.14 plan — new (2026-10-02)
 
 Written on Adam's request to consolidate parallel sessions. Item 9 is the other session's list; nothing here repeats it.
 - **Decision row missing:** `memory/decisions.md` has no row for the move to the `factoincognito` org (Adam decided it in chat on 2026-10-01; PR #112 describes it) or for the rule never to create a `sugose` repo with the moved names (item 7). A notes PR, Clead's own call.
 - **`memory/context.md` has no entry** for the evening of 2026-10-01 and 2026-10-02: the repo move, PBI-1.15 and PBI-1.17 done, the parallel-sessions problem and this consolidation, and why a session bound to the old path could not reach the new repo. Write it as a PR.
-- **CHANGELOG Unreleased** lists nothing after #112. Missing: #113 to #117, and whatever merges after this file's PR (see item 9 for the release plan).
+- **CHANGELOG Unreleased** lists nothing after #112. Missing: #113 to #120 (checked against the GitHub API on 2026-10-02: #113 added the entries up to #112 and, by the one-PR-behind rule, is not listed itself; #115, #117, #118, #119 and #120 only changed this file; #114 and #116 changed the backlog and the docs), and whatever merges after. See item 9 for the release plan.
 - **Item 6** (the four CLAUDE.md wording nits) is still open; fold it into the next change that touches those sections. Two more non-blocking notes from Crog's review of #116, to fold into the next docs change: the decisions row says the script is "the first step of `build`" (it is the first step after the checkout), and one edited line in `docs/DEV_INFRASTRUCTURE.md` runs past the wrap width.
 - **PBI-1.16 text** in the backlog says Part 1 needs "no pull-request requirement". Adam's actual protection differs (item 7). Either the setting changes (recommended) or the text does; decide when item 7 is dealt with.
 - **PBI-1.14 spec meets the changed repo** in the places listed in item 8; the spec text itself is not corrected yet. Fix it in the slice that touches each place, not in a bulk edit.
@@ -147,6 +167,16 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 - **Stale branches Adam deletes by hand** (agents get 403): `throwaway-red-check-pr` and `docs/next-session-old-clead-pending` (its content is in item 9; its PR was never opened).
 - **Process question for Adam:** two sessions each wrote an item numbered 8 within hours, and a session on the old path wrote to a side branch. Does he want a rule in CLAUDE.md that only one Clead session works on the template at a time, and that every session starts by listing open PRs and non-main branches? Not written; his call.
 - **Working practice that held up, kept as a reminder for the next session:** Crog agents on Opus review process, code and config changes and also merge; Sonnet Crog agents do merge-only runs; every merge is re-verified against the GitHub API by Clead, not taken from the agent's report.
+
+### 11. From the product-office session's handoff, folded in — new (2026-10-02)
+
+**Why this exists:** a Clead session that works on Adam's company structure (in a separate private repo, "product-office") left a handoff as a Project doc, `claude/HANDOFF-2026-10-02-consolidation.md`, not as a PR, because it was bound to the old `sugose/` path and could not write to this repo. The new Clead session can read that doc in the Project. It was written before #116 to #120 merged and it checked less than this file does. **Where it disagrees with this file, this file wins.** Its content that is not elsewhere here:
+- **The boundary between sessions.** The product-office session works only in its own repo and learns template state from Adam or from this file. The template session owns the template and the bootstrapper. Private information (company structure, ideas, token expiry, library repos) stays in the product-office repo and never enters this public repo.
+- **After a release, in this order:** verify it through the API (the table above), report the result to Adam, then Adam deletes the old token and tells the product-office session (to-do 9). That session's next steps depend on the release; Clead cannot reach it.
+- **Its claim that this file's item 7 says the bootstrapper's `main` is not protected is out of date:** item 7 already records the protection as Adam set it, and why it would reject the release push. The facts in item 7 stand; to-do 3 is what changes it.
+- **It recommends 2.3.0** for the release, the same number as item 9. Whether to cut it before PBI-1.14 is built is Adam's open question 2(b), not decided.
+- **The gate for acuteping** is PBI-1.14 built plus Adam's end-to-end runs; the product-office repo has its own step for that.
+- **Disposition of the Project doc:** once this item is triaged, the new session tells Adam the Project doc can be deleted from the Project. Agents do not delete it unasked.
 
 ---
 
