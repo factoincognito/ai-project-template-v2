@@ -325,6 +325,51 @@ test_packs_workflow_tests_the_pack_from_the_built_bootstrapper() {
   ! grep -qE 'layout-pack\.sh [a-z-]+ project' "$wf" || die "a pack job still lays out straight from the template"
 }
 
+test_packs_workflow_simulates_the_setup_change_and_a_refused_change() {
+  # In every pack job the project is a git repo: the bootstrapper output is
+  # committed on main and the pack is laid out on a `setup` branch. The
+  # pack's own check runs verbatim on that change (with the base set to
+  # main) and must pass; then a source change without a test is made and
+  # the project's own check command, read from its ci.yml, must exit 1.
+  local wf="$REPO/.github/workflows/packs.yml" n p want got
+  n="$(grep -cF 'git -C project init -q -b main' "$wf")"
+  [ "$n" -eq 4 ] || die "expected 4 project repos (git init -b main), found $n"
+  n="$(grep -cF 'git -C project checkout -q -b setup' "$wf")"
+  [ "$n" -eq 4 ] || die "expected 4 setup branches, found $n"
+  # Each job runs exactly its own pack's check line, verbatim: not another
+  # pack's, and nothing appended.
+  for p in node web python react-native; do
+    want="run: $(sed -n 's|^ *run: \(bash \.github/scripts/require-test-change\.sh .*\)$|\1|p' "$REPO/languages/$p/ci.yml")"
+    got="$(awk -v job="  pack-$p:" '$0 == job { injob = 1; next } /^  [a-z][a-z-]*:$/ { injob = 0 } injob && /run: bash \.github\/scripts\/require-test-change\.sh/ { sub(/^ */, ""); print }' "$wf")"
+    [ "$got" = "$want" ] || die "pack-$p does not run its own check line verbatim (want: $want; got: $got)"
+  done
+  n="$(grep -B3 -F 'run: bash .github/scripts/require-test-change.sh' "$wf" | grep -cF 'TEST_FIRST_BASE: main')"
+  [ "$n" -eq 4 ] || die "expected TEST_FIRST_BASE: main on the 4 verbatim checks, found $n"
+  n="$(grep -cxF '          git merge -q --ff-only setup' "$wf")"
+  [ "$n" -eq 4 ] || die "expected setup merged into main 4 times, found $n"
+  n="$(grep -cxF '          [ "$rc" -eq 1 ]' "$wf")"
+  [ "$n" -eq 4 ] || die "expected 4 refused-change assertions (exactly exit 1), found $n"
+  ! grep -qE '"\$rc" -eq 2|"\$rc" -ne 0' "$wf" || die "a refused-change assertion accepts an exit code other than 1"
+  n="$(grep -cF 'cmd="$(sed -n' "$wf")"
+  [ "$n" -eq 4 ] || die "expected the project's check command read from its ci.yml 4 times, found $n"
+  # The refusal is intended, so it must not show as an error annotation or
+  # job summary on a green job: workflow commands are stopped around it.
+  n="$(grep -cF 'echo "::stop-commands::$token"' "$wf")"
+  [ "$n" -eq 4 ] || die "expected workflow commands stopped around the refused change 4 times, found $n"
+  n="$(grep -cF 'echo "::$token::"' "$wf")"
+  [ "$n" -eq 4 ] || die "expected workflow commands resumed 4 times, found $n"
+  n="$(grep -cF 'env -u GITHUB_STEP_SUMMARY TEST_FIRST_BASE=main bash -c "$cmd"' "$wf")"
+  [ "$n" -eq 4 ] || die "expected the refused change run without a job summary 4 times, found $n"
+  # The refused-change step is the last step of each pack job, so the branch
+  # it leaves behind cannot affect the pack's own steps.
+  n="$(awk '
+    /^  [a-z][a-z-]*:$/ { if (job ~ /^pack-(node|web|python|react-native)$/ && last ~ /Refuse a source change without a test/) ok++; job = $1; sub(":", "", job); last = "" }
+    /^      - (name|uses): / { last = $0 }
+    END { if (job ~ /^pack-(node|web|python|react-native)$/ && last ~ /Refuse a source change without a test/) ok++; print ok + 0 }
+  ' "$wf")"
+  [ "$n" -eq 4 ] || die "the refused-change step is not the last step of all 4 pack jobs (found $n)"
+}
+
 test_packs_workflow_node_version_matches_pack_ci() {
   local wf="$REPO/.github/workflows/packs.yml" v
   for p in node web react-native; do
