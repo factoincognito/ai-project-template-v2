@@ -157,7 +157,6 @@ graduate (see the rule above).
 ### 10. Pending from the Clead session that built PBI-1.17 PR 4 and the PBI-1.14 plan — new (2026-10-02)
 
 Written on Adam's request to consolidate parallel sessions. Item 9 is the other session's list; nothing here repeats it.
-- **Decision row missing:** `memory/decisions.md` has no row for the move to the `factoincognito` org (Adam decided it in chat on 2026-10-01; PR #112 describes it) or for the rule never to create a `sugose` repo with the moved names (item 7). A notes PR, Clead's own call.
 - **`memory/context.md` has no entry** for the evening of 2026-10-01 and 2026-10-02: the repo move, PBI-1.15 and PBI-1.17 done, the parallel-sessions problem and this consolidation, and why a session bound to the old path could not reach the new repo. Write it as a PR.
 - **CHANGELOG Unreleased** lists nothing after #112. Missing: #113 to #120 (checked against the GitHub API on 2026-10-02: #113 added the entries up to #112 and, by the one-PR-behind rule, is not listed itself; #115, #117, #118, #119 and #120 only changed this file; #114 and #116 changed the backlog and the docs), and whatever merges after. See item 9 for the release plan.
 - **Item 6** (the four CLAUDE.md wording nits) is still open; fold it into the next change that touches those sections. Two more non-blocking notes from Crog's review of #116, to fold into the next docs change: the decisions row says the script is "the first step of `build`" (it is the first step after the checkout), and one edited line in `docs/DEV_INFRASTRUCTURE.md` runs past the wrap width.
