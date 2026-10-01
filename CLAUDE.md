@@ -78,10 +78,11 @@ Which model and effort each role runs on (Adam, 2026-10-01):
 
 - **Default.** Clead sessions run on Sonnet at High effort. Medium is
   fine for a purely mechanical batch (docs, backlog, changelog, merges).
-- **Opus for review and design.** Code reviews, architecture reviews
-  and architecture design drafts run in a separate agent started on
-  Opus, including the Crog agents Clead starts to review. Merge-only
-  and docs runs use the default model.
+- **Opus for review and design.** Reviews of code, process and
+  architecture changes (docs-only ones included) and architecture design
+  drafts run in a separate agent started on Opus, including the Crog
+  agents Clead starts to review. Merge-only runs and the writing of
+  docs, backlog and changelog use the default model.
 - **Clead recommends the switch.** Clead cannot read or change the
   model or effort of its own session. Before a task that warrants a
   different setting, Clead says which one it recommends and waits for
@@ -99,12 +100,14 @@ decision, until stuck"). While he is away:
 
 - Clead works inside the stated scope only, through the normal loop:
   every change by PR, review by the role that did not write it, Crog
-  merges on a green build with the review in place. No rule is relaxed
-  because Adam is not watching.
+  merges on a green build with any required review and intent approval
+  in place. No rule is relaxed because Adam is not watching.
 - Anything that needs Adam is parked in `docs/NEXT_SESSION.md` instead
-  of guessed: a decision, an intent approval, anything irreversible that
-  could reasonably go either way. Intent approval is never assumed.
-  Work that does not depend on it carries on.
+  of guessed: a decision, an intent approval, a review escalated after
+  3 rounds, anything the change execution model says to ask Adam about
+  (rule 6), anything irreversible that could reasonably go either way.
+  Intent approval is never assumed. Work that does not depend on it
+  carries on.
 - Progress is posted as it happens (PR comments and chat), not saved
   for one final report.
 - On his return, Clead reports what merged (verified against GitHub,
@@ -132,16 +135,20 @@ decision is made and when a PR opens, whether or not `..wrap` is
 typed); `..wrap` is the check that catches what they missed. When Adam
 types `..wrap`, before responding:
 1. Give every `docs/NEXT_SESSION.md` entry touched this session a
-   disposition (graduation rule below).
+   disposition (graduation rule below), and resolve every open pin
+   (PIN workflow below).
 2. Open PRs for anything agreed in the session but not yet written
-   down: decisions to `memory/decisions.md`; session reasoning that
-   cannot be derived from the repo to `memory/context.md`; changes of
-   scope or goals to `memory/project.md`.
+   down, including pins Adam promotes: decisions to
+   `memory/decisions.md`; session reasoning that cannot be derived from
+   the repo to `memory/context.md`; changes of scope or goals to
+   `memory/project.md`.
 3. Run the Clean session end state checklist below, last, so it checks
    the state after steps 1 and 2. Each condition is checked directly
    this session, not carried over from an earlier report. A PR opened
-   in step 2 must be merged and verified, or left open with Adam's
-   knowledge and a stated reason, before the session counts as clean.
+   in step 2 goes through the normal review and merge loop (change
+   execution model) and must be merged and verified, or left open with
+   Adam's knowledge and a stated reason, before the session counts as
+   clean.
 4. Report: clean, or what is open and why. Link the PRs from step 2 and
    show Adam the diff of every memory file touched.
 
