@@ -57,15 +57,6 @@ removed as they graduate (see the rule above).
 **Revised assessment:** not yet evaluated. Likely prompted by this session's discovery that some process steps (e.g. routing doc-only changes through Crog) were unnecessary/obsolete once the Chrome-direct path was proven.
 **Action:** next session, audit CLAUDE.md/docs/ROUTINES.md for other steps that may now be redundant given the Change execution model split.
 
-### 7. Judgment-call routing between Clead-direct and Crog-delegated execution — new (discussion, not a decision)
-
-**Previous assumption:** the Change execution model (PR #36) splits work by content type only — doc-only is Clead-direct via Chrome, code/src goes to Crog.
-**Revised assessment:** Adam raised, mid-session, that efficiency might justify judgment calls on top of that split — routing some doc-only work to Crog anyway when Chrome-driven editing is likely to be slow (e.g. long structured content), even though that makes Adam more of a routing middleman, as a deliberate trade-off for faster execution. This was floated as a discussion point, not decided — flagged explicitly by Adam as something Clead should not treat as settled.
-**Impact on plan:** if adopted, would refine the Change execution model's "doc-only vs. code" rule of thumb with a second axis (content size/complexity), and would mean Clead sometimes recommends Crog delegation for large doc-only edits.
-**Action:** discuss with Adam and reach an actual decision before writing anything into memory/decisions.md or CLAUDE.md. Relevant evidence from this session: two Chrome-driven edits with multi-paragraph structured content (CLAUDE.md's Change execution model section, and this file's full rewrite) both hit repeated formatting failures (cursor mispositioning, markdown auto-continuation duplicating bullets, concatenated text) requiring several rounds of manual fixup, while short single-line edits (BACKLOG.md, ROUTINES.md) went cleanly in a handful of steps.
-
----
-
 ### 9. Autonomous batches work — new (2026-09-30)
 
 **What happened:** Adam gave one general instruction before sleeping ("pick up whatever you can from phase 1 and 2 which does not require my involvement; work until you get stuck"). Clead and Crog shipped five PRs (#63-#67) through the normal review loop: Crog wrote #63, #65 and #66 and Clead reviewed them; Clead wrote #64 and #67 and Crog reviewed them. Each role caught real errors in the other's work (a docs claim that overstated a pack in #65; a wrong conclusion about API credentials in #67). Progress was posted as it happened.
