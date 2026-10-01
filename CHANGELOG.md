@@ -6,6 +6,8 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-10-01
+
 ### Added
 - Marked PBI-1.10 [NOW] until the first bootstrapper publish is verified, and corrected its known-limitation wording (PR #62)
 - Refreshed both packs' tool versions (Node 24, TypeScript 6, Jest 30, Biome 2 with `--error-on-warnings`, Playwright 1.63, actions v7), and added a template-only workflow that tests every pack on GitHub's runners (PBI-1.6) (PR #63)
@@ -18,6 +20,9 @@ A bootstrapped project records the tag it was built from.
 - Recorded the 2026-09-30 session: three decisions, a context section, and NEXT_SESSION items 8 and 9 plus a proposal for item 6 (PR #70)
 - Stated only the observed tag-push refusal in NEXT_SESSION (PR #71)
 - Added CHANGELOG entries for PRs #68-#71 (PR #72)
+- Added the "Public repo" rule to CLAUDE.md: private information never goes into this public repository (PR #73)
+- Stated in CLAUDE.md that Clead starts Crog as a separate agent without asking Adam first, and that this relaxes no review, CI or intent-approval rule (PR #74)
+- Licensed the files the bootstrapper ships under the PolyForm Noncommercial License 1.0.0: the text and a Required Notice go in `licenses/` (not a root `LICENSE`), the stub README has a step for each project to choose its own licence, and a test pins the licence text (PR #75)
 
 ## [2.1.0] — 2026-09-30
 
