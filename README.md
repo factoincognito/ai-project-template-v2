@@ -1,4 +1,4 @@
-# [PROJECT NAME]
+# ai-project-template-v2
 
 A project run with the Clead + Crog workflow: a product owner decides
 what gets built, Clead (Claude, Tech Owner) owns how, and Crog (Claude
