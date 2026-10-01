@@ -338,6 +338,21 @@ test_branch_push_is_compared_with_origin_main() {
   expect_rc 0
 }
 
+test_branch_push_ignores_what_main_changed_after_the_branch_started() {
+  # The comparison is from the merge base (three dots). With two dots a
+  # change that landed on main afterwards would show up as this branch's.
+  local w; w="$(new_repo r6)"
+  put "$w" src/m.ts "v1"; commit "$w" "existing code"; on_main "$w"
+  branch "$w" feat; put "$w" docs/n.md "docs only"; commit "$w" "docs"
+  git -C "$w" checkout -q main
+  put "$w" src/m.ts "v2"; commit "$w" "main changes code"; on_main "$w"
+  git -C "$w" checkout -q feat
+  git -C "$w" fetch -q origin
+  run_check "$w" "GITHUB_EVENT_NAME=push GITHUB_REF_NAME=feat" "${NODE[@]}"
+  expect_rc 0
+  expect_no_line "code: src/m.ts"
+}
+
 test_push_to_main_passes_with_a_notice() {
   local w; w="$(new_repo r4)"
   put "$w" src/a.ts; commit "$w" "code straight on main"
