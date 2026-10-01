@@ -401,7 +401,7 @@ test_publish_to_empty_repo_creates_first_commit_and_tag() {
   clone="$WORK/clone.$RANDOM"; git clone -q "$remote" "$clone"
   [ "$(git -C "$clone" rev-list --count HEAD)" = 1 ] || die "expected exactly one commit"
   [ "$(git -C "$clone" log -1 --format=%s)" = \
-    "Bootstrapper v1.0.0 from sugose/ai-project-template-v2@$SHA" ] || die "bad commit message"
+    "Bootstrapper v1.0.0 from factoincognito/ai-project-template-v2@$SHA" ] || die "bad commit message"
   [ "$(git -C "$clone" rev-parse "v1.0.0^{commit}")" = "$(git -C "$clone" rev-parse HEAD)" ] \
     || die "tag does not point at the release commit"
   diff <(git -C "$clone" ls-files | LC_ALL=C sort) <(list_files "$out") || die "tree differs"

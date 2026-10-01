@@ -1,7 +1,7 @@
 # Project
 
 **Name:** ai-project-template-v2
-**Repo:** sugose/ai-project-template-v2
+**Repo:** factoincognito/ai-project-template-v2
 **Description:** A second-generation template for AI-assisted software
 development using the Clead + Crog workflow. Built from scratch to replace
 ai-project-template (v1), which accumulated complexity proportional to

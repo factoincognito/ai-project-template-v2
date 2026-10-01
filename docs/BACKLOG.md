@@ -146,7 +146,7 @@ get a working project in any supported language.
   notes, release notes); it should only record which template version
   it came from. This repo stays the development repo; a pipeline builds
   a clean bootstrapper from it and publishes it to a separate repo,
-  `sugose/ai-project-bootstrap`, which is marked as a GitHub template
+  `factoincognito/ai-project-bootstrap`, which is marked as a GitHub template
   repository. Projects are bootstrapped from there ("Use this
   template"), never from this repo and never by forking.
 
@@ -203,17 +203,17 @@ get a working project in any supported language.
   once it has run green once.
 
   **Publish.** The same workflow, on a pushed tag `v*`: runs the tests,
-  builds, then makes the default branch of `sugose/ai-project-bootstrap`
+  builds, then makes the default branch of `factoincognito/ai-project-bootstrap`
   match the build output exactly (files not in the output are deleted),
   as one new commit per release (history kept there) with message
-  `Bootstrapper <version> from sugose/ai-project-template-v2@<commit>`,
+  `Bootstrapper <version> from factoincognito/ai-project-template-v2@<commit>`,
   and pushes the same tag there. If the bootstrap repo is empty, that
   commit is its first. If the tag already exists there, the publish
   fails rather than overwriting. It authenticates with the Actions
   secret `BOOTSTRAP_PUSH_TOKEN`.
 
   **Setup by Adam (cannot be done by an agent here).** Create
-  `sugose/ai-project-bootstrap` (public, empty, no README) and tick
+  `factoincognito/ai-project-bootstrap` (public, empty, no README) and tick
   "Template repository". Create a fine-grained token with access to that
   repo only and permissions **Contents: read and write** and **Workflows:
   read and write** (GitHub rejects pushes that add or change files in
@@ -263,13 +263,13 @@ get a working project in any supported language.
   Adam: "the bootstrap script should be the only thing you need to run in order for the bootstrapped project to be created. Turn-key." Today a new project takes five manual README steps after "Use this template": copy a pack, turn on protection, fill placeholders, choose a licence and delete the section. Each one can go wrong without anyone noticing.
 
   **Goal and non-goals.**
-  **Goal.** Run one script and get a GitHub repo that is created from `sugose/ai-project-bootstrap`, laid out with one language pack, has its placeholders filled and its own licence, has protected `main` with a green `build`, and has a clean local clone. The setup itself arrives through a PR like every other change.
+  **Goal.** Run one script and get a GitHub repo that is created from `factoincognito/ai-project-bootstrap`, laid out with one language pack, has its placeholders filled and its own licence, has protected `main` with a green `build`, and has a clean local clone. The setup itself arrives through a PR like every other change.
   **Non-goals.** It does not write the project's content: goals, SPEC sections and the first PBI are for Clead in the first session. It does not migrate from an existing repo (the migration part of PBI-1.4). It does not set up the Claude app or project, Cloudflare deploy secrets, or a delegation level (PBI-1.12). It never deletes a repo.
 
   **Obtaining and starting it.**
   The script is `bootstrap-project.sh` at the root of the public bootstrapper repo. It is fetched with `gh api`, which refuses to run until `gh` is installed and logged in (read from the gh source, `pkg/cmd/api/api.go`: no auth-check exemption; not run), so installing `gh`, logging in and, on Windows, installing Git for Windows (which provides Git Bash and `git`) are README step 0, done by hand before the script exists. The command is the same in Git Bash, macOS and Linux:
   ```
-  gh api repos/sugose/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh && bash bootstrap-project.sh
+  gh api repos/factoincognito/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh && bash bootstrap-project.sh
   ```
   - Only the latest release can be bootstrapped: `gh repo create --template` always copies the bootstrapper's default branch, so the script refuses to run unless it is the current published version (see Preflight). There is no version pinning.
   - There is no leading `/` on the API path. In Git Bash, MSYS rewrites `/repos/...` into a Windows path (cli/cli#6415).
@@ -313,7 +313,7 @@ get a working project in any supported language.
 
   **Steps, in order.**
   1. **Preflight and confirmation** (above). It prints the full plan.
-  2. **Create** with `gh repo create OWNER/NAME --template sugose/ai-project-bootstrap --public|--private --description "…"`. GitHub makes the repo's first commit, a single commit of the template content (the "Creating a repository from a template" doc). Template content can land after creation, so the script then polls `repos/OWNER/NAME/branches/main` and the contents API for `CHANGELOG.md` for up to 60 s, retrying on 404, before touching protection.
+  2. **Create** with `gh repo create OWNER/NAME --template factoincognito/ai-project-bootstrap --public|--private --description "…"`. GitHub makes the repo's first commit, a single commit of the template content (the "Creating a repository from a template" doc). Template content can land after creation, so the script then polls `repos/OWNER/NAME/branches/main` and the contents API for `CHANGELOG.md` for up to 60 s, retrying on 404, before touching protection.
   3. **Protect `main` straight away** with `PUT repos/OWNER/NAME/branches/main/protection`, body `required_status_checks:null, enforce_admins:true, required_pull_request_reviews:{required_approving_review_count:0}, restrictions:null, allow_force_pushes:false, allow_deletions:false`.
      - A 403 is not read as "private repo on Free" by status code alone: a fine-grained token without Administration write also gets 403. The script classifies by the response message; if it cannot, it prints the raw message with both explanations (plan or token permission) and stops. The exact message text is UNVERIFIED.
      - It also sets `gh repo edit --delete-branch-on-merge --enable-squash-merge`.
@@ -547,7 +547,7 @@ get a working project in any supported language.
   published.
 
 - **[LATER] PBI-1.16** (Adam, 2026-10-01; he reports `main` on
-  `sugose/ai-project-bootstrap` is not protected) — Protect the
+  `factoincognito/ai-project-bootstrap` is not protected) — Protect the
   bootstrapper repo's default branch. **What.** Part 1, to do by Adam in
   that repo's settings: block force-pushes and deletion on `main`, with no
   pull-request requirement, so release history stays intact and the direct
@@ -558,7 +558,7 @@ get a working project in any supported language.
   is not verified. If neither works, PBI-1.15 carries the verification.
   Optional later layer: a post-publish check inside the bootstrapper repo,
   which would have to be guarded
-  (`if: github.repository == 'sugose/ai-project-bootstrap'`) so projects do
+  (`if: github.repository == 'factoincognito/ai-project-bootstrap'`) so projects do
   not inherit a failing or pointless job.
 
 - **[NEXT] PBI-1.17** (Adam, 2026-10-01; the WHAT is his, the HOW is Clead's; spec drafted 2026-10-01, needs Crog review and Adam's intent approval before any build) — Test first, and nothing claimed as working without a check that has run, by default at every level: the template, the bootstrapper and a bootstrapped project.
@@ -607,11 +607,11 @@ get a working project in any supported language.
   - Workflows cannot run locally. A workflow change needs a wiring assertion that fails against the old file (in `bootstrap/test.sh` or `tools/test-*.sh`, as the existing `test_workflow_*` tests do) plus the real run on GitHub, linked in the PR.
   - Exempt by path: prose. Exempt by statement: the trailer. Both show in the job summary, so no exemption is silent.
 
-  **Level (b), the bootstrapper (`sugose/ai-project-bootstrap`).**
+  **Level (b), the bootstrapper (`factoincognito/ai-project-bootstrap`).**
   Confirmed: it is generated, never edited. `build.sh` writes exactly the manifest plus stubs; `publish.sh` makes the repo's default branch match the build output (files not in it are deleted), so any edit there is lost at the next release. What ships today: `CLAUDE.md`, the stub `ci.yml`, `review.yml`, `changelog.yml`, the PR template, the process docs, `languages/` and the stubs. Its verification runs in the template: `build.sh`'s own checks, `bootstrap/test.sh` (real-build tests, which also assert that no `tools/`, `bootstrap/`, `packs.yml` or `bootstrapper.yml` ships; `build.sh` itself bans only `bootstrap/` and `docs/RELEASE_NOTES.md`), and the chain test in `packs.yml` (merged in #101), which on every push and PR and before every publish builds the bootstrapper, makes a project from it and runs each pack's CI. A copy of the bootstrapper gets the script file and `CLAUDE.md`'s rule, but its stub `ci.yml` does not run the script, and it has no harness for the bootstrapper itself. Options:
   1. **Change it through the template (rec).** A copy of the bootstrapper is a copy of a release, like a copied binary. To change it, change (or fork) the template, where the harness, the check and the chain test all apply; the published artifact is then verified by checks that ran before publishing. Cost: one line in the stub README ("This repo is generated from <template URL>; change it there"), which every project carries until the setup script deletes that README section; someone who edits a bootstrapper copy directly has no tests, by design.
   2. Ship the harness in the bootstrapper and have the setup script delete it. Cost: breaks `build.sh`'s `bootstrap/` ban and the `tools/` test, or moves the harness to a new shipped path; every "Use this template" project without the script keeps it; the harness depends on template-only fixtures and `languages/` source.
-  3. A workflow guarded by `if: github.repository == 'sugose/ai-project-bootstrap'`. It runs only in the published repo (the post-publish idea in PBI-1.16), never in copies or projects, so it does not answer this question. Every project still inherits an inert file.
+  3. A workflow guarded by `if: github.repository == 'factoincognito/ai-project-bootstrap'`. It runs only in the published repo (the post-publish idea in PBI-1.16), never in copies or projects, so it does not answer this question. Every project still inherits an inert file.
 
   **How the check is tested (test-first, strictly).**
   New `tools/test-require-test-change.sh` in the `bootstrap/test.sh` style (`run_test`, `die`, a temp `WORK`). Fixture: a local bare repo as `origin` with `main`, a clone, branches and commits made by the test, and the GitHub variables set per case. Written and shown red (the script does not exist) before the script:
