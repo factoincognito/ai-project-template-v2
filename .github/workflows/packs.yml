@@ -4,10 +4,14 @@
 # ships to bootstrapped projects.
 #
 # Each pack job builds the bootstrapper from this checkout
-# (bootstrap/build.sh), creates a project from that output the way the
-# README says to (the bootstrapper's files, plus the pack laid out from
-# the bootstrapper's own languages/ folder with tools/layout-pack.sh,
-# plus deleting languages/), then runs that pack's own CI steps. The
+# (bootstrap/build.sh), creates a project from that output (the
+# bootstrapper's files, plus the pack laid out from the bootstrapper's
+# own languages/ folder with tools/layout-pack.sh, plus deleting
+# languages/), then runs that pack's own CI steps. This follows the
+# bootstrapper README's manual steps with two differences: the pack's
+# .gitignore replaces the bootstrapper's instead of being merged into
+# it (nothing here reads it), and languages/ is deleted, where the README
+# only says you can. The
 # steps below copy the pack's ci.yml commands verbatim;
 # tools/test-layout-pack.sh fails if they drift apart. The template has
 # no lockfile, so the npm-based packs (node, web, react-native) run

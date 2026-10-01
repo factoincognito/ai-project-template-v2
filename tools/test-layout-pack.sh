@@ -318,6 +318,8 @@ test_packs_workflow_tests_the_pack_from_the_built_bootstrapper() {
   [ "$n" -eq 4 ] || die "expected 4 bootstrapper builds in packs.yml, found $n"
   n="$(grep -cF 'cp -a bootstrapper project' "$wf")"
   [ "$n" -eq 4 ] || die "expected 4 project copies from the bootstrapper, found $n"
+  n="$(grep -cF 'cp -a pack/. project/' "$wf")"
+  [ "$n" -eq 4 ] || die "expected 4 pack overlays onto the project, found $n"
   n="$(grep -cF 'rm -rf project/languages' "$wf")"
   [ "$n" -eq 4 ] || die "expected 4 languages/ deletions, found $n"
   ! grep -qE 'layout-pack\.sh [a-z-]+ project' "$wf" || die "a pack job still lays out straight from the template"

@@ -5,9 +5,9 @@
 # - Every push and pull request: run the build.sh / publish.sh tests.
 # - A pushed v* tag: run the tests and the pack chain test (packs.yml:
 #   build the bootstrapper, create a project from it, run each pack's
-#   CI), refuse unless the tagged commit is on main, build, and publish the output to the default branch of
-#   sugose/ai-project-bootstrap as one commit, then push the same tag
-#   there. Needs the Actions secret
+#   CI), refuse unless the tagged commit is on main, build, and publish
+#   the output to the default branch of sugose/ai-project-bootstrap as
+#   one commit, then push the same tag there. Needs the Actions secret
 #   BOOTSTRAP_PUSH_TOKEN (fine-grained, that repo only, Contents and
 #   Workflows: read and write).
 name: Bootstrapper
