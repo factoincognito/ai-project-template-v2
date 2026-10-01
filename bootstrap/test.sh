@@ -530,7 +530,7 @@ test_workflow_bootstrapper_test_runs_the_require_test_change_tests() {
   local wf="$REPO/.github/workflows/bootstrapper.yml"
   awk '/^  bootstrapper-test:/ { inj = 1; next }
        /^  [a-z][a-z-]*:/ { inj = 0 }
-       inj && /run: bash tools\/test-require-test-change\.sh/ { found = 1 }
+       inj && /^ *run: bash tools\/test-require-test-change\.sh *$/ { found = 1 }
        END { exit !found }' "$wf" \
     || die "bootstrapper-test does not run tools/test-require-test-change.sh"
 }

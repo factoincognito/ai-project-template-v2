@@ -570,7 +570,9 @@ test_several_exemptions_are_all_shown() {
   expect_rc 0
   expect_line "exempt: first reason"
   expect_line "exempt: second reason"
-  expect_out "first reason; second reason"
+  expect_out "::notice::"
+  grep -F "::notice::" <<<"$CHECK_OUT" | grep -qF "first reason" || die "notice lacks the first reason"
+  grep -F "::notice::" <<<"$CHECK_OUT" | grep -qF "second reason" || die "notice lacks the second reason"
 }
 
 # ---------- run ----------

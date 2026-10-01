@@ -54,6 +54,7 @@ while [ "$#" -gt 0 ]; do
     --code|--test|--ignore) mode="$1"; shift ;;
     --*) die2 "unknown flag: $1" ;;
     *)
+      [ -n "$1" ] || die2 "empty pattern after $mode: it would match nothing (is a variable unset?)"
       case "$mode" in
         --code) code_pats+=("$1") ;;
         --test) test_pats+=("$1") ;;
@@ -70,6 +71,9 @@ done
 # ---------- where we are ----------
 
 git rev-parse --git-dir >/dev/null 2>&1 || die2 "not inside a git repository"
+# Always see the whole repository, whatever directory this runs from (and
+# whatever diff.relative says).
+cd "$(git rev-parse --show-toplevel)" || die2 "cannot find the top of the repository"
 
 summary() {
   if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then printf '%s\n' "$@" >>"$GITHUB_STEP_SUMMARY"; fi
@@ -151,13 +155,23 @@ done <<<"$trailers"
 
 # ---------- report ----------
 
+# Escape what GitHub reads as a workflow command: a file name may hold
+# a newline, and "::warning::..." at the start of a line would run.
+escape() {
+  local s="$1"
+  s="${s//%/%25}"
+  s="${s//$'\r'/%0D}"
+  s="${s//$'\n'/%0A}"
+  printf '%s' "$s"
+}
+
 report() {
   local f r
-  for f in ${code_files[@]+"${code_files[@]}"}; do echo "code: $f"; done
-  for f in ${test_files[@]+"${test_files[@]}"}; do echo "test: $f"; done
-  for f in ${ignored_files[@]+"${ignored_files[@]}"}; do echo "ignored: $f"; done
-  for f in ${other_files[@]+"${other_files[@]}"}; do echo "other: $f"; done
-  for r in ${reasons[@]+"${reasons[@]}"}; do echo "exempt: $r"; done
+  for f in ${code_files[@]+"${code_files[@]}"}; do echo "code: $(escape "$f")"; done
+  for f in ${test_files[@]+"${test_files[@]}"}; do echo "test: $(escape "$f")"; done
+  for f in ${ignored_files[@]+"${ignored_files[@]}"}; do echo "ignored: $(escape "$f")"; done
+  for f in ${other_files[@]+"${other_files[@]}"}; do echo "other: $(escape "$f")"; done
+  for r in ${reasons[@]+"${reasons[@]}"}; do echo "exempt: $(escape "$r")"; done
 }
 report_out="$(report)"
 [ -z "$report_out" ] || printf '%s\n' "$report_out"
@@ -184,7 +198,9 @@ if [ "${#test_files[@]}" -gt 0 ]; then
   exit 0
 fi
 if [ "${#reasons[@]}" -gt 0 ]; then
-  echo "::notice::require-test-change: code changed without a test; exempt, reason: ${reasons[*]}"
+  joined=""
+  for r in "${reasons[@]}"; do joined="${joined:+$joined; }$r"; done
+  echo "::notice::require-test-change: code changed without a test; exempt, reason: $(escape "$joined")"
   exit 0
 fi
 
