@@ -601,6 +601,9 @@ template_args() {
   line="$(sed -n 's|^ *run: bash \.github/scripts/require-test-change\.sh ||p' "$TEMPLATE_CI")"
   [ -n "$line" ] || die "template ci.yml has no require-test-change run line"
   [ "$(printf '%s\n' "$line" | wc -l)" -eq 1 ] || die "template ci.yml has more than one require-test-change run line"
+  # The line is this repo's own and is meant to be a plain run of quoted
+  # patterns: a trailing `# comment` or a `;` makes the tests fail loudly
+  # rather than be misread.
   eval "TEMPLATE_ARGS=($line)"
 }
 
@@ -633,9 +636,29 @@ test_template_pack_prose_alone_passes()         { template_verdict 0 languages/n
 test_template_claude_md_alone_passes()          { template_verdict 0 CLAUDE.md; }
 test_template_docs_and_memory_alone_pass()      { template_verdict 0 docs/BACKLOG.md memory/decisions.md; }
 test_template_stub_prose_alone_passes()         { template_verdict 0 bootstrap/stubs/CHANGELOG.md bootstrap/stubs/licenses/NOTICE; }
-test_template_pack_tests_alone_pass() {
-  template_verdict 0 languages/python/starter/src/tests/__init__.py languages/python/starter/src/tests/test_placeholder.py
-  template_verdict 0 languages/web/starter/e2e/smoke.e2e.ts languages/react-native/starter/src/App.test.tsx
+# One file per call: each of these is a test only because of one pattern,
+# so dropping that pattern turns the case red.
+test_template_pack_test_patterns_each_count() {
+  template_verdict 0 languages/web/starter/src/example.test.ts
+  template_verdict 0 languages/react-native/starter/src/App.test.tsx
+  template_verdict 0 languages/web/starter/src/a.spec.ts
+  template_verdict 0 languages/react-native/starter/src/a.spec.tsx
+  template_verdict 0 languages/web/starter/src/__tests__/a.ts
+  template_verdict 0 languages/python/starter/src/tests/__init__.py
+  template_verdict 0 languages/python/test_foo.py
+  template_verdict 0 languages/web/starter/e2e/smoke.e2e.ts
+}
+# Each of these is code only because of one pattern.
+test_template_code_patterns_each_count() {
+  template_verdict 1 docs/x.sh
+  template_verdict 1 tools/fixtures/a.txt
+  template_verdict 1 .github/scripts/x.py
+  template_verdict 1 bootstrap/stubs/bootstrap-project.sh
+}
+test_template_test_pattern_does_not_reach_into_fixture_folders() {
+  # bootstrap/testdata/ is not a test just because its name starts with test.
+  template_verdict 1 bootstrap/testdata/fixture.sh
+  template_verdict 0 bootstrap/test-bootstrap-project.sh
 }
 test_template_pack_starter_code_with_its_test_passes() {
   template_verdict 0 languages/web/starter/src/example.ts languages/web/starter/src/example.test.ts
@@ -645,17 +668,24 @@ test_template_pack_starter_code_alone_fails()   { template_verdict 1 languages/w
 test_template_ci_workflow_is_wired_to_the_check() {
   # A workflow cannot run locally, so: a wiring assertion that fails
   # against the old checkout-only file, plus the real run on GitHub.
-  local job
+  local job step1 step2
   job="$(awk '/^  build:/ { injob = 1; next } /^  [a-z][a-z-]*:/ { injob = 0 } injob' "$TEMPLATE_CI")"
   [ -n "$job" ] || die "template ci.yml has no build job"
-  grep -qF 'fetch-depth: 0' <<<"$job" || die "build job checkout lacks fetch-depth: 0"
-  grep -qE '^ *- uses: actions/checkout@' <<<"$job" || die "build job has no checkout"
-  # The check is the first run step, so it fails in seconds.
-  [ "$(grep -E '^ *run:' <<<"$job" | head -n 1 | sed 's/^ *//')" != "" ] || die "build job has no run step"
-  grep -E '^ *run:' <<<"$job" | head -n 1 | grep -qF 'bash .github/scripts/require-test-change.sh' \
-    || die "the check is not the build job's first run step"
-  grep -qE '^name: ' "$TEMPLATE_CI" || die "template ci.yml has no name"
+  # Steps start at a line "      - ". Step 1 is the checkout with full
+  # history; step 2, right after it, is the check.
+  step1="$(awk '/^      - / { n++ } n == 1' <<<"$job")"
+  step2="$(awk '/^      - / { n++ } n == 2' <<<"$job")"
+  grep -qE 'uses: actions/checkout@' <<<"$step1" || die "the first step is not the checkout"
+  grep -qF 'fetch-depth: 0' <<<"$step1" || die "the checkout lacks fetch-depth: 0"
+  grep -qF 'bash .github/scripts/require-test-change.sh' <<<"$step2" || die "the check is not the step right after the checkout"
+  ! grep -qE '^ *(if:|continue-on-error:)' <<<"$job" || die "the build job is conditional or may fail silently"
+  # Triggers: every push, and pull requests to main.
+  grep -qE '^  push:' "$TEMPLATE_CI" || die "ci.yml no longer runs on push"
+  grep -qE '^  pull_request:' "$TEMPLATE_CI" || die "ci.yml no longer runs on pull_request"
+  awk '/^  pull_request:/ { f = 1; next } /^  [a-z_]+:/ { f = 0 } f' "$TEMPLATE_CI" | grep -qF 'branches: [main]' \
+    || die "pull_request no longer targets main"
   [ "$(grep -cE '^  [a-z][a-z-]*:$' <<<"$(sed -n '/^jobs:/,$p' "$TEMPLATE_CI")")" -eq 1 ] || die "template ci.yml must keep a single job, named build"
+  grep -qE '^  build:$' "$TEMPLATE_CI" || die "the job is not named build"
 }
 
 # ---------- run ----------
