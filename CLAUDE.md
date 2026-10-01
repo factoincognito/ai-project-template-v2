@@ -58,7 +58,10 @@ Adam's change-control model (stated 2026-07-23, updated 2026-09-30):
    required review (and intent approval) is in place: verdict comment
    first, then squash-merge. Clead reports merges to Adam. Adam keeps
    the final say and can stop any merge.
-5. **Adam is never the relay.** Clead gives Crog its tasks directly.
+5. **Adam is never the relay.** Clead gives Crog its tasks directly:
+   Clead starts Crog as a separate agent whenever a review or task needs
+   one, without asking Adam first. Starting Crog never replaces a rule
+   above: the review, CI and intent-approval requirements still apply.
 6. **When unsure** whether something needs a review, or whether to act
    alone, ask Adam.
 
