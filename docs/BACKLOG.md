@@ -526,7 +526,7 @@ get a working project in any supported language.
 
   Confirmed (and, after the Crog review, also `[project-description]` in three `package.json` files, `[project-name]` in `wrangler.jsonc`, `bootstrapper-test` as a required check in `docs/DEV_INFRASTRUCTURE.md`, and `review.yml` firing on `src/**`): `npm ci` in the node, web and react-native `ci.yml`; every pack's `ci.yml` has a single job `build`; `[DATE]` is a real placeholder in `docs/SPEC.md` and the stub `docs/NEXT_SESSION.md`, and a format token in `memory/roles.md` and `docs/CROG_ONBOARDING.md`; `docs/DEV_INFRASTRUCTURE.md` links `languages/<pack>/code-standards.md`; the stub README says "(step 2 above)"; `tools/layout-pack.sh` has the layout table and leaves out `code-standards.md` and the web deploy files; `bootstrapper-test` runs on `ubuntu-latest` only today (the spec adds a matrix); "Adam" is hard-coded in the shipped docs.
 
-- **[NEXT] PBI-1.15** (Adam, 2026-10-01; promoted to NEXT the same day because acuteping waits for a verified toolchain) — Test the whole chain before publishing:
+- **[DONE] PBI-1.15** (2026-10-01, PRs #101 and #102; Adam, promoted to NEXT the same day because acuteping waits for a verified toolchain) — Test the whole chain before publishing:
   build the bootstrapper, instantiate it, and prove the instance works.
   **Why.** Today the template's CI tests `build.sh` output (shape only) and
   the packs (laid out from the template checkout, not from the build
@@ -540,6 +540,11 @@ get a working project in any supported language.
   (a matrix renames checks; see PBI-1.14). **Done when.** A change that
   breaks a shipped pack file or the layout fails CI before any tag is
   published.
+  **Built (PR #101).** Each pack job in `packs.yml` builds the bootstrapper,
+  makes a project from that output and runs the pack's CI steps; on a `v*`
+  tag `publish` needs the `packs` call. The first run found a real bug (the
+  Python block in `docs/DEV_INFRASTRUCTURE.md`, fixed in PR #102). **Not yet
+  exercised:** the `packs` call on a real tag run, which needs a release.
 
 - **[LATER] PBI-1.16** (Adam, 2026-10-01; he reports `main` on
   `factoincognito/ai-project-bootstrap` is not protected) — Protect the
