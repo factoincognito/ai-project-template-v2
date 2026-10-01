@@ -46,7 +46,7 @@ Every pack follows the same shape. A new pack should too:
   "no hardcoded values") are for review.
 - **Test-first check.** Every pack's `ci.yml` checks out with
   `fetch-depth: 0` and runs `.github/scripts/require-test-change.sh` as
-  the first step of `build`, on a single `run:` line with the pack's own
+  the first step of `build` after the checkout, on a single `run:` line with the pack's own
   `--code` and `--test` patterns, so a pull request that changes code
   without changing a test fails. Config files are not code for this
   check. The pack's `code-standards.md` says what counts as code and as

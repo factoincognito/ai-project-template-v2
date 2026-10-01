@@ -7,6 +7,7 @@
 - **Biome warnings fail CI** — Biome 2 reports several recommended rules (for example `useConst`, `noNonNullAssertion`, unused variables and imports) as warnings, so CI runs `biome ci --error-on-warnings`. `noExplicitAny` is set to error in `biome.json`, so `any` fails even without the flag.
 - **Global types are listed** — TypeScript 6 no longer loads every installed `@types` package, so `tsconfig.json` lists them in `types` (`jest` by default). Add any you install.
 - **jest-expo** preset for unit and component tests, with **React Native Testing Library** (`@testing-library/react-native`) for components — minimum 80% line coverage enforced in CI. Its `render` is async: `await render(<App />)`.
+- **Test first** — write the failing test (`src/*.test.ts` or `src/*.test.tsx`) and run it red before the code; `build` fails a pull request that changes `src/` without changing a test (see `CLAUDE.md`, Both agents: test first).
 - **Versions come from the SDK.** `expo`, `react`, `react-native`, `jest`, `jest-expo`, `@types/react`, `@types/jest` and `typescript` must be the versions Expo SDK 57 expects. Add Expo and React Native libraries with `npx expo install <package>`, which picks the version that matches the SDK, then pin it exactly in `package.json`. `npx expo install --check` lists any that do not match (it asks Expo's servers, so it needs network access).
 - **Jest 29, not 30** — `jest-expo` 57 depends on Jest 29 (Expo SDK 57 expects `jest` `~29.7.0` and `@types/jest` 29.5.14), so this pack pins Jest 29 while the Node and web packs use Jest 30. Do not bump Jest on its own in a version refresh; move it only when an Expo SDK upgrade brings a `jest-expo` that supports the newer Jest.
 - **StyleSheet** for styles — `StyleSheet.create`, no inline style objects. No tool checks this; it is for review.
@@ -73,13 +74,22 @@ CI runs the lint and format check, the type check, and the unit and component te
 
 ### Test-first check in CI
 
-The first step of `build` is `.github/scripts/require-test-change.sh`. It
-fails a pull request that changes code without changing a test. Code is
+After the checkout, the first step of `build` is
+`.github/scripts/require-test-change.sh`. It fails a pull request that
+changes code without changing a test. Code is
 everything under `src/`. Tests are `src/*.test.ts`, `src/*.test.tsx`,
 `src/*.spec.ts`, `src/*.spec.tsx` and files in `__tests__/` folders under
 `src/`. Config (`package.json`, `tsconfig.json`, `biome.json`,
 `app.json`, `ci.yml`) is not code for this check; the other CI steps
 still run on it.
+
+To run the check locally, give it the base to compare with (the same line
+exits 2 outside CI without it):
+
+```bash
+git fetch origin && TEST_FIRST_BASE=origin/main bash .github/scripts/require-test-change.sh --code 'src/*' --test 'src/*.test.ts' 'src/*.test.tsx' 'src/*.spec.ts' 'src/*.spec.tsx' 'src/*__tests__/*'
+```
+
 A change no test can check carries a `Test-exempt: <reason>` commit
 trailer; the failing check prints the exact command. The check sees file
 names only: whether a test exercises the code is for review.

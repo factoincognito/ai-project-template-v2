@@ -6,6 +6,7 @@
 - **Biome warnings fail CI** — Biome 2 reports several recommended rules (for example `useConst`, `noNonNullAssertion`, unused variables and imports) as warnings, so CI runs `biome ci --error-on-warnings`. `noExplicitAny` is set to error in `biome.json`, so `any` fails even without the flag.
 - **Global types are listed** — TypeScript 6 no longer loads every installed `@types` package, so `tsconfig.json` lists them in `types` (`jest` by default). Add any you install, e.g. `node` after `npm install -D @types/node`.
 - **Jest + ts-jest** for testing — minimum 80% line coverage enforced in CI
+- **Test first** — write the failing test in `src/*.test.ts` and run it red before the code; `build` fails a pull request that changes `src/` without changing a test (see `CLAUDE.md`, Both agents: test first).
 - **No hardcoded values** — everything configurable via environment variables or config files
 - **Error handling** — always type-narrow errors; never `catch (e: any)`
 - **Imports** — relative imports within the project; no barrel files unless justified
@@ -43,12 +44,21 @@ npx tsc
 
 ### Test-first check in CI
 
-The first step of `build` is `.github/scripts/require-test-change.sh`. It
-fails a pull request that changes code without changing a test. Code is
+After the checkout, the first step of `build` is
+`.github/scripts/require-test-change.sh`. It fails a pull request that
+changes code without changing a test. Code is
 everything under `src/`. Tests are `src/*.test.ts`, `src/*.spec.ts` and
 files in `__tests__/` folders under `src/`. Config (`package.json`,
 `tsconfig.json`, `biome.json`, `ci.yml`) is not code for this check; the
 other CI steps still run on it.
+
+To run the check locally, give it the base to compare with (the same line
+exits 2 outside CI without it):
+
+```bash
+git fetch origin && TEST_FIRST_BASE=origin/main bash .github/scripts/require-test-change.sh --code 'src/*' --test 'src/*.test.ts' 'src/*.spec.ts' 'src/*__tests__/*'
+```
+
 A change no test can check carries a `Test-exempt: <reason>` commit
 trailer; the failing check prints the exact command. The check sees file
 names only: whether a test exercises the code is for review.
