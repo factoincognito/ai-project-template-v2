@@ -137,7 +137,7 @@ get a working project in any supported language.
   memory. Docs only.
 
 - **[NOW] PBI-1.10** (pipeline built in PR #60; done once the v2.1.0
-  publish passes the "Done when" checks below) — Build pipeline that
+  publish passes the "Done when" checks below. Adam, 2026-10-01: acuteping is not created until the whole toolchain is verifiably working, meaning PBI-1.15 is done and PBI-1.14 is built with Adam's end-to-end runs passed; see PBI-1.14 "Done when") — Build pipeline that
   produces the bootstrapper.
   Intent approved by Adam in chat, 2026-09-30 (recorded on PR #58).
 
@@ -531,7 +531,7 @@ get a working project in any supported language.
 
   Confirmed (and, after the Crog review, also `[project-description]` in three `package.json` files, `[project-name]` in `wrangler.jsonc`, `bootstrapper-test` as a required check in `docs/DEV_INFRASTRUCTURE.md`, and `review.yml` firing on `src/**`): `npm ci` in the node, web and react-native `ci.yml`; every pack's `ci.yml` has a single job `build`; `[DATE]` is a real placeholder in `docs/SPEC.md` and the stub `docs/NEXT_SESSION.md`, and a format token in `memory/roles.md` and `docs/CROG_ONBOARDING.md`; `docs/DEV_INFRASTRUCTURE.md` links `languages/<pack>/code-standards.md`; the stub README says "(step 2 above)"; `tools/layout-pack.sh` has the layout table and leaves out `code-standards.md` and the web deploy files; `bootstrapper-test` runs on `ubuntu-latest` only today (the spec adds a matrix); "Adam" is hard-coded in the shipped docs.
 
-- **[LATER] PBI-1.15** (Adam, 2026-10-01) — Test the whole chain before publishing:
+- **[NEXT] PBI-1.15** (Adam, 2026-10-01; promoted to NEXT the same day because acuteping waits for a verified toolchain) — Test the whole chain before publishing:
   build the bootstrapper, instantiate it, and prove the instance works.
   **Why.** Today the template's CI tests `build.sh` output (shape only) and
   the packs (laid out from the template checkout, not from the build
