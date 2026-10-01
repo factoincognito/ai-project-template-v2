@@ -275,12 +275,12 @@ get a working project in any supported language.
   - There is no leading `/` on the API path. In Git Bash, MSYS rewrites `/repos/...` into a Windows path (cli/cli#6415).
   - `curl … | bash` is not supported, because the prompts read stdin.
 
-  **Preflight.** The preflight has no side effects and exits 3 if anything fails, so nothing is created.
-  - Tools: `bash` 3.2 or later, `git`, and `gh`. For node, web and react-native it also needs `npm` (see the lockfile step). The script checks for features, not version numbers: `gh repo create --help` must list `--template`.
-  - `git config user.name` and `user.email` must be set.
+  **Preflight (guided).** Nothing is created until every check passes. Adam's rule (2026-10-01): when something is needed that the script cannot do itself, the script guides the user through it step by step; what cannot be in the script at all is documented in the README. So a failed check does not just exit. For each one the script prints numbered steps for the user's OS (what to do, the link to open, what to expect), waits for "press Enter when done", re-runs the check, and repeats until it passes or the user quits. On quit it prints the exact command to start again. In `--non-interactive` mode it never waits: it prints the same steps and exits 3. Where the script can do the action itself (an install command, `gh auth login`, `gh auth refresh -s workflow`), it prints the command and runs it only after the user answers yes; `--yes` does not approve installs or logins. The guides live in the script, and each one names how the script verifies it.
+  - Tools (guide per OS, with the install command offered where one exists; whether `winget` is present on a given Windows is UNVERIFIED): `bash` 3.2 or later, `git`, and `gh`. For node, web and react-native it also needs `npm` (see the lockfile step). The script checks for features, not version numbers: `gh repo create --help` must list `--template`.
+  - `git config user.name` and `user.email` must be set. Guide: the script offers to set them for the new clone only (repo-local), not globally.
   - `gh api user` must succeed. The script reads the `X-OAuth-Scopes` header from `gh api -i user` and needs `repo` (or `public_repo` for a public repo). It also needs `workflow`, because the setup commit changes `.github/workflows/ci.yml` (the OAuth scopes doc).
     - Interactive `gh auth login` over HTTPS already adds `workflow` when gh is the git credential helper (gh source, `git_credential.go`).
-    - If a scope is missing, the script says to run `gh auth refresh -h github.com -s workflow`.
+    - If a scope is missing, the script offers to run `gh auth refresh -h github.com -s workflow` and walks through the browser step (open the page, enter the one-time code, approve), then re-checks. Whether gh's own login prompts work in Git Bash's default terminal is UNVERIFIED.
     - A fine-grained token (`GH_TOKEN=github_pat_…`) sends no scopes header. The script then warns which permissions it needs (Administration, Contents, Workflows and Pull requests: write; Repository creation) and carries on.
   - The template's published version, read from `CHANGELOG.md` on the bootstrapper's `main` via the contents API, must equal the version stamped into the script. Otherwise the script says to download the current one.
   - `OWNER/NAME` must not exist yet (see re-runs), and the target directory must be absent or empty (except with `--resume`, which may reuse the existing clone).
@@ -403,6 +403,7 @@ get a working project in any supported language.
   - **Unit tests.** A new file, `bootstrap/test-bootstrap-project.sh`, in the `bootstrap/test.sh` style. It runs on ubuntu, macOS (invoking `/bin/bash`) and Windows (`shell: bash` is Git for Windows' bash, workflow-syntax doc). `docs/DEV_INFRASTRUCTURE.md` makes `bootstrapper-test` a required check, and a matrix renames its checks (`bootstrapper-test (ubuntu-latest)`, …), which would leave the required name never reporting and block every PR. So the matrix runs in a separate job and `bootstrapper-test` stays a single job named so, which `needs:` the matrix and uses `if: always()`, failing unless every matrix job's result is `success`. Without that, a failed matrix job would skip the aggregate job, and GitHub reports a skipped job as success, which would make the required check green on failing tests (documented in the troubleshooting doc; the dependency-failure case is not tested here). `bootstrap/test.sh` stays in the ubuntu leg. `publish` already `needs: bootstrapper-test`, so a macOS or Windows flake would also block a release; that is accepted.
     - `gh` is a stub, selected with `BOOTSTRAP_GH`. It logs every call and emulates `repo create --template` (a local bare repo seeded from a real `build.sh` output), `repo clone`, `api` (user, scopes header, licences, protection PUT/GET), `pr create/checks/merge` and `repo edit`. `git` is real, against local bare repos, as in the `publish.sh` tests.
     - **Cases:**
+  - each guided check: the steps print, the re-check loop passes after the simulated fix, and quitting prints the resume command; `--non-interactive` prints the steps and exits 3 without waiting; `--yes` does not run an install or login;
       - the 404 race (main not there yet) retries, and a 403 is classified by message;
       - each preflight failure creates nothing;
       - every pack's final tree is exactly what is expected;
@@ -427,7 +428,7 @@ get a working project in any supported language.
     - The five steps and the table become a three-line section: "If you see this, setup has not run: `<one command> --resume --owner … --name …`".
     - "Branch protection" drops "(step 2 above)" and points to `docs/DEV_INFRASTRUCTURE.md`.
     - "Use this template" is no longer the documented path, but it still works via `--resume`.
-  - **Template `README.md`.** "Creating a project from the template" becomes the one command plus its prerequisites. The stale "does not exist until…" text goes.
+  - **Template `README.md`.** "Creating a project from the template" becomes step 0 (install `gh`), the one command, and the list of what the script guides and what only the README covers. The stale "does not exist until…" text goes.
   - **`languages/README.md`.** "Every file has a place" points to the script's layout table, not the README tables.
   - **`docs/DEV_INFRASTRUCTURE.md`.** "Turning it on in a new project" says the script does this, and keeps the manual steps as the fallback.
   - **Backlog.**
@@ -435,7 +436,11 @@ get a working project in any supported language.
     - PBI-1.8 (licence choice) is folded into this PBI.
     - PBI-1.12 stays a possible future script option.
 
-  **Not possible without action outside the script (for Adam to accept).**
+  **Guided steps in the script, and what only the README can cover.**
+  Guided in the script (printed steps, then a re-check): installing `git` and, for npm packs, Node/npm; `gh auth login` and the `workflow` scope; git name and email; a token missing a permission (steps to create or edit a fine-grained token); an org that refuses repo creation (steps to give an org admin); a private repo on a plan without protection (a menu: upgrade steps, switch to public, or `--allow-unprotected`).
+  README only, because the script cannot exist or run without it: step 0, installing `gh` (one line per OS), since the script is fetched with `gh`; what to do after the script finishes (open the Claude app, add the new repo and start a chat, and, if the GitHub App is limited to selected repos, add the repo in GitHub settings, UNVERIFIED); org-admin and billing settings in more detail; deleting a throwaway repo; the maintainer's release tag. The README also lists every guide so a user can read them before running the script.
+
+  **Not possible without action outside the script (for Adam to accept).** Each of these is guided by the script or documented in the README, as above; none is done for the user.
   1. Installing `git`, `gh` and, for npm packs, Node/npm.
   2. `gh auth login` / `gh auth refresh -s workflow`. Both are a browser device-code step, although the script tells the user what to type.
   3. Private repos on GitHub Free: protection needs a paid plan (billing in the browser), or making the repo public.
@@ -459,7 +464,8 @@ get a working project in any supported language.
      - the local clone clean on `main`.
   4. An interrupted run completes with `--resume`, with no duplicate PR or commit.
   5. The docs above are updated, PBI-1.4 and PBI-1.8 have their dispositions, and the layout table exists once.
-  6. `bootstrapper-test` still reports as one required check, and goes red when any matrix leg fails, and `packs.yml` uses the lockfile command of step 7.
+  6. Each guided check prints its steps and passes on re-check, and the README lists them and the README-only steps.
+  7. `bootstrapper-test` still reports as one required check, and goes red when any matrix leg fails, and `packs.yml` uses the lockfile command of step 7.
 
   **Open decisions for Adam (my recommendation first).**
   1. **Order.** Protect first and put the setup through a PR (rec), or push the setup directly as a documented exception?
@@ -472,6 +478,7 @@ get a working project in any supported language.
   8. **E2E.** Manual by Adam now (rec), with CI automation using a sandbox token as a later IDEA?
   9. **Protection type.** Classic branch protection, as in the decisions log and `DEV_INFRASTRUCTURE` (rec), or a ruleset? Both have the same plan availability and the same rules.
   10. **Lockfile.** Require npm locally for npm packs (rec), or let the PR go red and leave the fix to the user?
+  11. **Running commands for the user.** The script runs installs and logins only after a yes, and `--yes` does not cover them (rec); or it only prints them and never runs them?
 
   **Sources checked by the drafting agent.**
 
@@ -493,6 +500,7 @@ get a working project in any supported language.
   - macOS `/bin/bash` being 3.2.
   - Durations of the CI waits.
   - Whether the Claude GitHub App needs the new repo added by hand.
+  - Whether `winget` (Windows) is present, and whether gh's login prompts work in mintty.
   - Whether fine-grained tokens can create repos without "All repositories" access.
   - Nothing was run against real GitHub: agents cannot create or delete repos.
 
