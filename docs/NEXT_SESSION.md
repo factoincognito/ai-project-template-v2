@@ -154,3 +154,9 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 
 - Every change goes through a PR; reviews follow the kind of change; merges are delegated to Crog once review passes and CI is green (CLAUDE.md, "Change execution model").
 - Clead works with git and the GitHub API; the Chrome web editor is the fallback. From Clead's cloud session, branch deletion returns 403 and a tag push was refused (2026-09-30); Adam creates release tags from the Releases page.
+- **Reaching GitHub from a Clead cloud session (all seen on 2026-10-02):**
+  - Access is per attached repository. The session's source repo is attached at the start; any other (for example `factoincognito/ai-project-bootstrap`) is attached with the `add_repo` tool, then cloned. The `GH_TOKEN` in the environment is invalid by itself (`gh auth status` fails) and no token pasted into chat helps; the access proxy decides by repository path.
+  - REST only. `gh pr list` and anything else that uses GraphQL returns 403; use `gh api repos/OWNER/REPO/pulls`, `…/commits/SHA/check-runs` and so on. Draft and ready-for-review, review threads and auto-merge have `…/ccr/…` routes (the 403 message lists them).
+  - The proxy also returns 403 for the Actions and secrets endpoints, for branch deletion and for tag pushes. Those are Adam's, by hand.
+  - Clones are shallow. The test-first check run locally exits 2 on a shallow clone; deepen with `git fetch --depth=400 origin main BRANCH` first. At most two git operations may run against a repo at once, so clone inline, never in parallel.
+  - Crog agents: review of process, code and config runs in an agent started with `model: opus`; merge-only runs use the default model. The agent that merges re-checks CI first, and Clead re-verifies every merge against the API.
