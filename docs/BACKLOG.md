@@ -327,7 +327,7 @@ get a working project in any supported language.
      - `[OWNER/REPO]` becomes the repo's `OWNER/NAME` in `memory/project.md`.
      - `[DATE]` becomes today's date (ISO) in `docs/SPEC.md` and `docs/NEXT_SESSION.md` only. In `memory/roles.md` and `docs/CROG_ONBOARDING.md`, `[DATE]` is a format token and stays.
      - The README line `[One or two sentences: …]` and the two-line description in `memory/project.md` become the description. The second is read as a whole file, not line by line. `[project-description]` becomes the description in `package.json` (node, web, react-native).
-     - `[project-name]` becomes an npm-safe slug (the lowercased repo name) in `package.json` and web `wrangler.jsonc`, and the display name in web `index.html` `<title>`. `[project-slug]` becomes the slug in `app.json`.
+     - `[project-name]` becomes an npm-safe slug (the lowercased repo name, `.` replaced by `-`; Cloudflare Worker name limits such as `_` and length are not verified) in `package.json` and web `wrangler.jsonc`, and the display name in web `index.html` `<title>`. `[project-slug]` becomes the slug in `app.json`.
      - **Left for the first Clead session** (the script lists them at the end): `[PHASE NAME]`, `[Goal]`, the SPEC section prompts, the rest of `memory/project.md` and `memory/context.md`.
      - **Never touched:** the BACKLOG markers, `[Unreleased]`, the ADR's `[If approved]` and `licenses/`.
   9. **Tidy up.**
@@ -341,13 +341,13 @@ get a working project in any supported language.
       - `none`: no file, with a warning if the repo is public.
   11. **CHANGELOG.** Append the pack, the licence and "set up by bootstrap-project.sh" under "Project created".
   12. **Self-check before commit.**
-      - No fill-table text remains.
+      - No fill-table text remains, checked per (file, text) pair: kept files document the same text (`languages/react-native/code-standards.md` has `[project-slug]`, and the kept web `wrangler.jsonc` still has `[project-name]` without `--with-deploy`).
       - `git status` shows only the expected paths.
       - The staged diff has no `gh[pousr]_…` or `github_pat_` strings.
       - Every file is LF.
   13. **Commit and push.** Commit "Set up <name>", then push the branch. Git uses gh as a credential helper for these commands only, via `-c`, with no global config change. The exact helper string is UNVERIFIED; the fallback is to tell the user to run `gh auth setup-git`.
   14. **PR.** `gh pr create --base main --head bootstrap-setup --title … --body-file …`. Giving a title and body makes it non-interactive.
-  15. **Wait for `build`.** Poll `gh pr checks <n> --json` until the check named `build` appears and finishes, up to `--ci-timeout`; only `build` is watched, not the review workflow nor the push-triggered duplicate run. If it fails, stop and leave the PR open with its link.
+  15. **Wait for `build`.** Poll `gh pr checks <n> --json` until the check named `build` appears and finishes, up to `--ci-timeout`; only `build` is watched, not the review workflow. A push and a pull_request run both report `build`; the script accepts the pull_request run (the `event` field of the `--json` output is UNVERIFIED) or, failing that, any `build` run on the head commit. If it fails, stop and leave the PR open with its link.
   16. **Add the required check.** PUT protection again with the full body (a PUT replaces the whole object): the step 3 body with `required_status_checks:{strict:false, contexts:["build"]}`. The REST docs mark `contexts` as required; whether `checks:[{context:"build"}]` alone is accepted is UNVERIFIED and is settled by the GET read-back, which is compared field by field. Every pack's `ci.yml` has one job, `build`, and a test enforces this. Doing it after `build` has run avoids the rule that "a required status check must have completed successfully … during the past seven days" (the troubleshooting doc).
   17. **Merge** with `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`. This runs under protection, so a successful merge also shows the gate accepted it.
   18. **Finish.** Idempotent: `gh pr merge --delete-branch` may already have switched to `main` and deleted the local branch, so each action is guarded. Then `git pull`, check `git status` is clean and HEAD equals the merge commit.
@@ -377,6 +377,7 @@ get a working project in any supported language.
     - a repo not stamped by this bootstrapper is refused;
     - the template commit only: continue from step 3;
     - an open `bootstrap-setup` PR: continue from step 15;
+    - a local `bootstrap-setup` commit that was never pushed (local branch ahead of origin, no remote branch): continue from step 13;
     - a `bootstrap-setup` branch pushed with no PR: continue from step 14;
     - a local clone with uncommitted setup edits: refused, with a message to commit or discard them (the script never discards work);
     - already set up (no setup section, no script): only re-check protection and report.
@@ -399,7 +400,7 @@ get a working project in any supported language.
   - **In projects.** The script is in GitHub's template commit (step 2) and is deleted by the setup PR, so it leaves no clutter after setup. The alternative, publishing it as a release asset on the bootstrapper, would keep it out of project history entirely, but `publish.sh` would have to create releases. **Open decision 3.**
 
   **Testing.**
-  - **Unit tests.** A new file, `bootstrap/test-bootstrap-project.sh`, in the `bootstrap/test.sh` style. It runs on ubuntu, macOS (invoking `/bin/bash`) and Windows (`shell: bash` is Git for Windows' bash, workflow-syntax doc). `docs/DEV_INFRASTRUCTURE.md` makes `bootstrapper-test` a required check, and a matrix renames its checks (`bootstrapper-test (ubuntu-latest)`, …), which would leave the required name never reporting and block every PR. So the matrix runs in a separate job and `bootstrapper-test` stays a single job named so, which `needs:` the matrix. `publish` already `needs: bootstrapper-test`, so a macOS or Windows flake would also block a release; that is accepted.
+  - **Unit tests.** A new file, `bootstrap/test-bootstrap-project.sh`, in the `bootstrap/test.sh` style. It runs on ubuntu, macOS (invoking `/bin/bash`) and Windows (`shell: bash` is Git for Windows' bash, workflow-syntax doc). `docs/DEV_INFRASTRUCTURE.md` makes `bootstrapper-test` a required check, and a matrix renames its checks (`bootstrapper-test (ubuntu-latest)`, …), which would leave the required name never reporting and block every PR. So the matrix runs in a separate job and `bootstrapper-test` stays a single job named so, which `needs:` the matrix and uses `if: always()`, failing unless every matrix job's result is `success`. Without that, a failed matrix job would skip the aggregate job, and GitHub reports a skipped job as success, which would make the required check green on failing tests (documented in the troubleshooting doc; the dependency-failure case is not tested here). `bootstrap/test.sh` stays in the ubuntu leg. `publish` already `needs: bootstrapper-test`, so a macOS or Windows flake would also block a release; that is accepted.
     - `gh` is a stub, selected with `BOOTSTRAP_GH`. It logs every call and emulates `repo create --template` (a local bare repo seeded from a real `build.sh` output), `repo clone`, `api` (user, scopes header, licences, protection PUT/GET), `pr create/checks/merge` and `repo edit`. `git` is real, against local bare repos, as in the `publish.sh` tests.
     - **Cases:**
       - the 404 race (main not there yet) retries, and a 403 is classified by message;
@@ -458,7 +459,7 @@ get a working project in any supported language.
      - the local clone clean on `main`.
   4. An interrupted run completes with `--resume`, with no duplicate PR or commit.
   5. The docs above are updated, PBI-1.4 and PBI-1.8 have their dispositions, and the layout table exists once.
-  6. `bootstrapper-test` still reports as one required check, and `packs.yml` uses the lockfile command of step 7.
+  6. `bootstrapper-test` still reports as one required check, and goes red when any matrix leg fails, and `packs.yml` uses the lockfile command of step 7.
 
   **Open decisions for Adam (my recommendation first).**
   1. **Order.** Protect first and put the setup through a PR (rec), or push the setup directly as a documented exception?
