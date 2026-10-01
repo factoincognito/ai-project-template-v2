@@ -105,26 +105,32 @@ Which model and effort each role runs on (Adam, 2026-10-01):
 5. Derive current PBI from open PRs and `docs/BACKLOG.md`
 6. Ask Adam what today's work is
 
-### Session end — type `..wrap` to flush memory
+### Session end — type `..wrap` to check the session is clean
 `..wrap` is the stop word that signals end of session. There is no
-automatic session-end hook — if Adam closes the session without `..wrap`,
-nothing is written. When Adam types `..wrap`, before responding:
-1. Append any new decisions made this session to `memory/decisions.md`.
-2. Update `memory/context.md` with session reasoning that doesn't fit
-   a structured file.
-3. Update `memory/project.md` if project scope or goals changed.
-4. Show Adam the diff of every memory file touched.
-5. Confirm what was persisted and what was deliberately left out.
+automatic session-end hook: closing the session without `..wrap` checks
+nothing. Decisions are committed as they are made, so `..wrap` is a
+check, not a memory dump. When Adam types `..wrap`, before responding:
+1. Run the Clean session end state checklist below. Each condition is
+   checked directly this session, not carried over from an earlier
+   report.
+2. Give every `docs/NEXT_SESSION.md` entry touched this session a
+   disposition (graduation rule below).
+3. Open PRs for anything agreed in the session but not yet written
+   down: decisions to `memory/decisions.md`; session reasoning that
+   cannot be derived from the repo to `memory/context.md`; changes of
+   scope or goals to `memory/project.md`.
+4. Report: clean, or what is open and why. Show Adam the diff of every
+   memory file touched.
 
-`..wrap` is the explicit flush, not a safety net. Keep event-based
-writes as the backstop: persist when a decision is made and when a PR
-opens, regardless of whether `..wrap` is typed.
+Keep event-based writes as the backstop: persist when a decision is
+made and when a PR opens, whether or not `..wrap` is typed.
 
 **Graduation rule:** every `docs/NEXT_SESSION.md` entry touched this
 session must be promoted (to a PBI, a decision, or a formal doc update),
 re-affirmed as still-next, or deleted as resolved/obsolete before the
 session is considered clean. Without this it silently forks into a
-second, competing backlog instead of a staging area.
+second, competing backlog instead of a staging area. `..wrap` enforces
+it.
 
 ### The PIN workflow
 

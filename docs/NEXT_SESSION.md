@@ -57,15 +57,6 @@ session, the rest were not touched. Items 8 and 9 are new.
 **Revised assessment:** not yet evaluated. Likely prompted by this session's discovery that some process steps (e.g. routing doc-only changes through Crog) were unnecessary/obsolete once the Chrome-direct path was proven.
 **Action:** next session, audit CLAUDE.md/docs/ROUTINES.md for other steps that may now be redundant given the Change execution model split.
 
-### 6. Graduation and ..wrap workflows — needed or obsolete? — new
-
-**Previous assumption:** the graduation rule (every NEXT_SESSION.md entry gets a disposition each touched session) and the `..wrap` stop-word flush are both load-bearing parts of the session-end process.
-**Revised assessment:** not yet evaluated — Adam is questioning whether these are still needed or have become obsolete, possibly given how much more is now committed directly and verifiably via PRs rather than relying on end-of-session memory flushes.
-**Action:** discuss with Adam — he clarified the doubt is specifically about how the graduation rule and `..wrap` interact with the Clean Session End State checklist (e.g. whether CSES verification already covers what graduation/`..wrap` are meant to catch, making one of them redundant). Worth revisiting once these six items have their first real graduation cycle.
-**Proposal (Clead, 2026-09-30), awaiting Adam:** make `..wrap` the end-of-session *check* rather than a memory dump, and fold the graduation rule into it. Decisions are committed as they are made (cheap now that Clead uses git and the API), and typing `..wrap` means: run the Clean session end state checklist, open PRs for anything agreed but not yet written down, then report clean or say what is open. One ritual instead of three. Disposition this session: re-affirmed as next, with this proposal.
-
----
-
 ### 7. Judgment-call routing between Clead-direct and Crog-delegated execution — new (discussion, not a decision)
 
 **Previous assumption:** the Change execution model (PR #36) splits work by content type only — doc-only is Clead-direct via Chrome, code/src goes to Crog.
