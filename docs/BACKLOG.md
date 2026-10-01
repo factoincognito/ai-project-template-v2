@@ -561,6 +561,15 @@ get a working project in any supported language.
   (`if: github.repository == 'sugose/ai-project-bootstrap'`) so projects do
   not inherit a failing or pointless job.
 
+- **[NEXT] PBI-1.17** (Adam, 2026-10-01; the WHAT is his, the HOW is Clead's; a spec still needs Crog review and his intent approval before any build) — The working philosophy applies by default at every level: test first, and nothing claimed as working without a check that has run. Adam: "regardless if you work on the template, the bootstrapper or a bootstrapped project".
+  **Why.** Today the rule exists only as Crog's TDD section, which ships to projects (`docs/CROG_ONBOARDING.md`). Nothing checks it, and the template, the bootstrapper and a bootstrapped project each treat it differently (see `memory/decisions.md`, 2026-10-01 rows on test-first and the verified toolchain).
+  **What, level by level (draft, to be specified).**
+  - Template repo: test-first is the default for everything with executable logic (scripts strictly; workflows with a wiring check that fails against the old file plus a real run). Docs and prose are exempt only as a stated exception. A CI check fails a PR that changes scripts, workflows or other code without changing a test.
+  - Bootstrapper: it is a release artifact, verified by the chain test (PBI-1.15). Open: whether someone who changes a copy of it gets test support. A bootstrapper cannot carry the template's dev tooling, because projects made from it would inherit that tooling; the setup script (PBI-1.14) could remove it.
+  - Bootstrapped project: ships on by default: a CI check that fails when `src/` changes and no test changes, a sentence on test-first in each pack's `code-standards.md`, and a line in the PR template asking for the failing run. The owner can switch each off; how is open (see PBI-1.12).
+  **Cannot be done.** No tool can prove a test was written before the code; the checks catch the common skip, and review (`memory/standards.md`) covers the rest.
+  **Open design questions.** What exactly counts as "a test changed" per pack; which paths count as code in the template; whether the shipped check is a new workflow or a step in each pack's `ci.yml` (and the required-check naming rules in PBI-1.14); the bootstrapper-development question above.
+
 ---
 
 ## Phase 2 — Validate unproven pieces
