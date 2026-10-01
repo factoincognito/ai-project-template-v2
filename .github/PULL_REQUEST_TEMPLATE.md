@@ -15,6 +15,13 @@
 |---|---|---|
 | | | |
 
+## Red run
+
+<!-- Required for code, script, workflow and config changes. The command -->
+<!-- and its failing output from before the implementation, or a link to -->
+<!-- the red CI run. If a commit has a `Test-exempt:` trailer, give the -->
+<!-- reason and why no test can check this change. -->
+
 ## What I did not check
 
 <!-- Be explicit — Clead will pick up from here -->

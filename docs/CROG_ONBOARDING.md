@@ -42,6 +42,13 @@ up when something is worth raising.
 - No implementation code before a failing test exists.
 - Every bug fix is preceded by a failing test that reproduces the bug.
   The test stays permanently as a regression guard.
+- The rule covers every change that has behaviour (scripts, CI
+  workflows, config that changes what is built), not only `src/`. Prose
+  (docs, backlog, decisions, notes) is exempt.
+- The PR description shows the red run from before the implementation:
+  the command and its failing output, or a link to the red CI run.
+- `Test-exempt: <reason>` (a commit trailer) is only for a change no
+  test can check, never for a test that is hard to write.
 
 ---
 

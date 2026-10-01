@@ -71,6 +71,19 @@ CI runs the lint and format check, the type check, and the unit and component te
 - check that dependency versions match the SDK (`npx expo install --check`) or run `npx expo-doctor`, because both need Expo's servers. Run them locally after adding a dependency. `expo-doctor` reports the `[project-slug]` placeholder in `app.json` as invalid until you set a real slug.
 - check the StyleSheet rule above.
 
+### Test-first check in CI
+
+The first step of `build` is `.github/scripts/require-test-change.sh`. It
+fails a pull request that changes code without changing a test. Code is
+everything under `src/`. Tests are `src/*.test.ts`, `src/*.test.tsx`,
+`src/*.spec.ts`, `src/*.spec.tsx` and files in `__tests__/` folders under
+`src/`. Config (`package.json`, `tsconfig.json`, `biome.json`,
+`app.json`, `ci.yml`) is not code for this check; the other CI steps
+still run on it.
+A change no test can check carries a `Test-exempt: <reason>` commit
+trailer; the failing check prints the exact command. The check sees file
+names only: whether a test exercises the code is for review.
+
 ### Pre-commit equivalent
 
 React Native projects use Biome's CI command in the CI pipeline rather than pre-commit hooks. Optionally add `lint-staged` + `husky` for local pre-commit enforcement — not included by default.

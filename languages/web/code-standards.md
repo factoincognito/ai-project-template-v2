@@ -68,6 +68,20 @@ npm run test:e2e
 npm run ci
 ```
 
+### Test-first check in CI
+
+The first step of `build` is `.github/scripts/require-test-change.sh`. It
+fails a pull request that changes code without changing a test. Code is
+everything under `src/` (including `style.css` and `vite-env.d.ts`) and
+`index.html`. Tests are `src/*.test.ts`, `src/*.spec.ts`, files in
+`__tests__/` folders under `src/`, and everything under `e2e/`. Config
+(`package.json`, `tsconfig.json`, `biome.json`, `vite.config.mts`,
+`ci.yml`) is not code for this check; the other CI steps still run on
+it.
+A change no test can check carries a `Test-exempt: <reason>` commit
+trailer; the failing check prints the exact command. The check sees file
+names only: whether a test exercises the code is for review.
+
 ### Deploying (Cloudflare)
 
 Optional: skip it if the page is served some other way. `deploy.yml` (copy to `.github/workflows/deploy.yml`) builds on every push to `main` and uploads `dist/` to Cloudflare as the static assets of a Worker, configured in `wrangler.jsonc` (copy to the project root and set `name`). There is no Worker script; Cloudflare serves the file as is.

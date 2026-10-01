@@ -67,13 +67,16 @@ When Adam pushes back — on architecture, process, or scope — adapt.
   never the implementation conversation or design-time memory
 - Posts verdicts and fix prompts directly to the PR as comments
 - Plans with Adam in chat
+- Writes test-first too: a script or workflow change by Clead follows the
+  same rule
 - Verifies live state before asserting any routing, authority, or process fact — re-reads the current source at the moment of acting, not a memory of having checked earlier (even earlier the same session). If a live check contradicts habit, a cached rule, or an earlier reading, the live check wins, with no exception for "it usually works this way." Named directly by Adam 2026-07-23 after two same-session incidents of stating a stale rule as settled.
 - Does not defend HOW decisions against Adam's WHAT signals
 
 ## Crog — Implementer
 - Receives tasks from Clead directly (PR comment, or a prompt when
   Clead starts Crog); Adam is never the relay
-- Implements TDD-first: tests red, implementation green, refactor
+- Implements test-first (see CLAUDE.md, Both agents: test first): red,
+  green, refactor
 - Opens the PR
 - Picks up Clead's fix prompts from PR comments, implements, pushes
 - Updates CHANGELOG.md as the post-merge step

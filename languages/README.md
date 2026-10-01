@@ -44,6 +44,13 @@ Every pack follows the same shape. A new pack should too:
   CI must fail when it is broken. Prove it by making a deliberate
   violation and watching CI fail. Rules no tool checks (for example
   "no hardcoded values") are for review.
+- **Test-first check.** Every pack's `ci.yml` checks out with
+  `fetch-depth: 0` and runs `.github/scripts/require-test-change.sh` as
+  the first step of `build`, on a single `run:` line with the pack's own
+  `--code` and `--test` patterns, so a pull request that changes code
+  without changing a test fails. Config files are not code for this
+  check. The pack's `code-standards.md` says what counts as code and as
+  a test.
 - **No lockfile in the pack.** The first `npm install` (or the
   language's equivalent) in the project creates it, and the project
   commits it. `code-standards.md` says so under "First-time setup".

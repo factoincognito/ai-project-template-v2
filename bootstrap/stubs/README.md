@@ -13,6 +13,11 @@ This repo was created from the bootstrapper with "Use this template".
 The template version it came from is recorded in `CHANGELOG.md`. Do
 these steps once, then delete this whole section.
 
+The files you got here are generated from the template at
+https://github.com/factoincognito/ai-project-template-v2. To change the
+bootstrapper itself, change the template there; a change made to a copy
+has no tests and is lost at the next release.
+
 1. **Copy in a language pack** from `languages/` (`node`, `web`,
    `python` or `react-native`). A bootstrap wizard that does this for
    you is planned but not written yet, so by hand:

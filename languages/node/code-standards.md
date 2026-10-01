@@ -41,6 +41,18 @@ npx biome format --write .
 npx tsc
 ```
 
+### Test-first check in CI
+
+The first step of `build` is `.github/scripts/require-test-change.sh`. It
+fails a pull request that changes code without changing a test. Code is
+everything under `src/`. Tests are `src/*.test.ts`, `src/*.spec.ts` and
+files in `__tests__/` folders under `src/`. Config (`package.json`,
+`tsconfig.json`, `biome.json`, `ci.yml`) is not code for this check; the
+other CI steps still run on it.
+A change no test can check carries a `Test-exempt: <reason>` commit
+trailer; the failing check prints the exact command. The check sees file
+names only: whether a test exercises the code is for review.
+
 ### Pre-commit equivalent
 
 Node projects use Biome's CI command in the CI pipeline rather than pre-commit hooks. Optionally add `lint-staged` + `husky` for local pre-commit enforcement — not included by default.

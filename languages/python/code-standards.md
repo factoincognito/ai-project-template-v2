@@ -57,6 +57,18 @@ pytest --cov=src --cov-report=term-missing
 python -m src.<module>.main
 ```
 
+### Test-first check in CI
+
+The first step of `build` is `.github/scripts/require-test-change.sh`. It
+fails a pull request that changes code without changing a test. Code is
+everything under `src/`. Tests are everything under `src/tests/`
+(`test_*.py`, `conftest.py` and helpers there). Config (`pyproject.toml`,
+the requirements files, `ci.yml`) is not code for this check; the other
+CI steps still run on it.
+A change no test can check carries a `Test-exempt: <reason>` commit
+trailer; the failing check prints the exact command. The check sees file
+names only: whether a test exercises the code is for review.
+
 ### Known gotcha: `MagicMock(spec=...)` inside `patch`
 
 Building a `MagicMock(spec=socket.socket)` inside a `with patch("socket.socket"):` block raises `InvalidSpecError: Cannot spec a Mock object`, because by then `socket.socket` is itself a mock. Build the mock first, then patch:
