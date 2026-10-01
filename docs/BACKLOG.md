@@ -267,7 +267,7 @@ get a working project in any supported language.
   **Non-goals.** It does not write the project's content: goals, SPEC sections and the first PBI are for Clead in the first session. It does not migrate from an existing repo (the migration part of PBI-1.4). It does not set up the Claude app or project, Cloudflare deploy secrets, or a delegation level (PBI-1.12). It never deletes a repo.
 
   **Obtaining and starting it.**
-  The script is `bootstrap-project.sh` at the root of the public bootstrapper repo. It is fetched with `gh`, which is a prerequisite anyway, so there is no curl dependency. The command is the same in Git Bash, macOS and Linux:
+  The script is `bootstrap-project.sh` at the root of the public bootstrapper repo. It is fetched with `gh api`, which refuses to run until `gh` is installed and logged in (read from the gh source, `pkg/cmd/api/api.go`: no auth-check exemption; not run), so installing `gh`, logging in and, on Windows, installing Git for Windows (which provides Git Bash and `git`) are README step 0, done by hand before the script exists. The command is the same in Git Bash, macOS and Linux:
   ```
   gh api repos/sugose/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh && bash bootstrap-project.sh
   ```
@@ -275,18 +275,20 @@ get a working project in any supported language.
   - There is no leading `/` on the API path. In Git Bash, MSYS rewrites `/repos/...` into a Windows path (cli/cli#6415).
   - `curl … | bash` is not supported, because the prompts read stdin.
 
-  **Preflight (guided).** Nothing is created until every check passes. Adam's rule (2026-10-01): when something is needed that the script cannot do itself, the script guides the user through it step by step; what cannot be in the script at all is documented in the README. So a failed check does not just exit. For each one the script prints numbered steps for the user's OS (what to do, the link to open, what to expect), waits for "press Enter when done", re-runs the check, and repeats until it passes or the user quits. On quit it prints the exact command to start again. In `--non-interactive` mode it never waits: it prints the same steps and exits 3. Where the script can do the action itself (an install command, `gh auth login`, `gh auth refresh -s workflow`), it prints the command and runs it only after the user answers yes; `--yes` does not approve installs or logins. The guides live in the script, and each one names how the script verifies it.
+  **Who this is for.** The target user may be a product person with no knowledge of git, GitHub or a terminal (Adam, 2026-10-01: ease of use is imperative; "a true WHAT person without HOW skills"). Every message, prompt and guide in the script and the README is written for that reader; see "Ease-of-use requirements".
+
+  **Preflight (guided).** Before the repo exists, nothing is created until every preflight check passes. Adam's rule (2026-10-01): when something is needed that the script cannot do itself, the script guides the user through it step by step; what cannot be in the script at all is documented in the README. So a failed check does not just exit. For each one the script prints numbered steps for the user's OS (what to do, the link to open, what to expect), waits for "press Enter when done", re-runs the check, and repeats until it passes or the user quits. On quit it prints the exact command to start again. In `--non-interactive` mode it never waits: it prints the same steps and exits 3. Where the script can do the action itself (an install command, `gh auth login`, `gh auth refresh -s workflow`), it prints the command and runs it only after the user answers yes; `--yes` does not approve installs or logins. The guides live in the script, and each one names how the script verifies it.
   - Tools (guide per OS, with the install command offered where one exists; whether `winget` is present on a given Windows is UNVERIFIED): `bash` 3.2 or later, `git`, and `gh`. For node, web and react-native it also needs `npm` (see the lockfile step). The script checks for features, not version numbers: `gh repo create --help` must list `--template`.
-  - `git config user.name` and `user.email` must be set. Guide: the script offers to set them for the new clone only (repo-local), not globally.
+  - Git identity: the script asks for the user's name and email in the preflight (defaults from the global git config when set; flags `--git-name` and `--git-email` in non-interactive mode), writes them with `git config` (no `--global`) right after the clone in step 4, and checks them before the commit in step 13.
   - `gh api user` must succeed. The script reads the `X-OAuth-Scopes` header from `gh api -i user` and needs `repo` (or `public_repo` for a public repo). It also needs `workflow`, because the setup commit changes `.github/workflows/ci.yml` (the OAuth scopes doc).
-    - Interactive `gh auth login` over HTTPS already adds `workflow` when gh is the git credential helper (gh source, `git_credential.go`).
+    - Login itself is README step 0, so the script cannot count on the scopes an interactive login adds; the `workflow` guide below covers the scope.
     - If a scope is missing, the script offers to run `gh auth refresh -h github.com -s workflow` and walks through the browser step (open the page, enter the one-time code, approve), then re-checks. Whether gh's own login prompts work in Git Bash's default terminal is UNVERIFIED.
     - A fine-grained token (`GH_TOKEN=github_pat_…`) sends no scopes header. The script then warns which permissions it needs (Administration, Contents, Workflows and Pull requests: write; Repository creation) and carries on.
   - The template's published version, read from `CHANGELOG.md` on the bootstrapper's `main` via the contents API, must equal the version stamped into the script. Otherwise the script says to download the current one.
   - `OWNER/NAME` must not exist yet (see re-runs), and the target directory must be absent or empty (except with `--resume`, which may reuse the existing clone).
 
   **Inputs.**
-  Each input comes from a flag, or from a prompt read with plain `read` in bash. The script never relies on gh's own prompts, which misbehave in mintty, Git Bash's default terminal (cli/cli discussion #7893). It always sets `GH_PROMPT_DISABLED=1`.
+  Each input comes from a flag, or from a prompt read with plain `read` in bash. The script never relies on gh's own prompts, which misbehave in mintty, Git Bash's default terminal (cli/cli discussion #7893). It sets `GH_PROMPT_DISABLED=1` for every gh call, except the one guided login or scope-refresh command, which runs with it unset because that command needs gh's own prompt (whether it works in mintty is UNVERIFIED until the Git Bash e2e run).
 
   | Input | Flag | Default |
   |---|---|---|
@@ -345,7 +347,7 @@ get a working project in any supported language.
       - `git status` shows only the expected paths.
       - The staged diff has no `gh[pousr]_…` or `github_pat_` strings.
       - Every file is LF.
-  13. **Commit and push.** Commit "Set up <name>", then push the branch. Git uses gh as a credential helper for these commands only, via `-c`, with no global config change. The exact helper string is UNVERIFIED; the fallback is to tell the user to run `gh auth setup-git`.
+  13. **Commit and push.** Commit "Set up <name>", then push the branch. Git uses gh as a credential helper for these commands only, via `-c`, with no global config change. The exact helper string is UNVERIFIED. Fallback guide: `gh auth setup-git`, which changes the user's global git config, so it runs only after an explicit yes and with a sentence saying so.
   14. **PR.** `gh pr create --base main --head bootstrap-setup --title … --body-file …`. Giving a title and body makes it non-interactive.
   15. **Wait for `build`.** Poll `gh pr checks <n> --json` until the check named `build` appears and finishes, up to `--ci-timeout`; only `build` is watched, not the review workflow. A push and a pull_request run both report `build`; the script accepts the pull_request run (the `event` field of the `--json` output is UNVERIFIED) or, failing that, any `build` run on the head commit. If it fails, stop and leave the PR open with its link.
   16. **Add the required check.** PUT protection again with the full body (a PUT replaces the whole object): the step 3 body with `required_status_checks:{strict:false, contexts:["build"]}`. The REST docs mark `contexts` as required; whether `checks:[{context:"build"}]` alone is accepted is UNVERIFIED and is settled by the GET read-back, which is compared field by field. Every pack's `ci.yml` has one job, `build`, and a test enforces this. Doing it after `build` has run avoids the rule that "a required status check must have completed successfully … during the past seven days" (the troubleshooting doc).
@@ -369,9 +371,9 @@ get a working project in any supported language.
   The alternative is to push the setup straight to `main` before protection and record it as the one documented exception. That is faster, but it breaks the rule and leaves `build` unproven until the first real PR. **Open decision 1.**
 
   **Refusals, warnings, re-runs, failures.**
-  - **Private repo, no protection possible.** Protection is free only on public repos; private repos need Pro, Team or Enterprise (branch protection REST doc). Rulesets have the same availability (About rulesets). Reading `/user` `plan` needs `read:user`, which gh's minimum scopes lack, so the script cannot check the plan before creating. Instead it warns before creating, and if step 3 returns 403 it stops at once. At that point the repo holds only the template commit. The script prints three options:
+  - **Private repo, no protection possible.** Protection is free only on public repos; private repos need Pro, Team or Enterprise (branch protection REST doc). Rulesets have the same availability (About rulesets). Reading `/user` `plan` needs `read:user`, which gh's minimum scopes lack, so the script cannot check the plan before creating. Instead it warns before creating, and if step 3 returns 403 it stops at once (a post-create guide: it does not retry in the same run). At that point the repo holds only the template commit. The script prints plain-language steps for three options and the exact `--resume` command:
     - upgrade the plan, then run with `--resume`;
-    - `gh repo edit --visibility public --accept-visibility-change-consequences`, then `--resume`;
+    - `gh repo edit --visibility public --accept-visibility-change-consequences`, then `--resume`; this changes the repo's visibility, so it runs only after its own explicit yes, which `--yes` does not cover;
     - `--resume --allow-unprotected`, which merges unprotected and adds a decision row to the project's `memory/decisions.md` saying `main` is unprotected and why. **Open decision 5.**
   - **Existing repo.** Refused unless `--resume` is given. With `--resume`, the script works out where to continue from GitHub and the clone, not from any state file:
     - a repo not stamped by this bootstrapper is refused;
@@ -403,7 +405,7 @@ get a working project in any supported language.
   - **Unit tests.** A new file, `bootstrap/test-bootstrap-project.sh`, in the `bootstrap/test.sh` style. It runs on ubuntu, macOS (invoking `/bin/bash`) and Windows (`shell: bash` is Git for Windows' bash, workflow-syntax doc). `docs/DEV_INFRASTRUCTURE.md` makes `bootstrapper-test` a required check, and a matrix renames its checks (`bootstrapper-test (ubuntu-latest)`, …), which would leave the required name never reporting and block every PR. So the matrix runs in a separate job and `bootstrapper-test` stays a single job named so, which `needs:` the matrix and uses `if: always()`, failing unless every matrix job's result is `success`. Without that, a failed matrix job would skip the aggregate job, and GitHub reports a skipped job as success, which would make the required check green on failing tests (documented in the troubleshooting doc; the dependency-failure case is not tested here). `bootstrap/test.sh` stays in the ubuntu leg. `publish` already `needs: bootstrapper-test`, so a macOS or Windows flake would also block a release; that is accepted.
     - `gh` is a stub, selected with `BOOTSTRAP_GH`. It logs every call and emulates `repo create --template` (a local bare repo seeded from a real `build.sh` output), `repo clone`, `api` (user, scopes header, licences, protection PUT/GET), `pr create/checks/merge` and `repo edit`. `git` is real, against local bare repos, as in the `publish.sh` tests.
     - **Cases:**
-  - each guided check: the steps print, the re-check loop passes after the simulated fix, and quitting prints the resume command; `--non-interactive` prints the steps and exits 3 without waiting; `--yes` does not run an install or login;
+      - each guided check: the steps print, the re-check loop passes after the simulated fix, and quitting prints the resume command; the user answers No to an offered command and nothing runs; a stub `BOOTSTRAP_RUN` replaces every install and login command so CI never installs anything; `--non-interactive` prints the steps and exits 3 without waiting; `--yes` does not run an install or login;
       - the 404 race (main not there yet) retries, and a 403 is classified by message;
       - each preflight failure creates nothing;
       - every pack's final tree is exactly what is expected;
@@ -418,7 +420,7 @@ get a working project in any supported language.
       - the fake token never appears in output or files;
       - the real build ships the script stamped, LF and executable.
   - **End to end.** Agents cannot do this run: repo deletion returns 403, and this cloud session's proxy refuses non-repo-scoped GitHub API calls ("sessions are bound to their configured repositories"). **Adam runs it** after the release.
-    - Create throwaway public repos named `bootstrap-e2e-<pack>-<date>`: all four packs, at least one interactive in Git Bash on Windows and one `--non-interactive`. Ctrl-C one run during the CI wait, then `--resume` it.
+    - Create throwaway public repos named `bootstrap-e2e-<pack>-<date>`: all four packs, at least one interactive in Git Bash on Windows and one `--non-interactive`. Ctrl-C one run during the CI wait, then `--resume` it. At least one run walks a real guided path: the `workflow` scope refresh in Git Bash on Windows. One run is made by someone who follows only the README, with no help (see Done when).
     - Delete them afterwards with `gh repo delete` (after `gh auth refresh -s delete_repo`) or in Settings.
     - A template-only `bootstrap/e2e-check.sh OWNER/NAME DIR` checks a finished run against "Done when" and prints the delete command.
     - Automating this in CI later needs a sandbox owner and a token with Administration write. **Open decision 8.**
@@ -436,18 +438,34 @@ get a working project in any supported language.
     - PBI-1.8 (licence choice) is folded into this PBI.
     - PBI-1.12 stays a possible future script option.
 
+  **Rules for commands the script offers to run.**
+  - Each is a fixed string in the script, never built from user input; the full command is printed before the question, and the default answer is No.
+  - The answer is read from the terminal, not from piped stdin.
+  - The script never runs `sudo`: on Linux it prints the package-manager line for the user to run.
+  - It uses only the OS package manager (`winget`, `brew`), never a vendor `curl | sh` installer.
+  - No token is echoed. The script itself is fetched from the bootstrapper's `main` with no integrity check: the version check only proves it is the latest release, not that its content is genuine.
+
+  **Ease-of-use requirements.**
+  - Plain language, no jargon without a one-line explanation (say "a copy of your project on this computer", not "clone"; "approval step" or "check", not "scope" or "required status check").
+  - Every guide says why the step is needed, shows the exact text to copy or the page to open, says what the user will see when it worked, and what to do if they see something else. The script verifies each step itself and says so ("Done, git is installed").
+  - Every prompt explains its choice in one sentence and offers a default. The pack prompt describes each pack in plain words (what kind of project it is for), the licence prompt says in one line what each licence means, and neither asks the user to know the term beforehand.
+  - Errors say what happened and the next action, never a raw API message alone (the raw text is shown below it for support).
+  - Progress is visible: each of the steps prints one line when it starts and when it ends.
+  - The finish report says in plain words what was created and the one thing to do next.
+  - The README is written for the same reader: copy-paste blocks, no assumed tools, screenshots-free text that still names every button.
+
   **Guided steps in the script, and what only the README can cover.**
-  Guided in the script (printed steps, then a re-check): installing `git` and, for npm packs, Node/npm; `gh auth login` and the `workflow` scope; git name and email; a token missing a permission (steps to create or edit a fine-grained token); an org that refuses repo creation (steps to give an org admin); a private repo on a plan without protection (a menu: upgrade steps, switch to public, or `--allow-unprotected`).
-  README only, because the script cannot exist or run without it: step 0, installing `gh` (one line per OS), since the script is fetched with `gh`; what to do after the script finishes (open the Claude app, add the new repo and start a chat, and, if the GitHub App is limited to selected repos, add the repo in GitHub settings, UNVERIFIED); org-admin and billing settings in more detail; deleting a throwaway repo; the maintainer's release tag. The README also lists every guide so a user can read them before running the script.
+  Guided in the script before anything is created (preflight): installing Node/npm for npm packs, the `workflow` scope refresh, the git name and email, and a token missing a permission (steps to create or edit a fine-grained token).
+  Guided after the repo exists (post-create: print steps, exit, `--resume`): an org that refuses repo creation or has Actions turned off (detected via `repos/OWNER/NAME/actions/permissions`, UNVERIFIED; otherwise step 15 would just time out), and a private repo on a plan without protection (a menu: upgrade steps, switch to public, or `--allow-unprotected`).
+  README only, because the script cannot exist or run without it: step 0 (install `gh`, `gh auth login`, and on Windows Git for Windows, one copy-paste block per OS with what the user will see after each); what to do after the script finishes (open the Claude app, add the new repo and start a chat, and, if the GitHub App is limited to selected repos, add the repo in GitHub settings, UNVERIFIED); org-admin and billing settings in more detail; deleting a throwaway repo. The README also lists every guide so a user can read them before running the script. The maintainer's release tag is not in the user README; it stays in `memory/decisions.md`.
 
   **Not possible without action outside the script (for Adam to accept).** Each of these is guided by the script or documented in the README, as above; none is done for the user.
-  1. Installing `git`, `gh` and, for npm packs, Node/npm.
-  2. `gh auth login` / `gh auth refresh -s workflow`. Both are a browser device-code step, although the script tells the user what to type.
+  1. Installing `gh` and Git for Windows (README step 0), and Node/npm for npm packs (guided).
+  2. `gh auth login` (README step 0) and `gh auth refresh -s workflow` (guided). Both are a browser device-code step, although the script tells the user what to type.
   3. Private repos on GitHub Free: protection needs a paid plan (billing in the browser), or making the repo public.
   4. Org-owned repos: the org must allow repo creation and Actions, which only an org admin can change.
   5. Giving Claude access to the new repo: the Claude app, a new Claude project, and, if the GitHub App is limited to selected repos, adding the repo in GitHub settings. The last part is UNVERIFIED.
   6. Deleting a repo from a failed run or an e2e test (`delete_repo` scope or Settings).
-  7. Creating the release tag that publishes the script, which is Adam's job per `memory/decisions.md`.
 
   **Known limitation.**
   The shipped process docs still name "Adam" as the product owner. The script fills only `[PO NAME]` placeholders and does not rewrite "Adam". That is "De-Adamify" (`docs/NEXT_SESSION.md` item 4); once those become placeholders, the fill table picks them up.
@@ -465,7 +483,8 @@ get a working project in any supported language.
   4. An interrupted run completes with `--resume`, with no duplicate PR or commit.
   5. The docs above are updated, PBI-1.4 and PBI-1.8 have their dispositions, and the layout table exists once.
   6. Each guided check prints its steps and passes on re-check, and the README lists them and the README-only steps.
-  7. `bootstrapper-test` still reports as one required check, and goes red when any matrix leg fails, and `packs.yml` uses the lockfile command of step 7.
+  7. Someone who has never used `gh` or a terminal sets up a project by following only the README and the script's own messages, without help. Adam, or anyone he names, does this once and the result is recorded on the PBI; any step they could not finish unaided is a defect.
+  8. `bootstrapper-test` still reports as one required check, and goes red when any matrix leg fails, and `packs.yml` uses the lockfile command of step 7.
 
   **Open decisions for Adam (my recommendation first).**
   1. **Order.** Protect first and put the setup through a PR (rec), or push the setup directly as a documented exception?
@@ -478,7 +497,7 @@ get a working project in any supported language.
   8. **E2E.** Manual by Adam now (rec), with CI automation using a sandbox token as a later IDEA?
   9. **Protection type.** Classic branch protection, as in the decisions log and `DEV_INFRASTRUCTURE` (rec), or a ruleset? Both have the same plan availability and the same rules.
   10. **Lockfile.** Require npm locally for npm packs (rec), or let the PR go red and leave the fix to the user?
-  11. **Running commands for the user.** The script runs installs and logins only after a yes, and `--yes` does not cover them (rec); or it only prints them and never runs them?
+  11. **Running commands for the user.** The script runs installs and logins only after a yes, with the rules above, and `--yes` does not cover them (rec); or it only prints them and never runs them? Given the target reader, running them is the easier path.
 
   **Sources checked by the drafting agent.**
 
