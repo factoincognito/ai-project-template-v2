@@ -296,3 +296,27 @@ GitHub API, not taken from an agent's report.
 
 Open: Adam bootstraps acuteping from v2.2.0, which closes PBI-1.10; the
 wording notes in `docs/NEXT_SESSION.md` item 6.
+
+## Evening 2026-10-01 and 2026-10-02 (repo move and consolidation)
+
+Adam moved both repos from `sugose/` to the `factoincognito` org; PR #112
+repointed the live references. PBI-1.15 (the chain test) was marked
+done, and PBI-1.17 (test first at every level) was built in four PRs; it
+stays `[NEXT]` until Adam's end-to-end runs. The PBI-1.14 build plan was
+drafted as 17 slices and staged, not started.
+
+Several Clead sessions then worked on the template at the same time. Two
+of them each wrote a NEXT_SESSION item numbered 8 within hours, and
+sessions bound to the old `sugose/` path could not reach the moved repo:
+attaching the new path failed on the same-name checkout, and the access
+proxy decides by repository path, so no token helped. One of them pushed
+its notes to a side branch; another, working on Adam's company structure
+in a separate private repo, left a Project doc instead of a PR. Adam had
+every session stage its pending items in `docs/NEXT_SESSION.md` (PRs
+#117-#121), then started one session on the new path to consolidate.
+
+That session found the handoff Project doc already overtaken by #121, and
+re-read through the API what NEXT_SESSION item 7 already recorded: the
+bootstrapper's `main` protection (PR required, `build` required, no admin
+bypass) would reject the release pipeline's direct push. The release waits for Adam's change to that
+setting and his answer on releasing before PBI-1.14 is built.
