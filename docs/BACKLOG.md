@@ -257,6 +257,240 @@ get a working project in any supported language.
   direction than today's setting, and which rules in CLAUDE.md the option
   would change (review gates, merge delegation, intent approval).
 
+- **[IDEA] PBI-1.14** (proposed 2026-10-01 by Clead from Adam's request; architectural, needs Crog review and Adam's intent approval before any build; supersedes PBI-1.4 for new projects and absorbs PBI-1.8 if approved) — Turn-key bootstrap script.
+
+  **Why.**
+  Adam: "the bootstrap script should be the only thing you need to run in order for the bootstrapped project to be created. Turn-key." Today a new project takes five manual README steps after "Use this template": copy a pack, turn on protection, fill placeholders, choose a licence and delete the section. Each one can go wrong without anyone noticing.
+
+  **Goal and non-goals.**
+  **Goal.** Run one script and get a GitHub repo that is created from `sugose/ai-project-bootstrap`, laid out with one language pack, has its placeholders filled and its own licence, has protected `main` with a green `build`, and has a clean local clone. The setup itself arrives through a PR like every other change.
+  **Non-goals.** It does not write the project's content: goals, SPEC sections and the first PBI are for Clead in the first session. It does not migrate from an existing repo (the migration part of PBI-1.4). It does not set up the Claude app or project, Cloudflare deploy secrets, or a delegation level (PBI-1.12). It never deletes a repo.
+
+  **Obtaining and starting it.**
+  The script is `bootstrap-project.sh` at the root of the public bootstrapper repo. It is fetched with `gh`, which is a prerequisite anyway, so there is no curl dependency. The command is the same in Git Bash, macOS and Linux:
+  ```
+  gh api repos/sugose/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh && bash bootstrap-project.sh
+  ```
+  - Add `?ref=vX.Y.Z` to the path to pin a version.
+  - There is no leading `/` on the API path. In Git Bash, MSYS rewrites `/repos/...` into a Windows path (cli/cli#6415).
+  - `curl … | bash` is not supported, because the prompts read stdin.
+
+  **Preflight.** The preflight has no side effects and exits 3 if anything fails, so nothing is created.
+  - Tools: `bash` 3.2 or later, `git`, and `gh`. For node, web and react-native it also needs `npm` (see the lockfile step). The script checks for features, not version numbers: `gh repo create --help` must list `--template`.
+  - `git config user.name` and `user.email` must be set.
+  - `gh api user` must succeed. The script reads the `X-OAuth-Scopes` header from `gh api -i user` and needs `repo` (or `public_repo` for a public repo). It also needs `workflow`, because the setup commit changes `.github/workflows/ci.yml` (the OAuth scopes doc).
+    - Interactive `gh auth login` over HTTPS already adds `workflow` when gh is the git credential helper (gh source, `git_credential.go`).
+    - If a scope is missing, the script says to run `gh auth refresh -h github.com -s workflow`.
+    - A fine-grained token (`GH_TOKEN=github_pat_…`) sends no scopes header. The script then warns which permissions it needs (Administration, Contents, Workflows and Pull requests: write; Repository creation) and carries on.
+  - The template's published version, read from `CHANGELOG.md` on the bootstrapper's `main` via the contents API, must equal the version stamped into the script. Otherwise the script says to download the current one.
+  - `OWNER/NAME` must not exist yet (see re-runs), and the target directory must be absent or empty.
+
+  **Inputs.**
+  Each input comes from a flag, or from a prompt read with plain `read` in bash. The script never relies on gh's own prompts, which misbehave in mintty, Git Bash's default terminal (cli/cli discussion #7893). It always sets `GH_PROMPT_DISABLED=1`.
+
+  | Input | Flag | Default |
+  |---|---|---|
+  | Repo name | `--name` | none; must match `^[A-Za-z0-9][A-Za-z0-9._-]*$` |
+  | Owner (user or org) | `--owner` | the `gh api user` login |
+  | Display name | `--project-name` | repo name |
+  | One-line description | `--description` | none (empty leaves the placeholder) |
+  | Product owner name | `--po-name` | gh profile name, else the login |
+  | Language pack | `--pack node\|web\|python\|react-native` | none |
+  | Web deploy files laid out | `--with-deploy` (web only) | off |
+  | Visibility | `--public` / `--private` | public |
+  | Project licence | `--license none\|mit\|apache-2.0\|gpl-3.0\|bsd-3-clause\|polyform-noncommercial-1.0.0\|<any GitHub licence key>` | none offered as a default |
+  | Copyright holder | `--copyright-holder` | PO name |
+  | Target dir | `--dir` | `./<name>` |
+  | CI wait | `--ci-timeout <min>` | 20 |
+
+  - `--non-interactive` never reads stdin. Any missing required input (name, pack or licence) exits 2, listing every input that is missing.
+  - `--yes` skips the final "Proceed?" confirmation.
+  - `--dry-run` runs the preflight and prints the plan.
+  - `--resume` continues an existing repo (see re-runs).
+  - Name values may not contain control characters, `"`, `\`, `<`, `>`, `&` or backtick, because they go into JSON and HTML. The description must be one line.
+
+  **Steps, in order.**
+  1. **Preflight and confirmation** (above). It prints the full plan.
+  2. **Create** with `gh repo create OWNER/NAME --template sugose/ai-project-bootstrap --public|--private --description "…"`. GitHub makes the repo's first commit, a single commit of the template content (the "Creating a repository from a template" doc).
+  3. **Protect `main` straight away** with `PUT repos/OWNER/NAME/branches/main/protection`, body `required_pull_request_reviews:{required_approving_review_count:0}, enforce_admins:true, required_status_checks:null, restrictions:null, allow_force_pushes:false, allow_deletions:false`.
+     - This also detects the plan. A 403 here means a private repo without Pro or Team, and the script stops (see "Refusals").
+     - It also sets `gh repo edit --delete-branch-on-merge --enable-squash-merge`.
+  4. **Clone** with `gh repo clone OWNER/NAME DIR`, retrying for up to 60 s until `origin/main` holds `CHANGELOG.md`. Template content can land after creation: gh's own `--clone` retries 3 times, 3 s apart (gh source, `cloneWithRetry`). Then the script checks that the clone's CHANGELOG stamp equals the script's version.
+  5. **Branch** `bootstrap-setup`.
+  6. **Lay out the pack** using the table and checks from `tools/layout-pack.sh`, moved into the script as the single source (see "Shipping").
+     - Overlay mode: `ci.yml` replaces the stub. The pack's `gitignore` lines are appended to `.gitignore` when they are missing. Any other target that already exists is an error.
+     - `--with-deploy` also lays out `deploy.yml` to `.github/workflows/deploy.yml` and `wrangler.jsonc` to the root.
+  7. **Lockfile (npm packs).** `npm install --package-lock-only --no-audit --no-fund` creates `package-lock.json` without `node_modules`. Without it, the pack's `npm ci` fails and the setup PR can never go green.
+  8. **Fill placeholders** from a fixed table of (file, exact text, value). Replacement is literal: awk `index()`/`substr()` with the values passed via `ENVIRON`. It is not `sed`, which treats the values as regex and needs `sed -i` (which differs on macOS).
+     - `[PROJECT NAME]` becomes the display name in `README.md`, `CLAUDE.md`, `CHANGELOG.md`, `docs/SPEC.md`, `docs/BACKLOG.md`, `docs/NEXT_SESSION.md`, `memory/project.md` and react-native `app.json`.
+     - `[PO NAME]` becomes the PO name in `README.md` and `docs/BACKLOG.md`.
+     - `[OWNER/REPO]` becomes the repo's `OWNER/NAME` in `memory/project.md`.
+     - `[DATE]` becomes today's date (ISO) in `docs/SPEC.md` and `docs/NEXT_SESSION.md` only. In `memory/roles.md` and `docs/CROG_ONBOARDING.md`, `[DATE]` is a format token and stays.
+     - The README line `[One or two sentences: …]` and the two-line description in `memory/project.md` become the description.
+     - `[project-name]` becomes an npm-safe slug (the lowercased repo name) in `package.json`, and the display name in web `index.html` `<title>`. `[project-slug]` becomes the slug in `app.json`.
+     - **Left for the first Clead session** (the script lists them at the end): `[PHASE NAME]`, `[Goal]`, the SPEC section prompts, the rest of `memory/project.md` and `memory/context.md`.
+     - **Never touched:** the BACKLOG markers, `[Unreleased]`, the ADR's `[If approved]` and `licenses/`.
+  9. **Tidy up.**
+     - Delete the README section from `## After bootstrapping` up to the next `## ` heading.
+     - Prune `languages/` to the chosen pack's files that were not laid out (`code-standards.md`, plus the web deploy files when `--with-deploy` is off). This keeps the `docs/DEV_INFRASTRUCTURE.md` links working.
+     - Delete `bootstrap-project.sh` itself.
+     - Keep `licenses/`.
+  10. **Licence.**
+      - A GitHub key: `gh api licenses/<key> --jq .body` goes to `LICENSE`, with `[year]` and `[fullname]` filled (choosealicense.com placeholders).
+      - `polyform-noncommercial-1.0.0`: the text is copied from `licenses/` to `LICENSE`, and a root `NOTICE` gets `Required Notice: Copyright <holder>`.
+      - `none`: no file, with a warning if the repo is public.
+  11. **CHANGELOG.** Append the pack, the licence and "set up by bootstrap-project.sh" under "Project created".
+  12. **Self-check before commit.**
+      - No fill-table text remains.
+      - `git status` shows only the expected paths.
+      - The staged diff has no `gh[pousr]_…` or `github_pat_` strings.
+      - Every file is LF.
+  13. **Commit and push.** Commit "Set up <name>", then push the branch. Git uses gh as a credential helper for these commands only, via `-c`, with no global config change. The exact helper string is UNVERIFIED; the fallback is to tell the user to run `gh auth setup-git`.
+  14. **PR.** `gh pr create --base main --head bootstrap-setup --title … --body-file …`. Giving a title and body makes it non-interactive.
+  15. **Wait for `build`.** Poll `gh pr checks <n> --watch --fail-fast` until a check appears, up to `--ci-timeout`. Exit code 8 means pending. If the check fails, stop and leave the PR open with its link.
+  16. **Add the required check.** PUT protection again, now with `required_status_checks:{strict:false, checks:[{context:"build"}]}`. Every pack's `ci.yml` has one job, `build`, and a test enforces this. Doing it now, after `build` has run, avoids the rule that "a required status check must have completed successfully … during the past seven days" (the troubleshooting doc). Whether the API needs that rule is UNVERIFIED. Then read it back with GET and compare it field by field.
+  17. **Merge** with `gh pr merge <n> --squash --delete-branch --match-head-commit <sha>`. This runs under protection, so a successful merge also shows the gate accepted it.
+  18. **Finish.** `git switch main && git pull`, delete the local branch, then check `git status` is clean and HEAD equals the merge commit.
+  19. **Report.** The script prints:
+      - repo URL, local path, PR URL, pack and licence;
+      - protection as read back;
+      - the placeholders left for Clead;
+      - the next step: open the Claude app, give it the new repo, and start a chat. `CLAUDE.md` does the rest.
+
+  **The order problem**
+  `CLAUDE.md` says every change goes through a PR. This design needs no exception:
+  - GitHub's template generation makes `main`'s only commit.
+  - `main` is protected at step 3, before anything else is pushed.
+  - The setup arrives as a PR that must pass `build`.
+  - The cost is a few minutes of CI wait, and it proves the project is "green on day one".
+
+  The alternative is to push the setup straight to `main` before protection and record it as the one documented exception. That is faster, but it breaks the rule and leaves `build` unproven until the first real PR. **Open decision 1.**
+
+  **Refusals, warnings, re-runs, failures.**
+  - **Private repo, no protection possible.** Protection is free only on public repos; private repos need Pro, Team or Enterprise (branch protection REST doc). Rulesets have the same availability (About rulesets). Reading `/user` `plan` needs `read:user`, which gh's minimum scopes lack, so the script cannot check the plan before creating. Instead it warns before creating, and if step 3 returns 403 it stops at once. At that point the repo holds only the template commit. The script prints three options:
+    - upgrade the plan, then run with `--resume`;
+    - `gh repo edit --visibility public --accept-visibility-change-consequences`, then `--resume`;
+    - `--resume --allow-unprotected`, which merges unprotected and adds a decision row to the project's `memory/decisions.md` saying `main` is unprotected and why. **Open decision 5.**
+  - **Existing repo.** Refused unless `--resume` is given. With `--resume`, the script works out where to continue from GitHub and the clone, not from any state file:
+    - a repo not stamped by this bootstrapper is refused;
+    - the template commit only: continue from step 3;
+    - an open `bootstrap-setup` PR: continue from step 15;
+    - already set up (no setup section, no script): only re-check protection and report.
+
+    Because of this, `--resume` also completes a repo made with the "Use this template" button.
+  - **Failure midway.** An `ERR` trap prints what exists (repo, branch, PR, local dir) and the exact `--resume` command. A local dir the script created is removed if it fails before the clone completes.
+    - The script never deletes a repo. That needs the `delete_repo` scope; the script prints `gh auth refresh -s delete_repo && gh repo delete OWNER/NAME --yes` as a hint only.
+  - **No secrets.** The script never prints, stores or writes tokens into files, remotes or git config. Step 12 blocks a commit that contains one.
+  - **Portability.**
+    - bash 3.2: no associative arrays, `mapfile` or `${x,,}`. macOS `/bin/bash` is 3.2 (UNVERIFIED here, but tested on the macOS runner).
+    - `\r` is stripped from all captured output.
+    - It uses `gh --jq` instead of `jq`, and no `sed -i`.
+    - API paths have no leading `/`.
+
+  **Shipping, and what changes in the build.**
+  - **Source.** `bootstrap/stubs/bootstrap-project.sh`. Stubs mirror the output layout, so it ships at the bootstrapper root. It is executable and LF, enforced by `.gitattributes`. It must pass the existing forbidden-string checks (no PBI ids or PR refs), so its header links the spec by URL.
+  - **`build.sh`.** Stamp `{{TEMPLATE_VERSION}}` and `{{TEMPLATE_COMMIT}}` in the script as well as `CHANGELOG.md`, and require both placeholders in both stubs. The existing "placeholder left" check catches a missed stamp. The ban on a `bootstrap/` folder and the forbidden strings stay as they are.
+  - **`manifest.txt`.** No change; `languages` still ships.
+  - **Layout table: one source.** The table and its checks move from `tools/layout-pack.sh` into the script, which gets a `layout-pack <pack> <dir>` subcommand. `tools/layout-pack.sh` becomes a one-line wrapper, so `packs.yml` and its drift test keep working.
+  - **In projects.** The script is in GitHub's template commit (step 2) and is deleted by the setup PR, so it leaves no clutter after setup. The alternative, publishing it as a release asset on the bootstrapper, would keep it out of project history entirely, but `publish.sh` would have to create releases. **Open decision 3.**
+
+  **Testing.**
+  - **Unit tests.** A new file, `bootstrap/test-bootstrap-project.sh`, in the `bootstrap/test.sh` style. It runs in the existing required `bootstrapper-test` job, as a matrix on ubuntu, on macOS (invoking `/bin/bash`), and on Windows, where `shell: bash` is Git for Windows' bash (workflow-syntax doc). That needs no new required check.
+    - `gh` is a stub, selected with `BOOTSTRAP_GH`. It logs every call and emulates `repo create --template` (a local bare repo seeded from a real `build.sh` output), `repo clone`, `api` (user, scopes header, licences, protection PUT/GET), `pr create/checks/merge` and `repo edit`. `git` is real, against local bare repos, as in the `publish.sh` tests.
+    - **Cases:**
+      - each preflight failure creates nothing;
+      - every pack's final tree is exactly what is expected;
+      - no fill-table text is left;
+      - the README section is gone and `languages/` is pruned;
+      - each licence variant;
+      - the exact protection bodies, and their order relative to the merge;
+      - non-interactive mode works with `</dev/null`, and missing inputs give exit 2;
+      - a resume from each phase;
+      - a CI failure leaves the PR open;
+      - a 403 on protection stops before any push;
+      - the fake token never appears in output or files;
+      - the real build ships the script stamped, LF and executable.
+  - **End to end.** Agents cannot do this run: repo deletion returns 403, and this cloud session's proxy refuses non-repo-scoped GitHub API calls ("sessions are bound to their configured repositories"). **Adam runs it** after the release.
+    - Create throwaway public repos named `bootstrap-e2e-<pack>-<date>`: all four packs, at least one interactive in Git Bash on Windows and one `--non-interactive`. Ctrl-C one run during the CI wait, then `--resume` it.
+    - Delete them afterwards with `gh repo delete` (after `gh auth refresh -s delete_repo`) or in Settings.
+    - A template-only `bootstrap/e2e-check.sh OWNER/NAME DIR` checks a finished run against "Done when" and prints the delete command.
+    - Automating this in CI later needs a sandbox owner and a token with Administration write. **Open decision 8.**
+
+  **What changes in the existing manual README steps.**
+  - **Stub `README.md`.**
+    - The five steps and the table become a three-line section: "If you see this, setup has not run: `<one command> --resume --owner … --name …`".
+    - "Branch protection" drops "(step 2 above)" and points to `docs/DEV_INFRASTRUCTURE.md`.
+    - "Use this template" is no longer the documented path, but it still works via `--resume`.
+  - **Template `README.md`.** "Creating a project from the template" becomes the one command plus its prerequisites. The stale "does not exist until…" text goes.
+  - **`languages/README.md`.** "Every file has a place" points to the script's layout table, not the README tables.
+  - **`docs/DEV_INFRASTRUCTURE.md`.** "Turning it on in a new project" says the script does this, and keeps the manual steps as the fallback.
+  - **Backlog.**
+    - PBI-1.4 is **superseded** for new projects. If Adam still wants the migration branch, it becomes its own IDEA.
+    - PBI-1.8 (licence choice) is folded into this PBI.
+    - PBI-1.12 stays a possible future script option.
+
+  **Not possible without action outside the script (for Adam to accept).**
+  1. Installing `git`, `gh` and, for npm packs, Node/npm.
+  2. `gh auth login` / `gh auth refresh -s workflow`. Both are a browser device-code step, although the script tells the user what to type.
+  3. Private repos on GitHub Free: protection needs a paid plan (billing in the browser), or making the repo public.
+  4. Org-owned repos: the org must allow repo creation and Actions, which only an org admin can change.
+  5. Giving Claude access to the new repo: the Claude app, a new Claude project, and, if the GitHub App is limited to selected repos, adding the repo in GitHub settings. The last part is UNVERIFIED.
+  6. Deleting a repo from a failed run or an e2e test (`delete_repo` scope or Settings).
+  7. Creating the release tag that publishes the script, which is Adam's job per `memory/decisions.md`.
+
+  **Known limitation.**
+  The shipped process docs still name "Adam" as the product owner. The script fills only `[PO NAME]` placeholders and does not rewrite "Adam". That is "De-Adamify" (`docs/NEXT_SESSION.md` item 4); once those become placeholders, the fill table picks them up.
+
+  **Done when.**
+  1. A release publishes a bootstrapper whose root has `bootstrap-project.sh`, stamped with that version and commit, LF and executable, and whose file list is the manifest plus stubs.
+  2. The unit tests pass on ubuntu, macOS `/bin/bash` and Windows Git Bash in `bootstrapper-test`.
+  3. Adam's e2e runs (above) each end with:
+     - the repo created;
+     - the setup PR squash-merged on a green `build`;
+     - protection read back as specified;
+     - no fill-table placeholders left;
+     - no README setup section, `languages/` pruned, `LICENSE` as chosen, and no script in the tree;
+     - the local clone clean on `main`.
+  4. An interrupted run completes with `--resume`, with no duplicate PR or commit.
+  5. The docs above are updated, PBI-1.4 and PBI-1.8 have their dispositions, and the layout table exists once.
+
+  **Open decisions for Adam (my recommendation first).**
+  1. **Order.** Protect first and put the setup through a PR (rec), or push the setup directly as a documented exception?
+  2. **Setup PR review.** Merge on green `build` with no Clead/Crog review, because it is the released template's own tested output (rec: add this as a named exception in `CLAUDE.md`, rule 3)? Or require a review?
+  3. **Delivery.** Script at the bootstrapper root, deleted by the setup PR (rec), or as a release asset?
+  4. **`languages/` after setup.** Keep only the chosen pack's files that were not laid out (rec), delete it all and fix the doc links, or keep it all?
+  5. **Private repo on Free.** Stop, but allow `--allow-unprotected` with a recorded decision (rec)? Or always refuse?
+  6. **Licence.** Required with no default (rec)? List: none, MIT, Apache-2.0, GPL-3.0, BSD-3-Clause, PolyForm Noncommercial, or any GitHub licence key.
+  7. **Repo settings.** Also turn on delete-branch-on-merge and squash merge (rec yes; agents cannot delete branches)?
+  8. **E2E.** Manual by Adam now (rec), with CI automation using a sandbox token as a later IDEA?
+  9. **Protection type.** Classic branch protection, as in the decisions log and `DEV_INFRASTRUCTURE` (rec), or a ruleset? Both have the same plan availability and the same rules.
+  10. **Lockfile.** Require npm locally for npm packs (rec), or let the PR go red and leave the fix to the user?
+
+  ## Sources checked by the drafting agent
+
+  - gh manual: https://cli.github.com/manual/gh_repo_create , gh_repo_clone , gh_repo_edit , gh_pr_create , gh_pr_checks , gh_pr_merge , gh_api , gh_auth_login , gh_auth_refresh , gh_auth_setup-git , gh_auth_status , gh_help_environment (all under https://cli.github.com/manual/).
+  - gh source (cli/cli, trunk): `pkg/cmd/repo/create/create.go` (`cloneWithRetry`), `pkg/cmd/auth/shared/git_credential.go`, `internal/authflow/flow.go`, `pkg/cmd/auth/status/status.go`.
+  - GitHub docs: REST branch protection, About protected branches, Troubleshooting required status checks (seven-day rule), About rulesets, REST rules, REST create a repository using a template, Creating a repository from a template, permissions for fine-grained tokens, Scopes for OAuth apps, REST users, REST contents, REST licenses, workflow syntax (`shell: bash` on Windows).
+  - https://github.com/github/choosealicense.com/blob/gh-pages/README.md (`[year]`, `[fullname]`), https://docs.npmjs.com/cli/v11/commands/npm-install (`--package-lock-only`), https://github.com/cli/cli/issues/6415 (MSYS leading slash), https://github.com/cli/cli/discussions/7893 (mintty prompts).
+
+  ## Not verified
+
+  - Whether the branch-protection API accepts a required check that has never run (the design avoids depending on it).
+  - Whether `contexts` may be omitted when `checks` is given.
+  - The exact text of the 403 for a private repo on Free.
+  - The exact `credential.helper` string for gh as a per-command helper.
+  - The npm shim, `/dev/tty` and process substitution in Git Bash.
+  - Whether a stub `gh` on PATH beats `gh.exe` on the Windows runner (the design uses `BOOTSTRAP_GH`).
+  - macOS `/bin/bash` being 3.2.
+  - Durations of the CI waits.
+  - Whether the Claude GitHub App needs the new repo added by hand.
+  - Whether fine-grained tokens can create repos without "All repositories" access.
+  - Nothing was run against real GitHub: agents cannot create or delete repos.
+
+  ## Checked by Clead against the repo (2026-10-01)
+
+  Confirmed: `npm ci` in the node, web and react-native `ci.yml`; every pack's `ci.yml` has a single job `build`; `[DATE]` is a real placeholder in `docs/SPEC.md` and the stub `docs/NEXT_SESSION.md`, and a format token in `memory/roles.md` and `docs/CROG_ONBOARDING.md`; `docs/DEV_INFRASTRUCTURE.md` links `languages/<pack>/code-standards.md`; the stub README says "(step 2 above)"; `tools/layout-pack.sh` has the layout table and leaves out `code-standards.md` and the web deploy files; `bootstrapper-test` runs on `ubuntu-latest` only today (the spec adds a matrix); "Adam" is hard-coded in the shipped docs.
+
 ---
 
 ## Phase 2 — Validate unproven pieces
