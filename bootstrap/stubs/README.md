@@ -34,7 +34,12 @@ these steps once, then delete this whole section.
    | react-native: `starter/src/` | `src/` |
 
    Then follow the pack's `code-standards.md` ("First-time setup"). Once
-   the pack is in place you can delete the `languages/` folder.
+   the pack is in place, clean up `languages/`: delete the other packs,
+   and in the pack you used delete everything except `code-standards.md`
+   (for the web pack, copy the deploy files out first if you want them).
+   This is required: left as it is, the folder breaks the project's own
+   CI, because Biome stops on the nested pack configs and Jest runs the
+   other packs' tests.
 2. **Turn on branch protection** for `main` (Settings, Branches): require
    a pull request with **no** required approvals (every PR is opened
    under your own account, and GitHub does not let authors approve their
