@@ -316,6 +316,17 @@ test_file_name_cannot_inject_a_workflow_command() {
   ! grep -q '^::warning::' <<<"$CHECK_OUT" || die "a file name produced a workflow command: $CHECK_OUT"
 }
 
+test_escaping_covers_percent_and_carriage_return() {
+  local w; w="$(new_repo p13)"
+  branch "$w" feat
+  put "$w" "src/100%.ts"; put "$w" "$(printf 'src/b\r::warning::x.ts')"; commit "$w" "odd names"
+  run_check "$w" "$BASE" "${NODE[@]}"
+  expect_rc 1
+  expect_line "code: src/100%25.ts"
+  expect_line "code: src/b%0D::warning::x.ts"
+  ! grep -q "$(printf '\r')" <<<"$CHECK_OUT" || die "a raw carriage return reached the log"
+}
+
 # ---------- Test-exempt trailer ----------
 
 test_trailer_with_reason_passes_and_prints_it() {
@@ -388,7 +399,11 @@ test_pull_request_compares_with_its_own_base_branch() {
   # The base is whatever the pull request targets, not always main.
   local w; w="$(new_repo r7)"
   git -C "$w" push -q origin main:release 2>/dev/null
-  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  # main moves on, so origin/main and origin/release really differ: a
+  # check that used the wrong base would see main's later test file.
+  put "$w" src/later.test.ts; commit "$w" "main moved after release was cut"; on_main "$w"
+  git -C "$w" checkout -q -b feat origin/release
+  put "$w" src/a.ts; commit "$w" "code"
   git -C "$w" fetch -q origin
   git -C "$w" checkout -q --detach origin/release
   git -C "$w" merge -q --no-ff -m "Merge feat into release" feat
@@ -571,8 +586,8 @@ test_several_exemptions_are_all_shown() {
   expect_line "exempt: first reason"
   expect_line "exempt: second reason"
   expect_out "::notice::"
-  grep -F "::notice::" <<<"$CHECK_OUT" | grep -qF "first reason" || die "notice lacks the first reason"
-  grep -F "::notice::" <<<"$CHECK_OUT" | grep -qF "second reason" || die "notice lacks the second reason"
+  # git log lists the newest commit first; reasons are joined with "; ".
+  grep -qF "reason: second reason; first reason" <<<"$CHECK_OUT" || die "notice lacks both reasons, joined: $CHECK_OUT"
 }
 
 # ---------- run ----------

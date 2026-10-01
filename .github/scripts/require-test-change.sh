@@ -73,7 +73,8 @@ done
 git rev-parse --git-dir >/dev/null 2>&1 || die2 "not inside a git repository"
 # Always see the whole repository, whatever directory this runs from (and
 # whatever diff.relative says).
-cd "$(git rev-parse --show-toplevel)" || die2 "cannot find the top of the repository"
+top="$(git rev-parse --show-toplevel)" || die2 "not inside a work tree (a bare repository has no files to compare)"
+cd "$top"
 
 summary() {
   if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then printf '%s\n' "$@" >>"$GITHUB_STEP_SUMMARY"; fi
@@ -159,7 +160,7 @@ done <<<"$trailers"
 # a newline, and "::warning::..." at the start of a line would run.
 escape() {
   local s="$1"
-  s="${s//%/%25}"
+  s="${s//\%/%25}"
   s="${s//$'\r'/%0D}"
   s="${s//$'\n'/%0A}"
   printf '%s' "$s"
