@@ -135,9 +135,9 @@ tests, so it is only safe once branch protection requires `build`.
 ### 6. Commits, branches and pull requests
 
 - **One PR, one change.** Unrelated changes never share a PR.
-- **Branch names:** `feature/<short-description>` or
-  `fix/<short-description>`, e.g. `feature/udp-listener`,
-  `fix/multicast-join-error`.
+- **Branch names:** `feat/<short-description>`,
+  `fix/<short-description>` or `docs/<short-description>`, e.g.
+  `feat/udp-listener`, `fix/multicast-join-error`.
 - **Commit messages:** imperative, present tense, specific. Say what the
   commit does, not what you did. Good: `Add configurable UDP listener
   with multicast support`. Bad: `Added stuff`, `WIP`, `fix`.
