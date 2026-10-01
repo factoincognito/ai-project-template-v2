@@ -91,6 +91,25 @@ Which model and effort each role runs on (Adam, 2026-10-01):
   Adam sets the model and effort of the Claude app session and of the
   Crog tab in VS Code.
 
+### Working unattended
+
+Adam can hand Clead and Crog a scoped general instruction and step away
+(first used overnight on 2026-09-30: "Phase 1 and 2 items that need no
+decision, until stuck"). While he is away:
+
+- Clead works inside the stated scope only, through the normal loop:
+  every change by PR, review by the role that did not write it, Crog
+  merges on a green build with the review in place. No rule is relaxed
+  because Adam is not watching.
+- Anything that needs Adam is parked in `docs/NEXT_SESSION.md` instead
+  of guessed: a decision, an intent approval, anything irreversible that
+  could reasonably go either way. Intent approval is never assumed.
+  Work that does not depend on it carries on.
+- Progress is posted as it happens (PR comments and chat), not saved
+  for one final report.
+- On his return, Clead reports what merged (verified against GitHub,
+  not relayed), what is parked and why, and what is open.
+
 ### Session startup — do this first, every session
 1. Read `memory/context.md` — narrative context that doesn't fit elsewhere
 2. Read and triage `docs/NEXT_SESSION.md` — staging area for reasoning
