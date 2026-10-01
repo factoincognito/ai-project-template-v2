@@ -75,14 +75,6 @@ session, the rest were not touched. Items 8 and 9 are new.
 
 ---
 
-### 8. Backlog decisions waiting for Adam — mostly resolved (2026-10-01)
-
-Adam decided every item on 2026-10-01; the results are in the repo (PRs #73-#81: public-repo rule, template licence, branch prefixes, trigger IDs removed, PBI-1.4 / 2.2 / 4.2 decisions, PBI-1.13). One item still needs Adam's own hands:
-- **Repo setting "Automatically delete head branches":** turn it on (Settings, General). Agents get 403 on branch deletion. The merged branches already on the remote must be deleted by hand.
-**Action:** Adam does the click; delete this item once the setting is on and the old branches are gone.
-
----
-
 ### 9. Autonomous batches work — new (2026-09-30)
 
 **What happened:** Adam gave one general instruction before sleeping ("pick up whatever you can from phase 1 and 2 which does not require my involvement; work until you get stuck"). Clead and Crog shipped five PRs (#63-#67) through the normal review loop: Crog wrote #63, #65 and #66 and Clead reviewed them; Clead wrote #64 and #67 and Crog reviewed them. Each role caught real errors in the other's work (a docs claim that overstated a pack in #65; a wrong conclusion about API credentials in #67). Progress was posted as it happened.
