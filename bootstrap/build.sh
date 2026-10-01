@@ -158,3 +158,5 @@ fi
 mkdir -p "$OUT"
 cp -a "$STAGE/." "$OUT/"
 echo "Built bootstrapper $VERSION from $COMMIT into $OUT ($(list_rel "$OUT" | wc -l | tr -d ' ') files)"
+
+# throwaway line: a code change with no test change, to prove the check goes red. Never merge.
