@@ -31,6 +31,11 @@ Coverage percentage and test count are necessary but not sufficient.
 - Are all non-trivial error paths and recovery behaviours represented?
 - For every error path, is there a test verifying correct recovery —
   not just that a warning was logged?
+- Was the red run shown before the implementation? If not, ask for it.
+- A green test-change check only proves some test file changed. Do the
+  changed tests exercise the changed code?
+- Each `Test-exempt:` reason: is it true, and is there really nothing a
+  test could check?
 
 ## 5. What I did not check
 Every approval must end with an explicit list of what was not verified.

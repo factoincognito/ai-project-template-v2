@@ -9,6 +9,7 @@
 - **Exception chaining** — inside `except`, always `raise XxxError(...) from exc` (Ruff `B904` enforces it)
 - **Cross-platform paths** — `pathlib.Path` for all file paths, never string concatenation (Ruff `PTH` enforces it)
 - **pytest** for testing — minimum 80% line coverage of `src/` enforced in CI; `src/tests/` itself is not counted
+- **Test first** — write the failing test in `src/tests/` and run it red before the code; `build` fails a pull request that changes `src/` without changing a test (see `CLAUDE.md`, Both agents: test first).
 - **No hardcoded values** — everything configurable via config file, environment variable or CLI
 - **Run as a module, from the project root** — `python -m src.<module>.main`, never `python src/<module>/main.py`. Run as a script, `from src.<module> import ...` fails with `ModuleNotFoundError: No module named 'src'`, on every OS.
 
@@ -56,6 +57,27 @@ pytest --cov=src --cov-report=term-missing
 # Run the application (always from the project root)
 python -m src.<module>.main
 ```
+
+### Test-first check in CI
+
+After the checkout, the first step of `build` is
+`.github/scripts/require-test-change.sh`. It fails a pull request that
+changes code without changing a test. Code is
+everything under `src/`. Tests are everything under `src/tests/`
+(`test_*.py`, `conftest.py` and helpers there). Config (`pyproject.toml`,
+the requirements files, `ci.yml`) is not code for this check; the other
+CI steps still run on it.
+
+To run the check locally, give it the base to compare with (the same line
+exits 2 outside CI without it):
+
+```bash
+git fetch origin && TEST_FIRST_BASE=origin/main bash .github/scripts/require-test-change.sh --code 'src/*' --test 'src/tests/*'
+```
+
+A change no test can check carries a `Test-exempt: <reason>` commit
+trailer; the failing check prints the exact command. The check sees file
+names only: whether a test exercises the code is for review.
 
 ### Known gotcha: `MagicMock(spec=...)` inside `patch`
 

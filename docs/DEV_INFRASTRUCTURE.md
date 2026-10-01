@@ -108,7 +108,11 @@ template's.
 **CI runs on every push to any branch and on every pull request to
 `main`** (GitHub Actions, `.github/workflows/ci.yml`). A new project
 starts with a stub `ci.yml` that only checks out the code; the language
-pack's `ci.yml` replaces it.
+pack's `ci.yml` replaces it. The stub has no test-first check because,
+with no pack, there is no `src/` to define code by. In the template
+repository itself `ci.yml` is not the stub: its `build` runs the same
+check, with patterns for the template's scripts, workflows and pack
+files.
 
 The rules every pack's CI follows:
 
@@ -117,6 +121,15 @@ The rules every pack's CI follows:
   check that never arrives, until the required check is changed too.
 - **Green on day one.** A fresh project passes its own CI with no
   changes; each pack ships a placeholder or starter test for that.
+- **A code change comes with a test change.** After the checkout, the
+  first step of `build` runs `.github/scripts/require-test-change.sh` with the pack's patterns
+  and fails a pull request that changes code without changing a test. A
+  change no test can check carries a `Test-exempt: <reason>` commit
+  trailer, which the job summary shows for the reviewer. The checkout
+  needs `fetch-depth: 0` so the base branch is there to compare with. The
+  check sees file names only: whether the test exercises the code is for
+  review. To run it locally, give it the base with `TEST_FIRST_BASE`;
+  each pack's `code-standards.md` has the full command.
 - **CI enforces what a tool can check.** Where `code-standards.md`
   states a rule a tool can check (types, lint, formatting, the 80% line
   coverage gate), CI fails when it is broken. Rules no tool checks are

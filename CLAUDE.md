@@ -1,6 +1,25 @@
 # [PROJECT NAME] — Agent Entry Point
 
-This file is read by two agents. Read your section only.
+This file is read by two agents. Read this section and your own.
+
+---
+
+## Both agents: test first
+
+Test first, and nothing is claimed as working without a check that has
+run. Before changing behaviour, write a check that fails without the
+change and run it to see it fail; then make it pass. Say "done",
+"works" or "fixed" only after a check that tests that exact claim has
+run and passed, and name it. This covers code, scripts, CI workflows and
+config that changes what is built; prose (docs, backlog, decisions,
+notes) is exempt. Any other exception is stated in a `Test-exempt:
+<reason>` trailer line in a commit message, which CI shows and the
+reviewer judges. Once a language pack's CI is in place, its `build`
+fails a pull request that changes code (in a project, `src/`, and
+`index.html` for the web pack) without changing a test; what counts as
+code and as a test is listed in that step of `.github/workflows/ci.yml`.
+Details: `docs/CROG_ONBOARDING.md` (TDD rules), `memory/standards.md`
+(review).
 
 ---
 
