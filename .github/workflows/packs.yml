@@ -115,10 +115,16 @@ jobs:
           git -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Source change without a test"
           cmd="$(sed -n 's/^ *run: //p' .github/workflows/ci.yml | grep -F require-test-change.sh)"
           [ -n "$cmd" ]
+          # The refusal is the point of this step: stop workflow commands so
+          # its ::error:: does not show as an annotation on a green job, and
+          # keep it out of the job summary.
+          token="stop-$RANDOM$RANDOM$RANDOM"
+          echo "::stop-commands::$token"
           set +e
-          TEST_FIRST_BASE=main bash -c "$cmd"
+          env -u GITHUB_STEP_SUMMARY TEST_FIRST_BASE=main bash -c "$cmd"
           rc=$?
           set -e
+          echo "::$token::"
           [ "$rc" -eq 1 ]
 
 
@@ -205,10 +211,16 @@ jobs:
           git -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Source change without a test"
           cmd="$(sed -n 's/^ *run: //p' .github/workflows/ci.yml | grep -F require-test-change.sh)"
           [ -n "$cmd" ]
+          # The refusal is the point of this step: stop workflow commands so
+          # its ::error:: does not show as an annotation on a green job, and
+          # keep it out of the job summary.
+          token="stop-$RANDOM$RANDOM$RANDOM"
+          echo "::stop-commands::$token"
           set +e
-          TEST_FIRST_BASE=main bash -c "$cmd"
+          env -u GITHUB_STEP_SUMMARY TEST_FIRST_BASE=main bash -c "$cmd"
           rc=$?
           set -e
+          echo "::$token::"
           [ "$rc" -eq 1 ]
 
 
@@ -281,10 +293,16 @@ jobs:
           git -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Source change without a test"
           cmd="$(sed -n 's/^ *run: //p' .github/workflows/ci.yml | grep -F require-test-change.sh)"
           [ -n "$cmd" ]
+          # The refusal is the point of this step: stop workflow commands so
+          # its ::error:: does not show as an annotation on a green job, and
+          # keep it out of the job summary.
+          token="stop-$RANDOM$RANDOM$RANDOM"
+          echo "::stop-commands::$token"
           set +e
-          TEST_FIRST_BASE=main bash -c "$cmd"
+          env -u GITHUB_STEP_SUMMARY TEST_FIRST_BASE=main bash -c "$cmd"
           rc=$?
           set -e
+          echo "::$token::"
           [ "$rc" -eq 1 ]
 
 
@@ -357,8 +375,14 @@ jobs:
           git -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Source change without a test"
           cmd="$(sed -n 's/^ *run: //p' .github/workflows/ci.yml | grep -F require-test-change.sh)"
           [ -n "$cmd" ]
+          # The refusal is the point of this step: stop workflow commands so
+          # its ::error:: does not show as an annotation on a green job, and
+          # keep it out of the job summary.
+          token="stop-$RANDOM$RANDOM$RANDOM"
+          echo "::stop-commands::$token"
           set +e
-          TEST_FIRST_BASE=main bash -c "$cmd"
+          env -u GITHUB_STEP_SUMMARY TEST_FIRST_BASE=main bash -c "$cmd"
           rc=$?
           set -e
+          echo "::$token::"
           [ "$rc" -eq 1 ]
