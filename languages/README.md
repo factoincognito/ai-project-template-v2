@@ -71,7 +71,7 @@ Every pack follows the same shape. A new pack should too:
    did not write it (see `CLAUDE.md`, "Change execution model").
 
 In the template repository
-(https://github.com/sugose/ai-project-template-v2), each pack is also
+(https://github.com/factoincognito/ai-project-template-v2), each pack is also
 tested on GitHub's own runners on every pull request, by the
 template-only workflow `.github/workflows/packs.yml` and the layout
 script `tools/layout-pack.sh`. A new pack gets a job there, and its

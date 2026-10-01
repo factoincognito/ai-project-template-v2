@@ -31,7 +31,7 @@ Remote Control from a cloud Clead session: not reachable).
 
 Neither is built or tested yet. The design, the dead ends already
 investigated and the related backlog items are in the template repo:
-https://github.com/sugose/ai-project-template-v2 (`memory/decisions.md`,
+https://github.com/factoincognito/ai-project-template-v2 (`memory/decisions.md`,
 "Path B").
 
 ## Review Routine — input contract (hard constraint)

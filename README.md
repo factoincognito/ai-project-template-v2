@@ -14,7 +14,7 @@ this repo: `CLAUDE.md` is the entry point.
 - A GitHub account, and git
 
 ### Creating a project from the template
-1. Create the repo from the bootstrapper, `sugose/ai-project-bootstrap`,
+1. Create the repo from the bootstrapper, `factoincognito/ai-project-bootstrap`,
    with "Use this template". The bootstrapper is built from this repo by
    a release pipeline (backlog PBI-1.10) and does not exist until that
    pipeline's first release; until then there is no clean way to

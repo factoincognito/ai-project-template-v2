@@ -7,7 +7,7 @@
 # - A pushed v* tag: run the tests and the pack chain test (packs.yml:
 #   build the bootstrapper, create a project from it, run each pack's
 #   CI), refuse unless the tagged commit is on main, build, and publish
-#   the output to the default branch of sugose/ai-project-bootstrap as
+#   the output to the default branch of factoincognito/ai-project-bootstrap as
 #   one commit, then push the same tag there. Needs the Actions secret
 #   BOOTSTRAP_PUSH_TOKEN (fine-grained, that repo only, Contents and
 #   Workflows: read and write).
@@ -45,7 +45,7 @@ jobs:
       group: bootstrapper-publish
       cancel-in-progress: false
     env:
-      BOOTSTRAP_REPO: sugose/ai-project-bootstrap
+      BOOTSTRAP_REPO: factoincognito/ai-project-bootstrap
     steps:
       - uses: actions/checkout@v7
         with:

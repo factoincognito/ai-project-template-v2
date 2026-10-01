@@ -13,7 +13,7 @@
 set -euo pipefail
 export LC_ALL=C
 
-SOURCE_REPO="sugose/ai-project-template-v2"
+SOURCE_REPO="factoincognito/ai-project-template-v2"
 
 err() { echo "publish.sh: error: $*" >&2; }
 fail() { err "$@"; exit 1; }

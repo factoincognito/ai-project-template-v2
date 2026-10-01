@@ -97,7 +97,7 @@ green. Then close it without merging. A setting that shows as "on" is
 not proof on its own.
 
 **In the template repo.** The template's own `main`
-(https://github.com/sugose/ai-project-template-v2) is protected the
+(https://github.com/factoincognito/ai-project-template-v2) is protected the
 same way, with two required checks: `build` and `bootstrapper-test`.
 The second tests the template's release pipeline, which projects do not
 have. A project sets its own required checks and does not copy the
@@ -161,7 +161,7 @@ management (until there is a secret).
 Each pack's `code-standards.md` is the reference for its rules and
 commands. It sits in `languages/<pack>/` in a new project; if that
 folder has been deleted after setup, the same file is in the template
-repo at https://github.com/sugose/ai-project-template-v2/tree/main/languages.
+repo at https://github.com/factoincognito/ai-project-template-v2/tree/main/languages.
 
 ### Python (`python` pack)
 

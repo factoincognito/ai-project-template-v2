@@ -8,4 +8,4 @@ All notable changes to [PROJECT NAME] are documented here.
 
 - Bootstrapped from the Clead + Crog project template
   {{TEMPLATE_VERSION}}, built from
-  sugose/ai-project-template-v2@{{TEMPLATE_COMMIT}}.
+  factoincognito/ai-project-template-v2@{{TEMPLATE_COMMIT}}.
