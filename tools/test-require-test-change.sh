@@ -688,6 +688,182 @@ test_template_ci_workflow_is_wired_to_the_check() {
   grep -qE '^  build:$' "$TEMPLATE_CI" || die "the job is not named build"
 }
 
+# ---------- each pack's own ci.yml ----------
+# As for the template: the patterns come from the exact `run:` line in
+# languages/<pack>/ci.yml. The fixture is a real project made the way the
+# chain test makes it: the bootstrapper's build output on main, and the
+# pack laid out on a `setup` branch (the setup pull request).
+
+PACKS="node web python react-native"
+
+pack_args() {
+  local line
+  line="$(sed -n 's|^ *run: bash \.github/scripts/require-test-change\.sh ||p' "$REPO/languages/$1/ci.yml")"
+  [ -n "$line" ] || die "languages/$1/ci.yml has no require-test-change run line"
+  [ "$(printf '%s\n' "$line" | wc -l)" -eq 1 ] || die "languages/$1/ci.yml has more than one require-test-change run line"
+  # Same caveat as for the template: a trailing comment or `;` fails loudly.
+  eval "PACK_ARGS=($line)"
+}
+
+# The bootstrapper output, built once per run (tests run in subshells, so
+# it is cached on disk).
+bootstrapper_output() {
+  local d="$WORK/bootstrapper-output"
+  if [ ! -d "$d" ]; then
+    bash "$REPO/bootstrap/build.sh" "$d" v0.0.0 0123456789abcdef0123456789abcdef01234567 >/dev/null \
+      || die "could not build the bootstrapper"
+  fi
+  echo "$d"
+}
+
+# project_repo <pack> <name>: a repo whose main is the bootstrapper output
+# and whose branch `setup` has the pack laid out (languages/ deleted), the
+# way PBI-1.14's setup pull request will. Prints the clone's path; leaves
+# the clone on `setup`.
+project_repo() {
+  local pack="$1" d="$WORK/$2" bo
+  bo="$(bootstrapper_output)"
+  mkdir -p "$d"
+  git init -q --bare -b main "$d/origin.git"
+  git clone -q "$d/origin.git" "$d/w" 2>/dev/null
+  git -C "$d/w" config user.name test
+  git -C "$d/w" config user.email test@example.invalid
+  git -C "$d/w" config commit.gpgsign false
+  cp -a "$bo/." "$d/w/"
+  git -C "$d/w" add -A
+  commit "$d/w" "bootstrapper output"
+  git -C "$d/w" push -q -u origin main 2>/dev/null
+  branch "$d/w" setup
+  PACKS_DIR="$bo/languages" bash "$REPO/tools/layout-pack.sh" "$pack" "$d/pack" >/dev/null
+  cp -a "$d/pack/." "$d/w/"
+  rm -rf "$d/w/languages"
+  git -C "$d/w" add -A
+  commit "$d/w" "set up the $pack pack"
+  echo "$d/w"
+}
+
+# After the setup change is merged: a fresh branch off main.
+after_setup() {
+  git -C "$1" checkout -q main
+  git -C "$1" merge -q --ff-only setup
+  git -C "$1" push -q origin main 2>/dev/null
+  git -C "$1" checkout -q -b change
+}
+
+pack_code_file() { case "$1" in python) echo src/feature.py ;; *) echo src/feature.ts ;; esac; }
+pack_test_file() {
+  case "$1" in
+    python) echo src/tests/test_feature.py ;;
+    react-native) echo src/feature.test.tsx ;;
+    *) echo src/feature.test.ts ;;
+  esac
+}
+
+test_every_pack_accepts_its_own_setup_change() {
+  # Green on day one: the pull request that lays the pack out must pass the
+  # pack's own check (node adds only a test; the others add code with tests).
+  local p w
+  for p in $PACKS; do
+    pack_args "$p"
+    w="$(project_repo "$p" "setup-$p")"
+    run_check "$w" "$BASE" "${PACK_ARGS[@]}"
+    [ "$CHECK_RC" -eq 0 ] || die "$p: setup change refused (exit $CHECK_RC): $CHECK_OUT"
+  done
+}
+
+test_every_pack_refuses_source_without_a_test_and_accepts_it_with_one() {
+  local p w
+  for p in $PACKS; do
+    pack_args "$p"
+    w="$(project_repo "$p" "change-$p")"
+    after_setup "$w"
+    put "$w" "$(pack_code_file "$p")"; commit "$w" "code only"
+    run_check "$w" "$BASE" "${PACK_ARGS[@]}"
+    [ "$CHECK_RC" -eq 1 ] || die "$p: code without a test not refused (exit $CHECK_RC): $CHECK_OUT"
+    grep -qxF "code: $(pack_code_file "$p")" <<<"$CHECK_OUT" || die "$p: code file not named: $CHECK_OUT"
+    put "$w" "$(pack_test_file "$p")"; commit "$w" "and its test"
+    run_check "$w" "$BASE" "${PACK_ARGS[@]}"
+    [ "$CHECK_RC" -eq 0 ] || die "$p: code with a test refused (exit $CHECK_RC): $CHECK_OUT"
+  done
+}
+
+test_every_pack_treats_config_and_docs_as_not_code() {
+  # Config still gets the type check, lint and tests; it does not need a test.
+  local p w cfg
+  for p in $PACKS; do
+    pack_args "$p"
+    w="$(project_repo "$p" "config-$p")"
+    after_setup "$w"
+    case "$p" in python) cfg=pyproject.toml ;; *) cfg=package.json ;; esac
+    printf '\n' >>"$w/$cfg"; git -C "$w" add "$cfg"
+    printf '\n' >>"$w/.github/workflows/ci.yml"; git -C "$w" add .github/workflows/ci.yml
+    put "$w" docs/notes.md "words"
+    commit "$w" "config and docs"
+    run_check "$w" "$BASE" "${PACK_ARGS[@]}"
+    [ "$CHECK_RC" -eq 0 ] || die "$p: config/docs change refused (exit $CHECK_RC): $CHECK_OUT"
+  done
+}
+
+test_every_pack_counts_the_tests_it_runs() {
+  # A test file alone passes; the other forms the pack's test runner picks up
+  # by default count as tests too.
+  local p w f
+  for p in node web react-native; do
+    pack_args "$p"
+    for f in src/a.spec.ts src/__tests__/a.ts; do
+      w="$(project_repo "$p" "forms-$p-$RANDOM")"
+      after_setup "$w"
+      put "$w" "$f"; commit "$w" "test form"
+      run_check "$w" "$BASE" "${PACK_ARGS[@]}"
+      [ "$CHECK_RC" -eq 0 ] || die "$p: $f not counted as a test (exit $CHECK_RC): $CHECK_OUT"
+      grep -qxF "test: $f" <<<"$CHECK_OUT" || die "$p: $f not listed as a test"
+    done
+  done
+  pack_args python
+  w="$(project_repo python "forms-python")"
+  after_setup "$w"
+  put "$w" src/tests/conftest.py; commit "$w" "fixture helper"
+  run_check "$w" "$BASE" "${PACK_ARGS[@]}"
+  [ "$CHECK_RC" -eq 0 ] || die "python: conftest.py not counted as a test: $CHECK_OUT"
+}
+
+test_web_pack_counts_the_page_as_code_and_e2e_as_tests() {
+  local w
+  pack_args web
+  w="$(project_repo web "web-page")"
+  after_setup "$w"
+  printf '<!-- changed -->\n' >>"$w/index.html"; git -C "$w" add index.html; commit "$w" "page only"
+  run_check "$w" "$BASE" "${PACK_ARGS[@]}"
+  [ "$CHECK_RC" -eq 1 ] || die "web: an index.html change without a test was not refused: $CHECK_OUT"
+  grep -qxF "code: index.html" <<<"$CHECK_OUT" || die "web: index.html not listed as code"
+  put "$w" e2e/feature.e2e.ts; commit "$w" "browser test"
+  run_check "$w" "$BASE" "${PACK_ARGS[@]}"
+  [ "$CHECK_RC" -eq 0 ] || die "web: an e2e test did not satisfy the check: $CHECK_OUT"
+}
+
+# assert_wired_to_check <ci.yml> <label>: the file's one job runs the check as
+# its second step, right after a checkout with full history.
+assert_wired_to_check() {
+  local f="$1" label="$2" job step1 step2
+  job="$(awk '/^  build:/ { injob = 1; next } /^  [a-z][a-z-]*:/ { injob = 0 } injob' "$f")"
+  [ -n "$job" ] || die "$label: no build job"
+  step1="$(awk '/^      - / { n++ } n == 1' <<<"$job")"
+  step2="$(awk '/^      - / { n++ } n == 2' <<<"$job")"
+  grep -qE 'uses: actions/checkout@' <<<"$step1" || die "$label: the first step is not the checkout"
+  grep -qF 'fetch-depth: 0' <<<"$step1" || die "$label: the checkout lacks fetch-depth: 0"
+  grep -qF 'bash .github/scripts/require-test-change.sh' <<<"$step2" || die "$label: the check is not the step right after the checkout"
+  ! grep -qE '^ *(if:|continue-on-error:)' <<<"$step2" || die "$label: the check step is conditional or may fail silently"
+  [ "$(grep -cE '^  [a-z][a-z-]*:$' <<<"$(sed -n '/^jobs:/,$p' "$f")")" -eq 1 ] || die "$label: must keep a single job, named build"
+  grep -qE '^  build:$' "$f" || die "$label: the job is not named build"
+}
+
+test_every_pack_ci_workflow_is_wired_to_the_check() {
+  local p
+  for p in $PACKS; do
+    assert_wired_to_check "$REPO/languages/$p/ci.yml" "$p ci.yml"
+  done
+}
+
 # ---------- run ----------
 
 TESTS=$(declare -F | awk '{print $3}' | grep '^test_')
