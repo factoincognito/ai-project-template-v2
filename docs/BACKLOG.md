@@ -74,7 +74,9 @@ get a working project in any supported language.
   app.json, tsconfig.json, biome.json, gitignore, vscode settings,
   placeholder test. Adapt to v2 structure.
 
-- **[LATER] PBI-1.4** — Write the v2 bootstrap wizard (`BOOTSTRAP.md`)
+- **[LATER] PBI-1.4** (Adam, 2026-10-01: keep LATER; the bootstrapper plus
+  `tools/layout-pack.sh` cover most of it, and a small "lay out pack X"
+  step in the bootstrapper could replace the wizard) — Write the v2 bootstrap wizard (`BOOTSTRAP.md`)
   — guided setup via Claude chat, branches on new project vs migration
   from existing project, generates all project files for chosen language,
   produces Crog setup prompt. Migration branch must ask: source repo,
@@ -245,7 +247,8 @@ autonomy. Use a real project as the pilot: acuteping (decided
   diffs. The `review.yml` workflow posts a marker comment — confirm
   this fires correctly and Clead can read it to trigger review.
 
-- **[LATER] PBI-2.2** — Start Clead's review automatically when a PR
+- **[LATER] PBI-2.2** (Adam, 2026-10-01: not approved as written; both
+  design points below stay unresolved, so nothing is built) — Start Clead's review automatically when a PR
   opens, instead of Clead having to notice it. Reworded 2026-09-30:
   the original premise (confirm the GitHub connector can write) is
   superseded; see PBI-2.3's findings. Possible mechanism, not built or
@@ -356,7 +359,9 @@ third-layer reviewer for complex src PRs.
 
   **Confirmed 2026-07-23 (this session):** the Chrome-web-editor path is proven end-to-end. Clead edited memory/decisions.md directly through GitHub's web file editor via Chrome, committed to a new branch, and opened PR #34 with no Crog involvement and no local git — then squash-merged and deleted the branch the same way. Four PRs total (#31-#34) were authored, reviewed (verdicts posted directly on each PR), merged, and cleaned up entirely through Chrome this session. This confirms the practical goal of this PBI (Clead-authored doc-only PRs bypass Crog) via the Chrome-web-editor mechanism specifically. The local-sandbox git push/commit mechanism (via Bash) remains a separate, unconfirmed, hazard-prone capability — see the git-lock finding above — and is intentionally left open; Chrome is the proven default for doc-only changes going forward.
 
-- **[LATER] PBI-4.2** — Implement event-driven memory writes in CLAUDE.md.
+- **[DONE] PBI-4.2** (Adam, 2026-10-01: closed as done; CLAUDE.md already requires
+  event-based writes — "persist when a decision is made and when a PR
+  opens" under Session end — plus the `..wrap` flush) — Implement event-driven memory writes in CLAUDE.md.
 
   ## Reframe (from Cowork-Clead, 2026-06-27)
   Persistence is never automatic on session end. It only happens if
