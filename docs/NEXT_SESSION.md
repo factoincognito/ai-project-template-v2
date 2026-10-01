@@ -13,14 +13,14 @@
 Written 2026-10-02 so nothing depends on anyone remembering. **The next Clead session lists this to Adam in its first reply and removes each line when Adam confirms it is done.** Agents cannot do these: the access proxy returns 403 on branch deletion and on the Actions and secrets settings, and branch protection and tokens are GitHub account settings.
 
 1. **Start the new Clead session with `factoincognito/ai-project-template-v2` as its source, with push access.** A session bound to the old `sugose/` path cannot reach the moved repo. (The session attaches `factoincognito/ai-project-bootstrap` itself.)
-2. **Answer two questions** (item 8): (a) `--resume` on a repo stamped by an older bootstrapper: refuse, or finish with the current script's tables? (b) Is holding every release tag until PBI-1.14's slice S15 merges acceptable (acuteping then waits for PBI-1.14, or is set up by hand)? Say "go" after answering and S1 and S3 start.
+2. **Answer two questions** (item 8): (a) `--resume` on a repo stamped by an older bootstrapper: refuse, or finish with the current script's tables? (b) is answered (2026-10-02): release v2.3.0 before S1, then no tag until S15 merges. Say "go" after answering (a) and S1 and S3 start, once v2.3.0 is verified.
 3. **Fix the bootstrapper's `main` protection** (item 7). In `factoincognito/ai-project-bootstrap`: Settings, Branches, the rule for `main`, Edit. Untick "Require a pull request before merging". Untick "Require status checks to pass before merging". Untick "Do not allow bypassing the above settings". Keep "Allow force pushes" and "Allow deletions" unticked (that is what blocks them). Save. Then tell the session; it re-reads the rule through the API. Why: the release publishes with one direct push of a new commit and the tag to `main`, which the current settings would reject.
-4. **Confirm the publish token** (item 7). GitHub, your profile, Settings, Developer settings, Fine-grained tokens, open the token. Check: resource owner is `factoincognito`; repository access includes `ai-project-bootstrap`; Contents and Workflows are both read and write; it has not expired; if the org requires approval for tokens, an org owner has approved it. The menu names are from memory of GitHub's UI and were not checked against its docs. Agents cannot read the token, so seeing it work needs a real push: the first release, or the optional token-check job in item 7 (Adam decides whether he wants it).
+4. **Publish token: done (2026-10-02).** Adam showed the fine-grained token `fi-bootstrap-publish`: owner `factoincognito`, repository access `ai-project-bootstrap` only, code and workflows read and write, expires 2027-10-02. Whether the secret `BOOTSTRAP_PUSH_TOKEN` holds this token is proven only by the v2.3.0 publish.
 5. **Delete two branches** in the template repo (Branches page, trash icon): `throwaway-red-check-pr` and `docs/next-session-old-clead-pending` (its content is in item 9, its PR was never opened).
 6. **Decide two small things** (item 10): whether CLAUDE.md should say that only one Clead session works on the template at a time (and that every session starts by listing open PRs and non-main branches); and, for PBI-1.16, whether the setting changes (recommended, step 3) or the backlog text does.
-7. **Later, when PBI-1.14 is built:** the end-to-end runs on throwaway repos, including PBI-1.17's red-then-`Test-exempt` pull request in a real project (PBI-1.17 stays `[NEXT]` until then); and pushing the release tag, which agents cannot do. No tag before items 3 and 4 are done.
+7. **Later, when PBI-1.14 is built:** the end-to-end runs on throwaway repos, including PBI-1.17's red-then-`Test-exempt` pull request in a real project (PBI-1.17 stays `[NEXT]` until then); and, after S15 merges, the next release tag, which agents cannot do.
 8. **If an agent has to change files in your connected PC folder,** it asks for delete permission once per session (a failed pull left a stale `.git/index.lock` last time). Your PC clone of the template is behind main and its `origin` points at the org; the session fast-forwards it after you grant that.
-9. **After the first release has published successfully (not before):** delete the old publish token `bootstrap-publish` in your GitHub token settings (the product-office session told you to wait for a successful release; which token that is was not checked), and tell the product-office session that the release is out. It waits for it and has no access to this repo's state except through you or this file (item 11).
+9. **After the first release has published successfully (not before):** delete the old publish token `bootstrap-publish` in your GitHub token settings (the new one is `fi-bootstrap-publish`; the product-office session told you to wait for a successful release), and tell the product-office session that the release is out. It waits for it and has no access to this repo's state except through you or this file (item 11).
 
 ---
 
@@ -35,7 +35,7 @@ Written 2026-10-02 so the order does not have to be re-derived. "Clead" is the n
 | Bootstrapper `main` protection fixed | Adam | Nothing (to-do 3); Clead re-reads it through the API afterwards |
 | Publish token confirmed | Adam | Nothing (to-do 4); only a real push proves it |
 | Release prep PR (rename Unreleased, date it, add PRs merged after #123) | Clead | Nothing, but write it just before the tag so it is complete |
-| Release tag `v*` | Adam, from the Releases page | Release prep merged; to-do 3 and 4 done; **and Adam's answer to question 2(b)**: his 2026-10-01 order held the tag until PBI-1.14 is built, while the product-office session's handoff recommends releasing sooner. Do not pick between them. |
+| Release tag `v*` | Adam, from the Releases page | v2.3.0: release prep merged and to-do 3 done (Adam decided 2026-10-02 to release before S1). The next tag after that: S15 merged. |
 | Release verified | Clead, through the API: the workflow run succeeded, bootstrapper `main` has the new commit, the tag exists | The tag. An auth error in the publish step means the token: fix that before anything else is built on the pipeline. |
 | Old token deleted, product-office session told | Adam | A verified release (to-do 9) |
 | End-to-end runs on throwaway repos; PBI-1.17 to `[DONE]` | Adam runs, Clead reads the results | PBI-1.14 built (to-do 7) |
@@ -51,8 +51,8 @@ runners on every PR; reviews and merges are delegated (CLAUDE.md, "Change
 execution model"). The test-first rule is in force at every level: the
 shared check, the template's `build`, the pack CIs and the docs are all
 merged. PBI-1.14 (the turn-key bootstrap script) is planned in 17 slices
-and not built (item 8). Adam's order: PBI-1.14, then acuteping; no release
-tag until item 7 closes. Several sessions worked on the template in
+and not built (item 8). Adam's order: v2.3.0 now, then PBI-1.14, then acuteping; no
+further tag until S15 merges. Several sessions worked on the template in
 parallel on 2026-10-01 and 2026-10-02; Adam consolidates them into one new
 session, which starts by reading this file, the open PRs and the branches.
 Items below are open staging entries; resolved ones are removed as they
@@ -138,8 +138,8 @@ graduate (see the rule above).
 **First slice:** S1. Tests first: the layout table lives only in the script; the script's `layout-pack` output equals the wrapper's for every pack; non-empty target refused; usage and unknown pack exit 2; the real build ships the script at the root, executable and LF; the script is bash 3.2 compatible and mentions no template-only path.
 **Questions for Adam (neither blocks S1):**
 1. `--resume` on a repo stamped by an older bootstrapper version (including repos already made with "Use this template"): refuse, or finish with the current script's tables? Blocks only S15.
-2. No release tag before S15 merges (a tag would publish a half-built script as the latest). Is that acceptable? It means acuteping waits for PBI-1.14 or is set up by hand.
-**Not started:** no slice is built yet. Adam answers the two questions and says go; then S1 and S3 start (S3 is independent), with an Opus Crog as implementer and an Opus reviewer for the code.
+2. Answered by Adam, 2026-10-02: v2.3.0 is released before S1 (nothing of PBI-1.14 ships in it), then no tag until S15 merges. acuteping waits for PBI-1.14 and the end-to-end runs either way (decision of 2026-10-01).
+**Not started:** no slice is built yet. Adam answers question 1 and says go, and v2.3.0 is verified; then S1 and S3 start (S3 is independent), with an Opus Crog as implementer and an Opus reviewer for the code.
 
 
 ### 9. Pending from the previous Clead session (PBI-1.17 build), staged on Adam's request — new (2026-10-02)
@@ -148,7 +148,7 @@ graduate (see the rule above).
 **Already done, so not pending (checked against `main` d5c0f76, 2026-10-02):** #113 (CHANGELOG for #95 to #112), #114 (PBI-1.15 marked done), #116 (PBI-1.17 PR 4: the docs, the spec text fix and the decision row).
 **Still pending:**
 - **Item 7 can close.** Adam reported on 2026-10-02 that `BOOTSTRAP_PUSH_TOKEN` is set and Actions is enabled on both repos. That settles the first two conditions. The third (the token can still push to the bootstrapper repo) is only proven by the first publish: publish runs only on a pushed `v*` tag and has no manual trigger. Whoever closes item 7 lifts the hold, and looks at the first publish run before calling the token good.
-- **Release prep.** `CHANGELOG.md` Unreleased lists everything up to #123; add whatever merges later. At release time, rename it to the next version and date it, as was done for 2.2.0. Clead's proposal is 2.3.0 (minor: bootstrapped projects gain the check and the pack CIs run it). The tags v2.1.0 and v2.2.0 exist, and publish refuses an existing tag. Agreed order (Adam, 2026-10-01): PBI-1.14 build, then Adam cuts the release tag, then Adam's end-to-end runs on throwaway repos, then acuteping.
+- **Release prep.** `CHANGELOG.md` Unreleased lists everything up to #123; add whatever merges later. At release time, rename it to the next version and date it, as was done for 2.2.0. Clead's proposal is 2.3.0 (minor: bootstrapped projects gain the check and the pack CIs run it). The tags v2.1.0 and v2.2.0 exist, and publish refuses an existing tag. Order (Adam, 2026-10-02, replacing his 2026-10-01 order): release v2.3.0 now, then the PBI-1.14 build with no tag until S15 merges, then Adam's end-to-end runs on throwaway repos, then acuteping.
 - **PBI-1.17 stays `[NEXT]`** until Adam's end-to-end runs show the red-then-exempt PR behaving as specified (see its "Done when").
 - **Not proven by any run yet (nothing claimed until one has run):** a real `pull_request` inside a bootstrapped project; the tag-push and `workflow_call` path of `packs.yml` (first release-tag run); real bash 3.2 and macOS/Windows git; the rendered job summary. The backlog already lists the first, third and fourth; the tag-push path is not in the backlog yet.
 - **By Adam, by hand** (agent sessions get 403 on both): delete the branch `throwaway-red-check-pr` (from the closed #109), and push the release tag. PBI-1.16 Part 1 (protect `main` on the bootstrapper repo) is still open.
@@ -171,7 +171,7 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 - **The boundary between sessions.** The product-office session works only in its own repo and learns template state from Adam or from this file. The template session owns the template and the bootstrapper. Private information (company structure, ideas, token expiry, library repos) stays in the product-office repo and never enters this public repo.
 - **After a release, in this order:** verify it through the API (the table above), report the result to Adam, then Adam deletes the old token and tells the product-office session (to-do 9). That session's next steps depend on the release; Clead cannot reach it.
 - **Its claim that this file's item 7 says the bootstrapper's `main` is not protected is out of date:** item 7 already records the protection as Adam set it, and why it would reject the release push. The facts in item 7 stand; to-do 3 is what changes it.
-- **It recommends 2.3.0** for the release, the same number as item 9. Whether to cut it before PBI-1.14 is built is Adam's open question 2(b), not decided.
+- **It recommends 2.3.0** for the release, the same number as item 9. Adam decided on 2026-10-02 to cut it before PBI-1.14 is built (to-do 2).
 - **The gate for acuteping** is PBI-1.14 built plus Adam's end-to-end runs; the product-office repo has its own step for that.
 - **Disposition of the Project doc:** once this item is triaged, the new session tells Adam the Project doc can be deleted from the Project. Agents do not delete it unasked.
 
