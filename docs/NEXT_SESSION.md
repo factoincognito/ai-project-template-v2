@@ -78,6 +78,26 @@ removed as they graduate (see the rule above).
 **Do not** create a repository under `sugose` named `ai-project-template-v2` or `ai-project-bootstrap`: GitHub deletes the redirect permanently.
 **Action:** when Adam confirms the token and Actions, record it here and delete this item. If the token cannot push, fix it before any tag.
 
+### 8. PBI-1.14 build plan: 17 slices, first slice ready — new (2026-10-02)
+
+**What this is:** a design draft by an Opus agent (read-only, from the approved spec and the repo as of PBI-1.17 done). Its repo claims come from reading files and are re-checked per slice; the spec is not changed by it.
+**Slices (one PR each, test-first, each shown red before the implementation):**
+- S1 layout table moves into `bootstrap/stubs/bootstrap-project.sh` (`layout-pack` subcommand); `tools/layout-pack.sh` becomes a wrapper. Ships.
+- S2 `build.sh` stamps the script version and commit, in place (the current `sed > tmp; mv` drops the executable bit). Ships.
+- S3 `packs.yml` uses the script's lockfile command (independent; touches `packs.yml` and `tools/test-layout-pack.sh`).
+- S4 test harness `bootstrap/test-bootstrap-project.sh`, test hooks, message helpers, wired into `bootstrapper-test`.
+- S5 `bootstrapper-test` becomes one aggregate check over an OS matrix (ubuntu, macOS, Windows).
+- S6 inputs and validation. S7 guided preflight, local checks. S8 guided preflight, GitHub checks. S9 create and protect. S10 local tree. S11 fill placeholders. S12 lockfile, licence, CHANGELOG. S13 self-check, commit, push, PR. S14 wait, require `build`, merge, finish, report. S15 resume, failures, private repos.
+- S16 `bootstrap/e2e-check.sh` (read-only checker for Adam's end-to-end runs). S17 docs and process, last.
+**Critical path:** S1, S2, S4, S6 to S15, S17. S3 can start now; S5 after S4; S16 after S5.
+**Cannot be verified in CI (Adam's end-to-end runs only):** GitHub timing and error texts after create, the protection PUT shape, private-repo clone and push, Git Bash prompts, `winget`, a lockfile made on Windows or macOS under `npm ci` on Linux, the unaided README run, and the red-then-`Test-exempt` PR in a real project.
+**Spec meets changed repo (to fix in the slice named):** the placement-table tests in `bootstrap/test.sh` pin both READMEs (S17); `test_workflow_bootstrapper_test_runs_the_require_test_change_tests` conflicts with the aggregate design (S5); the setup PR's tree must keep `.github/scripts/require-test-change.sh` (S10); stamps from releases before the org move name the old owner, so older repos cannot be resumed (S15).
+**First slice:** S1. Tests first: the layout table lives only in the script; the script's `layout-pack` output equals the wrapper's for every pack; non-empty target refused; usage and unknown pack exit 2; the real build ships the script at the root, executable and LF; the script is bash 3.2 compatible and mentions no template-only path.
+**Questions for Adam (neither blocks S1):**
+1. `--resume` on a repo stamped by an older bootstrapper version (including repos already made with "Use this template"): refuse, or finish with the current script's tables? Blocks only S15.
+2. No release tag before S15 merges (a tag would publish a half-built script as the latest). Is that acceptable? It means acuteping waits for PBI-1.14 or is set up by hand.
+**Not started:** no slice is built yet.
+
 ---
 
 ## Items that do not change
