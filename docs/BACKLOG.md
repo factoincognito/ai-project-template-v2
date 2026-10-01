@@ -430,7 +430,7 @@ get a working project in any supported language.
     - The five steps and the table become a three-line section: "If you see this, setup has not run: `<one command> --resume --owner … --name …`".
     - "Branch protection" drops "(step 2 above)" and points to `docs/DEV_INFRASTRUCTURE.md`.
     - "Use this template" is no longer the documented path, but it still works via `--resume`.
-  - **Template `README.md`.** "Creating a project from the template" becomes step 0 (install `gh`), the one command, and the list of what the script guides and what only the README covers. The stale "does not exist until…" text goes.
+  - **Template `README.md`.** "Creating a project from the template" becomes step 0 (install `gh`, log in, and on Windows install Git for Windows), the one command, and the list of what the script guides and what only the README covers. The stale "does not exist until…" text goes.
   - **`languages/README.md`.** "Every file has a place" points to the script's layout table, not the README tables.
   - **`docs/DEV_INFRASTRUCTURE.md`.** "Turning it on in a new project" says the script does this, and keeps the manual steps as the fallback.
   - **Backlog.**
@@ -457,14 +457,14 @@ get a working project in any supported language.
   - The README is written for the same reader: copy-paste blocks, no assumed tools, screenshots-free text that still names every button.
 
   **Guided steps in the script, and what only the README can cover.**
-Guided in the script, in three groups by when the failure shows:
+  Guided in the script, in three groups by when the failure shows:
   - Preflight (before anything exists; fix, re-check, continue): installing `git` (on macOS the `git` shim starts the Apple command-line tools install; on Linux the package-manager line is printed, never run with `sudo`), installing Node/npm for npm packs (the guide points to nodejs.org, because a distro's Node may be older than the one CI uses), the `workflow` scope refresh, and the git name and email.
   - Failed at create, step 2 (nothing exists; print steps, exit, plain re-run, not `--resume`): an org that refuses repo creation, and a token missing a permission.
   - Post-create (the repo exists; print steps, exit, `--resume`): a token missing a permission that first shows at step 3; Actions turned off in the org or repo, detected by a check right after step 3 (`repos/OWNER/NAME/actions/permissions`, UNVERIFIED) so it fails before the push, not as a timeout at step 15; the credential-helper fallback at step 13 (`gh auth setup-git`, with its own yes); and a private repo on a plan without protection (a menu: upgrade steps, switch to public, or `--allow-unprotected`).
   README only, because the script cannot exist or run without it: step 0 (install `gh`, log in, and on Windows install Git for Windows then close and reopen Git Bash so `gh` is on the PATH; one copy-paste block per OS with what the user will see after each. The login command is one exact line that already asks for the `workflow` scope, `gh auth login -h github.com -p https -w -s workflow`, with the instruction to answer Yes to "Authenticate Git". The flags exist per the gh manual; that they avoid every other prompt is UNVERIFIED); what to do after the script finishes (open the Claude app, add the new repo and start a chat, and, if the GitHub App is limited to selected repos, add the repo in GitHub settings, UNVERIFIED); org-admin and billing settings in more detail; deleting a throwaway repo. The README also lists every guide so a user can read them before running the script. The maintainer's release tag is not in the user README; it stays in `memory/decisions.md`.
 
   **Not possible without action outside the script (for Adam to accept).** Each of these is guided by the script or documented in the README, as above; none is done for the user.
-  1. Installing `gh` and Git for Windows (README step 0), and Node/npm for npm packs (guided).
+  1. Installing `gh` and Git for Windows (README step 0), and `git` on macOS and Linux and Node/npm for npm packs (guided).
   2. `gh auth login` (README step 0) and `gh auth refresh -s workflow` (guided). Both are a browser device-code step, although the script tells the user what to type.
   3. Private repos on GitHub Free: protection needs a paid plan (billing in the browser), or making the repo public.
   4. Org-owned repos: the org must allow repo creation and Actions, which only an org admin can change.
