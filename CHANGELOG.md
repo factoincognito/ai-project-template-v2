@@ -21,6 +21,11 @@ A bootstrapped project records the tag it was built from.
 - Removed NEXT_SESSION item 7 as obsolete (PR #87)
 - Added "Working unattended" to CLAUDE.md and graduated NEXT_SESSION item 9 (PR #88)
 - Applied the reviewers' wording notes from #85, #86 and #88 to CLAUDE.md and the decisions row (PR #89)
+- Added CHANGELOG entries for PRs #83-#89 (PR #90)
+- Staged the four wording notes from the #89 review as NEXT_SESSION item 6 (PR #91)
+- Recorded that the Clead and Crog Routines were deleted (PR #92)
+- Recorded two decisions in `memory/decisions.md`: the licence, and Crog agents staying inside Clead's session (PR #93)
+- Added the 2026-10-01 session to `memory/context.md` (PR #94)
 
 ## [2.2.0] — 2026-10-01
 
