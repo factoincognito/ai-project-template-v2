@@ -74,7 +74,7 @@ get a working project in any supported language.
   app.json, tsconfig.json, biome.json, gitignore, vscode settings,
   placeholder test. Adapt to v2 structure.
 
-- **[LATER] PBI-1.4** (Adam, 2026-10-01: keep LATER; the bootstrapper plus
+- **[SUPERSEDED] PBI-1.4** (2026-10-01: superseded for new projects by PBI-1.14, the turn-key bootstrap script, approved by Adam; if the migration branch is still wanted it becomes its own IDEA. Earlier note: Adam, 2026-10-01, keep LATER; the bootstrapper plus
   `tools/layout-pack.sh` cover most of it, and a small "lay out pack X"
   step in the bootstrapper could replace the wizard) — Write the v2 bootstrap wizard (`BOOTSTRAP.md`)
   — guided setup via Claude chat, branches on new project vs migration
@@ -125,7 +125,7 @@ get a working project in any supported language.
   `wrangler.jsonc`; checked with `wrangler deploy --dry-run` only, a
   real deploy is not yet verified.
 
-- **[LATER] PBI-1.8** — Licence choice at project setup: the template
+- **[SUPERSEDED] PBI-1.8** (2026-10-01: folded into PBI-1.14, which has the licence choice) — Licence choice at project setup: the template
   offers a set of licences (PolyForm Noncommercial among them) and the
   project picks one at start. Depends on the wizard (PBI-1.4), unless
   the licence texts are first added as files under `licenses/`.
@@ -257,7 +257,7 @@ get a working project in any supported language.
   direction than today's setting, and which rules in CLAUDE.md the option
   would change (review gates, merge delegation, intent approval).
 
-- **[IDEA] PBI-1.14** (proposed 2026-10-01 by Clead from Adam's request; architectural, needs Crog review and Adam's intent approval before any build; supersedes PBI-1.4 for new projects and absorbs PBI-1.8 if approved) — Turn-key bootstrap script.
+- **[NEXT] PBI-1.14** (proposed 2026-10-01 by Clead from Adam's request; spec reviewed by Crog and intent approved by Adam in chat, 2026-10-01, with every open decision answered as recommended; recorded on PR #97; supersedes PBI-1.4 for new projects and absorbs PBI-1.8; not yet built) — Turn-key bootstrap script.
 
   **Why.**
   Adam: "the bootstrap script should be the only thing you need to run in order for the bootstrapped project to be created. Turn-key." Today a new project takes five manual README steps after "Use this template": copy a pack, turn on protection, fill placeholders, choose a licence and delete the section. Each one can go wrong without anyone noticing.
