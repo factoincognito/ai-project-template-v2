@@ -44,8 +44,14 @@ these steps once, then delete this whole section.
 3. **Fill in the placeholders**: `[PROJECT NAME]`, `[PO NAME]` and the
    description in this README, `CLAUDE.md`, `CHANGELOG.md`, `docs/SPEC.md`,
    `docs/BACKLOG.md`, `docs/NEXT_SESSION.md` and `memory/project.md`.
-   Search the repo for `[` followed by a capital letter to find them.
-4. **Delete this section** and commit the result through a pull request.
+   Search the repo for `[` followed by a capital letter to find them
+   (ignore the `licenses/` folder, whose text has a few such links).
+4. **Choose your project's licence.** The template's own files are
+   licensed under the PolyForm Noncommercial License 1.0.0 (see
+   `licenses/`); keep that folder for as long as any template file
+   remains in your project. It does not license your project: add your
+   own `LICENSE` file at the root.
+5. **Delete this section** and commit the result through a pull request.
 
 ## Setup
 
