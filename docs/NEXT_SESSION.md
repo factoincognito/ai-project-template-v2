@@ -1,6 +1,6 @@
 # [PROJECT NAME] — Next Session Planning
 
-**Last Updated:** 2026-09-30
+**Last Updated:** 2026-10-01
 **Author:** Clead (Tech Owner)
 **Purpose:** Staging area for reasoning, revised assumptions, and plan-adaptation thoughts that aren't yet mature enough to be a PBI, a decision, a strategy update, or a vision-doc change. Complements `docs/BACKLOG.md` — it does not replace it. Discrete, scoped, actionable work belongs in the backlog as a PBI, not here.
 
@@ -75,19 +75,11 @@ session, the rest were not touched. Items 8 and 9 are new.
 
 ---
 
-### 8. Backlog decisions waiting for Adam — new (2026-09-30)
+### 8. Backlog decisions waiting for Adam — mostly resolved (2026-10-01)
 
-Clead worked through every Phase 1 and 2 item that needed no decision. What is left needs Adam:
-- **PBI-1.4 bootstrap wizard:** keep LATER? The bootstrapper plus `tools/layout-pack.sh` already cover most of it; a small "lay out pack X" step in the bootstrapper could replace the wizard.
-- **PBI-1.8 licence choice at setup, and the template's own licence** (it has no licence file).
-- **PBI-2.2 review Routine:** approve the idea, and accept or reject its two design points (independence by prompt only; posting as Adam).
-- **PBI-4.2 event-driven memory writes:** check against what CLAUDE.md already requires; may be mostly done.
-- **Remove the Routine trigger IDs** from `memory/decisions.md` (public repo; unusable without tokens, but no reason to publish them).
-- **A public-repo rule in CLAUDE.md:** never write private information into memory/ or docs/ (agreed for acuteping; the template has no such line yet).
-- **Branch prefixes:** CROG_ONBOARDING and DEV_INFRASTRUCTURE say `feature/`, practice is `feat/`, `docs/`, `fix/`. Align one way.
-- **Repo setting "Automatically delete head branches":** agents cannot delete branches (403); 41 branches besides `main` remain on the remote (counted 2026-09-30). Turning the setting on is one click for Adam.
-- **Next tool refresh:** Node 26 becomes LTS on 2026-10-28; TypeScript 7 once ts-jest supports it; Expo SDK moves Jest for the react-native pack.
-**Action:** Adam decides each; Clead turns decisions into PBIs or doc changes.
+Adam decided every item on 2026-10-01; the results are in the repo (PRs #73-#81: public-repo rule, template licence, branch prefixes, trigger IDs removed, PBI-1.4 / 2.2 / 4.2 decisions, PBI-1.13). One item still needs Adam's own hands:
+- **Repo setting "Automatically delete head branches":** turn it on (Settings, General). Agents get 403 on branch deletion. The merged branches already on the remote must be deleted by hand.
+**Action:** Adam does the click; delete this item once the setting is on and the old branches are gone.
 
 ---
 
