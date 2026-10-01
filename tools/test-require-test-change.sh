@@ -50,8 +50,8 @@ die() { echo "assertion failed: $*" >&2; exit 1; }
 # new_repo <name>: a bare origin and a clone, main holding README.md,
 # pushed. Prints the clone's path.
 new_repo() {
-  local d="$WORK/$1"
-  mkdir -p "$d"
+  local d
+  d="$(mktemp -d "$WORK/$1.XXXXXX")"
   git init -q --bare -b main "$d/origin.git"
   git clone -q "$d/origin.git" "$d/w" 2>/dev/null
   git -C "$d/w" config user.name test
@@ -102,6 +102,15 @@ expect_line() { grep -qxF -- "$1" <<<"$CHECK_OUT" || die "no output line: $1; ou
 expect_no_line() { ! grep -qxF -- "$1" <<<"$CHECK_OUT" || die "unexpected output line: $1"; }
 
 # ---------- code and test changes ----------
+
+test_fixtures_with_the_same_name_do_not_collide() {
+  # Names built from $RANDOM collided now and then and made a clone fail.
+  local a b
+  a="$(new_repo same)"; b="$(new_repo same)"
+  [ "$a" != "$b" ] || die "two fixtures got the same directory"
+  a="$(project_repo node same)"; b="$(project_repo node same)"
+  [ "$a" != "$b" ] || die "two project fixtures got the same directory"
+}
 
 test_script_exists() {
   [ -f "$SCRIPT" ] || die "no $SCRIPT"
@@ -613,7 +622,7 @@ template_verdict() {
   local want="$1" w f
   shift
   template_args
-  w="$(new_repo "tpl$RANDOM")"
+  w="$(new_repo tpl)"
   branch "$w" feat
   for f in "$@"; do put "$w" "$f"; done
   commit "$w" "change"
@@ -721,9 +730,9 @@ bootstrapper_output() {
 # way PBI-1.14's setup pull request will. Prints the clone's path; leaves
 # the clone on `setup`.
 project_repo() {
-  local pack="$1" d="$WORK/$2" bo
+  local pack="$1" d bo
   bo="$(bootstrapper_output)"
-  mkdir -p "$d"
+  d="$(mktemp -d "$WORK/$2.XXXXXX")"
   git init -q --bare -b main "$d/origin.git"
   git clone -q "$d/origin.git" "$d/w" 2>/dev/null
   git -C "$d/w" config user.name test
@@ -810,8 +819,8 @@ test_every_pack_counts_the_tests_it_runs() {
   local p w f
   for p in node web react-native; do
     pack_args "$p"
-    for f in src/a.spec.ts src/__tests__/a.ts; do
-      w="$(project_repo "$p" "forms-$p-$RANDOM")"
+    for f in src/a.test.ts src/a.spec.ts src/__tests__/a.ts $([ "$p" = react-native ] && echo "src/a.test.tsx src/a.spec.tsx"); do
+      w="$(project_repo "$p" "forms-$p")"
       after_setup "$w"
       put "$w" "$f"; commit "$w" "test form"
       run_check "$w" "$BASE" "${PACK_ARGS[@]}"
