@@ -57,12 +57,6 @@ removed as they graduate (see the rule above).
 **Revised assessment:** not yet evaluated. Likely prompted by this session's discovery that some process steps (e.g. routing doc-only changes through Crog) were unnecessary/obsolete once the Chrome-direct path was proven.
 **Action:** next session, audit CLAUDE.md/docs/ROUTINES.md for other steps that may now be redundant given the Change execution model split.
 
-### 9. Autonomous batches work — new (2026-09-30)
-
-**What happened:** Adam gave one general instruction before sleeping ("pick up whatever you can from phase 1 and 2 which does not require my involvement; work until you get stuck"). Clead and Crog shipped five PRs (#63-#67) through the normal review loop: Crog wrote #63, #65 and #66 and Clead reviewed them; Clead wrote #64 and #67 and Crog reviewed them. Each role caught real errors in the other's work (a docs claim that overstated a pack in #65; a wrong conclusion about API credentials in #67). Progress was posted as it happened.
-**Revised assessment:** a scoped general instruction plus the delegated review/merge rules is enough to run unattended. The stop rule (park anything that needs Adam here) held.
-**Action:** decide whether to write this up as a documented working mode in CLAUDE.md.
-
 ---
 
 ## Items that do not change
