@@ -13,8 +13,9 @@ CLAUDE.md
 # The shared test-first check that each pack's CI runs.
 .github/scripts/require-test-change.sh
 
-# Workflows are listed by file so template-only workflows never ship.
-.github/workflows/ci.yml
+# Workflows are listed by file so template-only workflows never ship. The
+# template's own ci.yml is one of them: the project's ci.yml is the stub in
+# bootstrap/stubs/.github/workflows/.
 .github/workflows/review.yml
 .github/workflows/changelog.yml
 
