@@ -1,3 +1,14 @@
+# The template's own CI. Template-only: this file is not in
+# bootstrap/manifest.txt and never ships. What ships as a new project's
+# ci.yml is the checkout-only stub in bootstrap/stubs/.github/workflows/,
+# replaced by a language pack's ci.yml.
+#
+# The job is named `build` because branch protection requires that name.
+# Its one step is the test-first check: a pull request that changes code
+# (scripts, workflows, pack files, the shipped dotfiles) without changing
+# a test fails. Patterns: see the --code, --test and --ignore flags below.
+# The check's own tests run in the bootstrapper-test job
+# (.github/workflows/bootstrapper.yml).
 name: CI
 
 on:
@@ -11,4 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # Language-specific steps added by bootstrap wizard
+        with:
+          # Full history, so the base branch is there to compare with.
+          fetch-depth: 0
+      - name: Require a test change with a code change
+        run: bash .github/scripts/require-test-change.sh --code '*.sh' 'bootstrap/*' 'tools/*' '.github/workflows/*' '.github/scripts/*' 'languages/*' '.gitattributes' '.gitignore' --test 'bootstrap/test.sh' 'bootstrap/test-*.sh' 'tools/test-*.sh' 'languages/*.test.ts' 'languages/*.test.tsx' 'languages/*.spec.ts' 'languages/*.spec.tsx' 'languages/*__tests__/*' 'languages/*/src/tests/*' 'languages/*/test_*.py' 'languages/*.e2e.ts' --ignore '*.md' 'bootstrap/stubs/licenses/*'
