@@ -272,3 +272,27 @@ What is private stays out of this repo; acuteping's private notes live
 in a separate private repo until acuteping is
 bootstrapped.
 
+## Session 2026-10-01 (v2.2.0 and process cleanup)
+
+Released v2.2.0 so the licence reaches the public bootstrapper, and
+checked that the published bootstrapper matches a local build. Adam then
+decided every open backlog question; what was left in the staging file
+was resolved or became backlog items (a backlog and kanban view, a
+delegation-level option for the bootstrapper, the next tool refresh).
+
+Process changed on Adam's decisions: `..wrap` became an end-of-session
+check instead of a memory flush; an unattended working mode and a
+model-and-effort rule were written into CLAUDE.md; the June Routines
+were deleted; every merged branch was cleaned up and the repo setting
+that deletes head branches on merge was turned on.
+
+Why reviews and design run on Opus agents: Clead's own errors this
+session were verification errors (a check that matched the wrong thing,
+a stale local clone, a branch count from a partial fetch), and a
+separate, stronger reader caught real problems that Clead's own checks
+had missed (PR #86's checklist ran before the steps that change what it
+checks). Every claim of "merged" or "deleted" was re-checked against the
+GitHub API, not taken from an agent's report.
+
+Open: Adam bootstraps acuteping from v2.2.0, which closes PBI-1.10; the
+wording notes in `docs/NEXT_SESSION.md` item 6.
