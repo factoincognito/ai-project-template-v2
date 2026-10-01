@@ -548,10 +548,13 @@ get a working project in any supported language.
 
 - **[LATER] PBI-1.16** (Adam, 2026-10-01; he reports `main` on
   `factoincognito/ai-project-bootstrap` is not protected) — Protect the
-  bootstrapper repo's default branch. **What.** Part 1, to do by Adam in
-  that repo's settings: block force-pushes and deletion on `main`, with no
-  pull-request requirement, so release history stays intact and the direct
-  publish push still works. Part 2, research first: whether a ruleset or a
+  bootstrapper repo's default branch. **What.** Part 1 (done 2026-10-02):
+  Adam set `main` in that repo's settings to block force-pushes and
+  deletion, with no pull-request or status-check requirement; Clead read
+  the rule back through the API, and the v2.3.0 publish push went through
+  it. Part 2, research first (written when the repo was user-owned; it is
+  now in the `factoincognito` organisation, so the organisation-only
+  options below may apply; not re-checked): whether a ruleset or a
   bypass allowance can limit writes to the publish token on a user-owned
   repo. The docs say push `restrictions` are organisation-only; whether
   `bypass_pull_request_allowances` or a ruleset works on a user-owned repo
