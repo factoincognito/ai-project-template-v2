@@ -57,6 +57,16 @@ removed as they graduate (see the rule above).
 **Revised assessment:** not yet evaluated. Likely prompted by this session's discovery that some process steps (e.g. routing doc-only changes through Crog) were unnecessary/obsolete once the Chrome-direct path was proven.
 **Action:** next session, audit CLAUDE.md/docs/ROUTINES.md for other steps that may now be redundant given the Change execution model split.
 
+### 6. CLAUDE.md wording nits from the #89 review — new (2026-10-01)
+
+**What happened:** the Opus review of #89 approved it and listed four small notes that were not fixed there.
+**Notes:**
+- `..wrap` step 2 names only the three memory files as destinations; a pin promoted to a backlog item or a NEXT_SESSION entry has no named destination.
+- "Model and effort" does not say which model a Crog agent started for an implementation task uses; "the default model" is defined only for Clead sessions (this gap predates #89).
+- In "Working unattended", "Work that does not depend on it carries on": "it" is ambiguous after the longer list.
+- Rule 3 says "System, process and architecture changes"; the model wording says "process and architecture" and drops "system".
+**Action:** fold these into the next change that touches those CLAUDE.md sections, or drop them if Adam judges them not worth a PR. Delete this item when done.
+
 ---
 
 ## Items that do not change
