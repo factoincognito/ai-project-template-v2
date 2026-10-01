@@ -232,6 +232,13 @@ get a working project in any supported language.
   and its commit, and from which "Use this template" creates a repo
   with no template history.
 
+- **[LATER] PBI-1.13** (Adam, 2026-10-01: leave as a dated LATER) — Next
+  tool refresh of the language packs, not before 2026-10-28, when Node 26
+  is expected to become LTS (date not verified; check before starting).
+  Also: TypeScript 7 once ts-jest supports it, and the Expo SDK's Jest
+  version for the react-native pack. Follows the PBI-1.6 method: update,
+  then run every pack's CI on GitHub's runners.
+
 - **[IDEA] PBI-1.11** (pinned by Adam, 2026-10-01) — Backlog visualiser:
   a way to see `docs/BACKLOG.md` as a backlog list and as a kanban board
   (columns by marker: NOW, NEXT, LATER, and so on). Open questions, not
