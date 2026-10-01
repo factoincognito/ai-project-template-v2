@@ -12,6 +12,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history, so the base branch is there to compare with.
+          fetch-depth: 0
+
+      - name: Require a test change with a code change
+        run: bash .github/scripts/require-test-change.sh --code 'src/*' --test 'src/*.test.ts' 'src/*.test.tsx' 'src/*.spec.ts' 'src/*.spec.tsx' 'src/*__tests__/*'
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
