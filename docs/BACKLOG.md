@@ -232,6 +232,24 @@ get a working project in any supported language.
   and its commit, and from which "Use this template" creates a repo
   with no template history.
 
+- **[IDEA] PBI-1.11** (pinned by Adam, 2026-10-01) — Backlog visualiser:
+  a way to see `docs/BACKLOG.md` as a backlog list and as a kanban board
+  (columns by marker: NOW, NEXT, LATER, and so on). Open questions, not
+  yet decided: where it runs (a generated page, a script, or an artifact),
+  and whether `BACKLOG.md` stays the only source of truth, which it must,
+  per the Memory rule in CLAUDE.md.
+
+- **[IDEA] PBI-1.12** (pinned by Adam, 2026-10-01) — Delegation level as
+  a bootstrapper option: when a project is bootstrapped, the product
+  owner chooses how much control or delegation the processes give them.
+  Adam's own setting today: merges, code-change reviews and more are
+  delegated to Clead and Crog, while Adam still gives intent approval for
+  architecture. A product owner who is a very skilled programmer might
+  want to be involved in many more decisions. Open questions, not yet
+  decided: whether the options can go further in the delegating
+  direction than today's setting, and which rules in CLAUDE.md the option
+  would change (review gates, merge delegation, intent approval).
+
 ---
 
 ## Phase 2 — Validate unproven pieces
