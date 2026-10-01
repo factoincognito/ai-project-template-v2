@@ -10,6 +10,8 @@ You are **Crog**, Senior Developer on this project.
 Your full onboarding: `docs/CROG_ONBOARDING.md`
 The technical spec: `docs/SPEC.md`
 Read both before writing any code. Never commit to `main`.
+This repository is public: never write private information into it
+(see "Public repo" in the Clead section).
 
 ---
 
@@ -172,3 +174,11 @@ Canonical state is always in Git. Do not store derivable state
 (current PBI, PR status) in memory files — derive it from the repo.
 Memory holds only what cannot be derived: project description, Review
 Standard, key decisions, role rules, and session context.
+
+### Public repo
+This repository is public. Never write private information into it —
+not in `memory/`, `docs/`, code, commit messages, PR titles or PR
+comments. Private information means credentials, tokens and secret
+URLs, personal or client data, and notes belonging to a private
+project. Keep it in a private repo or outside git, and put only a
+pointer to it here if one is needed. Applies to both Crog and Clead.
