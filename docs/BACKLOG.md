@@ -239,14 +239,7 @@ get a working project in any supported language.
   version for the react-native pack. Follows the PBI-1.6 method: update,
   then run every pack's CI on GitHub's runners.
 
-- **[IDEA] PBI-1.11** (pinned by Adam, 2026-10-01; decided the same day: it is a project of its own, bootstrapped from this template, not a template feature) — Backlog visualiser:
-  a way to see a project's `docs/BACKLOG.md` as a backlog list and as a kanban board
-  (columns by marker: NOW, NEXT, LATER, and so on). `BACKLOG.md` stays the
-  only source of truth (Memory rule in CLAUDE.md); the visualiser only reads it.
-  Nothing is built in this template. Open questions, not yet decided: where it
-  runs (a generated page, a script, or an artifact), likely with the web pack,
-  and what a template project does to get it (a link, or its output). It becomes
-  a project once Adam picks it up; this PBI then points to its repo.
+- **[MOVED] PBI-1.11** (pinned by Adam, 2026-10-01; decided the same day) — Backlog visualiser: a way to see a project's `BACKLOG.md` as a backlog list and as a kanban board. It is a project of its own, bootstrapped from this template, and not a template feature, so it is tracked in the owner's private product office and not here. Nothing is built in this template.
 
 - **[IDEA] PBI-1.12** (pinned by Adam, 2026-10-01) — Delegation level as
   a bootstrapper option: when a project is bootstrapped, the product
