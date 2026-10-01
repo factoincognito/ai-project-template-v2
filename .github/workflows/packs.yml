@@ -72,8 +72,19 @@ jobs:
           set -euo pipefail
           PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh node pack
           cp -a bootstrapper project
+          git -C project init -q -b main
+          git -C project add -A
+          git -C project -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Bootstrapper output"
+          git -C project checkout -q -b setup
           cp -a pack/. project/
           rm -rf project/languages
+          git -C project add -A
+          git -C project -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Set up the node pack"
+
+      - name: Check the setup change with the pack's own check
+        env:
+          TEST_FIRST_BASE: main
+        run: bash .github/scripts/require-test-change.sh --code 'src/*' --test 'src/*.test.ts' 'src/*.spec.ts' 'src/*__tests__/*'
 
       - name: Create the lockfile
         run: npm install --no-audit --no-fund
@@ -89,6 +100,27 @@ jobs:
 
       - name: Test with coverage
         run: npx jest --coverage --coverageThreshold='{"global":{"lines":80}}'
+
+      # Last, so the branch it leaves behind cannot affect the steps above.
+      # Any file under src/ is a source change; the pack's patterns decide.
+      - name: Refuse a source change without a test
+        run: |
+          set -euo pipefail
+          git checkout -q main
+          git merge -q --ff-only setup
+          git checkout -q -b change
+          mkdir -p src
+          echo untested > src/untested.txt
+          git add src/untested.txt
+          git -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Source change without a test"
+          cmd="$(sed -n 's/^ *run: //p' .github/workflows/ci.yml | grep -F require-test-change.sh)"
+          [ -n "$cmd" ]
+          set +e
+          TEST_FIRST_BASE=main bash -c "$cmd"
+          rc=$?
+          set -e
+          [ "$rc" -eq 1 ]
+
 
   pack-web:
     runs-on: ubuntu-latest
@@ -116,8 +148,19 @@ jobs:
           set -euo pipefail
           PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh web pack
           cp -a bootstrapper project
+          git -C project init -q -b main
+          git -C project add -A
+          git -C project -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Bootstrapper output"
+          git -C project checkout -q -b setup
           cp -a pack/. project/
           rm -rf project/languages
+          git -C project add -A
+          git -C project -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Set up the web pack"
+
+      - name: Check the setup change with the pack's own check
+        env:
+          TEST_FIRST_BASE: main
+        run: bash .github/scripts/require-test-change.sh --code 'src/*' 'index.html' --test 'src/*.test.ts' 'src/*.spec.ts' 'src/*__tests__/*' 'e2e/*'
 
       - name: Create the lockfile
         run: npm install --no-audit --no-fund
@@ -148,6 +191,27 @@ jobs:
           path: project/playwright-report/
           retention-days: 7
 
+      # Last, so the branch it leaves behind cannot affect the steps above.
+      # Any file under src/ is a source change; the pack's patterns decide.
+      - name: Refuse a source change without a test
+        run: |
+          set -euo pipefail
+          git checkout -q main
+          git merge -q --ff-only setup
+          git checkout -q -b change
+          mkdir -p src
+          echo untested > src/untested.txt
+          git add src/untested.txt
+          git -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Source change without a test"
+          cmd="$(sed -n 's/^ *run: //p' .github/workflows/ci.yml | grep -F require-test-change.sh)"
+          [ -n "$cmd" ]
+          set +e
+          TEST_FIRST_BASE=main bash -c "$cmd"
+          rc=$?
+          set -e
+          [ "$rc" -eq 1 ]
+
+
   pack-python:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -174,8 +238,19 @@ jobs:
           set -euo pipefail
           PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh python pack
           cp -a bootstrapper project
+          git -C project init -q -b main
+          git -C project add -A
+          git -C project -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Bootstrapper output"
+          git -C project checkout -q -b setup
           cp -a pack/. project/
           rm -rf project/languages
+          git -C project add -A
+          git -C project -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Set up the python pack"
+
+      - name: Check the setup change with the pack's own check
+        env:
+          TEST_FIRST_BASE: main
+        run: bash .github/scripts/require-test-change.sh --code 'src/*' --test 'src/tests/*'
 
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
@@ -191,6 +266,27 @@ jobs:
 
       - name: Test with coverage
         run: pytest --cov=src --cov-fail-under=80
+
+      # Last, so the branch it leaves behind cannot affect the steps above.
+      # Any file under src/ is a source change; the pack's patterns decide.
+      - name: Refuse a source change without a test
+        run: |
+          set -euo pipefail
+          git checkout -q main
+          git merge -q --ff-only setup
+          git checkout -q -b change
+          mkdir -p src
+          echo untested > src/untested.txt
+          git add src/untested.txt
+          git -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Source change without a test"
+          cmd="$(sed -n 's/^ *run: //p' .github/workflows/ci.yml | grep -F require-test-change.sh)"
+          [ -n "$cmd" ]
+          set +e
+          TEST_FIRST_BASE=main bash -c "$cmd"
+          rc=$?
+          set -e
+          [ "$rc" -eq 1 ]
+
 
   pack-react-native:
     runs-on: ubuntu-latest
@@ -218,8 +314,19 @@ jobs:
           set -euo pipefail
           PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh react-native pack
           cp -a bootstrapper project
+          git -C project init -q -b main
+          git -C project add -A
+          git -C project -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Bootstrapper output"
+          git -C project checkout -q -b setup
           cp -a pack/. project/
           rm -rf project/languages
+          git -C project add -A
+          git -C project -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Set up the react-native pack"
+
+      - name: Check the setup change with the pack's own check
+        env:
+          TEST_FIRST_BASE: main
+        run: bash .github/scripts/require-test-change.sh --code 'src/*' --test 'src/*.test.ts' 'src/*.test.tsx' 'src/*.spec.ts' 'src/*.spec.tsx' 'src/*__tests__/*'
 
       - name: Create the lockfile
         run: npm install --no-audit --no-fund
@@ -235,3 +342,23 @@ jobs:
 
       - name: Test with coverage
         run: npx jest --coverage --coverageThreshold='{"global":{"lines":80}}'
+
+      # Last, so the branch it leaves behind cannot affect the steps above.
+      # Any file under src/ is a source change; the pack's patterns decide.
+      - name: Refuse a source change without a test
+        run: |
+          set -euo pipefail
+          git checkout -q main
+          git merge -q --ff-only setup
+          git checkout -q -b change
+          mkdir -p src
+          echo untested > src/untested.txt
+          git add src/untested.txt
+          git -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Source change without a test"
+          cmd="$(sed -n 's/^ *run: //p' .github/workflows/ci.yml | grep -F require-test-change.sh)"
+          [ -n "$cmd" ]
+          set +e
+          TEST_FIRST_BASE=main bash -c "$cmd"
+          rc=$?
+          set -e
+          [ "$rc" -eq 1 ]
