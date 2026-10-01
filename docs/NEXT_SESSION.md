@@ -8,6 +8,21 @@
 
 ---
 
+## Adam's to-do (things only Adam can do)
+
+Written 2026-10-02 so nothing depends on anyone remembering. **The next Clead session lists this to Adam in its first reply and removes each line when Adam confirms it is done.** Agents cannot do these: the access proxy returns 403 on branch deletion and on the Actions and secrets settings, and branch protection and tokens are GitHub account settings.
+
+1. **Start the new Clead session with `factoincognito/ai-project-template-v2` as its source, with push access.** A session bound to the old `sugose/` path cannot reach the moved repo. (The session attaches `factoincognito/ai-project-bootstrap` itself.)
+2. **Answer two questions** (item 8): (a) `--resume` on a repo stamped by an older bootstrapper: refuse, or finish with the current script's tables? (b) Is holding every release tag until PBI-1.14's slice S15 merges acceptable (acuteping then waits for PBI-1.14, or is set up by hand)? Say "go" after answering and S1 and S3 start.
+3. **Fix the bootstrapper's `main` protection** (item 7). In `factoincognito/ai-project-bootstrap`: Settings, Branches, the rule for `main`, Edit. Untick "Require a pull request before merging". Untick "Require status checks to pass before merging". Untick "Do not allow bypassing the above settings". Keep "Allow force pushes" and "Allow deletions" unticked (that is what blocks them). Save. Then tell the session; it re-reads the rule through the API. Why: the release publishes with one direct push of a new commit and the tag to `main`, which the current settings would reject.
+4. **Confirm the publish token** (item 7). GitHub, your profile, Settings, Developer settings, Fine-grained tokens, open the token. Check: resource owner is `factoincognito`; repository access includes `ai-project-bootstrap`; Contents and Workflows are both read and write; it has not expired; if the org requires approval for tokens, an org owner has approved it. The menu names are from memory of GitHub's UI and were not checked against its docs. Agents cannot read the token, so seeing it work needs a real push: the first release, or the optional token-check job in item 7 (Adam decides whether he wants it).
+5. **Delete two branches** in the template repo (Branches page, trash icon): `throwaway-red-check-pr` and `docs/next-session-old-clead-pending` (its content is in item 9, its PR was never opened).
+6. **Decide two small things** (item 10): whether CLAUDE.md should say that only one Clead session works on the template at a time (and that every session starts by listing open PRs and non-main branches); and, for PBI-1.16, whether the setting changes (recommended, step 3) or the backlog text does.
+7. **Later, when PBI-1.14 is built:** the end-to-end runs on throwaway repos, including PBI-1.17's red-then-`Test-exempt` pull request in a real project (PBI-1.17 stays `[NEXT]` until then); and pushing the release tag, which agents cannot do. No tag before items 3 and 4 are done.
+8. **If an agent has to change files in your connected PC folder,** it asks for delete permission once per session (a failed pull left a stale `.git/index.lock` last time). Your PC clone of the template is behind main and its `origin` points at the org; the session fast-forwards it after you grant that.
+
+---
+
 ## Current situation summary
 
 As of 2026-10-02: v2.1.0 and v2.2.0 are released. Both repos live under
