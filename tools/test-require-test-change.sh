@@ -9,6 +9,11 @@
 # Cases that need a pack's or the template's own `run:` line (not here)
 # live in the pull requests that create those lines.
 set -euo pipefail
+# A failing fixture step inside $( ) must fail the test, not hide.
+shopt -s inherit_errexit 2>/dev/null || true
+# Same result on a laptop as in CI: no inherited git state or user config.
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
@@ -258,6 +263,59 @@ test_non_ascii_path_is_seen() {
   expect_line "code: src/é.ts"
 }
 
+test_several_patterns_after_one_flag() {
+  # `--code A B --test C D`: every pattern after a flag belongs to it.
+  local w; w="$(new_repo p8)"
+  branch "$w" feat; put "$w" lib/a.ts; commit "$w" "code in the second pattern"
+  run_check "$w" "$BASE" --code 'src/*' 'lib/*' --test 'src/*.test.ts' 'lib/*.test.ts'
+  expect_rc 1
+  expect_line "code: lib/a.ts"
+  put "$w" lib/a.test.ts; commit "$w" "test in the second test pattern"
+  run_check "$w" "$BASE" --code 'src/*' 'lib/*' --test 'src/*.test.ts' 'lib/*.test.ts'
+  expect_rc 0
+}
+
+test_pattern_without_a_flag_is_an_error() {
+  local w; w="$(new_repo p9)"
+  run_check "$w" "$BASE" 'src/*' --code 'src/*' --test 'src/*.test.ts'
+  expect_rc 2
+}
+
+test_empty_pattern_is_an_error() {
+  # An empty pattern matches nothing, so a CI line built from an empty
+  # variable would pass forever.
+  local w; w="$(new_repo p10)"
+  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  run_check "$w" "$BASE" --code '' --test 'src/*.test.ts'
+  expect_rc 2
+  run_check "$w" "$BASE" --code 'src/*' --test ''
+  expect_rc 2
+  run_check "$w" "$BASE" "${NODE[@]}" --ignore ''
+  expect_rc 2
+}
+
+test_run_from_a_subdirectory_sees_the_whole_repo() {
+  # diff.relative=true would otherwise list only the files under the
+  # current directory, and a change elsewhere would pass unseen.
+  local w; w="$(new_repo p11)"
+  git -C "$w" config diff.relative true
+  branch "$w" feat; put "$w" src/a.ts; put "$w" docs/d.md; commit "$w" "code and docs"
+  run_check "$w/docs" "$BASE" "${NODE[@]}"
+  expect_rc 1
+  expect_line "code: src/a.ts"
+}
+
+test_file_name_cannot_inject_a_workflow_command() {
+  # A name with a newline would otherwise print a line that GitHub reads
+  # as a workflow command.
+  local w; w="$(new_repo p12)"
+  branch "$w" feat
+  put "$w" "$(printf 'src/a\n::warning::injected.ts')"; commit "$w" "nasty name"
+  run_check "$w" "$BASE" "${NODE[@]}"
+  expect_rc 1
+  ! grep -q '^::warning::' <<<"$CHECK_OUT" || die "a file name produced a workflow command: $CHECK_OUT"
+}
+
 # ---------- Test-exempt trailer ----------
 
 test_trailer_with_reason_passes_and_prints_it() {
@@ -324,6 +382,20 @@ test_pull_request_with_a_test_passes() {
   git -C "$w" merge -q --no-ff -m "Merge feat into main" feat
   run_check "$w" "GITHUB_EVENT_NAME=pull_request GITHUB_BASE_REF=main" "${NODE[@]}"
   expect_rc 0
+}
+
+test_pull_request_compares_with_its_own_base_branch() {
+  # The base is whatever the pull request targets, not always main.
+  local w; w="$(new_repo r7)"
+  git -C "$w" push -q origin main:release 2>/dev/null
+  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  git -C "$w" fetch -q origin
+  git -C "$w" checkout -q --detach origin/release
+  git -C "$w" merge -q --no-ff -m "Merge feat into release" feat
+  run_check "$w" "GITHUB_EVENT_NAME=pull_request GITHUB_BASE_REF=release" "${NODE[@]}"
+  expect_rc 1
+  run_check "$w" "GITHUB_EVENT_NAME=pull_request GITHUB_BASE_REF=nope" "${NODE[@]}"
+  expect_rc 2
 }
 
 test_branch_push_is_compared_with_origin_main() {
@@ -471,6 +543,34 @@ test_summary_shows_the_exemption_reason() {
   run_check "$w" "$BASE GITHUB_STEP_SUMMARY=$sum" "${NODE[@]}"
   expect_rc 0
   grep -qF "nothing a test could check" "$sum" || die "summary lacks the reason"
+}
+
+test_summary_names_the_base_it_compared_with() {
+  local w sum; w="$(new_repo m3)"; sum="$WORK/summary3.md"
+  branch "$w" feat; put "$w" src/a.test.ts; commit "$w" "t"
+  run_check "$w" "$BASE GITHUB_STEP_SUMMARY=$sum" "${NODE[@]}"
+  expect_rc 0
+  grep -qF "Compared with" "$sum" || die "summary lacks the base line"
+  grep -qF "origin/main" "$sum" || die "summary lacks the base name"
+}
+
+test_summary_is_written_for_a_push_to_main() {
+  local w sum; w="$(new_repo m4)"; sum="$WORK/summary4.md"
+  run_check "$w" "GITHUB_EVENT_NAME=push GITHUB_REF_NAME=main GITHUB_STEP_SUMMARY=$sum" "${NODE[@]}"
+  expect_rc 0
+  grep -qF "not checked" "$sum" || die "summary lacks the push-to-main line"
+}
+
+test_several_exemptions_are_all_shown() {
+  local w; w="$(new_repo m5)"
+  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  git -C "$w" commit -q --allow-empty -m "one" --trailer "Test-exempt: first reason"
+  git -C "$w" commit -q --allow-empty -m "two" --trailer "Test-exempt: second reason"
+  run_check "$w" "$BASE" "${NODE[@]}"
+  expect_rc 0
+  expect_line "exempt: first reason"
+  expect_line "exempt: second reason"
+  expect_out "first reason; second reason"
 }
 
 # ---------- run ----------
