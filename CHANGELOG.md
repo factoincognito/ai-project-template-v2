@@ -6,6 +6,15 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Added
+- Prepared the 2.2.0 changelog: renamed the Unreleased section and listed PRs #73-#75 (PR #76)
+- Removed the two Routine trigger IDs from `memory/decisions.md`; they stay in git history (PR #77)
+- Aligned the branch-prefix docs with practice: `feat/`, `fix/`, `docs/` (PR #78)
+- Recorded Adam's decisions on PBI-1.4 (stays LATER), PBI-2.2 (not approved as written) and PBI-4.2 (closed as done) (PR #79)
+- Added PBI-1.11 (backlog visualiser) and PBI-1.12 (delegation level option for the bootstrapper) as ideas (PR #80)
+- Added PBI-1.13: the next tool refresh, as a dated LATER item (PR #81)
+- Resolved NEXT_SESSION item 8 after Adam's decisions; only his branch-cleanup click remains (PR #82)
+
 ## [2.2.0] — 2026-10-01
 
 ### Added
