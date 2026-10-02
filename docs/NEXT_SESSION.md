@@ -82,11 +82,26 @@ graduate (see the rule above).
 **Impact on plan:** would mean genericizing Adam-specific references (roles.md, CLAUDE.md, etc.) into a productized template component.
 **Action:** clarify scope with Adam — is this about this template repo specifically, or a downstream product? What stays as example content vs. becomes configurable?
 
-### 5. Simplifications to process due to no longer needed workflows/workflow steps — new
+### 5. Process simplifications: audit done 2026-10-02, fixes pending
 
-**Previous assumption:** n/a — new idea.
-**Revised assessment:** not yet evaluated. Likely prompted by this session's discovery that some process steps (e.g. routing doc-only changes through Crog) were unnecessary/obsolete once the Chrome-direct path was proven.
-**Action:** next session, audit CLAUDE.md/docs/ROUTINES.md for other steps that may now be redundant given the Change execution model split.
+**What this is:** a read-only audit of `origin/main` at 944f34b (CLAUDE.md, ROUTINES, roles, standards, CROG_ONBOARDING, DEV_INFRASTRUCTURE, decisions, review.yml, changelog.yml). Line numbers refer to that commit. Removing a shipped file needs the bootstrap manifest tests run first (test-first). Not in scope: the temporary arrangement until 2026-10-05, and items 12 and 13.
+**Stale or contradicted (Clead's to fix, process PRs reviewed by Crog), most important first:**
+1. `docs/ROUTINES.md` ships to every project but describes deleted Routines (decisions row 2026-10-01), an unapproved Path B (PBI-2.2), a review-Routine input contract that duplicates `standards.md` section 7, and a prompt delimiter for pasting. Delete it; remove it from the CLAUDE.md table and `bootstrap/manifest.txt`; keep the delimiter as 3 lines in `roles.md` only if Adam still pastes prompts.
+2. `.github/workflows/review.yml` posts `<!-- clead-review-ready -->`, which nothing reads; it never fires in the template and is noise in projects. Delete it, drop it from the manifest and from `CROG_ONBOARDING.md:61-62`; reinstate with PBI-2.2.
+3. `changelog.yml` and the docs say a CHANGELOG PR after every merge (one PR behind); practice is batched (#83, #113, #124, #134, #141). State the real rule once and drop or keep the workflow (see C2).
+4. `CLAUDE.md:90-92` still names the Chrome web-editor path as a fallback; decisions row 2026-09-30 says it is no longer needed. Delete the sentence (also `NEXT_SESSION` "Items that do not change"); mark the old rows superseded. (Startup step 3's Chrome fallback is left for item 12.)
+5. `memory/decisions.md` open question 2 (about 320 lines on Routines, fire URLs, tokens, Adam firing curl) is superseded by the rows of 2026-09-30 and 2026-10-01. Replace it with a short "resolved" note, or move it to a dated archive in `docs/decisions/`.
+6. `memory/standards.md` is titled "Clead Review Standard"; since 2026-09-30 Crog reviews too. Retitle to "Review Standard", say "the reviewer", and add which sections apply to process and docs reviews.
+7. `CROG_ONBOARDING.md:75-77` (act only on a Clead fix prompt on the PR thread) and `:58-62` (report the PR to Clead; the dead marker) are out of date. Reword.
+8. ADR 0001 (ships to projects) still describes Routines dispatch. Add a "partly superseded" status header.
+9. Wording: `decisions.md` rows citing `tools/pr_dump.sh` (no longer exists); open question 4's premise (the GitHub connector); `CLAUDE.md:221-223` mentions fomo-f in a file that ships to every project.
+**Duplicated (consolidate into one home, pointers elsewhere):** the graduation rule (5 places), pin disposition (3), the 3-rounds escalation (6; home: `standards.md` section 6), the test coverage table (3; home: the PR template), the approval ceremony (`roles.md` vs `CROG_ONBOARDING.md`), merge authority (5; `CROG_ONBOARDING.md:33-34` is narrower than rule 3).
+**Needs Adam (process rules he set):**
+- C1. One PR in three records status after the work (e.g. #137, #142-#145), each with CI and a Crog merge run. Options: fold "slice done" into the next slice PR; let Clead merge its own no-review-gate PRs; record "slice done" in the slice PR itself.
+- C2. CHANGELOG as a per-PR list repeats `git log`. Option: write it per release from user-visible changes at release prep; this would drop the batch CHANGELOG PRs and clean-end condition 5.
+- C3. Item 8's deferred review notes are backlog items in a staging file; graduate them into the PBI-1.14 slice list. "What waits for what" overlaps item 8.
+- C4. "Working unattended" in CLAUDE.md mostly restates rules 1-4; shorten with item 6's nits.
+**Also:** item 6's nits are repeated in item 10; fold them into the CLAUDE.md edit for 4 and 9.
 
 ### 6. CLAUDE.md wording nits from the #89 review — new (2026-10-01)
 
@@ -107,22 +122,25 @@ graduate (see the rule above).
 - S3 `packs.yml` uses the script's lockfile command (independent; touches `packs.yml` and `tools/test-layout-pack.sh`). **Done: #130, 2026-10-02.**
 - S4 test harness `bootstrap/test-bootstrap-project.sh`, test hooks, message helpers, wired into `bootstrapper-test`. **Done: #136, 2026-10-02.**
 - S5 `bootstrapper-test` becomes one aggregate check over an OS matrix (ubuntu, macOS, Windows).
-- S6 inputs and validation. S7 guided preflight, local checks. S8 guided preflight, GitHub checks. S9 create and protect. S10 local tree. S11 fill placeholders. S12 lockfile, licence, CHANGELOG. S13 self-check, commit, push, PR. S14 wait, require `build`, merge, finish, report. S15 resume, failures, private repos.
+- S6 inputs and validation. **Done: #146, 2026-10-02.** S7 guided preflight, local checks. S8 guided preflight, GitHub checks. S9 create and protect. S10 local tree. S11 fill placeholders. S12 lockfile, licence, CHANGELOG. S13 self-check, commit, push, PR. S14 wait, require `build`, merge, finish, report. S15 resume, failures, private repos.
 - S16 `bootstrap/e2e-check.sh` (read-only checker for Adam's end-to-end runs). S17 docs and process, last.
 **Critical path:** S1, S2, S4, S6 to S15, S17. S3 can start now; S5 after S4; S16 after S5.
 **Cannot be verified in CI (Adam's end-to-end runs only):** GitHub timing and error texts after create, the protection PUT shape, private-repo clone and push, Git Bash prompts, `winget`, a lockfile made on Windows or macOS under `npm ci` on Linux, the unaided README run, and the red-then-`Test-exempt` PR in a real project.
 **Spec meets changed repo (to fix in the slice named):** the placement-table tests in `bootstrap/test.sh` pin both READMEs (S17); `test_workflow_bootstrapper_test_runs_the_require_test_change_tests` conflicts with the aggregate design (S5); the setup PR's tree must keep `.github/scripts/require-test-change.sh` (S10); stamps from releases before the org move name the old owner, so older repos cannot be resumed (S15).
-**Next slice:** S5 or S6 (S6 is on the critical path).
+**Next slice:** S7 (critical path), or S5.
 **Questions for Adam (neither blocks S1):**
 1. Answered by Adam, 2026-10-02 (`memory/decisions.md`): `--resume` refuses a repo stamped by an older bootstrapper version and tells the user to create a fresh repo; a repo stamped by the current version, including one made with "Use this template" from the current release, still resumes. The spec text is corrected in S15.
 2. Answered by Adam, 2026-10-02: v2.3.0 is released before S1 (nothing of PBI-1.14 ships in it), then no tag until S15 merges. acuteping waits for PBI-1.14 and the end-to-end runs either way (decision of 2026-10-01).
 **Started 2026-10-02:** Adam answered question 1 and said go. S1 (#131) and S3 (#130) merged the same day, then S2 (#133); each was built test-first by an Opus Crog and approved by an Opus review (S1 and S2 after a second round that fixed tests which could not fail).
 **Review notes deferred to later slices (non-blocking):**
 - Still open after S2 and S4, no slice assigned: the S3 test in `tools/test-layout-pack.sh` only sees `npm install` in single-line `run:` steps; one inside a `run: |` block passes unnoticed (#130 review).
-- S6 to S8 (the first slice that calls `run_gh`): `bypass_lines` exempts a whole line when anything on it captures or redirects, not just the command. `run_gh pr create --body-file <(…)`, `run_gh pr checks $(…)`, `cat<"$file"` and `relay() { cat; }` pass, and a direct `"${BOOTSTRAP_GH:-gh}"` call is not flagged. Tighten the check or add these to its "Not covered" list (#136 review, A).
 - Any slice that adds `say_command` calls: the command-argument check sees only the first call on a line and only the first word of its argument (#136 review, B).
-- Any slice that builds messages from variables: a banned word in a one-word variable value, or an unquoted word passed to an unlisted helper, is not seen. The harness header comment should say one-word values are not covered (#136 review, C).
 - S8: the literal scan has no opt-out, so matching gh's error text (e.g. `"Repository not found"`) fails the harness. S8 needs an opt-out marker for `literal_strings`, with a self-test, not rewording around the check (#136 review, D).
+- S7: a typed folder answer starting with `~` is not expanded, so it would create a folder literally named `~` (#146 review).
+- S8: the script reads the GitHub account (`gh api user`) for the defaults before the guided preflight, so a user who is not signed in gets exit 1 partway through the questions instead of the spec's guide (exit 3 with `--non-interactive`), and the error is not mapped. Move or guard it when the guided GitHub checks land (#146 review).
+- S9: a repo name is allowed up to 214 characters, but GitHub probably caps it at 100; the owner pattern refuses `_`, which an Enterprise Managed User's login has. Neither is verified (#146 review).
+- S13 (only if a real heredoc hits it): heredoc body lines still go through the per-line checks, so a quiet heredoc whose text says "printf" is flagged, and a body line cannot carry the opt-out marker. It fails loudly (#146 review).
+- Whichever slice touches the usage text, or S17: a bare positional word gets the plain usage text, not the What happened / What to do next format (#146 review).
 - S17: the expected-paths list in `tools/test-layout-pack.sh` (the per-file layout test) is a deliberate third statement of the placement table, next to the script and the README tables; change it together with the README tables (#131 review). `languages/README.md` still says the table lives in `tools/layout-pack.sh` (also S17).
 - Any slice that touches the script's usage text: run through the wrapper, the usage message names `bootstrap-project.sh layout-pack`, not the command the user typed (#131 review, cosmetic).
 - S5: a real bash 3.2 run in CI. A reviewer ran the built script once under a self-built bash 3.2.57 on Linux (all four packs identical); macOS `/bin/bash` and Git for Windows bash are unverified.
@@ -175,7 +193,14 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 1. PBI-1.14: since setup is possible by asking Claude, the script's value is a setup that is repeatable, checked and cheap, not one that becomes possible. Keep the 17-slice plan, or build a smaller version (Clead guides the setup and a short script checks the result)? **Answered by Adam, 2026-10-02:** PBI-1.14 stays as planned. Even a knowledgeable WHAT person who could set up alone gains from being guided: it is a safety net.
 2. If the process is the strong suit, should effort go first to the process itself (enforcement, less overhead, Projects as the base where it fits) rather than to the setup script?
 3. Adam's model, 2026-10-02: one installer and one path, with decision points along the way. Each step is skipped when it already exists or is not needed for what the user is building, and otherwise done, or guided when the script cannot do it. To the user that can look like several entry points. The PBI-1.14 spec already works this way: the guided preflight checks tools, login and scopes and guides only what is missing, packs only check what they need (npm only for node, web and react-native), and `--resume` reads the repo's state and continues from the right step. Not covered: an existing app or a repo with code that wants the process. The spec refuses a repo the bootstrapper did not create, and migration was the superseded PBI-1.4 (close to item 1). In Adam's model that would be one more decision point (existing code found: add only the process). Should it exist, and if so in PBI-1.14 or as its own item?
+**Added later the same day:**
+- **Adam on the core value:** the template is instant onboarding of an already trained AI colleague. The repo puts the process and practices into every session on demand, with no re-training: a less knowledgeable WHAT person would not bring these practices, and a knowledgeable one would not want to re-train an AI from scratch each time. Examples: write things down as they are decided, `..wrap` as the safety net, the standing rules. Clead's note: Claude Code supplies the mechanism (CLAUDE.md loads automatically); the template supplies the content.
+- **Open, for Adam:** measure the template's value instead of judging it (he named the risk of overvaluing his own creation)? Options: fix in advance what would make a feature go; use acuteping as a measurement (per guardrail: real problems caught versus time and tokens spent); a comparison run (the same small app with the template and with plain Claude Code).
 
+
+### 14. How Clead reports to Adam — new (2026-10-02)
+
+**Adam:** he does not read every long message. When Clead stops and waits for him, it ends with a short **For you** block: what it recommends and what it needs from him, including any recommendation made earlier in the message. **Action:** put this into CLAUDE.md with the next CLAUDE.md change (item 5), reviewed by Crog; until then every Clead session follows it from here.
 ---
 
 ## Items that do not change
