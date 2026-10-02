@@ -172,7 +172,7 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 - **Not unique as parts:** Claude Code now ships Projects (one coordinating conversation that starts parallel cloud sessions; public beta), Code Review, `/code-review`, PR auto-fix, and CLAUDE.md with auto memory. **Unique:** the operating model and the lessons from v1, fomo-f and the football tracker, written down and enforced where possible.
 - **Weak spots:** overhead on small changes; some guardrails are instructions only (review independence, test-first order); part of the Clead and Crog coordination overlaps Projects.
 **Questions for Adam:**
-1. PBI-1.14: since setup is possible by asking Claude, the script's value is a setup that is repeatable, checked and cheap, not one that becomes possible. Keep the 17-slice plan, or build a smaller version (Clead guides the setup and a short script checks the result)?
+1. PBI-1.14: since setup is possible by asking Claude, the script's value is a setup that is repeatable, checked and cheap, not one that becomes possible. Keep the 17-slice plan, or build a smaller version (Clead guides the setup and a short script checks the result)? **Answered by Adam, 2026-10-02:** PBI-1.14 stays as planned. Even a knowledgeable WHAT person who could set up alone gains from being guided: it is a safety net.
 2. If the process is the strong suit, should effort go first to the process itself (enforcement, less overhead, Projects as the base where it fits) rather than to the setup script?
 
 ---
