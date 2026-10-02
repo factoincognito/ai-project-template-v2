@@ -282,39 +282,103 @@ command_arg_violations() {
 
 # bypass_lines <file>: lines outside the messages block that can put text
 # on the terminal without a helper. A line that writes somewhere else on
-# purpose ends with "# not-user-facing". Checked, on the line with its
-# quoted strings removed:
-#   - echo, printf, a heredoc (<<, not the here-string <<<), or >&2;
+# purpose ends with "# not-user-facing". Checked:
+#   - echo, printf, a heredoc (<<, not the here-string <<<), or >&2, on
+#     the line with its quoted strings removed;
 #   - /dev/stderr, /dev/stdout, /dev/tty or /dev/fd/N (on the full line);
-#   - run_gh, gh, git, npm, cat or tee whose output is neither captured
-#     ($( ) or <( )) nor sent elsewhere with a stdout redirect (>, 1>, &>).
+#   - BOOTSTRAP_GH outside the body of run_gh: every gh call goes through
+#     run_gh, so its output is seen here;
+#   - each run_gh, gh, git, npm, cat or tee command whose own stdout is
+#     neither captured ($( ), <( ) or backticks around it) nor sent
+#     elsewhere with a stdout redirect (>, >>, 1>, &>) in the same
+#     command, or after the same pipeline or ( ) subshell. A walker reads
+#     the code with its quotes, $( ) and ( ) nesting and continuation
+#     lines, so a capture or redirect elsewhere on the line does not count
+#     (the S4 review's note A).
 # Not covered (no static scan can tell): the stderr of those commands
-# (gh's error text is raw; the slice that first calls run_gh, S6 to S8,
-# tests that it is mapped through show_error), the stdout of other
-# commands (ls, sed, find ...: the script uses them only inside a capture
-# today), output through a pipe or an eval, and a helper defined outside
-# the messages block that prints through say (its texts are still checked
-# by literal_strings). run_offered's own output reaches the terminal on
-# purpose: an install or a login has to show its progress and prompts.
+# (gh's error text is raw: tests check that each gh call's error is
+# shown through show_error), the stdout of other commands (ls, sed,
+# find, tr ...: the script uses them inside a capture or a redirected
+# pipeline), output through an eval or a { } group, a case pattern inside
+# $( ), and a helper defined outside the messages block that prints
+# through say (its texts are still checked by literal_strings).
+# run_offered's own output reaches the terminal on purpose: an install or
+# a login has to show its progress and prompts.
 bypass_lines() {
   awk -v sq="'" '
+    function flag(n) { if (!(n in quiet)) hit[n] = 1 }
+    function settle() { if (pend[d]) flag(pend[d]); pend[d] = 0 }
+    function push(t) { d++; ctx[d] = t; pend[d] = 0 }
+    function pop() {
+      # The output of a ( ) subshell goes where the subshell sends it.
+      if (ctx[d] == "p" && pend[d] && !pend[d - 1]) pend[d - 1] = pend[d]
+      d--
+    }
+    function captured(   k) {
+      for (k = 2; k <= d; k++) if (ctx[k] == "c" || ctx[k] == "b") return 1
+      return 0
+    }
+    BEGIN { d = 1; ctx[1] = "t"; pend[1] = 0 }
     /^[[:space:]]*# ---------- messages ----------/ { inblk = 1; next }
     /^[[:space:]]*# ---------- end of messages ----------/ { inblk = 0; next }
     inblk { next }
-    /^[[:space:]]*#/ { next }
-    /# not-user-facing[[:space:]]*$/ { next }
+    d == 1 && /^[[:space:]]*#/ { next }
     {
+      src[NR] = $0
+      if ($0 ~ /# not-user-facing[[:space:]]*$/) quiet[NR] = 1
       line = $0
       gsub(/"([^"\\]|\\.)*"/, "", line); gsub(sq "[^" sq "]*" sq, "", line)
       gsub(/<<</, "", line)
-      bad = 0
-      if (line ~ /(^|[^A-Za-z0-9_])(echo|printf)([[:space:]]|$)/ || line ~ /<</ || line ~ />&2/) bad = 1
-      if ($0 ~ /\/dev\/(stderr|stdout|tty|fd\/[0-9])/) bad = 1
-      if (line ~ /(^|[^A-Za-z0-9_-])(run_gh|gh|git|npm|cat|tee)([[:space:]]|$)/ \
-          && line !~ /(^|[^A-Za-z0-9_-])(run_gh|gh|git|npm|cat|tee)[[:space:]]*\(\)/ \
-          && line !~ /[$<]\(/ && line !~ /(^|[^0-9&>])(1|&)?>([^&]|$)/) bad = 1
-      if (bad) print NR ": " $0
+      if (line ~ /(^|[^A-Za-z0-9_])(echo|printf)([[:space:]]|$)/ || line ~ /<</ || line ~ />&2/) flag(NR)
+      if ($0 ~ /\/dev\/(stderr|stdout|tty|fd\/[0-9])/) flag(NR)
+      if ($0 ~ /^run_gh\(\)[[:space:]]*\{/) in_run_gh = 1
+      if ($0 ~ /BOOTSTRAP_GH/ && !in_run_gh) flag(NR)
+      if (in_run_gh && $0 ~ /^\}/) in_run_gh = 0
+
+      n = length($0); i = 1; cont = 0
+      while (i <= n) {
+        c = substr($0, i, 1); t = ctx[d]; nx = substr($0, i + 1, 1)
+        pv = (i > 1) ? substr($0, i - 1, 1) : ""
+        if (t == "s") { if (c == sq) d--; i++; continue }
+        if (t == "d") {
+          if (c == "\\") { i += 2; continue }
+          if (c == "\"") { d--; i++; continue }
+          if (c == "$" && nx == "(") { push("c"); i += 2; continue }
+          if (c == "`") { push("b"); i++; continue }
+          i++; continue
+        }
+        # A command context: the top level, $( ), <( ), ( ) or backticks.
+        if (c == "\\") { if (i == n) cont = 1; i += 2; continue }
+        if (c == sq) { push("s"); i++; continue }
+        if (c == "\"") { push("d"); i++; continue }
+        if (c == "`") { if (t == "b") pop(); else push("b"); i++; continue }
+        if (c == "#" && (i == 1 || pv ~ /[[:space:];]/)) break
+        if ((c == "$" || c == "<") && nx == "(") { push("c"); i += 2; continue }
+        if (c == "(") { push("p"); i++; continue }
+        if (c == ")") { if (d > 1) pop(); else settle(); i++; continue }
+        if (c == ";") { settle(); i++; continue }
+        if (c == "&") {
+          if (nx == ">") { pend[d] = 0; i += 2; continue }
+          if (nx == "&") { settle(); i += 2; continue }
+          settle(); i++; continue
+        }
+        if (c == "|") { if (nx == "|") { settle(); i += 2 } else i++; continue }
+        if (c == ">") {
+          if (nx == "&") { i += 2; continue }
+          if (pv ~ /[0-9]/ && !(pv == "1" && (i < 3 || substr($0, i - 2, 1) !~ /[A-Za-z0-9_]/))) { i++; continue }
+          pend[d] = 0; i++; continue
+        }
+        if (c ~ /[A-Za-z_]/ && (i == 1 || pv !~ /[A-Za-z0-9_$={}\/.-]/)) {
+          w = substr($0, i); match(w, /^[A-Za-z0-9_-]+/); w = substr(w, 1, RLENGTH)
+          nw = substr($0, i + length(w), 1)
+          if (w ~ /^(run_gh|gh|git|npm|cat|tee)$/ && nw != "=" && nw != "(" && !captured()) pend[d] = NR
+          i += length(w); continue
+        }
+        i++
+      }
+      if (!cont && ctx[d] != "s" && ctx[d] != "d") settle()
     }
+    END { for (k = 1; k <= NR; k++) if (k in hit) print k ": " src[k] }
   ' "$1"
 }
 
@@ -924,6 +988,11 @@ test_github_account_answer_has_carriage_returns_removed() {
   export STUB_GH_CR
   inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}"
   expect_inputs "$d" OWNER=octo-user "PO_NAME=Octo User"
+  # Removed where the output is read, not only by the later checks.
+  make_stub_gh "$d/gh2"
+  [ "$( load_script; STUB_GH_LOG="$d/gh2.log" BOOTSTRAP_GH="$d/gh2" read_github_user
+        printf '%s|%s' "$GH_LOGIN" "$GH_PROFILE_NAME" )" = "octo-user|Octo User" ] \
+    || die "a carriage return is left in what GitHub answered"
 }
 
 test_github_account_failure_is_explained_with_the_raw_text_below() {
@@ -1234,7 +1303,7 @@ test_questions_are_skipped_for_inputs_given_as_options() {
 }
 
 test_a_wrong_answer_is_explained_and_asked_again() {
-  local d
+  local d t
   d="$(tmpdir)"
   printf '%s\n' "my app" my-app "" "" "Lends tools." "" "" ruby 2 maybe n "" 7 mit "" "" >"$d/in"
   inputs "$d"
@@ -1243,7 +1312,12 @@ test_a_wrong_answer_is_explained_and_asked_again() {
   [ "$(grep -c '^Description: $' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "empty required answer not asked again"; }
   [ "$(grep -c '^Language pack' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "pack not asked again"; }
   [ "$(grep -c '^Licence' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "licence not asked again"; }
-  [ "$(grep -c 'Please try again\.$' "$d/out")" -eq 5 ] || { cat "$d/out" >&2; die "not 5 explained retries"; }
+  [ "$(grep -c 'Please try again\.$' "$d/out")" -eq 5 ] || { cat "$d/out" >&2; die "not 5 retries"; }
+  # Each retry first says what was wrong with the answer.
+  for t in '^Use only letters, digits' '^An answer is needed here' '^Choose one of the packs' \
+    '^Answer yes or no' '^Choose a number from 1 to 6'; do
+    grep -qE "$t.* Please try again\.$" "$d/out" || { cat "$d/out" >&2; die "retry not explained: $t"; }
+  done
 }
 
 test_pack_and_licence_can_be_chosen_by_number_or_name() {
@@ -1289,6 +1363,8 @@ test_deploy_question_on_another_pack_than_web_is_refused() {
   printf '%s\n' my-app "" "Lends tools." "" "" node "" mit "" "" >"$d/in"
   inputs "$d" --with-deploy
   expect_refused "$d" --with-deploy
+  # It stops at once: no question after the pack.
+  ! grep -qE '^(Visibility|Licence|Folder)' "$d/out" || { cat "$d/out" >&2; die "questions went on after the conflict"; }
 }
 
 # A full question run (web, a licence): every question is asked.
