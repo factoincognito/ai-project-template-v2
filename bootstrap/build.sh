@@ -8,8 +8,9 @@
 #   <commit>   full 40-character SHA the build is made from
 #
 # Output = every path in bootstrap/manifest.txt, copied as is, plus every
-# file in bootstrap/stubs/. The CHANGELOG.md stub is stamped with the
-# version and commit. The build is assembled in a temp dir and checked;
+# file in bootstrap/stubs/. The CHANGELOG.md and bootstrap-project.sh
+# stubs are stamped with the version and commit, in place, keeping each
+# file's mode. The build is assembled in a temp dir and checked;
 # <out-dir> is only written when every check passes.
 set -euo pipefail
 export LC_ALL=C
@@ -80,9 +81,15 @@ for s in ${STUB_FILES[@]+"${STUB_FILES[@]}"}; do
   done
 done
 
-[ -f "$STUBS/CHANGELOG.md" ] || fail "CHANGELOG.md stub not found in $STUBS"
-for p in '{{TEMPLATE_VERSION}}' '{{TEMPLATE_COMMIT}}'; do
-  grep -qF "$p" "$STUBS/CHANGELOG.md" || fail "CHANGELOG.md stub lacks $p"
+# The stubs that carry the version stamp. Each must hold both
+# placeholders; the stamp is the only link back to the template.
+STAMPED=(CHANGELOG.md bootstrap-project.sh)
+for s in "${STAMPED[@]}"; do
+  [ ! -L "$STUBS/$s" ] || fail "$s stub must be a regular file, not a symlink"
+  [ -f "$STUBS/$s" ] || fail "$s stub not found in $STUBS"
+  for p in '{{TEMPLATE_VERSION}}' '{{TEMPLATE_COMMIT}}'; do
+    grep -qF "$p" "$STUBS/$s" || fail "$s stub lacks $p"
+  done
 done
 
 # ---------- assemble in a temp dir ----------
@@ -106,10 +113,18 @@ for s in ${STUB_FILES[@]+"${STUB_FILES[@]}"}; do
 done
 
 # Stamp the version. Both values are validated above, so they are safe
-# in a sed replacement.
-sed -e "s|{{TEMPLATE_VERSION}}|$VERSION|g" -e "s|{{TEMPLATE_COMMIT}}|$COMMIT|g" \
-  "$STAGE/CHANGELOG.md" >"$STAGE/CHANGELOG.md.tmp"
-mv "$STAGE/CHANGELOG.md.tmp" "$STAGE/CHANGELOG.md"
+# in a sed replacement. In place: the stamped text is written back over
+# the staged copy (cat >), which keeps its mode; a `sed > tmp; mv` would
+# replace the file with a new one and drop the script's executable bit.
+# Not `sed -i`, whose syntax differs between GNU and BSD sed. The temp
+# file is outside the stage, so it cannot end up in the output.
+STAMP_TMP="$(mktemp)"
+trap 'rm -rf "$STAGE" "$STAMP_TMP"' EXIT
+for s in "${STAMPED[@]}"; do
+  sed -e "s|{{TEMPLATE_VERSION}}|$VERSION|g" -e "s|{{TEMPLATE_COMMIT}}|$COMMIT|g" \
+    "$STAGE/$s" >"$STAMP_TMP"
+  cat "$STAMP_TMP" >"$STAGE/$s"
+done
 
 # ---------- check the output ----------
 
@@ -120,6 +135,13 @@ list_rel() { (cd "$1" && find . \( -type f -o -type l \) | sed 's|^\./||' | sort
 
 [ ! -e "$STAGE/docs/RELEASE_NOTES.md" ] || problem "forbidden path in output: docs/RELEASE_NOTES.md"
 [ ! -e "$STAGE/bootstrap" ] || problem "forbidden path in output: bootstrap/"
+
+# Stamping must not change a stub's executable bit.
+for s in "${STAMPED[@]}"; do
+  if [ -x "$STUBS/$s" ] && [ ! -x "$STAGE/$s" ]; then
+    problem "stamping dropped the executable bit of $s"
+  fi
+done
 
 while IFS= read -r f; do
   problem "placeholder left in output: $f"
