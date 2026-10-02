@@ -2,8 +2,10 @@
 # Template-only: this workflow is not in bootstrap/manifest.txt and never
 # ships to bootstrapped projects.
 #
-# - Every push and pull request: run the build.sh / publish.sh tests and the
-#   tests of the shared test-first check (tools/test-require-test-change.sh).
+# - Every push and pull request: run the build.sh / publish.sh tests, the
+#   tests of the shared test-first check (tools/test-require-test-change.sh)
+#   and the tests of the bootstrap script
+#   (bootstrap/test-bootstrap-project.sh).
 # - A pushed v* tag: run the tests and the pack chain test (packs.yml:
 #   build the bootstrapper, create a project from it, run each pack's
 #   CI), refuse unless the tagged commit is on main, build, and publish
@@ -32,6 +34,8 @@ jobs:
         run: bash bootstrap/test.sh
       - name: Test the require-test-change check
         run: bash tools/test-require-test-change.sh
+      - name: Test bootstrap-project.sh
+        run: bash bootstrap/test-bootstrap-project.sh
 
   packs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')

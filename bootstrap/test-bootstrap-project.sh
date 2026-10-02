@@ -281,12 +281,12 @@ test_layout_pack_errors_use_the_error_format() {
   local out err rc
   out="$(tmpdir)"; touch "$out/x"
   err="$WORK/err.$RANDOM"; rc=0
-  bash "$SCRIPT" layout-pack node "$out" 2>"$err" >/dev/null || rc=$?
+  PACKS_DIR="$REPO/languages" bash "$SCRIPT" layout-pack node "$out" 2>"$err" >/dev/null || rc=$?
   [ "$rc" -eq 1 ] || die "non-empty target exited $rc, want 1"
   grep -qE '^What happened: .*target dir is not empty' "$err" || { cat "$err" >&2; die "no What happened line"; }
   grep -qE '^What to do next: .{10,}' "$err" || { cat "$err" >&2; die "no next action"; }
   rc=0
-  bash "$SCRIPT" layout-pack ruby "$(tmpdir)/new" 2>"$err" >/dev/null || rc=$?
+  PACKS_DIR="$REPO/languages" bash "$SCRIPT" layout-pack ruby "$(tmpdir)/new" 2>"$err" >/dev/null || rc=$?
   [ "$rc" -eq 2 ] || die "unknown pack exited $rc, want 2"
   grep -qE '^What happened: .*unknown pack: ruby' "$err" || { cat "$err" >&2; die "no What happened line"; }
   grep -qE '^What to do next: .{10,}' "$err" || { cat "$err" >&2; die "no next action"; }
@@ -408,7 +408,9 @@ test_user_facing_strings_are_collected() {
   user_strings "$SCRIPT" >"$s"
   for t in 'usage: bootstrap-project.sh layout-pack' 'unknown pack: ' 'target dir is not empty' \
     'missing from the pack: ' 'not in the layout table: ' 'pack folder not found' 'Laid out the' \
-    'What happened:' 'What to do next:' 'Something unexpected happened'; do
+    'What happened:' 'What to do next:' 'Something unexpected happened' \
+    'Choose one of the packs' 'This copy of the bootstrapper is incomplete' \
+    'Choose a folder that is empty' 'Check that the languages folder'; do
     grep -qF -- "$t" "$s" || { cat "$s" >&2; die "collector missed: $t"; }
   done
 }
@@ -441,7 +443,9 @@ test_banned_words_check_catches_planted_violations() {
   # Each planted line holds one banned word in a form a message might
   # use; each must be caught, through the same collection the real
   # check uses.
-  local copy="$WORK/copy.$RANDOM.sh" w n hits
+  # Only the planted lines (after the script's own last line) are counted,
+  # so this tests the checker whatever the script says.
+  local copy="$WORK/copy.$RANDOM.sh" w n hits last
   local planted='Making a copy (clone) now
 Could not clone it
 It was cloned
@@ -455,12 +459,13 @@ The repository exists
 On the main branch
 The API said no'
   cp "$SCRIPT" "$copy"
+  last="$(wc -l <"$copy" | tr -d ' ')"
   while IFS= read -r w; do
     printf 'say "%s"\n' "$w" >>"$copy"
   done <<<"$planted"
   # A continuation line of a helper call is collected too.
   printf '%s\n' 'fail 1 "It failed." \' '  "Open the branch page."' >>"$copy"
-  hits="$(user_strings "$copy" | banned_hits)"
+  hits="$(user_strings "$copy" | banned_hits | awk -F: -v last="$last" '$1 > last')"
   n="$(printf '%s\n' "$hits" | grep -c . || true)"
   # 12 planted say lines minus "copy (clone)" (one word in brackets is
   # not an explanation of three words, so it is still caught: 12), plus
@@ -469,13 +474,14 @@ The API said no'
 }
 
 test_banned_word_with_its_explanation_or_in_a_command_passes() {
-  local copy="$WORK/copy.$RANDOM.sh" hits
+  local copy="$WORK/copy.$RANDOM.sh" hits last
   cp "$SCRIPT" "$copy"
+  last="$(wc -l <"$copy" | tr -d ' ')"
   printf '%s\n' \
     'say "Your repo (the home of your project on GitHub) is ready."' \
     'say_command "gh repo clone $owner/$name"' \
     'say "Problems: none. Approval step done."' >>"$copy"
-  hits="$(user_strings "$copy" | banned_hits)"
+  hits="$(user_strings "$copy" | banned_hits | awk -F: -v last="$last" '$1 > last')"
   [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "an explained word or a command was flagged"; }
 }
 
