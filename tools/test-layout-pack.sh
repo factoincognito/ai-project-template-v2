@@ -314,7 +314,10 @@ test_wrapper_passes_the_template_packs_dir() {
     || die "the wrapper does not pass PACKS_DIR to the script"
 }
 
-test_script_output_equals_wrapper_output_for_every_pack() {
+test_wrapper_lays_out_what_the_script_does() {
+  # The wrapper execs the script, so this only proves that it forwards
+  # the pack, the target and PACKS_DIR. Whether the table is right is
+  # tested against the pack sources in the next test.
   local p a b
   for p in $PACKS; do
     a="$WORK/script.$p.$RANDOM"; b="$WORK/wrapper.$p.$RANDOM"
@@ -324,6 +327,69 @@ test_script_output_equals_wrapper_output_for_every_pack() {
     diff <(list_files "$a") <(list_files "$b") || die "$p: file lists differ"
     diff -r "$a" "$b" >&2 || die "$p: contents differ"
   done
+}
+
+# The expected placement, written out independently of the script:
+# "<project path> <pack path>", a trailing / meaning a whole folder. It
+# repeats the README placement table on purpose. A check derived from
+# the script's own table would compare the script with itself, so the
+# only honest oracle for "each file lands at the right path" is a second,
+# independent statement of where files go. It lives here, in the test,
+# never in tools/layout-pack.sh (which test_layout_table_lives_only_in_the_script
+# keeps free of pack paths).
+expected_placement() {
+  local common=".github/workflows/ci.yml ci.yml
+.gitignore gitignore
+.vscode/settings.json vscode-settings.json
+.vscode/extensions.json vscode-extensions.json"
+  local ts="package.json package.json
+tsconfig.json tsconfig.json
+biome.json biome.json"
+  case "$1" in
+    node) printf '%s\n' "$common" "$ts" "src/placeholder.test.ts placeholder.test.ts" ;;
+    web) printf '%s\n' "$common" "$ts" "index.html index.html" "vite.config.mts vite.config.mts" \
+      "playwright.config.ts playwright.config.ts" "src/ starter/src/" "e2e/ starter/e2e/" ;;
+    python) printf '%s\n' "$common" "pyproject.toml pyproject.toml" "requirements.txt requirements.txt" \
+      "requirements-dev.txt requirements-dev.txt" ".pre-commit-config.yaml pre-commit-config.yaml" \
+      "src/ starter/src/" ;;
+    react-native) printf '%s\n' "$common" "$ts" "app.json app.json" "src/ starter/src/" ;;
+    *) die "no expected placement for $1" ;;
+  esac
+}
+
+# Expands expected_placement into one "<project file> <pack file>" line
+# per file, folders listed from the pack itself.
+expected_files() {
+  local pack="$1" to from f
+  expected_placement "$pack" | while read -r to from; do
+    if [ "${to%/}" != "$to" ]; then
+      (cd "$REPO/languages/$pack/$from" && find . -type f | sed 's|^\./||') | while IFS= read -r f; do
+        echo "$to$f $from$f"
+      done
+    else
+      echo "$to $from"
+    fi
+  done | LC_ALL=C sort
+}
+
+test_every_laid_out_file_is_its_pack_source_at_the_expected_path() {
+  # For every pack: the laid-out file list is exactly the expected one
+  # (a wrong destination, a missing file or an extra file fails), and
+  # each file is byte-identical to its source in the pack.
+  local p out exp to from n=0
+  for p in $PACKS; do
+    out="$WORK/golden.$p.$RANDOM"; exp="$WORK/expected.$p.$RANDOM"
+    PACKS_DIR="$REPO/languages" bash "$SCRIPT" layout-pack "$p" "$out" >/dev/null \
+      || die "script layout-pack $p failed"
+    expected_files "$p" >"$exp"
+    diff <(list_files "$out") <(cut -d' ' -f1 "$exp") >&2 \
+      || die "$p: laid-out files differ from the expected placement (diff above)"
+    while read -r to from; do
+      n=$((n + 1))
+      cmp -s "$REPO/languages/$p/$from" "$out/$to" || die "$p: $to differs from the pack's $from"
+    done <"$exp"
+  done
+  [ "$n" -ge 40 ] || die "compared only $n files; the expected list is broken"
 }
 
 test_script_refuses_a_non_empty_target() {

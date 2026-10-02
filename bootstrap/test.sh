@@ -613,15 +613,50 @@ test_shipped_project_script_lays_out_from_its_own_languages_dir() {
   done
 }
 
-test_project_script_is_bash_3_2_compatible() {
-  # macOS /bin/bash is 3.2. Bash 4+ constructs are refused in every line
-  # that is not a full-line comment. Each pattern comes with a sample it
-  # must match, so a broken pattern fails the test instead of passing.
+test_shipped_project_script_ignores_the_users_cdpath() {
+  # The script finds itself with cd. A CDPATH in the user's environment
+  # must not change where it looks (a decoy folder of the same name) or
+  # make cd print the folder into the captured path, when it is called
+  # by a relative path.
+  local out="$WORK/real.$RANDOM" parent name decoy a b
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  parent="$(dirname "$out")"; name="$(basename "$out")"
+  decoy="$WORK/decoy.$RANDOM"; mkdir -p "$decoy/$name"
+  b="$WORK/wrapper.$RANDOM"
+  (unset PACKS_DIR; bash "$REPO/tools/layout-pack.sh" node "$b") >/dev/null || die "wrapper failed"
+  # CDPATH holding the script's own parent: cd would print the folder.
+  a="$WORK/cdp1.$RANDOM"
+  (unset PACKS_DIR; cd "$parent" && CDPATH="$parent" bash "$name/bootstrap-project.sh" layout-pack node "$a") \
+    >/dev/null || die "layout-pack failed with CDPATH set to the script's parent"
+  diff -r "$a" "$b" >&2 || die "CDPATH (script's parent) changed the layout"
+  # CDPATH holding a decoy folder with the same name: cd would go there.
+  a="$WORK/cdp2.$RANDOM"
+  (unset PACKS_DIR; cd "$parent" && CDPATH="$decoy" bash "$name/bootstrap-project.sh" layout-pack node "$a") \
+    >/dev/null || die "layout-pack failed with CDPATH set to a decoy"
+  diff -r "$a" "$b" >&2 || die "CDPATH (decoy) changed the layout"
+}
+
+test_project_script_avoids_listed_bash4_constructs() {
+  # A partial static scan, not a proof of bash 3.2 compatibility (macOS
+  # /bin/bash is 3.2). It refuses the bash 4+ constructs listed below in
+  # every line that is not a full-line comment, plus `bash -n`. Anything
+  # not listed passes; a real run on bash 3.2 comes with the OS matrix.
+  # Each pattern comes with a sample it must match, so a broken pattern
+  # fails the test instead of passing.
   local f="$PROJECT_SCRIPT" code="$WORK/code.$RANDOM" i
   local pats=() samples=()
   [ -f "$f" ] || die "no $f"
   bash -n "$f" || die "syntax error in $f"
   pats+=('(declare|local|typeset|readonly)[[:space:]]+-[a-zA-Z]*[Anlu]'); samples+=('local -A map')
+  pats+=('(declare|typeset)[[:space:]]+-[a-zA-Z]*g'); samples+=('declare -g x=1')
+  pats+=('\[\[?[[:space:]]+(!+[[:space:]]+)?-[vR][[:space:]]'); samples+=('[ -v x ] && :')
+  pats+=('\{[A-Za-z_][A-Za-z0-9_]*\}[<>]'); samples+=('exec {fd}>/dev/null')
+  pats+=('BASHPID|BASH_COMPAT|BASH_LOADABLES_PATH|READLINE_|COPROC|SRANDOM'); samples+=('echo "$BASHPID"')
+  pats+=('%-?[0-9]*\([^)]*\)T'); samples+=("printf '%(%F)T' -1")
+  pats+=('(declare|typeset|local)[[:space:]]+-[a-zA-Z]*I'); samples+=('local -I x')
+  pats+=('shopt[[:space:]]+-s[[:space:]]+(checkjobs|direxpand|globasciiranges|inherit_errexit|localvar_inherit|assoc_expand_once)'); samples+=('shopt -s inherit_errexit')
+  pats+=('\$\{[A-Za-z_][A-Za-z0-9_]*:[0-9]+:-[0-9]+\}'); samples+=('y="${x:2:-1}"')
+  pats+=('read[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*-[a-zA-Z]*N[[:space:]]'); samples+=('read -N 3 x')
   pats+=('\$\{[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?(,,?|\^\^?)'); samples+=('y="${x,,}"')
   pats+=('\$\{[A-Za-z_][A-Za-z0-9_]*@[QEPAaKkUuL]\}'); samples+=('y="${x@Q}"')
   pats+=('(^|[^A-Za-z0-9_])(mapfile|readarray|coproc)([^A-Za-z0-9_]|$)'); samples+=('mapfile -t lines')

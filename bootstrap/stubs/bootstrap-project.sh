@@ -36,7 +36,9 @@ cmd_layout_pack() {
   local here packs_dir common typescript table not_laid_out src
   local from to f covered skip
 
-  here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  # CDPATH is cleared: a user's CDPATH could send cd to another folder of
+  # the same name, or make it print the folder into $here.
+  here="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
   packs_dir="${PACKS_DIR:-$here/languages}"
 
   common="ci.yml .github/workflows/ci.yml
