@@ -403,7 +403,7 @@ test_script_refuses_a_non_empty_target() {
 
 test_script_usage_errors_exit_2() {
   local out="$WORK/o.$RANDOM"
-  expect_rc 2 "usage:" bash "$SCRIPT"
+  # No arguments now start the questions (bootstrap/test-bootstrap-project.sh).
   expect_rc 2 "usage:" bash "$SCRIPT" no-such-command
   expect_rc 2 "usage:" bash "$SCRIPT" layout-pack
   expect_rc 2 "usage:" bash "$SCRIPT" layout-pack node

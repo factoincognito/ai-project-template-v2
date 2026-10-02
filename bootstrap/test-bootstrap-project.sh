@@ -88,6 +88,22 @@ set -euo pipefail
 } >>"$STUB_GH_LOG"
 case "${1:-}" in
   --version) echo "gh version 0.0.0 (stub)" ;;
+  api)
+    # The signed-in account: login, then profile name (empty when the
+    # profile has none), one per line. STUB_GH_LOGIN and STUB_GH_NAME
+    # set them, STUB_GH_CR adds a carriage return to each line (as on
+    # Windows), STUB_GH_USER_ERROR makes the call fail with that text.
+    if [ "$#" -eq 4 ] && [ "$2" = user ] && [ "$3" = --jq ] && [ "$4" = '.login, (.name // "")' ]; then
+      if [ -n "${STUB_GH_USER_ERROR:-}" ]; then
+        printf '%s\n' "$STUB_GH_USER_ERROR" >&2
+        exit 1
+      fi
+      printf '%s%s\n%s%s\n' "${STUB_GH_LOGIN:-octo-user}" "${STUB_GH_CR:-}" \
+        "${STUB_GH_NAME-Octo User}" "${STUB_GH_CR:-}"
+    else
+      echo "stub gh: no emulation for: $*" >&2; exit 64
+    fi
+    ;;
   *) echo "stub gh: no emulation for: $*" >&2; exit 64 ;;
 esac
 STUB
@@ -145,13 +161,15 @@ export BOOTSTRAP_RUN="$WORK/refuse/run" BOOTSTRAP_GH="$WORK/refuse/gh"
 #     space (literal_strings), so a message kept in a variable or passed
 #     to a helper not in MSG_HELPERS is checked too.
 # Shell variables are removed: their content is a path or a value the
-# user typed, not wording. The argument of say_command and run_offered
+# user typed, not wording. Not seen, so for review: a banned word held in
+# a one-word value (local what=repo; say "Creating the $what") or passed
+# unquoted to a helper not in MSG_HELPERS. The argument of say_command and run_offered
 # is not checked for banned words: it is an exact command, so instead it
 # must start with a known command word (command_arg_violations).
 # What reaches the terminal some other way is the job of bypass_lines;
 # what it cannot see is listed there.
 
-MSG_HELPERS='say|step_start|step_end|show_error|fail'
+MSG_HELPERS='say|step_start|step_end|show_error|fail|ask|prompt_for|answer|add_problem'
 
 # user_strings <file>: prints "<line number>: <text>" for each.
 user_strings() {
@@ -310,13 +328,16 @@ test_sourcing_the_script_defines_functions_and_runs_nothing() {
 }
 
 test_script_piped_into_bash_still_runs_its_main_part() {
-  # `curl ... | bash` is not supported (the prompts read stdin), but the
-  # sourced-or-executed check must not make a piped run silently do
-  # nothing: it runs, and with no arguments shows the usage (exit 2).
-  local err="$WORK/err.$RANDOM" rc=0
-  bash <"$SCRIPT" >/dev/null 2>"$err" || rc=$?
+  # `curl ... | bash` is not supported (the prompts read stdin, which is
+  # then the script itself), but the sourced-or-executed check must not
+  # make a piped run silently do nothing: it runs, and with no arguments
+  # (the questions) it refuses in plain words with exit 2, asking nothing.
+  local err="$WORK/err.$RANDOM" out="$WORK/out.$RANDOM" rc=0
+  bash <"$SCRIPT" >"$out" 2>"$err" || rc=$?
   [ "$rc" -eq 2 ] || { cat "$err" >&2; die "piped run exited $rc, want 2"; }
-  grep -qF 'usage:' "$err" || { cat "$err" >&2; die "piped run did not show the usage"; }
+  sed -n 1p "$err" | grep -qE '^What happened: .*(pipe|piped)' || { cat "$err" >&2; die "piped run did not say why it stopped"; }
+  grep -qE '^What to do next: .*README' "$err" || { cat "$err" >&2; die "piped run did not point to the README command"; }
+  ! grep -q ': $' "$out" || { cat "$out" >&2; die "piped run asked a question"; }
 }
 
 # ---------- message helpers ----------
@@ -559,7 +580,10 @@ test_user_facing_strings_are_collected() {
     'missing from the pack: ' 'not in the layout table: ' 'pack folder not found' 'Laid out the' \
     'What happened:' 'What to do next:' 'Something unexpected happened' \
     'Choose one of the packs' 'This copy of the bootstrapper is incomplete' \
-    'Choose a folder that is empty' 'Check that the languages folder'; do
+    'Choose a folder that is empty' 'Check that the languages folder' \
+    'There is no default, because only you can choose it' 'Please try again' \
+    'not one this script knows' 'needs a value after it' 'Some options are missing or cannot be used' \
+    'a question got no answer' 'Could not read your GitHub account'; do
     grep -qF -- "$t" "$s" || { cat "$s" >&2; die "collector missed: $t"; }
   done
 }
@@ -684,10 +708,39 @@ test_captured_or_redirected_gh_output_is_allowed() {
     '  run_gh api user >/dev/null' \
     '  run_gh api user >"$f" 2>"$err"' \
     '  if run_gh auth status >/dev/null 2>&1; then :; fi' \
+    '  if out="$(run_gh api user --jq '"'"'.login, (.name // "")'"'"' 2>"$err")"; then :; fi' \
+    '  raw="$(cat "$err")"' \
+    '  run_gh api user \' \
+    '    --jq .login >"$f"' \
+    '  ( cat "$f" ) >"$g"' \
+    '  run_gh api user | tr -d x >"$f"' \
+    '  done < <(run_gh api user)' \
+    '  x=cat; y=$(git rev-parse HEAD)' \
     '}')"
   from="$(planted_from)"
   hits="$(bypass_lines "$copy" | only_planted "$from")"
   [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "captured gh output was flagged"; }
+}
+
+test_output_hidden_by_a_capture_elsewhere_on_the_line_is_caught() {
+  # Review of the harness (note A): a capture or redirect anywhere on the
+  # line used to exempt the whole line, so these reached the terminal
+  # unseen. Each planted line must now be caught on its own.
+  local copy n from
+  copy="$(plant 'cmd_y() {' \
+    '  run_gh pr create --body-file <(say "x")' \
+    '  run_gh pr checks $(current_pr)' \
+    '  run_gh pr checks >"$out"; cat "$out"' \
+    '  cat<"$file"' \
+    '  relay() { cat; }' \
+    '  "${BOOTSTRAP_GH:-gh}" pr checks >"$out"' \
+    '  ( cat "$f" )' \
+    '  run_gh api user \' \
+    '    --jq .login' \
+    '}')"
+  from="$(planted_from)"
+  n="$(bypass_lines "$copy" | only_planted "$from" | wc -l | tr -d ' ')"
+  [ "$n" -eq 8 ] || { bypass_lines "$copy" | only_planted "$from" >&2; die "caught $n of 8 planted output routes"; }
 }
 
 test_say_command_and_run_offered_take_a_known_command() {
@@ -731,6 +784,568 @@ test_banned_word_with_its_explanation_or_in_a_command_passes() {
     'say "Problems: none. Approval step done."' >>"$copy"
   hits="$(user_strings "$copy" | banned_hits | awk -F: -v last="$last" '$1 > last')"
   [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "an explained word or a command was flagged"; }
+}
+
+# ---------- inputs ----------
+# parse_args reads the options; collect_inputs checks them, asks for the
+# missing ones (with --non-interactive: takes the defaults, asks nothing)
+# and fills in the defaults. `inputs <dir> <options...>` runs both with
+# the script loaded, a stub gh, and stdin from <dir>/in (empty when
+# absent). It writes the resolved answers to <dir>/dump (dump_inputs),
+# stdout to <dir>/out, stderr to <dir>/err, gh calls to <dir>/gh.log, and
+# sets RC. It is never called in a condition, so errexit behaves as in a
+# real run.
+
+REQUIRED_OPTS=(--name my-app --description "Lends tools to neighbours." --pack node --license mit)
+
+dump_inputs() {
+  printf '%s\n' "NAME=$IN_NAME" "OWNER=$IN_OWNER" "PROJECT_NAME=$IN_PROJECT_NAME" \
+    "DESCRIPTION=$IN_DESCRIPTION" "PO_NAME=$IN_PO_NAME" "PACK=$IN_PACK" \
+    "WITH_DEPLOY=$IN_WITH_DEPLOY" "VISIBILITY=$IN_VISIBILITY" "LICENSE=$IN_LICENSE" \
+    "COPYRIGHT_HOLDER=$IN_COPYRIGHT_HOLDER" "DIR=$IN_DIR" "CI_TIMEOUT=$IN_CI_TIMEOUT" \
+    "SLUG=$IN_SLUG" "NON_INTERACTIVE=$OPT_NON_INTERACTIVE" "YES=$OPT_YES" \
+    "DRY_RUN=$OPT_DRY_RUN" "RESUME=$OPT_RESUME"
+}
+
+inputs() {
+  local d="$1"
+  shift
+  [ -e "$d/in" ] || : >"$d/in"
+  [ -x "$d/gh" ] || make_stub_gh "$d/gh"
+  rm -f "$d/dump"
+  set +e
+  ( load_script
+    export STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
+    parse_args "$@"
+    collect_inputs
+    dump_inputs >"$d/dump"
+  ) <"$d/in" >"$d/out" 2>"$d/err"
+  RC=$?
+  set -e
+}
+
+# expect_inputs <dir> <NAME=value...>: the run succeeded and has each.
+expect_inputs() {
+  local d="$1" l
+  shift
+  [ "$RC" -eq 0 ] && [ -s "$d/dump" ] || { cat "$d/err" >&2; die "no answers collected (exit $RC)"; }
+  for l in "$@"; do
+    grep -qxF -- "$l" "$d/dump" || { cat "$d/dump" >&2; die "answers lack: $l"; }
+  done
+}
+
+# expect_refused <dir> <option>: exit 2, a plain error first, the option
+# listed with its problem, and no answers collected.
+expect_refused() {
+  local d="$1" opt="$2"
+  [ "$RC" -eq 2 ] || { cat "$d/err" >&2; die "exit $RC, want 2 for $opt"; }
+  sed -n 1p "$d/err" | grep -q '^What happened: ' || { cat "$d/err" >&2; die "no plain error first"; }
+  grep -qE -- "^    - $opt: .{10,}" "$d/err" || { cat "$d/err" >&2; die "$opt not listed with its problem"; }
+  grep -qE '^What to do next: .{10,}' "$d/err" || { cat "$d/err" >&2; die "no next action"; }
+  [ ! -e "$d/dump" ] || die "answers were collected although $opt was refused"
+}
+
+# refuses <option> <value...>: each value, given as the option with the
+# other required options, is refused with exit 2 naming the option.
+refuses() {
+  local opt="$1" v d
+  shift
+  for v in "$@"; do
+    d="$(tmpdir)"
+    echo "checking $opt $(printf '%q' "$v")" >&2
+    inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner acme --po-name Ada "$opt" "$v"
+    expect_refused "$d" "$opt"
+  done
+}
+
+# accepts <option> <value> <NAME=value>: the value is taken, as shown.
+accepts() {
+  local d
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner acme --po-name Ada "$1" "$2"
+  expect_inputs "$d" "$3"
+}
+
+test_inputs_come_from_the_options() {
+  local d
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive --name My.App --owner acme-inc --project-name "My App" \
+    --description "Tracks the things we lend out." --po-name "Ada Lovelace" --pack web \
+    --with-deploy --private --license apache-2.0 --copyright-holder "Acme Inc." \
+    --dir "$d/work dir" --ci-timeout 45
+  expect_inputs "$d" NAME=My.App OWNER=acme-inc "PROJECT_NAME=My App" \
+    "DESCRIPTION=Tracks the things we lend out." "PO_NAME=Ada Lovelace" PACK=web \
+    WITH_DEPLOY=yes VISIBILITY=private LICENSE=apache-2.0 "COPYRIGHT_HOLDER=Acme Inc." \
+    "DIR=$d/work dir" CI_TIMEOUT=45 SLUG=my-app NON_INTERACTIVE=1
+  [ ! -e "$d/gh.log" ] || { cat "$d/gh.log" >&2; die "GitHub was asked although --owner and --po-name were given"; }
+}
+
+test_options_also_take_the_name_equals_value_form() {
+  local d
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive --name=my-app "--description=Lends tools, = and all." \
+    --pack=python --license=none --owner=acme --po-name=Ada --ci-timeout=5
+  expect_inputs "$d" NAME=my-app "DESCRIPTION=Lends tools, = and all." PACK=python \
+    LICENSE=none OWNER=acme PO_NAME=Ada CI_TIMEOUT=5
+}
+
+test_defaults_fill_the_options_left_out() {
+  local d
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}"
+  expect_inputs "$d" OWNER=octo-user PROJECT_NAME=my-app "PO_NAME=Octo User" \
+    "COPYRIGHT_HOLDER=Octo User" VISIBILITY=public WITH_DEPLOY=no DIR=./my-app \
+    CI_TIMEOUT=20 SLUG=my-app YES= DRY_RUN= RESUME=
+  # One gh call, with gh's prompts off.
+  [ "$(cat "$d/gh.log")" = "$(printf 'GH_PROMPT_DISABLED=1\tapi\tuser\t--jq\t.login, (.name // "")')" ] \
+    || { cat "$d/gh.log" >&2; die "GitHub was not asked exactly once, as expected"; }
+}
+
+test_po_name_defaults_to_the_login_when_the_profile_has_no_name() {
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_NAME=""
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}"
+  expect_inputs "$d" OWNER=octo-user PO_NAME=octo-user COPYRIGHT_HOLDER=octo-user
+}
+
+test_copyright_holder_defaults_to_the_po_name_given() {
+  local d
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner acme --po-name "Ada Lovelace"
+  expect_inputs "$d" "PO_NAME=Ada Lovelace" "COPYRIGHT_HOLDER=Ada Lovelace"
+  [ ! -e "$d/gh.log" ] || die "GitHub was asked although no default needed it"
+}
+
+test_github_account_answer_has_carriage_returns_removed() {
+  local d
+  d="$(tmpdir)"
+  STUB_GH_CR="$(printf '\r')"
+  export STUB_GH_CR
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}"
+  expect_inputs "$d" OWNER=octo-user "PO_NAME=Octo User"
+}
+
+test_github_account_failure_is_explained_with_the_raw_text_below() {
+  # gh's own error text is raw: it is shown only below a plain message
+  # and a next action, for support. Nothing is collected, exit 1.
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_USER_ERROR="HTTP 401: Bad credentials (https://api.github.com/user)"
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}"
+  [ "$RC" -eq 1 ] || { cat "$d/err" >&2; die "exit $RC, want 1"; }
+  sed -n 1p "$d/err" | grep -q '^What happened: Could not read your GitHub account' \
+    || { cat "$d/err" >&2; die "no plain message first"; }
+  sed -n 2p "$d/err" | grep -qE '^What to do next: .*--owner' || { cat "$d/err" >&2; die "no next action"; }
+  sed -n 3p "$d/err" | grep -qF 'Details for support' || { cat "$d/err" >&2; die "raw text not introduced"; }
+  sed -n 4p "$d/err" | grep -qxF '    HTTP 401: Bad credentials (https://api.github.com/user)' \
+    || { cat "$d/err" >&2; die "raw text not shown below"; }
+  [ ! -s "$d/out" ] || { cat "$d/out" >&2; die "something went to stdout"; }
+  [ ! -e "$d/dump" ] || die "answers were collected"
+}
+
+test_non_interactive_lists_every_missing_required_input() {
+  local d o
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive
+  for o in --name --description --pack --license; do expect_refused "$d" "$o"; done
+  [ ! -e "$d/gh.log" ] || die "GitHub was asked before the missing inputs were reported"
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive --name my-app --pack web
+  for o in --description --license; do expect_refused "$d" "$o"; done
+  ! grep -qE -- '^    - --(name|pack):' "$d/err" || { cat "$d/err" >&2; die "a given option was listed as missing"; }
+}
+
+test_non_interactive_never_reads_stdin() {
+  # The first line of stdin is still there after the inputs are collected.
+  local d
+  d="$(tmpdir)"
+  printf '%s\n' first-line second-line >"$d/in"
+  make_stub_gh "$d/gh"
+  # Not in a condition, so a failing step stops the subshell (errexit).
+  set +e
+  ( load_script
+    export STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
+    parse_args --non-interactive "${REQUIRED_OPTS[@]}"
+    collect_inputs
+    dump_inputs >"$d/dump"
+    IFS= read -r line
+    printf '%s\n' "$line" >"$d/first"
+  ) <"$d/in" >"$d/out" 2>"$d/err"
+  RC=$?
+  set -e
+  expect_inputs "$d" NAME=my-app OWNER=octo-user
+  [ "$(cat "$d/first")" = first-line ] || die "stdin was read: next line is $(cat "$d/first")"
+  ! grep -q ': $' "$d/out" || { cat "$d/out" >&2; die "a question was asked"; }
+}
+
+test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
+  # The whole script, as a user runs it. The steps after the questions are
+  # not built yet: it stops there, with exit 1, having created nothing.
+  local d rc
+  d="$(tmpdir)"
+  make_stub_gh "$d/gh"
+  export STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
+  rc=0
+  bash "$SCRIPT" --non-interactive "${REQUIRED_OPTS[@]}" </dev/null >"$d/out" 2>"$d/err" || rc=$?
+  [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "exit $rc, want 1"; }
+  grep -qF 'stops after the questions' "$d/err" || { cat "$d/err" >&2; die "no stop message"; }
+  rc=0
+  bash "$SCRIPT" --non-interactive "${REQUIRED_OPTS[@]}" <&- >"$d/out" 2>"$d/err" || rc=$?
+  [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "stdin closed: exit $rc, want 1"; }
+  grep -qF 'stops after the questions' "$d/err" || { cat "$d/err" >&2; die "stdin closed: no stop message"; }
+  [ "$(cut -f2- "$d/gh.log" | sort -u)" = "$(printf 'api\tuser\t--jq\t.login, (.name // "")')" ] \
+    || { cat "$d/gh.log" >&2; die "gh was used for more than reading the account"; }
+}
+
+test_running_with_no_options_starts_the_questions() {
+  local d rc=0
+  d="$(tmpdir)"
+  bash "$SCRIPT" </dev/null >"$d/out" 2>"$d/err" || rc=$?
+  [ "$rc" -eq 2 ] || { cat "$d/err" >&2; die "exit $rc, want 2 (no answer)"; }
+  grep -q '^Project name: $' "$d/out" || { cat "$d/out" >&2; die "the first question was not asked"; }
+}
+
+test_unknown_option_is_refused() {
+  local d
+  d="$(tmpdir)"
+  inputs "$d" --nmae my-app
+  [ "$RC" -eq 2 ] || { cat "$d/err" >&2; die "exit $RC, want 2"; }
+  sed -n 1p "$d/err" | grep -qE '^What happened: .*--nmae' || { cat "$d/err" >&2; die "the option is not named"; }
+  grep -qE '^What to do next: .*--help' "$d/err" || { cat "$d/err" >&2; die "no pointer to --help"; }
+}
+
+test_option_without_its_value_is_refused() {
+  local d
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive --name
+  [ "$RC" -eq 2 ] || { cat "$d/err" >&2; die "exit $RC, want 2"; }
+  sed -n 1p "$d/err" | grep -qE '^What happened: .*--name.*needs a value' || { cat "$d/err" >&2; die "not explained"; }
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive --description "" --name my-app
+  [ "$RC" -eq 2 ] || { cat "$d/err" >&2; die "empty value: exit $RC, want 2"; }
+  sed -n 1p "$d/err" | grep -qE '^What happened: .*--description.*needs a value' || { cat "$d/err" >&2; die "empty value not explained"; }
+}
+
+test_switch_given_a_value_is_refused() {
+  local d
+  d="$(tmpdir)"
+  inputs "$d" --yes=no
+  [ "$RC" -eq 2 ] || { cat "$d/err" >&2; die "exit $RC, want 2"; }
+  sed -n 1p "$d/err" | grep -qE '^What happened: .*--yes' || { cat "$d/err" >&2; die "not explained"; }
+}
+
+test_a_word_that_is_not_an_option_shows_the_usage() {
+  local d rc=0
+  d="$(tmpdir)"
+  bash "$SCRIPT" my-app </dev/null >"$d/out" 2>"$d/err" || rc=$?
+  [ "$rc" -eq 2 ] || { cat "$d/err" >&2; die "exit $rc, want 2"; }
+  grep -qF 'usage:' "$d/err" || { cat "$d/err" >&2; die "no usage shown"; }
+}
+
+test_help_lists_every_option() {
+  local d rc=0 o
+  d="$(tmpdir)"
+  bash "$SCRIPT" --help </dev/null >"$d/out" 2>"$d/err" || rc=$?
+  [ "$rc" -eq 0 ] || { cat "$d/err" >&2; die "exit $rc, want 0"; }
+  for o in --name --owner --project-name --description --po-name --pack --with-deploy \
+    --public --private --license --copyright-holder --dir --ci-timeout --non-interactive \
+    --yes --dry-run --resume --help layout-pack; do
+    grep -qF -- "$o" "$d/out" || { cat "$d/out" >&2; die "help lacks $o"; }
+  done
+}
+
+test_name_takes_letters_digits_dots_dashes_and_underscores() {
+  accepts --name a NAME=a
+  accepts --name 9lives NAME=9lives
+  accepts --name My.App_v2-x NAME=My.App_v2-x
+  refuses --name -x .x _x "my app" a/b café "a+b" "a$(printf '\t')b" "a\$b"
+}
+
+test_dots_in_the_name_become_dashes_in_the_lowercase_slug() {
+  local d
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive --name My.Cool.App --description "x y." --pack node --license mit --owner a --po-name b
+  expect_inputs "$d" NAME=My.Cool.App PROJECT_NAME=My.Cool.App SLUG=my-cool-app DIR=./My.Cool.App
+}
+
+test_name_whose_slug_npm_does_not_allow_is_refused() {
+  local long214 long215
+  long214="a$(printf '%0213d' 0)"
+  long215="a$(printf '%0214d' 0)"
+  refuses --name node_modules NODE_MODULES "$long215"
+  accepts --name "$long214" "NAME=$long214"
+}
+
+test_name_values_refuse_characters_that_break_json_or_html() {
+  # Spec: name values may not contain control characters, ", \, <, >, &
+  # or a backtick. The description must be one line.
+  local opt c
+  for opt in --project-name --description --po-name --copyright-holder; do
+    for c in '"' '\' '<' '>' '&' '`' "$(printf '\t')" "$(printf '\r')" "$(printf '\033')" "$(printf '\177')" '
+'; do
+      refuses "$opt" "a${c}b"
+    done
+  done
+  refuses --dir "a$(printf '\t')b" "a
+b"
+}
+
+test_a_bar_is_refused_in_the_po_name_and_display_name_only() {
+  refuses --project-name "a | b"
+  refuses --po-name "a|b"
+  accepts --copyright-holder "a | b" "COPYRIGHT_HOLDER=a | b"
+  accepts --description "Either this | or that." "DESCRIPTION=Either this | or that."
+}
+
+test_description_must_be_one_line_and_not_blank() {
+  refuses --description "   " "first
+second"
+  accepts --description "  One line.  " "DESCRIPTION=One line."
+}
+
+test_pack_must_be_one_of_the_four() {
+  local p
+  refuses --pack ruby nodejs 2
+  for p in node web python react-native; do accepts --pack "$p" "PACK=$p"; done
+  accepts --pack Web PACK=web
+}
+
+test_with_deploy_is_only_for_the_web_pack() {
+  local d
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner a --po-name b --with-deploy
+  expect_refused "$d" --with-deploy
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive --name x --description "x y." --pack web --license mit --owner a --po-name b --with-deploy
+  expect_inputs "$d" PACK=web WITH_DEPLOY=yes
+}
+
+test_public_and_private_cannot_both_be_given() {
+  local d
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner a --po-name b --private --public
+  expect_refused "$d" --private
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner a --po-name b --private
+  expect_inputs "$d" VISIBILITY=private
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner a --po-name b --public
+  expect_inputs "$d" VISIBILITY=public
+}
+
+test_licence_is_a_listed_choice_or_a_github_licence_key() {
+  local l
+  for l in none mit apache-2.0 gpl-3.0 bsd-3-clause polyform-noncommercial-1.0.0 agpl-3.0 cc0-1.0; do
+    accepts --license "$l" "LICENSE=$l"
+  done
+  accepts --license MIT LICENSE=mit
+  # Whether a key exists on GitHub is a GitHub check, made before
+  # anything is created (preflight); here only its form is checked.
+  refuses --license "my licence" "mit;x" ../mit -mit .mit
+}
+
+test_ci_wait_is_a_whole_number_of_minutes() {
+  refuses --ci-timeout 0 -5 1.5 ten 10000 000
+  accepts --ci-timeout 1 CI_TIMEOUT=1
+  accepts --ci-timeout 9999 CI_TIMEOUT=9999
+  accepts --ci-timeout 020 CI_TIMEOUT=20
+}
+
+test_owner_is_a_github_account_name() {
+  refuses --owner "my org" a/b -acme ac.me ac_me
+  accepts --owner Acme-Inc OWNER=Acme-Inc
+}
+
+test_every_problem_is_listed_at_once() {
+  local d o
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive --name "bad name" --pack ruby --ci-timeout x
+  for o in --name --pack --ci-timeout --description --license; do expect_refused "$d" "$o"; done
+}
+
+test_resume_dry_run_and_yes_are_recorded() {
+  local d
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner a --po-name b --resume --dry-run --yes
+  expect_inputs "$d" RESUME=1 DRY_RUN=1 YES=1
+}
+
+test_a_github_profile_name_that_cannot_be_used_is_refused_with_its_option() {
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_NAME="Ada | Lovelace"
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}"
+  expect_refused "$d" --po-name
+}
+
+# ---------- questions ----------
+# Without --non-interactive the script asks for every input not given as
+# an option, reading one answer per line from stdin. The question order:
+# name, display name, description, owner, PO name, pack, deploy files
+# (web only), visibility, licence, copyright holder (not for "none"),
+# folder.
+
+test_questions_are_asked_for_every_input_not_given() {
+  local d
+  d="$(tmpdir)"
+  printf '%s\n' my-app "My App" "Lends tools to neighbours." "" "" web y private mit "" "" >"$d/in"
+  inputs "$d"
+  expect_inputs "$d" NAME=my-app "PROJECT_NAME=My App" "DESCRIPTION=Lends tools to neighbours." \
+    OWNER=octo-user "PO_NAME=Octo User" PACK=web WITH_DEPLOY=yes VISIBILITY=private \
+    LICENSE=mit "COPYRIGHT_HOLDER=Octo User" DIR=./my-app CI_TIMEOUT=20 NON_INTERACTIVE=
+  [ "$(grep -c ': $' "$d/out")" -eq 11 ] || { cat "$d/out" >&2; die "not 11 questions"; }
+}
+
+test_an_empty_answer_takes_the_default_shown() {
+  local d
+  d="$(tmpdir)"
+  printf '%s\n' my-app "" "Lends tools." "" "" python "" mit "" "" >"$d/in"
+  inputs "$d"
+  expect_inputs "$d" PROJECT_NAME=my-app OWNER=octo-user "PO_NAME=Octo User" VISIBILITY=public \
+    "COPYRIGHT_HOLDER=Octo User" DIR=./my-app WITH_DEPLOY=no
+  grep -qxF 'Display name [my-app]: ' "$d/out" || { cat "$d/out" >&2; die "default not shown"; }
+  grep -qxF 'Owner [octo-user]: ' "$d/out" || { cat "$d/out" >&2; die "owner default not shown"; }
+}
+
+test_answers_have_spaces_and_carriage_returns_removed() {
+  local d cr
+  d="$(tmpdir)"
+  cr="$(printf '\r')"
+  printf '%s\n' "  my-app $cr" "My App$cr" "Lends tools.$cr" "acme$cr" "Ada$cr" "node$cr" \
+    "public$cr" "none$cr" "work$cr" >"$d/in"
+  inputs "$d"
+  expect_inputs "$d" NAME=my-app "PROJECT_NAME=My App" "DESCRIPTION=Lends tools." OWNER=acme \
+    PO_NAME=Ada PACK=node VISIBILITY=public LICENSE=none DIR=work
+}
+
+test_questions_are_skipped_for_inputs_given_as_options() {
+  local d
+  d="$(tmpdir)"
+  # Asked: display name, description, owner, PO name, visibility, folder.
+  # Not asked: deploy files (python) and copyright holder (licence none).
+  printf '%s\n' "" "Lends tools." "" "" "" "" >"$d/in"
+  inputs "$d" --name my-app --pack python --license none
+  expect_inputs "$d" NAME=my-app PACK=python LICENSE=none "DESCRIPTION=Lends tools." WITH_DEPLOY=no \
+    "COPYRIGHT_HOLDER=Octo User"
+  [ "$(grep -c ': $' "$d/out")" -eq 6 ] || { cat "$d/out" >&2; die "not 6 questions"; }
+  ! grep -qE '^(Project name|Language pack|Licence|Add the publishing files|Copyright holder)' "$d/out" \
+    || { cat "$d/out" >&2; die "asked for something given or not needed"; }
+}
+
+test_a_wrong_answer_is_explained_and_asked_again() {
+  local d
+  d="$(tmpdir)"
+  printf '%s\n' "my app" my-app "" "" "Lends tools." "" "" ruby 2 maybe n "" 7 mit "" "" >"$d/in"
+  inputs "$d"
+  expect_inputs "$d" NAME=my-app PACK=web WITH_DEPLOY=no LICENSE=mit "DESCRIPTION=Lends tools."
+  [ "$(grep -c '^Project name: $' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "name not asked again"; }
+  [ "$(grep -c '^Description: $' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "empty required answer not asked again"; }
+  [ "$(grep -c '^Language pack' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "pack not asked again"; }
+  [ "$(grep -c '^Licence' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "licence not asked again"; }
+  [ "$(grep -c 'Please try again\.$' "$d/out")" -eq 5 ] || { cat "$d/out" >&2; die "not 5 explained retries"; }
+}
+
+test_pack_and_licence_can_be_chosen_by_number_or_name() {
+  local d
+  d="$(tmpdir)"
+  printf '%s\n' my-app "" "Lends tools." "" "" 4 "" 6 "" "" >"$d/in"
+  inputs "$d"
+  expect_inputs "$d" PACK=react-native LICENSE=polyform-noncommercial-1.0.0
+  d="$(tmpdir)"
+  printf '%s\n' my-app "" "Lends tools." "" "" 1 "" 1 "" >"$d/in"
+  inputs "$d"
+  expect_inputs "$d" PACK=node LICENSE=none
+  d="$(tmpdir)"
+  printf '%s\n' my-app "" "Lends tools." "" "" python 2 agpl-3.0 "" "" >"$d/in"
+  inputs "$d"
+  expect_inputs "$d" PACK=python VISIBILITY=private LICENSE=agpl-3.0
+}
+
+test_running_out_of_answers_stops_with_exit_2() {
+  local d
+  d="$(tmpdir)"
+  printf '%s\n' my-app >"$d/in"
+  inputs "$d"
+  [ "$RC" -eq 2 ] || { cat "$d/err" >&2; die "exit $RC, want 2"; }
+  sed -n 1p "$d/err" | grep -q '^What happened: .*a question got no answer' || { cat "$d/err" >&2; die "not explained"; }
+  grep -qE '^What to do next: .*--non-interactive' "$d/err" || { cat "$d/err" >&2; die "no next action"; }
+  [ ! -e "$d/dump" ] || die "answers were collected"
+}
+
+test_invalid_options_are_refused_before_any_question() {
+  local d
+  d="$(tmpdir)"
+  printf '%s\n' my-app >"$d/in"
+  inputs "$d" --pack ruby
+  expect_refused "$d" --pack
+  ! grep -q ': $' "$d/out" || { cat "$d/out" >&2; die "a question was asked"; }
+}
+
+test_deploy_question_on_another_pack_than_web_is_refused() {
+  # --with-deploy given, and the pack chosen at the question is not web.
+  local d
+  d="$(tmpdir)"
+  printf '%s\n' my-app "" "Lends tools." "" "" node "" mit "" "" >"$d/in"
+  inputs "$d" --with-deploy
+  expect_refused "$d" --with-deploy
+}
+
+# A full question run (web, a licence): every question is asked.
+full_transcript() {
+  local d="$1"
+  printf '%s\n' my-app "" "Lends tools." "" "" web "" "" mit "" "" >"$d/in"
+  inputs "$d"
+  [ "$RC" -eq 0 ] || { cat "$d/err" >&2; die "the question run failed"; }
+}
+
+test_every_question_has_a_one_line_explanation_above_it() {
+  # The explanation is the nearest line above the question that is not
+  # an indented choice: one sentence or more, at least six words, ending
+  # in a full stop.
+  local d bad
+  d="$(tmpdir)"
+  full_transcript "$d"
+  bad="$(awk '
+    /: $/ {
+      n = split(why, w, " ")
+      if (why == "" || n < 6 || why !~ /\.$/) print "no explanation above: " $0
+      why = ""; next
+    }
+    /^  / { next }
+    { why = $0 }
+  ' "$d/out")"
+  [ -z "$bad" ] || { cat "$d/out" >&2; printf '%s\n' "$bad" >&2; die "a question has no explanation"; }
+}
+
+test_required_questions_have_no_default_and_say_why() {
+  local d got
+  d="$(tmpdir)"
+  full_transcript "$d"
+  got="$(awk '
+    /: $/ {
+      if ($0 ~ / \[[^]]*\]: $/) next
+      print $0 (why ~ /There is no default, because only you can choose it\./ ? "WHY" : "NOWHY")
+      why = ""; next
+    }
+    /^  / { next }
+    { why = $0 }
+  ' "$d/out")"
+  [ "$got" = "$(printf '%s\n' 'Project name: WHY' 'Description: WHY' \
+    'Language pack (type the number or the name): WHY' 'Licence (type the number or the name): WHY')" ] \
+    || { printf '%s\n' "$got" >&2; die "required questions are not exactly the four, each saying why"; }
+}
+
+test_pack_and_licence_questions_explain_each_choice() {
+  local d c line
+  d="$(tmpdir)"
+  full_transcript "$d"
+  for c in '1) node' '2) web' '3) python' '4) react-native' '1) none' '2) mit' '3) apache-2.0' \
+    '4) gpl-3.0' '5) bsd-3-clause' '6) polyform-noncommercial-1.0.0'; do
+    line="$(grep -F -- "  $c: " "$d/out" | head -1)"
+    [ -n "$line" ] || { cat "$d/out" >&2; die "choice not shown: $c"; }
+    [ "$(printf '%s\n' "${line#*: }" | wc -w | tr -d ' ')" -ge 5 ] || die "choice not explained in words: $line"
+  done
 }
 
 # ---------- run ----------
