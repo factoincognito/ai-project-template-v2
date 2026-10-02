@@ -12,10 +12,9 @@
 
 Written 2026-10-02 so nothing depends on anyone remembering. **Each Clead session lists this to Adam in its first reply and removes each line when Adam confirms it is done.** Agents cannot do these: the access proxy returns 403 on branch deletion, tag pushes and the Actions and secrets settings, and branch protection and tokens are GitHub account settings.
 
-1. **Answer PBI-1.14 question 1** (item 8): `--resume` on a repo stamped by an older bootstrapper: refuse, or finish with the current script's tables? Say "go" after answering and S1 and S3 start.
-2. **Decide** (item 10) whether CLAUDE.md should say that only one Clead session works on the template at a time, and that every session starts by listing open PRs and non-main branches.
-3. **Later, when PBI-1.14 is built:** after S15 merges, the next release tag, which agents cannot do; then the end-to-end runs on throwaway repos, including PBI-1.17's red-then-`Test-exempt` pull request in a real project (PBI-1.17 stays `[NEXT]` until then).
-4. **If an agent has to change files in your connected PC folder,** it asks for delete permission once per session (a failed pull left a stale `.git/index.lock` last time). Your PC clone of the template is behind main and its `origin` points at the org; the session fast-forwards it after you grant that.
+1. **Decide** (item 10) whether CLAUDE.md should say that only one Clead session works on the template at a time, and that every session starts by listing open PRs and non-main branches.
+2. **Later, when PBI-1.14 is built:** after S15 merges, the next release tag, which agents cannot do; then the end-to-end runs on throwaway repos, including PBI-1.17's red-then-`Test-exempt` pull request in a real project (PBI-1.17 stays `[NEXT]` until then).
+3. **If an agent has to change files in your connected PC folder,** it asks for delete permission once per session (a failed pull left a stale `.git/index.lock` last time). Your PC clone of the template is behind main and its `origin` points at the org; the session fast-forwards it after you grant that.
 
 ---
 
@@ -25,12 +24,12 @@ Written 2026-10-02 so the order does not have to be re-derived. "Clead" is the n
 
 | Step | Who | Blocked by |
 |---|---|---|
-| PBI-1.14 slices S1 and S3 | Clead (Opus Crog implementer) | Adam's answer and "go" (to-do 1) |
+| PBI-1.14 slices S1 and S3 | Clead (Opus Crog implementer) | Nothing: Adam answered question 1 and said go (2026-10-02) |
 | Rest of PBI-1.14, S15 last | Clead | S1 and S3 merged; each slice follows the PR loop |
 | Release prep PR for the next release (put the version heading over Unreleased, as #76 and #126 did) | Clead | S15 merged; written just before the tag so it is complete |
 | Next release tag `v*` | Adam, from the Releases page | Release prep merged (decision of 2026-10-02: no tag until S15 merges) |
 | Release verified | Clead, through the API: the tag run's checks passed, bootstrapper `main` has the new commit, the tag exists on both repos | The tag |
-| End-to-end runs on throwaway repos; PBI-1.17 to `[DONE]` | Adam runs, Clead reads the results | PBI-1.14 built and released (to-do 3) |
+| End-to-end runs on throwaway repos; PBI-1.17 to `[DONE]` | Adam runs, Clead reads the results | PBI-1.14 built and released (to-do 2) |
 | acuteping created | Adam | The end-to-end runs |
 
 ---
@@ -116,9 +115,9 @@ graduate (see the rule above).
 **Spec meets changed repo (to fix in the slice named):** the placement-table tests in `bootstrap/test.sh` pin both READMEs (S17); `test_workflow_bootstrapper_test_runs_the_require_test_change_tests` conflicts with the aggregate design (S5); the setup PR's tree must keep `.github/scripts/require-test-change.sh` (S10); stamps from releases before the org move name the old owner, so older repos cannot be resumed (S15).
 **First slice:** S1. Tests first: the layout table lives only in the script; the script's `layout-pack` output equals the wrapper's for every pack; non-empty target refused; usage and unknown pack exit 2; the real build ships the script at the root, executable and LF; the script is bash 3.2 compatible and mentions no template-only path.
 **Questions for Adam (neither blocks S1):**
-1. `--resume` on a repo stamped by an older bootstrapper version (including repos already made with "Use this template"): refuse, or finish with the current script's tables? Blocks only S15.
+1. Answered by Adam, 2026-10-02 (`memory/decisions.md`): `--resume` refuses a repo stamped by an older bootstrapper version and tells the user to create a fresh repo; a repo stamped by the current version, including one made with "Use this template" from the current release, still resumes. The spec text is corrected in S15.
 2. Answered by Adam, 2026-10-02: v2.3.0 is released before S1 (nothing of PBI-1.14 ships in it), then no tag until S15 merges. acuteping waits for PBI-1.14 and the end-to-end runs either way (decision of 2026-10-01).
-**Not started:** no slice is built yet. Adam answers question 1 and says go; then S1 and S3 start (S3 is independent), with an Opus Crog as implementer and an Opus reviewer for the code.
+**Started 2026-10-02:** Adam answered question 1 and said go. S1 and S3 are in progress (S3 is independent), with an Opus Crog as implementer and an Opus reviewer for the code.
 
 
 ### 9. Pending from the previous Clead session (PBI-1.17 build), staged on Adam's request — new (2026-10-02)
