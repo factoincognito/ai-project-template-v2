@@ -160,6 +160,8 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 - **CLAUDE.md assigns roles by surface** ("Crog (Claude Code)", "Clead (Claude app)"). Staying on Code needs that wording changed.
 - **Tools:** compare what Clead uses in Cowork with what a Code session has. For example, CLAUDE.md names the Chrome extension as Clead's fallback channel.
 - **Token use, Adam's open question:** does Code use more or fewer tokens than Cowork for the same task, small or large? Not measured on either side. Two data points for Code, from the sessions' own usage metadata (`get_session`, list price): the first turn of a trivial task read about 48k tokens of context (system prompt, tools, CLAUDE.md) before its first action, and the round-2 Opus review of #136 cost about $1.73. Run the same task in both before deciding.
+- **Adam's hypothesis:** Code on Code is likely more token-intensive than Cowork on Code, because Cowork is better at bouncing ideas around, discussion and documentation, which is everyday work here. Not measured.
+- **Clead's input, from the Code session of 2026-10-02:** that session was mostly discussion and docs, plus subagents. Over about 2 hours it cost about $9.51 at list price, read about 21M tokens from cache, and ended with about 286k tokens of context (session usage metadata). Most of that cost comes from resending the growing conversation on every turn. That happens on either product, so session length may matter more than the product: shorter sessions per topic, or compacting, cut it on both. Two more points: "better at" (quality of the result) and token use are separate questions; and that session ran on Opus while CLAUDE.md sets Clead's default to Sonnet, so part of its cost is the model, not the product.
 
 ---
 
