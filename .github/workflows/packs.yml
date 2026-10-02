@@ -14,9 +14,11 @@
 # only says you can. The
 # steps below copy the pack's ci.yml commands verbatim;
 # tools/test-layout-pack.sh fails if they drift apart. The template has
-# no lockfile, so the npm-based packs (node, web, react-native) run
-# `npm install` to create one first ("First-time setup" in the pack's
-# code-standards.md), then `npm ci` runs as a project's CI would. The
+# no lockfile, so the npm-based packs (node, web, react-native) first
+# create one with `npm install --package-lock-only --no-audit --no-fund`,
+# the command the bootstrap script is specified to use (PBI-1.14 step 7),
+# which writes package-lock.json without node_modules. Then `npm ci`
+# installs from that lockfile as a project's CI would. The
 # Python pack has no lockfile to create; pack-python leaves out the pip
 # cache of the pack's ci.yml, which would look for requirements files in
 # the template checkout.
@@ -87,7 +89,7 @@ jobs:
         run: bash .github/scripts/require-test-change.sh --code 'src/*' --test 'src/*.test.ts' 'src/*.spec.ts' 'src/*__tests__/*'
 
       - name: Create the lockfile
-        run: npm install --no-audit --no-fund
+        run: npm install --package-lock-only --no-audit --no-fund
 
       - name: Install dependencies
         run: npm ci
@@ -169,7 +171,7 @@ jobs:
         run: bash .github/scripts/require-test-change.sh --code 'src/*' 'index.html' --test 'src/*.test.ts' 'src/*.spec.ts' 'src/*__tests__/*' 'e2e/*'
 
       - name: Create the lockfile
-        run: npm install --no-audit --no-fund
+        run: npm install --package-lock-only --no-audit --no-fund
 
       - name: Install dependencies
         run: npm ci
@@ -347,7 +349,7 @@ jobs:
         run: bash .github/scripts/require-test-change.sh --code 'src/*' --test 'src/*.test.ts' 'src/*.test.tsx' 'src/*.spec.ts' 'src/*.spec.tsx' 'src/*__tests__/*'
 
       - name: Create the lockfile
-        run: npm install --no-audit --no-fund
+        run: npm install --package-lock-only --no-audit --no-fund
 
       - name: Install dependencies
         run: npm ci

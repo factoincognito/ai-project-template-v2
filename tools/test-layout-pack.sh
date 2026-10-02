@@ -398,7 +398,8 @@ test_pack_ci_steps_are_single_line() {
 test_packs_workflow_runs_every_pack_ci_step() {
   # packs.yml must run each pack's CI commands verbatim, so the two
   # cannot drift apart. `npm ci` is the one it may precede with
-  # `npm install`, because the template has no lockfile.
+  # `npm install --package-lock-only`, because the template has no
+  # lockfile.
   local wf="$REPO/.github/workflows/packs.yml" p cmd n=0
   for p in node web python react-native; do
     while IFS= read -r cmd; do
@@ -407,6 +408,34 @@ test_packs_workflow_runs_every_pack_ci_step() {
     done < <(sed -n 's/^ *run: //p' "$REPO/languages/$p/ci.yml")
   done
   [ "$n" -ge 17 ] || die "found only $n pack CI steps; the parser is broken"
+}
+
+test_packs_workflow_creates_the_lockfile_with_the_script_command() {
+  # PBI-1.14 step 7: each npm pack job creates package-lock.json with the
+  # bootstrap script's command, which writes no node_modules, and does so
+  # before `npm ci`. No other `npm install` runs anywhere in packs.yml.
+  local wf="$REPO/.github/workflows/packs.yml" p got n
+  local want='npm install --package-lock-only --no-audit --no-fund'
+  for p in node web react-native; do
+    got="$(awk -v job="  pack-$p:" '
+      $0 == job { injob = 1; next }
+      /^  [a-z][a-z-]*:$/ { injob = 0 }
+      injob && /^      - name: / { name = $0; sub(/^      - name: /, "", name) }
+      injob && /^        run: / { cmd = $0; sub(/^        run: /, "", cmd); print name "\t" cmd }
+    ' "$wf")"
+    n="$(printf '%s\n' "$got" | grep -c '^Create the lockfile	')" || true
+    [ "$n" -eq 1 ] || die "pack-$p: expected 1 \"Create the lockfile\" step, found $n"
+    printf '%s\n' "$got" | grep -qxF "Create the lockfile	$want" \
+      || die "pack-$p: lockfile step does not run exactly: $want (got: $(printf '%s\n' "$got" | grep '^Create the lockfile	' | cut -f2-))"
+    printf '%s\n' "$got" | awk -F'\t' -v want="$want" '
+      $2 == want { seen = 1 } $2 == "npm ci" { ci = 1; if (!seen) exit 1 }
+      END { if (!seen || !ci) exit 1 }
+    ' || die "pack-$p: the lockfile step does not run before npm ci"
+  done
+  n="$(grep -cE '^ *run: npm (install|i)( |$)' "$wf")" || true
+  [ "$n" -eq 3 ] || die "expected exactly 3 npm install steps (the lockfile steps), found $n"
+  ! grep -E '^ *run: npm (install|i)( |$)' "$wf" | grep -vqxE " *run: $want" \
+    || die "packs.yml runs an npm install other than: $want"
 }
 
 test_packs_workflow_uses_the_pack_ci_action_versions() {
