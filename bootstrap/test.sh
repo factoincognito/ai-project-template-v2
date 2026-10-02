@@ -170,12 +170,36 @@ test_project_script_stub_without_placeholders_rejected() {
 
 test_stamped_stub_that_is_a_symlink_rejected() {
   # Stamping writes in place; through a symlink it would write into
-  # whatever the link points at, possibly the source tree.
-  local fx; fx="$(make_fixture)"
-  mv "$fx/bootstrap/stubs/CHANGELOG.md" "$fx/real-changelog.md"
-  ln -s ../../real-changelog.md "$fx/bootstrap/stubs/CHANGELOG.md"
-  expect_build_fail "$fx" "CHANGELOG.md stub must be a regular file, not a symlink" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
-  grep -qF '{{TEMPLATE_VERSION}}' "$fx/real-changelog.md" || die "the link target was modified"
+  # whatever the link points at, possibly the source tree. The link is
+  # absolute: a relative one would be broken once copied into the
+  # build's temp folder, and nothing could be written through it.
+  local fx target out err rc
+  fx="$(make_fixture)"; out="$WORK/o.$RANDOM"; err="$WORK/err.$RANDOM"
+  target="$WORK/outside-changelog.$RANDOM.md"
+  mv "$fx/bootstrap/stubs/CHANGELOG.md" "$target"
+  ln -s "$target" "$fx/bootstrap/stubs/CHANGELOG.md"
+  set +e
+  bash "$fx/bootstrap/build.sh" "$out" v1.2.3 "$SHA" >/dev/null 2>"$err"
+  rc=$?
+  set -e
+  grep -qF '{{TEMPLATE_VERSION}}' "$target" || { cat "$target" >&2; die "the link target outside the build was modified"; }
+  [ ! -L "$out/CHANGELOG.md" ] || die "CHANGELOG.md shipped as a symlink"
+  [ "$rc" -ne 0 ] || die "build succeeded, expected the symlinked stub to be refused"
+  grep -qF "CHANGELOG.md stub must be a regular file, not a symlink" "$err" || { cat "$err" >&2; die "stderr lacks the symlink refusal"; }
+}
+
+test_build_fails_if_stamping_drops_the_executable_bit() {
+  # Pins the output check in build.sh: the fixture's own copy of
+  # build.sh is patched so that the stamp step strips the mode, and the
+  # build must then refuse. No hook in build.sh; the patch must apply,
+  # or this test fails instead of passing on an unchanged copy.
+  local fx b
+  fx="$(make_fixture)"; b="$fx/bootstrap/build.sh"
+  grep -qxF '  cat "$STAMP_TMP" >"$STAGE/$s"' "$b" || die "stamp line not found in build.sh; update this test"
+  sed -e 's|^  cat "\$STAMP_TMP" >"\$STAGE/\$s"$|&; chmod a-x "$STAGE/$s"|' "$b" >"$b.new"
+  cat "$b.new" >"$b"; rm "$b.new"
+  grep -qF 'chmod a-x "$STAGE/$s"' "$b" || die "the patch did not apply"
+  expect_build_fail "$fx" "stamping dropped the executable bit of bootstrap-project.sh" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
 }
 
 test_absent_out_dir_is_created() {
