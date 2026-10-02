@@ -283,32 +283,45 @@ command_arg_violations() {
 # bypass_lines <file>: lines outside the messages block that can put text
 # on the terminal without a helper. A line that writes somewhere else on
 # purpose ends with "# not-user-facing". Checked:
-#   - echo, printf, a heredoc (<<, not the here-string <<<), or >&2, on
-#     the line with its quoted strings removed;
+#   - echo, printf or >&2, on the line with its quoted strings removed;
 #   - /dev/stderr, /dev/stdout, /dev/tty or /dev/fd/N (on the full line);
 #   - BOOTSTRAP_GH outside the body of run_gh: every gh call goes through
 #     run_gh, so its output is seen here;
+#   - a heredoc (<< or <<-, not the here-string <<<, and not a << shift
+#     inside $(( )) or (( ))), wherever its command's output goes: its
+#     body is text the banned-words check does not read;
 #   - each run_gh, gh, git, npm, cat or tee command whose own stdout is
 #     neither captured ($( ), <( ) or backticks around it) nor sent
 #     elsewhere with a stdout redirect (>, >>, 1>, &>) in the same
-#     command, or after the same pipeline or ( ) subshell. A walker reads
-#     the code with its quotes, $( ) and ( ) nesting and continuation
-#     lines, so a capture or redirect elsewhere on the line does not count
-#     (the S4 review's note A).
+#     command, or after the same pipeline or ( ) subshell. The command
+#     may be written \gh or with a path (/usr/bin/gh, ./bin/gh). A walker
+#     reads the code with its quotes ('...', "...", $'...' with its \
+#     escapes), $( ), $(( )) and ( ) nesting and continuation lines, so a
+#     capture or redirect elsewhere on the line does not count (the S4
+#     review's note A). It skips a heredoc body up to its terminator line
+#     (tabs before it allowed for <<-, the delimiter read with its quotes
+#     or \ removed), so the quotes in a body do not carry over. A heredoc
+#     with no terminator line would hide the rest of the file, so its
+#     first line is flagged even when it is marked quiet.
 # Not covered (no static scan can tell): the stderr of those commands
 # (gh's error text is raw: tests check that each gh call's error is
 # shown through show_error), the stdout of other commands (ls, sed,
 # find, tr ...: the script uses them inside a capture or a redirected
-# pipeline), output through an eval or a { } group, a case pattern inside
-# $( ), and a helper defined outside the messages block that prints
-# through say (its texts are still checked by literal_strings).
+# pipeline), output through an eval or a { } group, code in a string run
+# later (trap '...', bash -c '...'), a command named through a variable
+# or in quotes ("gh", $gh, "$dir"/gh), raw output passed to a helper
+# (say "$(run_gh ...)"), a case pattern inside $( ), a nested ( )
+# subshell written (( with no space (read as arithmetic), and a helper
+# defined outside the messages block that prints through say (its texts
+# are still checked by literal_strings). The body lines of a heredoc get
+# the line checks above, but not the walker.
 # run_offered's own output reaches the terminal on purpose: an install or
 # a login has to show its progress and prompts.
 bypass_lines() {
   awk -v sq="'" '
     function flag(n) { if (!(n in quiet)) hit[n] = 1 }
     function settle() { if (pend[d]) flag(pend[d]); pend[d] = 0 }
-    function push(t) { d++; ctx[d] = t; pend[d] = 0 }
+    function push(t) { d++; ctx[d] = t; pend[d] = 0; par[d] = 0 }
     function pop() {
       # The output of a ( ) subshell goes where the subshell sends it.
       if (ctx[d] == "p" && pend[d] && !pend[d - 1]) pend[d - 1] = pend[d]
@@ -318,41 +331,112 @@ bypass_lines() {
       for (k = 2; k <= d; k++) if (ctx[k] == "c" || ctx[k] == "b") return 1
       return 0
     }
-    BEGIN { d = 1; ctx[1] = "t"; pend[1] = 0 }
+    # after_path(i): the word at i ends a path (/usr/bin/gh, ./gh, ~/gh)
+    # that starts where a word may start (not after $ = { } or \).
+    function after_path(i,   j, tok) {
+      j = i - 1
+      while (j >= 1 && substr($0, j, 1) ~ /[A-Za-z0-9_.\/~-]/) j--
+      tok = substr($0, j + 1, i - 1 - j)
+      if (tok !~ /^(\/|\.\.?\/|~\/)/) return 0
+      return (j == 0 || substr($0, j, 1) !~ /[$={}\\]/)
+    }
+    # heredoc(i): reads the delimiter after the << (or <<-) at i and
+    # queues it; returns the index just after the delimiter word.
+    function heredoc(i,   strip, ch, w, q) {
+      i += 2; strip = 0
+      if (substr($0, i, 1) == "-") { strip = 1; i++ }
+      while (substr($0, i, 1) ~ /[ \t]/) i++
+      w = ""
+      while (i <= n) {
+        ch = substr($0, i, 1)
+        if (ch ~ /[ \t;|&<>()]/) break
+        if (ch == "\\") { w = w substr($0, i + 1, 1); i += 2; continue }
+        if (ch == sq || ch == "\"") {
+          q = ch; i++
+          while (i <= n && substr($0, i, 1) != q) {
+            if (q == "\"" && substr($0, i, 1) == "\\") i++
+            w = w substr($0, i, 1); i++
+          }
+          i++; continue
+        }
+        w = w ch; i++
+      }
+      if (w != "") { nh++; hdelim[nh] = w; hstrip[nh] = strip; hline[nh] = NR }
+      return i
+    }
+    BEGIN { d = 1; ctx[1] = "t"; pend[1] = 0; nh = 0; hcur = 0 }
     /^[[:space:]]*# ---------- messages ----------/ { inblk = 1; next }
     /^[[:space:]]*# ---------- end of messages ----------/ { inblk = 0; next }
     inblk { next }
-    d == 1 && /^[[:space:]]*#/ { next }
+    d == 1 && !hcur && /^[[:space:]]*#/ { next }
     {
       src[NR] = $0
       if ($0 ~ /# not-user-facing[[:space:]]*$/) quiet[NR] = 1
       line = $0
       gsub(/"([^"\\]|\\.)*"/, "", line); gsub(sq "[^" sq "]*" sq, "", line)
-      gsub(/<<</, "", line)
-      if (line ~ /(^|[^A-Za-z0-9_])(echo|printf)([[:space:]]|$)/ || line ~ /<</ || line ~ />&2/) flag(NR)
+      if (line ~ /(^|[^A-Za-z0-9_])(echo|printf)([[:space:]]|$)/ || line ~ />&2/) flag(NR)
       if ($0 ~ /\/dev\/(stderr|stdout|tty|fd\/[0-9])/) flag(NR)
       if ($0 ~ /^run_gh\(\)[[:space:]]*\{/) in_run_gh = 1
       if ($0 ~ /BOOTSTRAP_GH/ && !in_run_gh) flag(NR)
       if (in_run_gh && $0 ~ /^\}/) in_run_gh = 0
 
-      n = length($0); i = 1; cont = 0
+      # A heredoc body: data up to its terminator line.
+      if (hcur) {
+        term = $0
+        if (hstrip[hcur]) sub(/^\t+/, "", term)
+        if (term == hdelim[hcur]) { hcur++; if (hcur > nh) { hcur = 0; nh = 0 } }
+        next
+      }
+
+      n = length($0); i = 1; cont = 0; wb = 0
       while (i <= n) {
         c = substr($0, i, 1); t = ctx[d]; nx = substr($0, i + 1, 1)
+        nx2 = substr($0, i + 2, 1)
         pv = (i > 1) ? substr($0, i - 1, 1) : ""
         if (t == "s") { if (c == sq) d--; i++; continue }
+        if (t == "e") {
+          if (c == "\\") { i += 2; continue }
+          if (c == sq) d--
+          i++; continue
+        }
         if (t == "d") {
           if (c == "\\") { i += 2; continue }
           if (c == "\"") { d--; i++; continue }
+          if (c == "$" && nx == "(" && nx2 == "(") { push("a"); i += 3; continue }
+          if (c == "$" && nx == "(") { push("c"); i += 2; continue }
+          if (c == "`") { push("b"); i++; continue }
+          i++; continue
+        }
+        if (t == "a") {
+          # Arithmetic: only its nesting matters; << here is a shift.
+          if (c == "(") { par[d]++; i++; continue }
+          if (c == ")") {
+            if (par[d] > 0) { par[d]--; i++; continue }
+            d--; i += (nx == ")") ? 2 : 1; continue
+          }
+          if (c == "$" && nx == "(" && nx2 == "(") { push("a"); i += 3; continue }
           if (c == "$" && nx == "(") { push("c"); i += 2; continue }
           if (c == "`") { push("b"); i++; continue }
           i++; continue
         }
         # A command context: the top level, $( ), <( ), ( ) or backticks.
-        if (c == "\\") { if (i == n) cont = 1; i += 2; continue }
+        if (c == "\\") {
+          if (i == n) { cont = 1; i++; continue }
+          # \gh runs gh: the word after the \ is checked.
+          if (nx ~ /[A-Za-z_]/ && (i == 1 || pv !~ /[A-Za-z0-9_$={}\/.-]/)) { wb = i + 1; i++; continue }
+          i += 2; continue
+        }
         if (c == sq) { push("s"); i++; continue }
+        if (c == "$" && nx == sq) { push("e"); i += 2; continue }
         if (c == "\"") { push("d"); i++; continue }
         if (c == "`") { if (t == "b") pop(); else push("b"); i++; continue }
         if (c == "#" && (i == 1 || pv ~ /[[:space:];]/)) break
+        if (c == "<" && nx == "<") {
+          if (nx2 == "<") { i += 3; continue }
+          flag(NR); i = heredoc(i); continue
+        }
+        if (c == "$" && nx == "(" && nx2 == "(") { push("a"); i += 3; continue }
+        if (c == "(" && nx == "(") { push("a"); i += 2; continue }
         if ((c == "$" || c == "<") && nx == "(") { push("c"); i += 2; continue }
         if (c == "(") { push("p"); i++; continue }
         if (c == ")") { if (d > 1) pop(); else settle(); i++; continue }
@@ -368,7 +452,7 @@ bypass_lines() {
           if (pv ~ /[0-9]/ && !(pv == "1" && (i < 3 || substr($0, i - 2, 1) !~ /[A-Za-z0-9_]/))) { i++; continue }
           pend[d] = 0; i++; continue
         }
-        if (c ~ /[A-Za-z_]/ && (i == 1 || pv !~ /[A-Za-z0-9_$={}\/.-]/)) {
+        if (c ~ /[A-Za-z_]/ && (i == 1 || i == wb || pv !~ /[A-Za-z0-9_$={}\/.-]/ || (pv == "/" && after_path(i)))) {
           w = substr($0, i); match(w, /^[A-Za-z0-9_-]+/); w = substr(w, 1, RLENGTH)
           nw = substr($0, i + length(w), 1)
           if (w ~ /^(run_gh|gh|git|npm|cat|tee)$/ && nw != "=" && nw != "(" && !captured()) pend[d] = NR
@@ -376,9 +460,13 @@ bypass_lines() {
         }
         i++
       }
-      if (!cont && ctx[d] != "s" && ctx[d] != "d") settle()
+      if (!cont && ctx[d] != "s" && ctx[d] != "d" && ctx[d] != "e") settle()
+      if (nh && !cont) hcur = 1
     }
-    END { for (k = 1; k <= NR; k++) if (k in hit) print k ": " src[k] }
+    END {
+      if (nh) hit[hline[hcur ? hcur : 1]] = 1
+      for (k = 1; k <= NR; k++) if (k in hit) print k ": " src[k]
+    }
   ' "$1"
 }
 
@@ -844,6 +932,8 @@ test_a_quiet_heredoc_does_not_hide_later_output() {
 }
 
 test_a_heredoc_inside_a_capture_does_not_hide_later_output() {
+  # The heredoc line itself is flagged as any heredoc is (its body is not
+  # read by the banned-words check); the later bare run_gh is too.
   local copy from
   copy="$(plant 'cmd_y() {' \
     '  body="$(cat <<'"'"'EOF'"'"'' \
@@ -853,7 +943,7 @@ test_a_heredoc_inside_a_capture_does_not_hide_later_output() {
     '  run_gh pr checks' \
     '}')"
   from="$(planted_from)"
-  expect_flagged "heredoc in a capture" "$copy" "$from" 6
+  expect_flagged "heredoc in a capture" "$copy" "$from" 2 6
 }
 
 test_heredoc_delimiters_quoted_or_dash_are_read() {
