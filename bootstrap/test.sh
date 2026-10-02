@@ -633,6 +633,29 @@ test_workflow_bootstrapper_test_runs_the_require_test_change_tests() {
     || die "bootstrapper-test does not run tools/test-require-test-change.sh"
 }
 
+test_workflow_bootstrapper_test_runs_the_bootstrap_project_tests() {
+  # The bootstrap script's own tests run in the required
+  # bootstrapper-test job from the PR that adds them (ubuntu only until
+  # the OS matrix lands).
+  local wf="$REPO/.github/workflows/bootstrapper.yml"
+  [ -f "$HERE/test-bootstrap-project.sh" ] || die "no bootstrap/test-bootstrap-project.sh"
+  awk '/^  bootstrapper-test:/ { inj = 1; next }
+       /^  [a-z][a-z-]*:/ { inj = 0 }
+       inj && /^ *run: bash bootstrap\/test-bootstrap-project\.sh *$/ { found = 1 }
+       END { exit !found }' "$wf" \
+    || die "bootstrapper-test does not run bootstrap/test-bootstrap-project.sh"
+}
+
+test_real_build_does_not_ship_the_bootstrap_project_tests() {
+  # The harness and its stub gh are template-only: bootstrap/ is not in
+  # the manifest, and no test file of the script ships next to it.
+  local out="$WORK/real.$RANDOM"
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  [ -z "$(cd "$out" && find . -name 'test-bootstrap-project*')" ] || die "the script's tests shipped"
+  ! grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -qE '^bootstrap(/|$)' \
+    || die "bootstrap/ is listed in the manifest"
+}
+
 test_real_build_ships_the_require_test_change_script() {
   # The shared check ships byte for byte, through the manifest. The
   # tools/ folder that holds its tests does not.

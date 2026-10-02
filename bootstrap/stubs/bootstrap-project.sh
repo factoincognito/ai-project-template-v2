@@ -14,6 +14,15 @@
 # Exit codes: 0 done, 1 failed, 2 usage error or unknown pack.
 # Runs on bash 3.2 (macOS /bin/bash): no associative arrays, no mapfile,
 # no ${var,,}.
+#
+# Test hooks (environment variables the tests set; users leave them unset):
+#   BOOTSTRAP_GH   the gh command to run (default: gh on the PATH).
+#   BOOTSTRAP_RUN  a command that replaces the runner of the install and
+#                  login commands the script offers. It gets the command
+#                  as one argument, so the tests never install anything.
+#
+# Sourcing this file defines its functions and runs nothing (the tests
+# load it that way); running it with bash runs the main part at the end.
 set -euo pipefail
 
 # The bootstrapper version and commit this script ships with. The build
@@ -24,14 +33,89 @@ set -euo pipefail
 SCRIPT_VERSION='{{TEMPLATE_VERSION}}'
 SCRIPT_COMMIT='{{TEMPLATE_COMMIT}}'
 
+# ---------- messages ----------
+# Everything the script shows the user goes through these helpers, and
+# nothing outside this block writes to the terminal by itself, so the
+# tests can check every user-facing string for plain words (see
+# "Ease-of-use requirements" in the spec). Only say_command may print
+# any word: it shows an exact command for the user to copy.
+
 usage() {
-  echo "usage: bootstrap-project.sh layout-pack <node|web|python|react-native> <target-dir>" >&2
+  printf '%s\n' "usage: bootstrap-project.sh layout-pack <node|web|python|react-native> <target-dir>" >&2
   exit 2
 }
 
-# ---------- layout-pack ----------
+# say <text>: one line of information.
+say() { printf '%s\n' "$*"; }
 
-lp_fail() { echo "layout-pack: $*" >&2; exit 1; }
+# say_command <command>: a command for the user to copy, indented.
+say_command() { printf '    %s\n' "$*"; }
+
+# step_start <what>, step_end <result>: the first and last line of a step.
+step_start() { printf '==> %s\n' "$*"; }
+step_end() { printf '    Done. %s\n' "$*"; }
+
+# show_error <what happened> <what to do next> [raw text]: an error in
+# plain words with the next action, on stderr. Raw text (an error from a
+# tool or from GitHub) is never shown alone: it comes below, for support.
+show_error() {
+  local what="${1:-}" next="${2:-}" raw="${3:-}" line
+  [ -n "$what" ] || what="Something unexpected happened."
+  [ -n "$next" ] || next="Run the script again. If the same thing happens, ask for help and show the details below."
+  {
+    printf 'What happened: %s\n' "$what"
+    printf 'What to do next: %s\n' "$next"
+    if [ -n "$raw" ]; then
+      printf 'Details for support (you can ignore these):\n'
+      printf '%s\n' "$raw" | tr -d '\r' | while IFS= read -r line; do
+        printf '    %s\n' "$line"
+      done
+    fi
+  } >&2
+}
+
+# fail <exit code> <what happened> <what to do next> [raw text]
+fail() {
+  local code="$1"
+  shift
+  show_error "$@"
+  exit "$code"
+}
+
+# Texts used by more than one message. They live here so the tests
+# check them with the rest.
+LP_PACK_NEXT="Choose one of the packs: node, web, python or react-native."
+LP_BROKEN_NEXT="This copy of the bootstrapper is incomplete. Download it again; if that does not help, report it to the bootstrapper's maintainers."
+
+# ---------- end of messages ----------
+
+# ---------- test hooks ----------
+
+# run_gh <args...>: runs gh, or $BOOTSTRAP_GH, with gh's own prompts
+# turned off. They misbehave in Git Bash's terminal, so the script asks
+# its own questions.
+run_gh() {
+  GH_PROMPT_DISABLED=1 "${BOOTSTRAP_GH:-gh}" "$@"
+}
+
+# run_offered <command>: runs a fixed command that the script offered and
+# the user approved (an install or a login), or hands it to
+# $BOOTSTRAP_RUN. gh's prompts stay on: a login needs them.
+# The argument runs through bash -c, so it must be a fixed string written
+# in this script, never built from user input or any variable (the spec:
+# "never built from user input"); the tests refuse a $ in it.
+run_offered() {
+  (
+    unset GH_PROMPT_DISABLED
+    if [ -n "${BOOTSTRAP_RUN:-}" ]; then
+      "$BOOTSTRAP_RUN" "$1"
+    else
+      bash -c "$1"
+    fi
+  )
+}
+
+# ---------- layout-pack ----------
 
 # The layout table: "<pack path> <project path>". A path ending in / is
 # a folder, copied with everything in it. The optional deploy files
@@ -91,24 +175,24 @@ starter/src/ src/"
       not_laid_out="code-standards.md"
       ;;
     *)
-      echo "layout-pack: unknown pack: $pack (expected node, web, python or react-native)" >&2
-      exit 2
+      fail 2 "layout-pack: unknown pack: $pack (expected node, web, python or react-native)" "$LP_PACK_NEXT"
       ;;
   esac
 
   src="$packs_dir/$pack"
-  [ -d "$src" ] || lp_fail "pack folder not found: $src"
+  [ -d "$src" ] || fail 1 "layout-pack: pack folder not found: $src" \
+    "Check that the languages folder is next to this script, or set PACKS_DIR to the folder that holds the packs."
 
   if [ -e "$out" ] && [ -n "$(ls -A "$out")" ]; then
-    lp_fail "target dir is not empty: $out"
+    fail 1 "layout-pack: target dir is not empty: $out" "Choose a folder that is empty or does not exist yet."
   fi
 
   # Every table source must exist.
   while read -r from _; do
     if [ "${from%/}" != "$from" ]; then
-      [ -d "$src/$from" ] || lp_fail "missing from the pack: $from"
+      [ -d "$src/$from" ] || fail 1 "layout-pack: missing from the pack: $from" "$LP_BROKEN_NEXT"
     else
-      [ -f "$src/$from" ] || lp_fail "missing from the pack: $from"
+      [ -f "$src/$from" ] || fail 1 "layout-pack: missing from the pack: $from" "$LP_BROKEN_NEXT"
     fi
   done <<<"$table"
 
@@ -122,7 +206,7 @@ starter/src/ src/"
       if [ "$f" = "$from" ]; then covered=1; fi
       case "$from" in */) case "$f" in "$from"*) covered=1 ;; esac ;; esac
     done <<<"$table"
-    [ -n "$covered" ] || lp_fail "not in the layout table: $f"
+    [ -n "$covered" ] || fail 1 "layout-pack: not in the layout table: $f" "$LP_BROKEN_NEXT"
   done < <(cd "$src" && find . -type f | sed 's|^\./||' | LC_ALL=C sort)
 
   mkdir -p "$out"
@@ -136,13 +220,20 @@ starter/src/ src/"
     fi
   done <<<"$table"
 
-  echo "Laid out the $pack pack in $out"
+  say "Laid out the $pack pack in $out"
 }
 
 # ---------- main ----------
 
-[ "$#" -ge 1 ] || usage
-case "$1" in
-  layout-pack) shift; cmd_layout_pack "$@" ;;
-  *) usage ;;
-esac
+main() {
+  [ "$#" -ge 1 ] || usage
+  case "$1" in
+    layout-pack) shift; cmd_layout_pack "$@" ;;
+    *) usage ;;
+  esac
+}
+
+# Run unless sourced. Piped into bash there is no BASH_SOURCE: run too.
+if [ -z "${BASH_SOURCE[0]:-}" ] || [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
+fi
