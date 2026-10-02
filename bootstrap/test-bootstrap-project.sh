@@ -113,19 +113,43 @@ STUB
   chmod +x "$path"
 }
 
+# ---------- safe defaults for the hooks ----------
+# Every test runs with both hooks pointing at stubs that refuse: they log
+# the call to $REFUSE_LOG, say which hook to set, and exit 70. So a test
+# that forgets to set a hook runs no real install, login or gh, and
+# fails. A test that needs the real default unsets the hook itself.
+
+make_refuser() {
+  local path="$1" hook="$2"
+  cat >"$path" <<STUB
+#!/usr/bin/env bash
+printf '%s\\n' "$hook \$*" >>"\${REFUSE_LOG:-$WORK/refused.log}"
+echo "test harness: refused to run '\$*' for real; this test must set $hook" >&2
+exit 70
+STUB
+  chmod +x "$path"
+}
+mkdir -p "$WORK/refuse"
+make_refuser "$WORK/refuse/run" BOOTSTRAP_RUN
+make_refuser "$WORK/refuse/gh" BOOTSTRAP_GH
+export BOOTSTRAP_RUN="$WORK/refuse/run" BOOTSTRAP_GH="$WORK/refuse/gh"
+
 # ---------- user-facing strings ----------
-# How the strings are collected: every message the script shows goes
-# through its message helpers, and the helpers live in one marked block
-# ("# ---------- messages ----------" up to "# ---------- end of messages
-# ----------"). A second test makes sure nothing outside that block writes
-# to the terminal by itself, so this list is complete:
-#   - every line inside the block that is not a comment (the helpers'
-#     own fixed texts, the usage text);
-#   - every call of a message helper outside the block, with its
-#     continuation lines (a line ending in \).
+# How the strings are collected, for the banned-words check:
+#   - every line inside the messages block ("# ---------- messages
+#     ----------" up to "# ---------- end of messages ----------") that
+#     is not a comment: the helpers' fixed texts, shared texts, usage;
+#   - every call of a listed message helper (MSG_HELPERS) outside the
+#     block, with its continuation lines (a line ending in \);
+#   - every quoted string literal anywhere in the script that holds a
+#     space (literal_strings), so a message kept in a variable or passed
+#     to a helper not in MSG_HELPERS is checked too.
 # Shell variables are removed: their content is a path or a value the
-# user typed, not wording. say_command is not collected: its argument is
-# an exact command for the user to copy, which may contain any word.
+# user typed, not wording. The argument of say_command and run_offered
+# is not checked for banned words: it is an exact command, so instead it
+# must start with a known command word (command_arg_violations).
+# What reaches the terminal some other way is the job of bypass_lines;
+# what it cannot see is listed there.
 
 MSG_HELPERS='say|step_start|step_end|show_error|fail'
 
@@ -159,18 +183,120 @@ banned_hits() {
   grep -Ew 'PRs?|APIs?' "$f" || true
 }
 
-# bypass_lines <file>: lines outside the messages block that write to the
-# terminal without a helper (echo, printf, a heredoc, or >&2). A line
-# that writes somewhere else on purpose ends with "# not-user-facing".
+# literal_strings <file>: every quoted string literal ("..." or '...',
+# also over several lines) that contains a space, outside comments, as
+# "<first line>: <text>", with shell variables removed. A message built
+# in a variable, or passed to a helper the harness does not list, is a
+# literal somewhere, so this sees it. The arguments of say_command and
+# run_offered are left out: they are exact commands (checked by
+# command_arg_violations instead).
+literal_strings() {
+  awk -v sq="'" '
+    function flush() {
+      if (lit ~ / / && !skip) { gsub(/\n/, " ", lit); print start ": " lit }
+    }
+    {
+      line = $0; n = length(line); i = 1
+      if (q == "") prefix = ""
+      while (i <= n) {
+        c = substr(line, i, 1)
+        if (q == "") {
+          if (c == "#" && (i == 1 || substr(line, i - 1, 1) ~ /[[:space:];]/)) break
+          if (c == "\\") { prefix = prefix substr(line, i, 2); i += 2; continue }
+          if (c == "\"" || c == sq) {
+            q = c; lit = ""; start = NR
+            skip = (prefix ~ /(^|[^A-Za-z0-9_])(say_command|run_offered)[[:space:]]+$/)
+          } else {
+            prefix = prefix c
+            if (c == ";" || c == "|" || c == "&") prefix = ""
+          }
+        } else if (c == q) {
+          flush(); q = ""; prefix = prefix "S"
+        } else if (q == "\"" && c == "\\") {
+          lit = lit substr(line, i + 1, 1); i += 2; continue
+        } else {
+          lit = lit c
+        }
+        i++
+      }
+      if (q != "") lit = lit "\n"
+    }
+  ' "$1" | sed -E 's/\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|\$[0-9@*#?]//g'
+}
+
+# all_banned_hits <file>: every banned-word hit in the file's user-facing
+# strings (the helper calls and the messages block, plus every literal),
+# one line per source line.
+all_banned_hits() {
+  { user_strings "$1"; literal_strings "$1"; } | banned_hits | LC_ALL=C sort -t: -k1,1n -u
+}
+
+# The first words a copy-paste command may start with: the tools the spec
+# names. say_command may also print a line starting with sudo (on Linux
+# the script prints the package-manager line for the user to run);
+# run_offered never runs sudo.
+CMD_WORDS='gh git npm node winget brew bash cd xcode-select'
+SAY_CMD_WORDS="$CMD_WORDS sudo"
+
+# command_arg_violations <file>: say_command and run_offered calls whose
+# argument is not one quoted literal starting with an allowed command
+# word. A run_offered argument may hold no $ or backtick at all: it runs
+# through bash -c, so it must be a fixed string, never built from input.
+command_arg_violations() {
+  awk -v sq="'" -v say_words=" $SAY_CMD_WORDS " -v run_words=" $CMD_WORDS " '
+    /^[[:space:]]*#/ { next }
+    match($0, /(^|[^A-Za-z0-9_])(say_command|run_offered)([[:space:]]|$)/) {
+      rest = substr($0, RSTART + RLENGTH)
+      kind = ($0 ~ /(^|[^A-Za-z0-9_])run_offered([[:space:]]|$)/) ? "run" : "say"
+      sub(/^[[:space:]]+/, "", rest)
+      q = substr(rest, 1, 1)
+      if (q != "\"" && q != sq) { print NR ": " $0; next }
+      arg = substr(rest, 2); end = index(arg, q)
+      if (end == 0) { print NR ": " $0; next }
+      arg = substr(arg, 1, end - 1)
+      word = arg; sub(/[[:space:]].*/, "", word)
+      words = (kind == "run") ? run_words : say_words
+      if (word == "" || index(words, " " word " ") == 0) { print NR ": " $0; next }
+      if (kind == "run" && arg ~ /[$`]/) { print NR ": " $0; next }
+    }
+  ' "$1"
+}
+
+# bypass_lines <file>: lines outside the messages block that can put text
+# on the terminal without a helper. A line that writes somewhere else on
+# purpose ends with "# not-user-facing". Checked, on the line with its
+# quoted strings removed:
+#   - echo, printf, a heredoc (<<, not the here-string <<<), or >&2;
+#   - /dev/stderr, /dev/stdout, /dev/tty or /dev/fd/N (on the full line);
+#   - run_gh, gh, git, npm, cat or tee whose output is neither captured
+#     ($( ) or <( )) nor sent elsewhere with a stdout redirect (>, 1>, &>).
+# Not covered (no static scan can tell): the stderr of those commands
+# (gh's error text is raw; the slice that first calls run_gh, S6 to S8,
+# tests that it is mapped through show_error), the stdout of other
+# commands (ls, sed, find ...: the script uses them only inside a capture
+# today), output through a pipe or an eval, and a helper defined outside
+# the messages block that prints through say (its texts are still checked
+# by literal_strings). run_offered's own output reaches the terminal on
+# purpose: an install or a login has to show its progress and prompts.
 bypass_lines() {
-  awk '
+  awk -v sq="'" '
     /^[[:space:]]*# ---------- messages ----------/ { inblk = 1; next }
     /^[[:space:]]*# ---------- end of messages ----------/ { inblk = 0; next }
     inblk { next }
     /^[[:space:]]*#/ { next }
     /# not-user-facing[[:space:]]*$/ { next }
-    { line = $0; gsub(/<<</, "", line) }
-    line ~ /(^|[^A-Za-z0-9_])(echo|printf)([[:space:]]|$)/ || line ~ /<</ || line ~ />&2/ { print NR ": " $0 }
+    {
+      line = $0
+      gsub(/"([^"\\]|\\.)*"/, "", line); gsub(sq "[^" sq "]*" sq, "", line)
+      gsub(/<<</, "", line)
+      bad = 0
+      if (line ~ /(^|[^A-Za-z0-9_])(echo|printf)([[:space:]]|$)/ || line ~ /<</ || line ~ />&2/) bad = 1
+      if ($0 ~ /\/dev\/(stderr|stdout|tty|fd\/[0-9])/) bad = 1
+      if (line ~ /(^|[^A-Za-z0-9_-])(run_gh|gh|git|npm|cat|tee)([[:space:]]|$)/ \
+          && line !~ /(^|[^A-Za-z0-9_-])(run_gh|gh|git|npm|cat|tee)[[:space:]]*\(\)/ \
+          && line !~ /[$<]\(/ && line !~ /(^|[^0-9&>])(1|&)?>([^&]|$)/) bad = 1
+      if (bad) print NR ": " $0
+    }
   ' "$1"
 }
 
@@ -399,6 +525,29 @@ test_run_offered_runs_with_gh_prompts_enabled() {
   [ "$(cat "$d/run.log")" = unset ] || die "the BOOTSTRAP_RUN runner saw GH_PROMPT_DISABLED=$(cat "$d/run.log")"
 }
 
+test_a_test_that_forgets_the_hooks_runs_nothing_real() {
+  # Review round 1: CI must be safe by structure, not by each test
+  # remembering the hooks. A test that sets neither hook runs no real
+  # install, login or gh: the harness defaults both to stubs that refuse
+  # loudly (non-zero exit), so the forgetful test fails.
+  local d rc
+  d="$(tmpdir)"; mkdir -p "$d/bin"
+  printf '#!/usr/bin/env bash\ntouch "%s/real-gh-ran"\n' "$d" >"$d/bin/gh"
+  chmod +x "$d/bin/gh"
+  rc=0
+  ( load_script; export REFUSE_LOG="$d/refused.log" PATH="$d/bin:$PATH"; run_offered "touch '$d/real-run-ran'" ) \
+    2>"$d/err" || rc=$?
+  [ ! -e "$d/real-run-ran" ] || die "run_offered ran the real command in a test that set no hook"
+  [ "$rc" -ne 0 ] || die "run_offered without a hook returned 0; a forgetful test would pass"
+  rc=0
+  ( load_script; export REFUSE_LOG="$d/refused.log" PATH="$d/bin:$PATH"; run_gh --version ) 2>>"$d/err" || rc=$?
+  [ ! -e "$d/real-gh-ran" ] || die "run_gh ran the gh on PATH in a test that set no hook"
+  [ "$rc" -ne 0 ] || die "run_gh without a hook returned 0; a forgetful test would pass"
+  grep -qF 'BOOTSTRAP_RUN' "$d/err" && grep -qF 'BOOTSTRAP_GH' "$d/err" \
+    || { cat "$d/err" >&2; die "the refusals do not name the hook to set"; }
+  [ "$(wc -l <"$d/refused.log" | tr -d ' ')" -eq 2 ] || die "refusals not logged"
+}
+
 # ---------- plain language ----------
 
 test_user_facing_strings_are_collected() {
@@ -435,7 +584,7 @@ test_bypass_check_catches_a_planted_echo() {
 
 test_no_banned_words_in_user_facing_strings() {
   local hits
-  hits="$(user_strings "$SCRIPT" | banned_hits)"
+  hits="$(all_banned_hits "$SCRIPT")"
   [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "banned word without its explanation"; }
 }
 
@@ -471,6 +620,105 @@ The API said no'
   # not an explanation of three words, so it is still caught: 12), plus
   # the continuation line: 13.
   [ "$n" -eq 13 ] || { printf '%s\n' "$hits" >&2; die "caught $n of 13 planted violations"; }
+}
+
+# plant <lines...>: a copy of the script with the lines added at the end;
+# prints the copy's path. planted_from prints the copy's first planted
+# line number, so a test can count only what it planted.
+plant() {
+  local copy
+  copy="$(mktemp "$WORK/copy.XXXXXX")"
+  cp "$SCRIPT" "$copy"
+  printf '%s\n' "$@" >>"$copy"
+  printf '%s\n' "$copy"
+}
+planted_from() { echo $(( $(wc -l <"$SCRIPT" | tr -d ' ') + 1 )); }
+
+# only_planted <first line>: keeps the "<line>: ..." / "<line><tab>..."
+# hits at or after that line.
+only_planted() { awk -F'[:\t]' -v from="$1" '$1 >= from'; }
+
+test_banned_words_in_a_message_held_in_a_variable_are_caught() {
+  # Review round 1: a message built in a variable got past the check.
+  local copy hits from
+  copy="$(plant 'cmd_x() {' \
+    '  local msg="Creating the repo now"' \
+    '  say "$msg"' \
+    '  local next="Open the repo page and approve the PR."' \
+    '  fail 1 "It stopped." "$next"' \
+    '}')"
+  from="$(planted_from)"
+  hits="$(all_banned_hits "$copy" | only_planted "$from")"
+  [ "$(printf '%s\n' "$hits" | grep -c .)" -eq 2 ] || { printf '%s\n' "$hits" >&2; die "variable messages not both caught"; }
+}
+
+test_banned_words_through_an_unlisted_helper_are_caught() {
+  # Review round 1: a helper that is not in MSG_HELPERS got past the check.
+  local copy hits from
+  copy="$(plant 'warn() { say "Warning: $*"; }' 'cmd_x() { warn "The status check failed"; }')"
+  from="$(planted_from)"
+  hits="$(all_banned_hits "$copy" | only_planted "$from")"
+  [ "$(printf '%s\n' "$hits" | grep -c .)" -eq 1 ] || { printf '%s\n' "$hits" >&2; die "unlisted helper's text not caught"; }
+}
+
+test_output_routes_without_echo_or_printf_are_caught() {
+  # Review round 1: these reach the terminal without echo, printf, a
+  # heredoc or >&2. Raw gh output also breaks "never raw text alone".
+  local copy n from
+  copy="$(plant 'cmd_x() {' \
+    '  run_gh pr checks 1' \
+    '  cat "$file"' \
+    '  tee /dev/stderr <<<"Clone failed"' \
+    '  cat >/dev/stderr' \
+    '  printf "%s" x >/dev/tty' \
+    '}')"
+  from="$(planted_from)"
+  n="$(bypass_lines "$copy" | only_planted "$from" | wc -l | tr -d ' ')"
+  [ "$n" -eq 5 ] || { bypass_lines "$copy" >&2; die "caught $n of 5 planted output routes"; }
+}
+
+test_captured_or_redirected_gh_output_is_allowed() {
+  local copy hits from
+  copy="$(plant 'cmd_x() {' \
+    '  out="$(run_gh api user)"' \
+    '  run_gh api user >/dev/null' \
+    '  run_gh api user >"$f" 2>"$err"' \
+    '  if run_gh auth status >/dev/null 2>&1; then :; fi' \
+    '}')"
+  from="$(planted_from)"
+  hits="$(bypass_lines "$copy" | only_planted "$from")"
+  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "captured gh output was flagged"; }
+}
+
+test_say_command_and_run_offered_take_a_known_command() {
+  # Review round 1: say_command is exempt from the banned words because
+  # it prints a command to copy, so its argument must be one. run_offered
+  # also takes only a fixed string (no $), and never sudo.
+  local copy hits from n
+  copy="$(plant 'cmd_x() {' \
+    '  say_command "Open the PR page and approve the branch"' \
+    '  say_command "$cmd"' \
+    '  say_command' \
+    '  run_offered "sudo apt install git"' \
+    '  run_offered "gh auth refresh -h github.com -s $scope"' \
+    '  run_offered "$cmd"' \
+    '  say_command "gh auth status"' \
+    '  say_command "bash bootstrap-project.sh --resume --name $name"' \
+    "  run_offered 'gh auth refresh -h github.com -s workflow'" \
+    '  run_offered "winget install --id Git.Git -e"' \
+    '}')"
+  from="$(planted_from)"
+  hits="$(command_arg_violations "$copy" | only_planted "$from")"
+  n="$(printf '%s\n' "$hits" | grep -c . || true)"
+  [ "$n" -eq 6 ] || { printf '%s\n' "$hits" >&2; die "flagged $n, want the first 6 planted calls"; }
+  ! printf '%s\n' "$hits" | awk -F'[:\t]' -v f="$from" '$1 >= f + 7' | grep -q . \
+    || { printf '%s\n' "$hits" >&2; die "an allowed command was flagged"; }
+}
+
+test_say_command_and_run_offered_calls_in_the_script_are_commands() {
+  local hits
+  hits="$(command_arg_violations "$SCRIPT")"
+  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "say_command or run_offered with something that is not a known command"; }
 }
 
 test_banned_word_with_its_explanation_or_in_a_command_passes() {

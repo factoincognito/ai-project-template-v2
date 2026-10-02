@@ -101,6 +101,9 @@ run_gh() {
 # run_offered <command>: runs a fixed command that the script offered and
 # the user approved (an install or a login), or hands it to
 # $BOOTSTRAP_RUN. gh's prompts stay on: a login needs them.
+# The argument runs through bash -c, so it must be a fixed string written
+# in this script, never built from user input or any variable (the spec:
+# "never built from user input"); the tests refuse a $ in it.
 run_offered() {
   (
     unset GH_PROMPT_DISABLED
