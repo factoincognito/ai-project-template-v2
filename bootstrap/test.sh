@@ -87,6 +87,10 @@ EOF
   printf '# Changelog\n\n## Created from template {{TEMPLATE_VERSION}} ({{TEMPLATE_COMMIT}})\n' \
     >"$d/bootstrap/stubs/CHANGELOG.md"
   printf '# Backlog\n\n## Open questions\n' >"$d/bootstrap/stubs/docs/BACKLOG.md"
+  printf '%s\n' '#!/usr/bin/env bash' "SCRIPT_VERSION='{{TEMPLATE_VERSION}}'" \
+    "SCRIPT_COMMIT='{{TEMPLATE_COMMIT}}'" 'echo "$SCRIPT_VERSION $SCRIPT_COMMIT"' \
+    >"$d/bootstrap/stubs/bootstrap-project.sh"
+  chmod 755 "$d/bootstrap/stubs/bootstrap-project.sh"
   echo "$d"
 }
 
@@ -98,7 +102,7 @@ test_fixture_output_is_exactly_manifest_plus_stubs() {
   build_ok "$fx" "$out" v1.2.3 "$SHA"
   diff <(list_files "$out") <(printf '%s\n' \
     .github/workflows/ci.yml .gitignore CHANGELOG.md CLAUDE.md \
-    docs/BACKLOG.md lang/.hidden lang/a/x.txt lang/b.txt | LC_ALL=C sort) \
+    bootstrap-project.sh docs/BACKLOG.md lang/.hidden lang/a/x.txt lang/b.txt | LC_ALL=C sort) \
     || die "output file list differs from manifest plus stubs"
 }
 
@@ -120,6 +124,58 @@ test_placeholders_replaced_with_version_and_commit() {
   grep -qF "## Created from template v1.2.3 ($SHA)" "$out/CHANGELOG.md" \
     || { cat "$out/CHANGELOG.md" >&2; die "CHANGELOG not stamped"; }
   ! grep -rqF '{{TEMPLATE_' "$out" || die "placeholder left"
+}
+
+test_changelog_stamp_is_byte_for_byte_as_before() {
+  # Stamping the script too must not change what the CHANGELOG gets.
+  local fx out
+  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  build_ok "$fx" "$out" v1.2.3 "$SHA"
+  cmp -s "$out/CHANGELOG.md" <(printf '# Changelog\n\n## Created from template v1.2.3 (%s)\n' "$SHA") \
+    || { cat "$out/CHANGELOG.md" >&2; die "CHANGELOG stamp changed"; }
+  [ ! -e "$out/CHANGELOG.md.tmp" ] || die "temp file left in output"
+}
+
+test_project_script_stub_is_stamped_with_version_and_commit() {
+  local fx out f
+  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  build_ok "$fx" "$out" v1.2.3 "$SHA"
+  f="$out/bootstrap-project.sh"
+  grep -qxF "SCRIPT_VERSION='v1.2.3'" "$f" || { cat "$f" >&2; die "script version not stamped"; }
+  grep -qxF "SCRIPT_COMMIT='$SHA'" "$f" || { cat "$f" >&2; die "script commit not stamped"; }
+  ! grep -qF '{{TEMPLATE_' "$f" || die "placeholder left in the script"
+  [ "$(bash "$f")" = "v1.2.3 $SHA" ] || die "stamped script does not report its stamp"
+}
+
+test_stamped_project_script_stays_executable() {
+  # Stamping rewrites the file; it must keep the stub's executable bit
+  # (a sed-to-temp-then-mv stamp would drop it).
+  local fx out
+  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  build_ok "$fx" "$out" v1.2.3 "$SHA"
+  [ -x "$out/bootstrap-project.sh" ] || { ls -l "$out" >&2; die "stamping dropped the executable bit"; }
+}
+
+test_project_script_stub_without_placeholders_rejected() {
+  local fx; fx="$(make_fixture)"
+  printf '%s\n' '#!/usr/bin/env bash' "SCRIPT_VERSION='{{TEMPLATE_VERSION}}'" \
+    >"$fx/bootstrap/stubs/bootstrap-project.sh"
+  expect_build_fail "$fx" "bootstrap-project.sh stub lacks {{TEMPLATE_COMMIT}}" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+  printf '%s\n' '#!/usr/bin/env bash' "SCRIPT_COMMIT='{{TEMPLATE_COMMIT}}'" \
+    >"$fx/bootstrap/stubs/bootstrap-project.sh"
+  expect_build_fail "$fx" "bootstrap-project.sh stub lacks {{TEMPLATE_VERSION}}" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+  rm "$fx/bootstrap/stubs/bootstrap-project.sh"
+  expect_build_fail "$fx" "bootstrap-project.sh stub not found" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+}
+
+test_stamped_stub_that_is_a_symlink_rejected() {
+  # Stamping writes in place; through a symlink it would write into
+  # whatever the link points at, possibly the source tree.
+  local fx; fx="$(make_fixture)"
+  mv "$fx/bootstrap/stubs/CHANGELOG.md" "$fx/real-changelog.md"
+  ln -s ../../real-changelog.md "$fx/bootstrap/stubs/CHANGELOG.md"
+  expect_build_fail "$fx" "CHANGELOG.md stub must be a regular file, not a symlink" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+  grep -qF '{{TEMPLATE_VERSION}}' "$fx/real-changelog.md" || die "the link target was modified"
 }
 
 test_absent_out_dir_is_created() {
@@ -351,8 +407,8 @@ test_changelog_stub_without_placeholders_rejected() {
 }
 
 test_placeholder_outside_changelog_not_replaced() {
-  # Only the CHANGELOG stub is stamped; the same placeholder anywhere
-  # else is left in and therefore fails the build.
+  # Only the CHANGELOG and script stubs are stamped; the same placeholder
+  # anywhere else is left in and therefore fails the build.
   local fx; fx="$(make_fixture)"
   echo "{{TEMPLATE_VERSION}}" >>"$fx/CLAUDE.md"
   expect_build_fail "$fx" "placeholder left in output: CLAUDE.md" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
@@ -579,6 +635,42 @@ test_build_preserves_the_executable_bit_of_a_stub() {
   [ -x "$out/run.sh" ] || die "build dropped the executable bit of a stub"
 }
 
+test_real_build_ships_the_project_script_stamped() {
+  local out="$WORK/real.$RANDOM" f
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  f="$out/bootstrap-project.sh"
+  grep -qxF "SCRIPT_VERSION='v2.1.0'" "$f" || die "shipped script lacks the version stamp"
+  grep -qxF "SCRIPT_COMMIT='$SHA'" "$f" || die "shipped script lacks the commit stamp"
+  ! grep -qF '{{TEMPLATE_' "$f" || die "placeholder left in the shipped script"
+  [ -x "$f" ] || die "shipped script is not executable after stamping"
+  ! grep -q $'\r' "$f" || die "shipped script has CR line endings"
+}
+
+test_project_script_holds_only_the_two_placeholder_assignments() {
+  # The build fails on any {{TEMPLATE_ left in the output, and stamps
+  # every one in this file. So the two assignments are the only place
+  # the placeholders may appear: later code compares against
+  # SCRIPT_VERSION, never against a literal placeholder.
+  local f="$PROJECT_SCRIPT"
+  [ -f "$f" ] || die "no $f"
+  grep -qxF "SCRIPT_VERSION='{{TEMPLATE_VERSION}}'" "$f" || die "no SCRIPT_VERSION placeholder assignment"
+  grep -qxF "SCRIPT_COMMIT='{{TEMPLATE_COMMIT}}'" "$f" || die "no SCRIPT_COMMIT placeholder assignment"
+  [ "$(grep -oF '{{TEMPLATE_' "$f" | wc -l | tr -d ' ')" -eq 2 ] \
+    || { grep -nF '{{TEMPLATE_' "$f" >&2; die "placeholder outside the two assignments"; }
+}
+
+test_unstamped_project_script_still_lays_out() {
+  # In the template the script is never stamped (tools/layout-pack.sh
+  # and packs.yml run it from bootstrap/stubs/), so the placeholder
+  # values must not break it.
+  local a="$WORK/unstamped.$RANDOM" b="$WORK/wrapper.$RANDOM"
+  grep -qF '{{TEMPLATE_VERSION}}' "$PROJECT_SCRIPT" || die "the stub is not unstamped; this test checks nothing"
+  PACKS_DIR="$REPO/languages" bash "$PROJECT_SCRIPT" layout-pack node "$a" >/dev/null \
+    || die "unstamped script layout-pack failed"
+  (unset PACKS_DIR; bash "$REPO/tools/layout-pack.sh" node "$b") >/dev/null || die "wrapper failed"
+  diff -r "$a" "$b" >&2 || die "unstamped script and wrapper lay out different trees"
+}
+
 test_project_script_is_committed_executable_and_lf() {
   # .gitattributes cannot set the mode, so the index must hold 100755,
   # and the eol attribute must be lf.
@@ -693,7 +785,6 @@ test_project_script_passes_the_forbidden_string_checks() {
   [ -f "$f" ] || die "no $f"
   ! grep -nE 'trig_|PBI-[0-9]|open question [0-9]' "$f" >&2 || die "forbidden pattern in $f"
   ! grep -nF '(PR #' "$f" >&2 || die "(PR # in $f"
-  ! grep -nF '{{TEMPLATE_' "$f" >&2 || die "placeholder in $f (stamping is not part of this script yet)"
   grep -qE 'https://github\.com/factoincognito/ai-project-template-v2/blob/main/docs/BACKLOG\.md' "$f" \
     || die "$f header does not link the spec by URL"
 }

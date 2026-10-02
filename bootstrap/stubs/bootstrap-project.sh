@@ -16,6 +16,14 @@
 # no ${var,,}.
 set -euo pipefail
 
+# The bootstrapper version and commit this script ships with. The build
+# stamps both values in place; in the template the script is unstamped
+# and these hold the placeholders. These two lines are the only place a
+# placeholder may appear: the build refuses any left in its output, so
+# code compares against these variables, never a literal placeholder.
+SCRIPT_VERSION='{{TEMPLATE_VERSION}}'
+SCRIPT_COMMIT='{{TEMPLATE_COMMIT}}'
+
 usage() {
   echo "usage: bootstrap-project.sh layout-pack <node|web|python|react-native> <target-dir>" >&2
   exit 2
