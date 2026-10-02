@@ -174,6 +174,7 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 **Questions for Adam:**
 1. PBI-1.14: since setup is possible by asking Claude, the script's value is a setup that is repeatable, checked and cheap, not one that becomes possible. Keep the 17-slice plan, or build a smaller version (Clead guides the setup and a short script checks the result)? **Answered by Adam, 2026-10-02:** PBI-1.14 stays as planned. Even a knowledgeable WHAT person who could set up alone gains from being guided: it is a safety net.
 2. If the process is the strong suit, should effort go first to the process itself (enforcement, less overhead, Projects as the base where it fits) rather than to the setup script?
+3. Adam's idea, 2026-10-02: entry points by what the user already has ("start me from where I need to be started"). Mostly in the PBI-1.14 spec already, by detection rather than by the user's choice: the guided preflight checks tools, login and scopes and guides only what is missing, and `--resume` reads the repo's state and continues from the right step. Not covered: "I already have an app or a repo with code, give me the process". The spec refuses a repo the bootstrapper did not create, and migration was the superseded PBI-1.4 (close to item 1). Should that become an entry point, and if so in PBI-1.14 or as its own item?
 
 ---
 
