@@ -807,6 +807,149 @@ test_output_hidden_by_a_capture_elsewhere_on_the_line_is_caught() {
   [ "$n" -eq 8 ] || { bypass_lines "$copy" | only_planted "$from" >&2; die "caught $n of 8 planted output routes"; }
 }
 
+# flagged_offsets <copy> <first planted line>: the flagged planted lines,
+# as offsets from the first planted line (1 = the first), space-separated.
+flagged_offsets() {
+  bypass_lines "$1" | awk -F: -v from="$2" '$1 >= from { printf "%s%d", sep, $1 - from + 1; sep = " " }'
+}
+
+# expect_flagged <what> <copy> <first planted line> <offsets...>: exactly
+# these planted lines are flagged.
+expect_flagged() {
+  local what="$1" copy="$2" from="$3" got
+  shift 3
+  got="$(flagged_offsets "$copy" "$from")"
+  [ "$got" = "$*" ] || { bypass_lines "$copy" | only_planted "$from" >&2; die "$what: flagged planted lines [$got], want [$*]"; }
+}
+
+test_a_quiet_heredoc_does_not_hide_later_output() {
+  # Review of 869cb9f (finding 1): the walker kept quote and $( ) state
+  # through a heredoc body, so an apostrophe, a " or an unclosed $( in
+  # the body stopped every later check. The body is data: it is skipped
+  # up to its terminator line, and the later bare commands are caught.
+  local body copy from
+  for body in "It's a body" 'Say "hello' 'Run $( now'; do
+    copy="$(plant 'write_notes() {' \
+      '  cat >"$f" <<EOF  # not-user-facing' \
+      "$body" \
+      'EOF' \
+      '}' \
+      'cmd_z() {' \
+      '  run_gh pr checks' \
+      '  cat "$x"' \
+      '}')"
+    from="$(planted_from)"
+    expect_flagged "body [$body]" "$copy" "$from" 7 8
+  done
+}
+
+test_a_heredoc_inside_a_capture_does_not_hide_later_output() {
+  local copy from
+  copy="$(plant 'cmd_y() {' \
+    '  body="$(cat <<'"'"'EOF'"'"'' \
+    "It's the body" \
+    'EOF' \
+    '  )"' \
+    '  run_gh pr checks' \
+    '}')"
+  from="$(planted_from)"
+  expect_flagged "heredoc in a capture" "$copy" "$from" 6
+}
+
+test_heredoc_delimiters_quoted_or_dash_are_read() {
+  # <<-: the terminator may be indented with tabs. A quoted delimiter
+  # ('EOF', "EOF", \EOF) ends at the bare word. Two heredocs on one line
+  # end one after the other. The body lines are not checked as commands.
+  local tab copy from
+  tab="$(printf '\t')"
+  copy="$(plant 'cmd_y() {' \
+    '  cat >"$f" <<-EOF  # not-user-facing' \
+    "${tab}It's indented" \
+    "${tab}run_gh pr checks" \
+    "${tab}EOF" \
+    '  run_gh pr checks' \
+    '  cat >"$f" <<'"'"'EOF'"'"'  # not-user-facing' \
+    "It's quoted" \
+    'EOF' \
+    '  run_gh pr checks' \
+    '  cat >"$f" <<"END"  # not-user-facing' \
+    'Say "hi' \
+    'END' \
+    '  run_gh pr checks' \
+    '  cat >"$f" <<\EOF  # not-user-facing' \
+    "It's escaped" \
+    'EOF' \
+    '  run_gh pr checks' \
+    '  paste - /dev/fd/3 >"$f" <<A 3<<'"'"'B'"'"'  # not-user-facing' \
+    "It's one" \
+    'A' \
+    'Run $( two' \
+    'B' \
+    '  run_gh pr checks' \
+    '}')"
+  from="$(planted_from)"
+  expect_flagged "quoted or dash delimiters" "$copy" "$from" 6 10 14 18 24
+}
+
+test_a_here_string_or_a_shift_is_not_a_heredoc() {
+  # <<< feeds one string; << inside $(( )) or (( )) is a bit shift. None
+  # starts a body, so the lines after them are still checked.
+  local copy from
+  copy="$(plant 'cmd_y() {' \
+    '  x="$(tr a b <<<"$y")"' \
+    '  run_gh pr checks' \
+    '  n=$((1 << 2))' \
+    '  run_gh pr checks' \
+    '  (( n <<= 1 )) || :' \
+    '  run_gh pr checks' \
+    '  m="$(( (n + 1) << 1 ))"' \
+    '  run_gh pr checks' \
+    '}')"
+  from="$(planted_from)"
+  expect_flagged "here-string or shift" "$copy" "$from" 3 5 7 9
+}
+
+test_an_unterminated_heredoc_is_flagged() {
+  # A heredoc with no terminator line would hide the rest of the file,
+  # so its first line is flagged even when it is marked quiet.
+  local copy from
+  copy="$(plant 'cmd_y() {' \
+    '  cat >"$f" <<EOF  # not-user-facing' \
+    'no end' \
+    '  run_gh pr checks' \
+    '}')"
+  from="$(planted_from)"
+  expect_flagged "unterminated heredoc" "$copy" "$from" 2
+}
+
+test_an_ansi_c_string_does_not_hide_later_output() {
+  # Review of 869cb9f (finding 1): $'...' takes \ as an escape, so
+  # $'\'' is one quote character, not the end of the string.
+  local copy from
+  copy="$(plant 'cmd_y() {' \
+    "  q=\$'\\''" \
+    '  run_gh pr checks' \
+    "  s=\$'it\\'s'; t='plain'" \
+    '  cat "$x"' \
+    '}')"
+  from="$(planted_from)"
+  expect_flagged "ANSI-C string" "$copy" "$from" 3 5
+}
+
+test_a_command_named_with_a_backslash_or_path_is_caught() {
+  # Review of 869cb9f (finding 2): \gh and /usr/bin/gh run gh too.
+  local copy from
+  copy="$(plant 'cmd_y() {' \
+    '  \gh pr checks' \
+    '  /usr/bin/gh pr checks' \
+    '  ./bin/run_gh pr checks' \
+    '  \cat "$x"' \
+    '  gh_path=/usr/bin/gh; v=a/cat' \
+    '}')"
+  from="$(planted_from)"
+  expect_flagged "backslash or path" "$copy" "$from" 2 3 4 5
+}
+
 test_say_command_and_run_offered_take_a_known_command() {
   # Review round 1: say_command is exempt from the banned words because
   # it prints a command to copy, so its argument must be one. run_offered
