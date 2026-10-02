@@ -24,7 +24,7 @@ Written 2026-10-02 so the order does not have to be re-derived. "Clead" is the n
 
 | Step | Who | Blocked by |
 |---|---|---|
-| Rest of PBI-1.14 (S2 next), S15 last | Clead (Opus Crog implementer, Opus review) | Nothing; S1 and S3 merged 2026-10-02. Each slice follows the PR loop |
+| Rest of PBI-1.14 (S4 next), S15 last | Clead (Opus Crog implementer, Opus review) | Nothing; S1, S2 and S3 merged 2026-10-02. Each slice follows the PR loop |
 | Release prep PR for the next release (put the version heading over Unreleased, as #76 and #126 did) | Clead | S15 merged; written just before the tag so it is complete |
 | Next release tag `v*` | Adam, from the Releases page | Release prep merged (decision of 2026-10-02: no tag until S15 merges) |
 | Release verified | Clead, through the API: the tag run's checks passed, bootstrapper `main` has the new commit, the tag exists on both repos | The tag |
@@ -103,7 +103,7 @@ graduate (see the rule above).
 **What this is:** a design draft by an Opus agent (read-only, from the approved spec and the repo as of PBI-1.17 done). Its repo claims come from reading files and are re-checked per slice; the spec is not changed by it.
 **Slices (one PR each, test-first, each shown red before the implementation):**
 - S1 layout table moves into `bootstrap/stubs/bootstrap-project.sh` (`layout-pack` subcommand); `tools/layout-pack.sh` becomes a wrapper. Ships. **Done: #131, 2026-10-02.**
-- S2 `build.sh` stamps the script version and commit, in place (the current `sed > tmp; mv` drops the executable bit). Ships.
+- S2 `build.sh` stamps the script version and commit, in place (the current `sed > tmp; mv` drops the executable bit). Ships. **Done: #133, 2026-10-02.**
 - S3 `packs.yml` uses the script's lockfile command (independent; touches `packs.yml` and `tools/test-layout-pack.sh`). **Done: #130, 2026-10-02.**
 - S4 test harness `bootstrap/test-bootstrap-project.sh`, test hooks, message helpers, wired into `bootstrapper-test`.
 - S5 `bootstrapper-test` becomes one aggregate check over an OS matrix (ubuntu, macOS, Windows).
@@ -112,11 +112,11 @@ graduate (see the rule above).
 **Critical path:** S1, S2, S4, S6 to S15, S17. S3 can start now; S5 after S4; S16 after S5.
 **Cannot be verified in CI (Adam's end-to-end runs only):** GitHub timing and error texts after create, the protection PUT shape, private-repo clone and push, Git Bash prompts, `winget`, a lockfile made on Windows or macOS under `npm ci` on Linux, the unaided README run, and the red-then-`Test-exempt` PR in a real project.
 **Spec meets changed repo (to fix in the slice named):** the placement-table tests in `bootstrap/test.sh` pin both READMEs (S17); `test_workflow_bootstrapper_test_runs_the_require_test_change_tests` conflicts with the aggregate design (S5); the setup PR's tree must keep `.github/scripts/require-test-change.sh` (S10); stamps from releases before the org move name the old owner, so older repos cannot be resumed (S15).
-**Next slice:** S2 (critical path), then S4.
+**Next slice:** S4 (critical path; the test harness), then S5 or S6.
 **Questions for Adam (neither blocks S1):**
 1. Answered by Adam, 2026-10-02 (`memory/decisions.md`): `--resume` refuses a repo stamped by an older bootstrapper version and tells the user to create a fresh repo; a repo stamped by the current version, including one made with "Use this template" from the current release, still resumes. The spec text is corrected in S15.
 2. Answered by Adam, 2026-10-02: v2.3.0 is released before S1 (nothing of PBI-1.14 ships in it), then no tag until S15 merges. acuteping waits for PBI-1.14 and the end-to-end runs either way (decision of 2026-10-01).
-**Started 2026-10-02:** Adam answered question 1 and said go. S1 (#131) and S3 (#130) merged the same day, each built test-first by an Opus Crog and approved by an Opus review (S1 after a second round).
+**Started 2026-10-02:** Adam answered question 1 and said go. S1 (#131) and S3 (#130) merged the same day, then S2 (#133); each was built test-first by an Opus Crog and approved by an Opus review (S1 and S2 after a second round that fixed tests which could not fail).
 **Review notes deferred to later slices (non-blocking):**
 - S2 or S4: the S3 test in `tools/test-layout-pack.sh` only sees `npm install` in single-line `run:` steps; one inside a `run: |` block passes unnoticed (#130 review).
 - S17: the expected-paths list in `tools/test-layout-pack.sh` (the per-file layout test) is a deliberate third statement of the placement table, next to the script and the README tables; change it together with the README tables (#131 review). `languages/README.md` still says the table lives in `tools/layout-pack.sh` (also S17).
