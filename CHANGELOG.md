@@ -15,6 +15,11 @@ A bootstrapped project records the tag it was built from.
 - PBI-1.14 S1: the pack layout table moved into `bootstrap/stubs/bootstrap-project.sh` (`layout-pack` subcommand); `tools/layout-pack.sh` is a wrapper; the script ships at the bootstrapper root, executable and LF (PR #131)
 - Recorded PBI-1.14 S1 and S3 done in NEXT_SESSION, with the deferred review notes (PR #132)
 - PBI-1.14 S2: `build.sh` stamps the version and commit into the script as well as `CHANGELOG.md`, in place, keeping the executable bit (PR #133)
+- PBI-1.14 S4: the bootstrap script's test harness (`bootstrap/test-bootstrap-project.sh`), the `BOOTSTRAP_GH` and `BOOTSTRAP_RUN` test hooks and the message helpers in `bootstrap-project.sh`; `bootstrapper-test` runs the harness (PR #136)
+- Recorded PBI-1.14 S4 done in NEXT_SESSION and parked its review notes (PR #137)
+- Recorded the temporary arrangement until 2026-10-05 13:00 UTC: Clead runs in a Claude Code cloud session and starts Crog as subagents; added NEXT_SESSION item 12 (PR #138)
+- Corrected the evidence behind the 2026-10-01 decision on Crog sessions in `memory/decisions.md`; the decision stands (PR #139)
+- Added Adam's token-use hypothesis and Clead's data to NEXT_SESSION item 12 (PR #140)
 
 ## [2.3.0] — 2026-10-02
 
