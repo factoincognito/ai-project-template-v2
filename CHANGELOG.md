@@ -6,6 +6,16 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Added
+- Prepared the 2.3.0 changelog (PR #126)
+- Closed NEXT_SESSION item 7 after the verified v2.3.0 release (PR #127)
+- Marked PBI-1.16 Part 1 (protection of the bootstrapper's `main`) done in the backlog (PR #128)
+- Recorded Adam's PBI-1.14 decision that `--resume` refuses a repo stamped by an older bootstrapper version, and his go for slices S1 and S3 (PR #129)
+- PBI-1.14 S3: `packs.yml` creates the lockfile with `npm install --package-lock-only`, the command the bootstrap script will use (PR #130)
+- PBI-1.14 S1: the pack layout table moved into `bootstrap/stubs/bootstrap-project.sh` (`layout-pack` subcommand); `tools/layout-pack.sh` is a wrapper; the script ships at the bootstrapper root, executable and LF (PR #131)
+- Recorded PBI-1.14 S1 and S3 done in NEXT_SESSION, with the deferred review notes (PR #132)
+- PBI-1.14 S2: `build.sh` stamps the version and commit into the script as well as `CHANGELOG.md`, in place, keeping the executable bit (PR #133)
+
 ## [2.3.0] — 2026-10-02
 
 ### Added
