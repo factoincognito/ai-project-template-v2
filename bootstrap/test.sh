@@ -563,6 +563,141 @@ test_real_build_ships_the_require_test_change_script() {
   [ ! -e "$out/tools" ] || die "tools/ shipped"
 }
 
+# ---------- bootstrap-project.sh (shipped as a stub) ----------
+# The source is bootstrap/stubs/bootstrap-project.sh; stubs mirror the
+# output, so it ships at the bootstrapper root, where packs are under
+# languages/.
+
+PROJECT_SCRIPT="$HERE/stubs/bootstrap-project.sh"
+
+test_build_preserves_the_executable_bit_of_a_stub() {
+  local fx out
+  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  printf '#!/usr/bin/env bash\necho hi\n' >"$fx/bootstrap/stubs/run.sh"
+  chmod 755 "$fx/bootstrap/stubs/run.sh"
+  build_ok "$fx" "$out" v1.2.3 "$SHA"
+  [ -x "$out/run.sh" ] || die "build dropped the executable bit of a stub"
+}
+
+test_project_script_is_committed_executable_and_lf() {
+  # .gitattributes cannot set the mode, so the index must hold 100755,
+  # and the eol attribute must be lf.
+  local mode eol
+  git -C "$REPO" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "needs a git checkout"
+  mode="$(git -C "$REPO" ls-files -s -- bootstrap/stubs/bootstrap-project.sh | cut -d' ' -f1)"
+  [ "$mode" = 100755 ] || die "bootstrap/stubs/bootstrap-project.sh has mode '$mode' in the index, want 100755"
+  eol="$(git -C "$REPO" check-attr eol -- bootstrap/stubs/bootstrap-project.sh | sed 's/.*: //')"
+  [ "$eol" = lf ] || die "eol attribute is '$eol', want lf"
+}
+
+test_real_build_ships_the_project_script_at_the_root() {
+  local out="$WORK/real.$RANDOM" f="bootstrap-project.sh"
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  [ -f "$out/$f" ] || die "$f not shipped at the root"
+  [ -x "$out/$f" ] || die "$f shipped without the executable bit"
+  ! grep -q $'\r' "$out/$f" || die "$f has CR line endings"
+  head -n1 "$out/$f" | grep -qxF '#!/usr/bin/env bash' || die "$f has no bash shebang"
+}
+
+test_shipped_project_script_lays_out_from_its_own_languages_dir() {
+  # At the bootstrapper root the script finds the packs in languages/
+  # with no PACKS_DIR, and lays out what the template's wrapper does.
+  local out="$WORK/real.$RANDOM" p a b
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  for p in node web python react-native; do
+    a="$WORK/shipped.$p.$RANDOM"; b="$WORK/wrapper.$p.$RANDOM"
+    (unset PACKS_DIR; cd "$WORK" && bash "$out/bootstrap-project.sh" layout-pack "$p" "$a") >/dev/null \
+      || die "shipped script layout-pack $p failed"
+    (unset PACKS_DIR; bash "$REPO/tools/layout-pack.sh" "$p" "$b") >/dev/null || die "wrapper $p failed"
+    diff -r "$a" "$b" >&2 || die "$p: shipped script and wrapper lay out different trees"
+  done
+}
+
+test_shipped_project_script_ignores_the_users_cdpath() {
+  # The script finds itself with cd. A CDPATH in the user's environment
+  # must not change where it looks (a decoy folder of the same name) or
+  # make cd print the folder into the captured path, when it is called
+  # by a relative path.
+  local out="$WORK/real.$RANDOM" parent name decoy a b
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  parent="$(dirname "$out")"; name="$(basename "$out")"
+  decoy="$WORK/decoy.$RANDOM"; mkdir -p "$decoy/$name"
+  b="$WORK/wrapper.$RANDOM"
+  (unset PACKS_DIR; bash "$REPO/tools/layout-pack.sh" node "$b") >/dev/null || die "wrapper failed"
+  # CDPATH holding the script's own parent: cd would print the folder.
+  a="$WORK/cdp1.$RANDOM"
+  (unset PACKS_DIR; cd "$parent" && CDPATH="$parent" bash "$name/bootstrap-project.sh" layout-pack node "$a") \
+    >/dev/null || die "layout-pack failed with CDPATH set to the script's parent"
+  diff -r "$a" "$b" >&2 || die "CDPATH (script's parent) changed the layout"
+  # CDPATH holding a decoy folder with the same name: cd would go there.
+  a="$WORK/cdp2.$RANDOM"
+  (unset PACKS_DIR; cd "$parent" && CDPATH="$decoy" bash "$name/bootstrap-project.sh" layout-pack node "$a") \
+    >/dev/null || die "layout-pack failed with CDPATH set to a decoy"
+  diff -r "$a" "$b" >&2 || die "CDPATH (decoy) changed the layout"
+}
+
+test_project_script_avoids_listed_bash4_constructs() {
+  # A partial static scan, not a proof of bash 3.2 compatibility (macOS
+  # /bin/bash is 3.2). It refuses the bash 4+ constructs listed below in
+  # every line that is not a full-line comment, plus `bash -n`. Anything
+  # not listed passes; a real run on bash 3.2 comes with the OS matrix.
+  # Each pattern comes with a sample it must match, so a broken pattern
+  # fails the test instead of passing.
+  local f="$PROJECT_SCRIPT" code="$WORK/code.$RANDOM" i
+  local pats=() samples=()
+  [ -f "$f" ] || die "no $f"
+  bash -n "$f" || die "syntax error in $f"
+  pats+=('(declare|local|typeset|readonly)[[:space:]]+-[a-zA-Z]*[Anlu]'); samples+=('local -A map')
+  pats+=('(declare|typeset)[[:space:]]+-[a-zA-Z]*g'); samples+=('declare -g x=1')
+  pats+=('\[\[?[[:space:]]+(!+[[:space:]]+)?-[vR][[:space:]]'); samples+=('[ -v x ] && :')
+  pats+=('\{[A-Za-z_][A-Za-z0-9_]*\}[<>]'); samples+=('exec {fd}>/dev/null')
+  pats+=('BASHPID|BASH_COMPAT|BASH_LOADABLES_PATH|READLINE_|COPROC|SRANDOM'); samples+=('echo "$BASHPID"')
+  pats+=('%-?[0-9]*\([^)]*\)T'); samples+=("printf '%(%F)T' -1")
+  pats+=('(declare|typeset|local)[[:space:]]+-[a-zA-Z]*I'); samples+=('local -I x')
+  pats+=('shopt[[:space:]]+-s[[:space:]]+(checkjobs|direxpand|globasciiranges|inherit_errexit|localvar_inherit|assoc_expand_once)'); samples+=('shopt -s inherit_errexit')
+  pats+=('\$\{[A-Za-z_][A-Za-z0-9_]*:[0-9]+:-[0-9]+\}'); samples+=('y="${x:2:-1}"')
+  pats+=('read[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*-[a-zA-Z]*N[[:space:]]'); samples+=('read -N 3 x')
+  pats+=('\$\{[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?(,,?|\^\^?)'); samples+=('y="${x,,}"')
+  pats+=('\$\{[A-Za-z_][A-Za-z0-9_]*@[QEPAaKkUuL]\}'); samples+=('y="${x@Q}"')
+  pats+=('(^|[^A-Za-z0-9_])(mapfile|readarray|coproc)([^A-Za-z0-9_]|$)'); samples+=('mapfile -t lines')
+  pats+=('&>>'); samples+=('cmd &>>log')
+  pats+=('\|&'); samples+=('cmd |& tee log')
+  pats+=(';;&|;&$|;&[[:space:]]'); samples+=('a) x ;;&')
+  pats+=('shopt[[:space:]]+-s[[:space:]]+(globstar|lastpipe|autocd)'); samples+=('shopt -s globstar')
+  pats+=('wait[[:space:]]+-n'); samples+=('wait -n')
+  pats+=('read[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*-[a-zA-Z]*i'); samples+=('read -e -i default x')
+  pats+=('\$\{[A-Za-z_][A-Za-z0-9_]*\[-[0-9]+\]\}'); samples+=('y="${a[-1]}"')
+  pats+=('EPOCHSECONDS|EPOCHREALTIME|BASH_ARGV0'); samples+=('t=$EPOCHSECONDS')
+  pats+=('\{[0-9]+\.\.[0-9]+\.\.[0-9]+\}'); samples+=('for i in {1..9..2}')
+  grep -nvE '^[[:space:]]*#' "$f" >"$code" || true
+  [ "$(wc -l <"$code")" -ge 20 ] || die "found almost no code lines; the filter is broken"
+  for i in "${!pats[@]}"; do
+    printf '%s\n' "${samples[$i]}" | grep -qE -- "${pats[$i]}" \
+      || die "pattern ${pats[$i]} misses its sample: ${samples[$i]}"
+    ! grep -E -- "${pats[$i]}" "$code" >&2 || die "bash 4+ construct (${pats[$i]}) in $f"
+  done
+}
+
+test_project_script_mentions_no_template_only_path() {
+  # It ships to the bootstrapper and then to projects, where tools/,
+  # bootstrap/ and the template-only workflows do not exist.
+  local f="$PROJECT_SCRIPT"
+  [ -f "$f" ] || die "no $f"
+  ! grep -nE '(^|[^A-Za-z0-9_.-])(tools|bootstrap|stubs)/' "$f" >&2 || die "template-only folder named in $f"
+  ! grep -nE 'packs\.yml|bootstrapper\.yml|manifest\.txt|test-layout-pack|layout-pack\.sh' "$f" >&2 \
+    || die "template-only file named in $f"
+}
+
+test_project_script_passes_the_forbidden_string_checks() {
+  local f="$PROJECT_SCRIPT"
+  [ -f "$f" ] || die "no $f"
+  ! grep -nE 'trig_|PBI-[0-9]|open question [0-9]' "$f" >&2 || die "forbidden pattern in $f"
+  ! grep -nF '(PR #' "$f" >&2 || die "(PR # in $f"
+  ! grep -nF '{{TEMPLATE_' "$f" >&2 || die "placeholder in $f (stamping is not part of this script yet)"
+  grep -qE 'https://github\.com/factoincognito/ai-project-template-v2/blob/main/docs/BACKLOG\.md' "$f" \
+    || die "$f header does not link the spec by URL"
+}
+
 # ---------- run ----------
 
 TESTS=$(declare -F | awk '{print $3}' | grep '^test_')

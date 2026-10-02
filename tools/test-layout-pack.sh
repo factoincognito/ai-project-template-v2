@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Tests for tools/layout-pack.sh.
+# Tests for tools/layout-pack.sh and the layout-pack subcommand of
+# bootstrap/stubs/bootstrap-project.sh, which holds the layout table.
 # Usage: bash tools/test-layout-pack.sh
 # Template-only: tools/ is not in bootstrap/manifest.txt.
 set -euo pipefail
@@ -7,6 +8,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 LAYOUT="$HERE/layout-pack.sh"
+SCRIPT="$REPO/bootstrap/stubs/bootstrap-project.sh"
+PACKS="node web python react-native"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -43,6 +46,15 @@ expect_fail() {
   if bash "$LAYOUT" "$@" 2>"$err" >/dev/null; then
     die "layout succeeded, expected failure containing: $msg"
   fi
+  grep -qF -- "$msg" "$err" || { cat "$err" >&2; die "stderr lacks: $msg"; }
+}
+
+# expect_rc <want-rc> <expected-stderr-substring> <command...>
+expect_rc() {
+  local want="$1" msg="$2"; shift 2
+  local err="$WORK/err.$RANDOM" rc=0
+  "$@" 2>"$err" >/dev/null || rc=$?
+  [ "$rc" -eq "$want" ] || { cat "$err" >&2; die "exit $rc, want $want: $*"; }
   grep -qF -- "$msg" "$err" || { cat "$err" >&2; die "stderr lacks: $msg"; }
 }
 
@@ -268,6 +280,156 @@ test_missing_pack_file_fails() {
   packs="$(copy_packs)"
   rm "$packs/node/tsconfig.json"
   PACKS_DIR="$packs" expect_fail "missing from the pack: tsconfig.json" node "$out"
+}
+
+# ---------- the table lives in bootstrap-project.sh ----------
+# tools/layout-pack.sh is a thin wrapper around the script's layout-pack
+# subcommand, so the bootstrapper and packs.yml lay out a pack from one
+# table.
+
+test_layout_table_lives_only_in_the_script() {
+  # Every pack entry (a file, or starter/) is named in the script and
+  # nowhere in the wrapper.
+  local p name n=0
+  [ -f "$SCRIPT" ] || die "no $SCRIPT"
+  for p in $PACKS; do
+    while IFS= read -r name; do
+      n=$((n + 1))
+      grep -qF -- "$name" "$SCRIPT" || die "the script does not name $p/$name"
+      ! grep -qF -- "$name" "$LAYOUT" || die "the wrapper names $p/$name: the table is not in one place"
+    done < <(cd "$REPO/languages/$p" && find . -mindepth 1 -maxdepth 1 | sed 's|^\./||' | LC_ALL=C sort)
+  done
+  [ "$n" -ge 30 ] || die "found only $n pack entries; the listing is broken"
+  grep -qE 'bootstrap/stubs/bootstrap-project\.sh"? layout-pack' "$LAYOUT" \
+    || die "the wrapper does not call the script's layout-pack subcommand"
+}
+
+test_wrapper_passes_the_template_packs_dir() {
+  # The script sits in bootstrap/stubs/ in the template, so its own
+  # default (languages/ next to it) does not exist there; the wrapper
+  # must point it at the template's languages/.
+  grep -qF 'PACKS_DIR="${PACKS_DIR:-$HERE/../languages}"' "$LAYOUT" \
+    || die "the wrapper does not default PACKS_DIR to the template's languages/"
+  grep -qE '^export PACKS_DIR$|^export PACKS_DIR=|PACKS_DIR="\$PACKS_DIR" ' "$LAYOUT" \
+    || die "the wrapper does not pass PACKS_DIR to the script"
+}
+
+test_wrapper_lays_out_what_the_script_does() {
+  # The wrapper execs the script, so this only proves that it forwards
+  # the pack, the target and PACKS_DIR. Whether the table is right is
+  # tested against the pack sources in the next test.
+  local p a b
+  for p in $PACKS; do
+    a="$WORK/script.$p.$RANDOM"; b="$WORK/wrapper.$p.$RANDOM"
+    PACKS_DIR="$REPO/languages" bash "$SCRIPT" layout-pack "$p" "$a" >/dev/null \
+      || die "script layout-pack $p failed"
+    bash "$LAYOUT" "$p" "$b" >/dev/null || die "wrapper $p failed"
+    diff <(list_files "$a") <(list_files "$b") || die "$p: file lists differ"
+    diff -r "$a" "$b" >&2 || die "$p: contents differ"
+  done
+}
+
+# The expected placement, written out independently of the script:
+# "<project path> <pack path>", a trailing / meaning a whole folder. It
+# repeats the README placement table on purpose. A check derived from
+# the script's own table would compare the script with itself, so the
+# only honest oracle for "each file lands at the right path" is a second,
+# independent statement of where files go. It lives here, in the test,
+# never in tools/layout-pack.sh (which test_layout_table_lives_only_in_the_script
+# keeps free of pack paths).
+expected_placement() {
+  local common=".github/workflows/ci.yml ci.yml
+.gitignore gitignore
+.vscode/settings.json vscode-settings.json
+.vscode/extensions.json vscode-extensions.json"
+  local ts="package.json package.json
+tsconfig.json tsconfig.json
+biome.json biome.json"
+  case "$1" in
+    node) printf '%s\n' "$common" "$ts" "src/placeholder.test.ts placeholder.test.ts" ;;
+    web) printf '%s\n' "$common" "$ts" "index.html index.html" "vite.config.mts vite.config.mts" \
+      "playwright.config.ts playwright.config.ts" "src/ starter/src/" "e2e/ starter/e2e/" ;;
+    python) printf '%s\n' "$common" "pyproject.toml pyproject.toml" "requirements.txt requirements.txt" \
+      "requirements-dev.txt requirements-dev.txt" ".pre-commit-config.yaml pre-commit-config.yaml" \
+      "src/ starter/src/" ;;
+    react-native) printf '%s\n' "$common" "$ts" "app.json app.json" "src/ starter/src/" ;;
+    *) die "no expected placement for $1" ;;
+  esac
+}
+
+# Expands expected_placement into one "<project file> <pack file>" line
+# per file, folders listed from the pack itself.
+expected_files() {
+  local pack="$1" to from f
+  expected_placement "$pack" | while read -r to from; do
+    if [ "${to%/}" != "$to" ]; then
+      (cd "$REPO/languages/$pack/$from" && find . -type f | sed 's|^\./||') | while IFS= read -r f; do
+        echo "$to$f $from$f"
+      done
+    else
+      echo "$to $from"
+    fi
+  done | LC_ALL=C sort
+}
+
+test_every_laid_out_file_is_its_pack_source_at_the_expected_path() {
+  # For every pack: the laid-out file list is exactly the expected one
+  # (a wrong destination, a missing file or an extra file fails), and
+  # each file is byte-identical to its source in the pack.
+  local p out exp to from n=0
+  for p in $PACKS; do
+    out="$WORK/golden.$p.$RANDOM"; exp="$WORK/expected.$p.$RANDOM"
+    PACKS_DIR="$REPO/languages" bash "$SCRIPT" layout-pack "$p" "$out" >/dev/null \
+      || die "script layout-pack $p failed"
+    expected_files "$p" >"$exp"
+    diff <(list_files "$out") <(cut -d' ' -f1 "$exp") >&2 \
+      || die "$p: laid-out files differ from the expected placement (diff above)"
+    while read -r to from; do
+      n=$((n + 1))
+      cmp -s "$REPO/languages/$p/$from" "$out/$to" || die "$p: $to differs from the pack's $from"
+    done <"$exp"
+  done
+  [ "$n" -ge 40 ] || die "compared only $n files; the expected list is broken"
+}
+
+test_script_refuses_a_non_empty_target() {
+  local out="$WORK/full.$RANDOM"
+  mkdir "$out"; echo x >"$out/keep.txt"
+  PACKS_DIR="$REPO/languages" expect_rc 1 "target dir is not empty" \
+    bash "$SCRIPT" layout-pack node "$out"
+  [ "$(list_files "$out")" = keep.txt ] || die "target dir changed"
+  [ "$(cat "$out/keep.txt")" = x ] || die "existing file touched"
+}
+
+test_script_usage_errors_exit_2() {
+  local out="$WORK/o.$RANDOM"
+  expect_rc 2 "usage:" bash "$SCRIPT"
+  expect_rc 2 "usage:" bash "$SCRIPT" no-such-command
+  expect_rc 2 "usage:" bash "$SCRIPT" layout-pack
+  expect_rc 2 "usage:" bash "$SCRIPT" layout-pack node
+  expect_rc 2 "usage:" bash "$SCRIPT" layout-pack node "$out" extra
+  [ ! -e "$out" ] || die "usage error wrote $out"
+}
+
+test_script_unknown_pack_exits_2() {
+  local out="$WORK/o.$RANDOM"
+  PACKS_DIR="$REPO/languages" expect_rc 2 "unknown pack: ruby" bash "$SCRIPT" layout-pack ruby "$out"
+  PACKS_DIR="$REPO/languages" expect_rc 2 "unknown pack: ../node" bash "$SCRIPT" layout-pack ../node "$out"
+  [ ! -e "$out" ] || die "unknown pack wrote $out"
+}
+
+test_wrapper_usage_and_unknown_pack_exit_2() {
+  expect_rc 2 "usage:" bash "$LAYOUT"
+  expect_rc 2 "usage:" bash "$LAYOUT" node
+  expect_rc 2 "unknown pack: ruby" bash "$LAYOUT" ruby "$WORK/o.$RANDOM"
+}
+
+test_script_missing_packs_dir_fails() {
+  # In the template the script's own default does not exist; without
+  # PACKS_DIR it must fail clearly, not lay out from somewhere else.
+  local out="$WORK/o.$RANDOM"
+  PACKS_DIR="$WORK/nope" expect_rc 1 "pack folder not found" bash "$SCRIPT" layout-pack node "$out"
+  [ ! -e "$out" ] || die "wrote $out"
 }
 
 # ---------- the README and the workflow agree with the script ----------
