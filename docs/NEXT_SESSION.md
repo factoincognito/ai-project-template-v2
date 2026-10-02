@@ -163,6 +163,18 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 - **Adam's hypothesis:** Code on Code is likely more token-intensive than Cowork on Code, because Cowork is better at bouncing ideas around, discussion and documentation, which is everyday work here. Not measured.
 - **Clead's input, from the Code session of 2026-10-02:** that session was mostly discussion and docs, plus subagents. Over about 2 hours it cost about $9.51 at list price, read about 21M tokens from cache, and ended with about 286k tokens of context (session usage metadata). Most of that cost comes from resending the growing conversation on every turn. That happens on either product, so session length may matter more than the product: shorter sessions per topic, or compacting, cut it on both. Two more points: "better at" (quality of the result) and token use are separate questions; and that session ran on Opus while CLAUDE.md sets Clead's default to Sonnet, so part of its cost is the model, not the product.
 
+
+### 13. What the template's value is, and for whom — new (2026-10-02)
+
+**Adam, 2026-10-02:** the strong suit is the process support. Even for a process-literate WHAT person who has all the tools installed, bootstrapping from the template beats starting with the processes as a blank sheet. The tooling can be set up by asking Claude: Adam did that for fomo-f from a bare computer, before any template existed.
+**Clead's analysis, the same day:**
+- **What the template gives:** a fixed way of working (WHAT/HOW roles; spec, backlog item, PR, review, merge); guardrails a non-programmer cannot provide (CI requires a test change with code changes and a green `build`; a separate review; branch protection); memory in the repo; tested language packs.
+- **Not unique as parts:** Claude Code now ships Projects (one coordinating conversation that starts parallel cloud sessions; public beta), Code Review, `/code-review`, PR auto-fix, and CLAUDE.md with auto memory. **Unique:** the operating model and the lessons from v1, fomo-f and the football tracker, written down and enforced where possible.
+- **Weak spots:** overhead on small changes; some guardrails are instructions only (review independence, test-first order); part of the Clead and Crog coordination overlaps Projects.
+**Questions for Adam:**
+1. PBI-1.14: since setup is possible by asking Claude, the script's value is a setup that is repeatable, checked and cheap, not one that becomes possible. Keep the 17-slice plan, or build a smaller version (Clead guides the setup and a short script checks the result)?
+2. If the process is the strong suit, should effort go first to the process itself (enforcement, less overhead, Projects as the base where it fits) rather than to the setup script?
+
 ---
 
 ## Items that do not change
