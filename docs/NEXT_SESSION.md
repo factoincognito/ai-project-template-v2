@@ -152,6 +152,15 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 - **The boundary between sessions.** The product-office session works only in its own repo and learns template state from Adam or from this file. The template session owns the template and the bootstrapper. Private information (company structure, ideas, token expiry, library repos) stays in the product-office repo and never enters this public repo.
 - **The gate for acuteping** is PBI-1.14 built plus Adam's end-to-end runs; the product-office repo has its own step for that.
 
+### 12. Clead in Code for good, or back to Cowork? — new (2026-10-02)
+
+**What this is:** Adam wants to discuss the pros and cons with Clead in Cowork after the temporary period ends (2026-10-05, 13:00 UTC). Until then Clead runs in a Claude Code cloud session (`memory/decisions.md`, 2026-10-02). Input gathered so far:
+- **What worked from a Code cloud session:** git, the GitHub API, PRs, a separate review session on Opus, and Crog merge subagents. A subagent hands its result straight back; a separate session does not report back and has to be checked on.
+- **Review independence rests on the same rule on both** (`memory/standards.md` section 7: a separate invocation with scoped inputs). A different product does not add to it. A different model for the reviewer may, but only if the author runs on a different model: with Clead on Opus, an Opus reviewer is the same model.
+- **CLAUDE.md assigns roles by surface** ("Crog (Claude Code)", "Clead (Claude app)"). Staying on Code needs that wording changed.
+- **Tools:** compare what Clead uses in Cowork with what a Code session has. For example, CLAUDE.md names the Chrome extension as Clead's fallback channel.
+- **Token use, Adam's open question:** does Code use more or fewer tokens than Cowork for the same task, small or large? Not measured on either side. Two data points for Code, from the sessions' own usage metadata (`get_session`, list price): the first turn of a trivial task read about 48k tokens of context (system prompt, tools, CLAUDE.md) before its first action, and the round-2 Opus review of #136 cost about $1.73. Run the same task in both before deciding.
+
 ---
 
 ## Items that do not change
