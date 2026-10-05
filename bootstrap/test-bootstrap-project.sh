@@ -86,8 +86,32 @@ set -euo pipefail
   for a in "$@"; do printf '\t%s' "$a"; done
   printf '\n'
 } >>"$STUB_GH_LOG"
+# fails_left <name>: true while the file <name> next to the log holds a
+# number above 0, counting it down; a test writes 1 there to make a call
+# fail once and then work, as if the user had fixed it in between.
+fails_left() {
+  local f="${STUB_GH_LOG%/*}/$1" n
+  [ -f "$f" ] || return 1
+  n="$(cat "$f")"
+  [ "$n" -gt 0 ] || return 1
+  echo $((n - 1)) >"$f"
+}
 case "${1:-}" in
-  --version) echo "gh version 0.0.0 (stub)" ;;
+  --version)
+    # gh-missing: gh is not installed (yet).
+    if fails_left gh-missing; then echo "gh: command not found" >&2; exit 127; fi
+    echo "gh version 0.0.0 (stub)"
+    ;;
+  repo)
+    # The feature check: a gh new enough lists --template; gh-old: too old.
+    if [ "$*" = "repo create --help" ]; then
+      echo "Create a new GitHub repository."
+      echo "  -d, --description string   Description of the repository"
+      fails_left gh-old || echo "  -p, --template repository  Make the new repository based on a template repository"
+    else
+      echo "stub gh: no emulation for: $*" >&2; exit 64
+    fi
+    ;;
   api)
     # The signed-in account: login, then profile name (empty when the
     # profile has none), one per line. STUB_GH_LOGIN and STUB_GH_NAME
@@ -149,6 +173,54 @@ mkdir -p "$WORK/refuse"
 make_refuser "$WORK/refuse/run" BOOTSTRAP_RUN
 make_refuser "$WORK/refuse/gh" BOOTSTRAP_GH
 export BOOTSTRAP_RUN="$WORK/refuse/run" BOOTSTRAP_GH="$WORK/refuse/gh"
+# The terminal an offered command's yes is read from: a file that does not
+# exist, so no test ever waits on the real terminal and no yes is given
+# unless a test writes one.
+export BOOTSTRAP_TTY="$WORK/no-terminal"
+
+# ---------- fake tools and a fake home ----------
+# git is real (its path is kept here); a test that needs git, npm, uname,
+# brew or winget to behave otherwise puts a fake one first on PATH.
+
+REAL_GIT="$(command -v git)"
+
+# fake_tool <dir> <name> [output]: makes <dir>/bin/<name>. Each call is
+# logged to <dir>/tools.log. While <dir>/<name>-fails holds a number above
+# 0 it counts it down and fails as a missing command does (exit 127): a
+# test writes 1 there for "missing, then installed by the user". Otherwise
+# a fake git runs the real git, and any other fake prints [output].
+fake_tool() {
+  local d="$1" name="$2" out="${3:-}"
+  mkdir -p "$d/bin"
+  cat >"$d/bin/$name" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "$name \$*" >>"$d/tools.log"
+f="$d/$name-fails"
+if [ -f "\$f" ]; then
+  n="\$(cat "\$f")"
+  if [ "\$n" -gt 0 ]; then echo \$((n - 1)) >"\$f"; echo "$name: command not found" >&2; exit 127; fi
+fi
+if [ "$name" = git ]; then exec "$REAL_GIT" "\$@"; fi
+printf '%s\n' "$out"
+EOF
+  chmod +x "$d/bin/$name"
+}
+
+# fake_home <dir> [git name] [git email]: a home folder whose global git
+# settings hold only the name and email given.
+fake_home() {
+  mkdir -p "$1"
+  : >"$1/.gitconfig"
+  [ -z "${2:-}" ] || "$REAL_GIT" config --file "$1/.gitconfig" user.name "$2"
+  [ -z "${3:-}" ] || "$REAL_GIT" config --file "$1/.gitconfig" user.email "$3"
+}
+
+# use_home <dir>: in the current (sub)shell, git reads its global settings
+# from <dir> only.
+use_home() {
+  export HOME="$1" GIT_CONFIG_NOSYSTEM=1
+  unset XDG_CONFIG_HOME GIT_CONFIG_GLOBAL
+}
 
 # ---------- user-facing strings ----------
 # How the strings are collected, for the banned-words check:
@@ -169,7 +241,7 @@ export BOOTSTRAP_RUN="$WORK/refuse/run" BOOTSTRAP_GH="$WORK/refuse/gh"
 # What reaches the terminal some other way is the job of bypass_lines;
 # what it cannot see is listed there.
 
-MSG_HELPERS='say|step_start|step_end|show_error|fail|ask|prompt_for|answer|add_problem'
+MSG_HELPERS='say|step_start|step_end|show_error|fail|ask|ask_terminal|prompt_for|answer|add_problem|guide_begin|guide_step|guide_end'
 
 # user_strings <file>: prints "<line number>: <text>" for each.
 user_strings() {
@@ -735,7 +807,10 @@ test_user_facing_strings_are_collected() {
     'Choose a folder that is empty' 'Check that the languages folder' \
     'There is no default, because only you can choose it' 'Please try again' \
     'not one this script knows' 'needs a value after it' 'Some options are missing or cannot be used' \
-    'a question got no answer' 'Could not read your GitHub account'; do
+    'a question got no answer' 'Could not read your GitHub account' \
+    'Why this is needed: ' 'When it has worked: ' 'If you see something else: ' \
+    'How the script checks it: ' 'To start again, run this command' 'git is not installed' \
+    'stops after checking this computer' 'Your name for git' 'Your email address for git'; do
     grep -qF -- "$t" "$s" || { cat "$s" >&2; die "collector missed: $t"; }
   done
 }
@@ -1088,7 +1163,9 @@ test_banned_word_with_its_explanation_or_in_a_command_passes() {
 # missing ones (with --non-interactive: takes the defaults, asks nothing)
 # and fills in the defaults. `inputs <dir> <options...>` runs both with
 # the script loaded, a stub gh, and stdin from <dir>/in (empty when
-# absent). It writes the resolved answers to <dir>/dump (dump_inputs),
+# absent), in <dir>/cwd, with git's global settings read from the fake
+# home <dir>/home (name "Test Person", email test@example.com, unless
+# the test made that folder itself). It writes the resolved answers to <dir>/dump (dump_inputs),
 # stdout to <dir>/out, stderr to <dir>/err, gh calls to <dir>/gh.log, and
 # sets RC. It is never called in a condition, so errexit behaves as in a
 # real run.
@@ -1101,7 +1178,7 @@ dump_inputs() {
     "WITH_DEPLOY=$IN_WITH_DEPLOY" "VISIBILITY=$IN_VISIBILITY" "LICENSE=$IN_LICENSE" \
     "COPYRIGHT_HOLDER=$IN_COPYRIGHT_HOLDER" "DIR=$IN_DIR" "CI_TIMEOUT=$IN_CI_TIMEOUT" \
     "SLUG=$IN_SLUG" "NON_INTERACTIVE=$OPT_NON_INTERACTIVE" "YES=$OPT_YES" \
-    "DRY_RUN=$OPT_DRY_RUN" "RESUME=$OPT_RESUME"
+    "DRY_RUN=$OPT_DRY_RUN" "RESUME=$OPT_RESUME" "GIT_NAME=$IN_GIT_NAME" "GIT_EMAIL=$IN_GIT_EMAIL"
 }
 
 inputs() {
@@ -1109,9 +1186,13 @@ inputs() {
   shift
   [ -e "$d/in" ] || : >"$d/in"
   [ -x "$d/gh" ] || make_stub_gh "$d/gh"
+  [ -d "$d/home" ] || fake_home "$d/home" "Test Person" test@example.com
+  mkdir -p "$d/cwd"
   rm -f "$d/dump"
   set +e
   ( load_script
+    cd "$d/cwd"
+    use_home "$d/home"
     export STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
     parse_args "$@"
     collect_inputs
@@ -1264,9 +1345,11 @@ test_non_interactive_never_reads_stdin() {
   d="$(tmpdir)"
   printf '%s\n' first-line second-line >"$d/in"
   make_stub_gh "$d/gh"
+  fake_home "$d/home" "Test Person" test@example.com
   # Not in a condition, so a failing step stops the subshell (errexit).
   set +e
   ( load_script
+    use_home "$d/home"
     export STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
     parse_args --non-interactive "${REQUIRED_OPTS[@]}"
     collect_inputs
@@ -1282,28 +1365,38 @@ test_non_interactive_never_reads_stdin() {
 }
 
 test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
-  # The whole script, as a user runs it. The steps after the questions are
-  # not built yet: it stops there, with exit 1, having created nothing.
+  # The whole script, as a user runs it. The steps after the checks on
+  # this computer are not built yet: it stops there, with exit 1, having
+  # created nothing.
   local d rc
   d="$(tmpdir)"
   make_stub_gh "$d/gh"
-  export STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
+  fake_home "$d/home" "Test Person" test@example.com
+  fake_tool "$d" npm 10.0.0
+  mkdir -p "$d/cwd"
   rc=0
-  bash "$SCRIPT" --non-interactive "${REQUIRED_OPTS[@]}" </dev/null >"$d/out" 2>"$d/err" || rc=$?
+  ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
+    bash "$SCRIPT" --non-interactive "${REQUIRED_OPTS[@]}" ) </dev/null >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "exit $rc, want 1"; }
-  grep -qF 'stops after the questions' "$d/err" || { cat "$d/err" >&2; die "no stop message"; }
+  grep -qF 'stops after checking this computer' "$d/err" || { cat "$d/err" >&2; die "no stop message"; }
   rc=0
-  bash "$SCRIPT" --non-interactive "${REQUIRED_OPTS[@]}" <&- >"$d/out" 2>"$d/err" || rc=$?
+  ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
+    bash "$SCRIPT" --non-interactive "${REQUIRED_OPTS[@]}" ) <&- >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "stdin closed: exit $rc, want 1"; }
-  grep -qF 'stops after the questions' "$d/err" || { cat "$d/err" >&2; die "stdin closed: no stop message"; }
-  [ "$(cut -f2- "$d/gh.log" | sort -u)" = "$(printf 'api\tuser\t--jq\t.login, (.name // "")')" ] \
-    || { cat "$d/gh.log" >&2; die "gh was used for more than reading the account"; }
+  grep -qF 'stops after checking this computer' "$d/err" || { cat "$d/err" >&2; die "stdin closed: no stop message"; }
+  # gh: the two checks on this computer, and the account for the defaults.
+  [ "$(cut -f2- "$d/gh.log" | LC_ALL=C sort -u)" = "$(printf '%s\n' '--version' "$(printf 'api\tuser\t--jq\t.login, (.name // "")')" \
+      "$(printf 'repo\tcreate\t--help')" | LC_ALL=C sort)" ] \
+    || { cat "$d/gh.log" >&2; die "gh was used for more than its checks and reading the account"; }
+  [ -z "$(ls -A "$d/cwd")" ] || { ls -A "$d/cwd" >&2; die "something was created"; }
 }
 
 test_running_with_no_options_starts_the_questions() {
   local d rc=0
   d="$(tmpdir)"
-  bash "$SCRIPT" </dev/null >"$d/out" 2>"$d/err" || rc=$?
+  make_stub_gh "$d/gh"
+  ( export STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
+    bash "$SCRIPT" ) </dev/null >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 2 ] || { cat "$d/err" >&2; die "exit $rc, want 2 (no answer)"; }
   grep -q '^Project name: $' "$d/out" || { cat "$d/out" >&2; die "the first question was not asked"; }
 }
@@ -1352,7 +1445,7 @@ test_help_lists_every_option() {
   [ "$rc" -eq 0 ] || { cat "$d/err" >&2; die "exit $rc, want 0"; }
   for o in --name --owner --project-name --description --po-name --pack --with-deploy \
     --public --private --license --copyright-holder --dir --ci-timeout --non-interactive \
-    --yes --dry-run --resume --help layout-pack; do
+    --yes --dry-run --resume --help --git-name --git-email layout-pack; do
     grep -qF -- "$o" "$d/out" || { cat "$d/out" >&2; die "help lacks $o"; }
   done
 }
@@ -1491,21 +1584,24 @@ test_a_github_profile_name_that_cannot_be_used_is_refused_with_its_option() {
 test_questions_are_asked_for_every_input_not_given() {
   local d
   d="$(tmpdir)"
-  printf '%s\n' my-app "My App" "Lends tools to neighbours." "" "" web y private mit "" "" >"$d/in"
+  printf '%s\n' my-app "My App" "Lends tools to neighbours." "" "" web y private mit "" "" \
+    "Ada Lovelace" ada@example.com >"$d/in"
   inputs "$d"
   expect_inputs "$d" NAME=my-app "PROJECT_NAME=My App" "DESCRIPTION=Lends tools to neighbours." \
     OWNER=octo-user "PO_NAME=Octo User" PACK=web WITH_DEPLOY=yes VISIBILITY=private \
-    LICENSE=mit "COPYRIGHT_HOLDER=Octo User" DIR=./my-app CI_TIMEOUT=20 NON_INTERACTIVE=
-  [ "$(grep -c ': $' "$d/out")" -eq 11 ] || { cat "$d/out" >&2; die "not 11 questions"; }
+    LICENSE=mit "COPYRIGHT_HOLDER=Octo User" DIR=./my-app CI_TIMEOUT=20 NON_INTERACTIVE= \
+    "GIT_NAME=Ada Lovelace" GIT_EMAIL=ada@example.com
+  [ "$(grep -c ': $' "$d/out")" -eq 13 ] || { cat "$d/out" >&2; die "not 13 questions"; }
 }
 
 test_an_empty_answer_takes_the_default_shown() {
   local d
   d="$(tmpdir)"
-  printf '%s\n' my-app "" "Lends tools." "" "" python "" mit "" "" >"$d/in"
+  printf '%s\n' my-app "" "Lends tools." "" "" python "" mit "" "" "" "" >"$d/in"
   inputs "$d"
   expect_inputs "$d" PROJECT_NAME=my-app OWNER=octo-user "PO_NAME=Octo User" VISIBILITY=public \
-    "COPYRIGHT_HOLDER=Octo User" DIR=./my-app WITH_DEPLOY=no
+    "COPYRIGHT_HOLDER=Octo User" DIR=./my-app WITH_DEPLOY=no "GIT_NAME=Test Person" \
+    GIT_EMAIL=test@example.com
   grep -qxF 'Display name [my-app]: ' "$d/out" || { cat "$d/out" >&2; die "default not shown"; }
   grep -qxF 'Owner [octo-user]: ' "$d/out" || { cat "$d/out" >&2; die "owner default not shown"; }
 }
@@ -1515,22 +1611,24 @@ test_answers_have_spaces_and_carriage_returns_removed() {
   d="$(tmpdir)"
   cr="$(printf '\r')"
   printf '%s\n' "  my-app $cr" "My App$cr" "Lends tools.$cr" "acme$cr" "Ada$cr" "node$cr" \
-    "public$cr" "none$cr" "work$cr" >"$d/in"
+    "public$cr" "none$cr" "work$cr" " Ada L $cr" "ada@example.com$cr" >"$d/in"
   inputs "$d"
   expect_inputs "$d" NAME=my-app "PROJECT_NAME=My App" "DESCRIPTION=Lends tools." OWNER=acme \
-    PO_NAME=Ada PACK=node VISIBILITY=public LICENSE=none DIR=work
+    PO_NAME=Ada PACK=node VISIBILITY=public LICENSE=none DIR=work "GIT_NAME=Ada L" \
+    GIT_EMAIL=ada@example.com
 }
 
 test_questions_are_skipped_for_inputs_given_as_options() {
   local d
   d="$(tmpdir)"
-  # Asked: display name, description, owner, PO name, visibility, folder.
+  # Asked: display name, description, owner, PO name, visibility, folder,
+  # git name and email.
   # Not asked: deploy files (python) and copyright holder (licence none).
-  printf '%s\n' "" "Lends tools." "" "" "" "" >"$d/in"
+  printf '%s\n' "" "Lends tools." "" "" "" "" "" "" >"$d/in"
   inputs "$d" --name my-app --pack python --license none
   expect_inputs "$d" NAME=my-app PACK=python LICENSE=none "DESCRIPTION=Lends tools." WITH_DEPLOY=no \
     "COPYRIGHT_HOLDER=Octo User"
-  [ "$(grep -c ': $' "$d/out")" -eq 6 ] || { cat "$d/out" >&2; die "not 6 questions"; }
+  [ "$(grep -c ': $' "$d/out")" -eq 8 ] || { cat "$d/out" >&2; die "not 8 questions"; }
   ! grep -qE '^(Project name|Language pack|Licence|Add the publishing files|Copyright holder)' "$d/out" \
     || { cat "$d/out" >&2; die "asked for something given or not needed"; }
 }
@@ -1538,7 +1636,7 @@ test_questions_are_skipped_for_inputs_given_as_options() {
 test_a_wrong_answer_is_explained_and_asked_again() {
   local d t
   d="$(tmpdir)"
-  printf '%s\n' "my app" my-app "" "" "Lends tools." "" "" ruby 2 maybe n "" 7 mit "" "" >"$d/in"
+  printf '%s\n' "my app" my-app "" "" "Lends tools." "" "" ruby 2 maybe n "" 7 mit "" "" "" "" >"$d/in"
   inputs "$d"
   expect_inputs "$d" NAME=my-app PACK=web WITH_DEPLOY=no LICENSE=mit "DESCRIPTION=Lends tools."
   [ "$(grep -c '^Project name: $' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "name not asked again"; }
@@ -1556,15 +1654,15 @@ test_a_wrong_answer_is_explained_and_asked_again() {
 test_pack_and_licence_can_be_chosen_by_number_or_name() {
   local d
   d="$(tmpdir)"
-  printf '%s\n' my-app "" "Lends tools." "" "" 4 "" 6 "" "" >"$d/in"
+  printf '%s\n' my-app "" "Lends tools." "" "" 4 "" 6 "" "" "" "" >"$d/in"
   inputs "$d"
   expect_inputs "$d" PACK=react-native LICENSE=polyform-noncommercial-1.0.0
   d="$(tmpdir)"
-  printf '%s\n' my-app "" "Lends tools." "" "" 1 "" 1 "" >"$d/in"
+  printf '%s\n' my-app "" "Lends tools." "" "" 1 "" 1 "" "" "" >"$d/in"
   inputs "$d"
   expect_inputs "$d" PACK=node LICENSE=none
   d="$(tmpdir)"
-  printf '%s\n' my-app "" "Lends tools." "" "" python 2 agpl-3.0 "" "" >"$d/in"
+  printf '%s\n' my-app "" "Lends tools." "" "" python 2 agpl-3.0 "" "" "" "" >"$d/in"
   inputs "$d"
   expect_inputs "$d" PACK=python VISIBILITY=private LICENSE=agpl-3.0
 }
@@ -1603,7 +1701,7 @@ test_deploy_question_on_another_pack_than_web_is_refused() {
 # A full question run (web, a licence): every question is asked.
 full_transcript() {
   local d="$1"
-  printf '%s\n' my-app "" "Lends tools." "" "" web "" "" mit "" "" >"$d/in"
+  printf '%s\n' my-app "" "Lends tools." "" "" web "" "" mit "" "" "" "" >"$d/in"
   inputs "$d"
   [ "$RC" -eq 0 ] || { cat "$d/err" >&2; die "the question run failed"; }
 }
@@ -1655,6 +1753,711 @@ test_pack_and_licence_questions_explain_each_choice() {
     [ -n "$line" ] || { cat "$d/out" >&2; die "choice not shown: $c"; }
     [ "$(printf '%s\n' "${line#*: }" | wc -w | tr -d ' ')" -ge 5 ] || die "choice not explained in words: $line"
   done
+}
+
+# ---------- guided preflight: checks on this computer ----------
+# Before anything is created the script checks this computer: bash 3.2 or
+# later, git, gh (new enough to create a project from a template), npm for
+# the node, web and react-native packs, and the target folder. A check
+# that fails prints a guide (numbered steps for the OS, why, what the user
+# sees when it worked, what to do otherwise, how the script checks it),
+# then waits for Enter and checks again, until it passes or the user
+# stops; then it prints the command to start again (exit 3). With
+# --non-interactive it prints the guide and exits 3 at once. A command
+# the script can run itself is offered, and run (through BOOTSTRAP_RUN)
+# only after a yes read from the terminal (BOOTSTRAP_TTY), never from
+# stdin and never because of --yes.
+#
+# `pre <dir> <command...>` runs a function of the loaded script after
+# detect_os, with PATH="<dir>/bin:/usr/bin:/bin" (so only the fake tools a
+# test makes, plus the system's own, are found: no brew or winget unless
+# faked), a stub gh and a stub runner, stdin from <dir>/in, the terminal
+# from <dir>/tty and the Linux release file from <dir>/os-release when
+# they exist, in <dir>/cwd with the fake home <dir>/home. stdout goes to
+# <dir>/out, stderr to <dir>/err, the runner's log to <dir>/run.log.
+# `whole <dir> <options...>` does the same for the whole script.
+
+prepare() {
+  local d="$1"
+  [ -e "$d/in" ] || : >"$d/in"
+  [ -x "$d/gh" ] || make_stub_gh "$d/gh"
+  [ -x "$d/run" ] || make_stub_run "$d/run"
+  [ -d "$d/home" ] || fake_home "$d/home" "Test Person" test@example.com
+  mkdir -p "$d/cwd" "$d/bin"
+  : >>"$d/run.log"
+}
+
+# in_env <dir>: the environment of a run, in the current subshell.
+in_env() {
+  local d="$1"
+  cd "$d/cwd"
+  use_home "$d/home"
+  export PATH="$d/bin:/usr/bin:/bin" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
+    STUB_RUN_LOG="$d/run.log" BOOTSTRAP_RUN="$d/run"
+  [ ! -e "$d/tty" ] || export BOOTSTRAP_TTY="$d/tty"
+  [ ! -e "$d/os-release" ] || export BOOTSTRAP_OS_RELEASE="$d/os-release"
+}
+
+pre_from_stdin() {
+  local d="$1"
+  shift
+  prepare "$d"
+  set +e
+  ( load_script; in_env "$d"; detect_os; "$@" ) >"$d/out" 2>"$d/err"
+  RC=$?
+  set -e
+}
+
+pre() {
+  local d="$1"
+  shift
+  prepare "$d"
+  pre_from_stdin "$d" "$@" <"$d/in"
+}
+
+whole() {
+  local d="$1"
+  shift
+  prepare "$d"
+  set +e
+  ( in_env "$d"; "$BASH" "$SCRIPT" "$@" ) <"$d/in" >"$d/out" 2>"$d/err"
+  RC=$?
+  set -e
+}
+
+# Settings for `pre`, run before the function they wrap.
+ni() { OPT_NON_INTERACTIVE=1; "$@"; }
+yes_opt() { OPT_YES=1; "$@"; }
+resume() { OPT_RESUME=1; "$@"; }
+with_pack() { IN_PACK="$1"; shift; "$@"; }
+with_dir() { IN_DIR="$1"; shift; "$@"; }
+
+# on_os <dir> <macos|linux|windows> [debian|fedora|arch|suse|other]: the
+# OS the script sees, through a fake uname and release file.
+on_os() {
+  local d="$1" os="$2" distro="${3:-debian}"
+  case "$os" in
+    macos) fake_tool "$d" uname Darwin ;;
+    linux) fake_tool "$d" uname Linux ;;
+    windows) fake_tool "$d" uname MINGW64_NT-10.0-19045 ;;
+  esac
+  case "$distro" in
+    debian) printf '%s\n' 'NAME="Ubuntu"' 'ID=ubuntu' 'ID_LIKE=debian' >"$d/os-release" ;;
+    fedora) printf '%s\n' 'NAME="Fedora Linux"' 'ID=fedora' >"$d/os-release" ;;
+    arch) printf '%s\n' 'NAME="Arch Linux"' 'ID=arch' >"$d/os-release" ;;
+    suse) printf '%s\n' 'NAME="openSUSE Leap"' 'ID="opensuse-leap"' 'ID_LIKE="suse opensuse"' >"$d/os-release" ;;
+    other) printf '%s\n' 'NAME="Something"' 'ID=something' >"$d/os-release" ;;
+  esac
+}
+
+# missing <dir> <tool> [times]: the fake <tool> fails as a missing
+# command that many times (default: always), then works.
+missing() { fake_tool "$1" "$2" 1.0.0; echo "${3:-9999}" >"$1/$2-fails"; }
+
+# A git that works, from the fakes (it runs the real git).
+working_git() { fake_tool "$1" git; }
+
+expect_rc() {
+  [ "$RC" -eq "$1" ] || { cat "$2/out" "$2/err" >&2; die "exit $RC, want $1"; }
+}
+expect_out() {
+  grep -qF -- "$2" "$1/out" || { cat "$1/out" "$1/err" >&2; die "output lacks: $2"; }
+}
+expect_no_out() {
+  ! grep -qF -- "$2" "$1/out" || { cat "$1/out" >&2; die "output has: $2"; }
+}
+expect_nothing_ran() {
+  [ ! -s "$1/run.log" ] || { cat "$1/run.log" >&2; die "an offered command ran"; }
+}
+
+test_git_missing_is_guided_and_checked_again_after_enter() {
+  local d
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  missing "$d" git 1
+  printf '\n' >"$d/in"
+  pre "$d" preflight_git
+  expect_rc 0 "$d"
+  expect_out "$d" "git is not installed."
+  expect_out "$d" "  1. "
+  expect_out "$d" "Press Enter to check again, or type q to stop: "
+  [ "$(tail -1 "$d/out")" = "    Done. git is installed." ] || { cat "$d/out" >&2; die "no done line after the check passed"; }
+  [ "$(grep -c '^git --version' "$d/tools.log")" -eq 2 ] || { cat "$d/tools.log" >&2; die "git was not checked twice"; }
+}
+
+test_a_guide_shows_again_until_the_check_passes() {
+  local d
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  missing "$d" git 2
+  printf '\n\n' >"$d/in"
+  pre "$d" preflight_git
+  expect_rc 0 "$d"
+  [ "$(grep -c '^git is not installed\.$' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "the guide was not shown twice"; }
+  [ "$(grep -c '^git --version' "$d/tools.log")" -eq 3 ] || die "git was not checked three times"
+}
+
+test_stopping_at_a_guide_prints_the_command_to_start_again() {
+  # Typing q, or no more input, stops with exit 3 and the exact command
+  # the user ran, quoted so it can be copied.
+  local d input
+  for input in 'q' 'Q' 'stop' ''; do
+    d="$(tmpdir)"
+    on_os "$d" linux debian
+    missing "$d" git
+    [ -z "$input" ] || printf '%s\n' "$input" >"$d/in"
+    whole "$d" --name my-app --description "Lends tools." --pack node
+    expect_rc 3 "$d"
+    expect_out "$d" "To start again, run this command:"
+    grep -qE "^    bash .*bootstrap-project\.sh --name my-app --description 'Lends tools\.' --pack node$" "$d/out" \
+      || { cat "$d/out" >&2; die "the command to start again is not the one that was run (input '$input')"; }
+    sed -n 1p "$d/err" | grep -qE '^What happened: .*git is not installed' || { cat "$d/err" >&2; die "no plain message"; }
+    grep -qE '^What to do next: .{10,}' "$d/err" || { cat "$d/err" >&2; die "no next action"; }
+    [ -z "$(ls -A "$d/cwd")" ] || die "something was created"
+  done
+}
+
+test_non_interactive_prints_the_guide_and_exits_3_without_waiting() {
+  local d
+  d="$(tmpdir)"
+  on_os "$d" macos
+  missing "$d" git
+  printf '%s\n' "" "" first-unread >"$d/in"
+  printf 'yes\n' >"$d/tty"
+  pre "$d" ni preflight_git
+  expect_rc 3 "$d"
+  expect_out "$d" "git is not installed."
+  expect_out "$d" "    xcode-select --install"
+  expect_out "$d" "To start again, run this command:"
+  expect_no_out "$d" "Press Enter"
+  expect_no_out "$d" "Run it now?"
+  expect_nothing_ran "$d"
+  [ "$(grep -c '^git --version' "$d/tools.log")" -eq 1 ] || die "git was checked more than once"
+}
+
+test_non_interactive_never_reads_stdin_at_a_guide() {
+  local d
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  missing "$d" git
+  printf '%s\n' first-line >"$d/in"
+  prepare "$d"
+  set +e
+  ( load_script; in_env "$d"; detect_os
+    ( ni preflight_git ) || true
+    IFS= read -r line
+    printf '%s\n' "$line" >"$d/first" ) <"$d/in" >"$d/out" 2>"$d/err"
+  set -e
+  [ "$(cat "$d/first")" = first-line ] || die "stdin was read at the guide"
+}
+
+test_an_offered_command_runs_after_yes_through_the_runner() {
+  # macOS, git missing: the script offers to start Apple's installer. The
+  # yes comes from the terminal; the runner logs instead of installing.
+  # After it ran, the check runs again straight away.
+  local d
+  d="$(tmpdir)"
+  on_os "$d" macos
+  missing "$d" git 1
+  printf 'yes\n' >"$d/tty"
+  pre "$d" preflight_git
+  expect_rc 0 "$d"
+  [ "$(cat "$d/run.log")" = "xcode-select --install" ] || { cat "$d/run.log" >&2; die "the runner did not get the offered command"; }
+  expect_out "$d" "Run it now? (yes or no) [no]: "
+  expect_no_out "$d" "Press Enter"
+  expect_out "$d" "    Done. git is installed."
+}
+
+test_answering_no_or_nothing_to_an_offer_runs_nothing() {
+  local d answer
+  for answer in no n "" maybe; do
+    d="$(tmpdir)"
+    on_os "$d" macos
+    missing "$d" git
+    printf '%s\n' "$answer" >"$d/tty"
+    printf 'q\n' >"$d/in"
+    pre "$d" preflight_git
+    expect_rc 3 "$d"
+    expect_nothing_ran "$d"
+    expect_out "$d" "Not run."
+  done
+  # No terminal to read the answer from: not run either.
+  d="$(tmpdir)"
+  on_os "$d" macos
+  missing "$d" git
+  printf 'q\n' >"$d/in"
+  pre "$d" preflight_git
+  expect_rc 3 "$d"
+  expect_nothing_ran "$d"
+  expect_out "$d" "Not run."
+}
+
+test_the_yes_to_an_offer_is_read_from_the_terminal_not_from_stdin() {
+  local d
+  d="$(tmpdir)"
+  on_os "$d" macos
+  missing "$d" git
+  : >"$d/tty"
+  printf '%s\n' yes yes q >"$d/in"
+  pre "$d" preflight_git
+  expect_rc 3 "$d"
+  expect_nothing_ran "$d"
+}
+
+test_the_yes_option_does_not_approve_an_install() {
+  local d
+  d="$(tmpdir)"
+  on_os "$d" macos
+  missing "$d" git
+  printf 'q\n' >"$d/in"
+  pre "$d" yes_opt preflight_git
+  expect_rc 3 "$d"
+  expect_nothing_ran "$d"
+  expect_out "$d" "Run it now? (yes or no) [no]: "
+}
+
+test_a_command_is_offered_once_per_check() {
+  # The offered command ran but did not fix it: the guide shows again,
+  # without a second offer, and waits for Enter.
+  local d
+  d="$(tmpdir)"
+  on_os "$d" macos
+  missing "$d" git 2
+  printf 'yes\n' >"$d/tty"
+  printf '\n' >"$d/in"
+  pre "$d" preflight_git
+  expect_rc 0 "$d"
+  [ "$(grep -c . "$d/run.log")" -eq 1 ] || { cat "$d/run.log" >&2; die "the command was offered and run more than once"; }
+  [ "$(grep -c 'Run it now?' "$d/out")" -eq 1 ] || die "offered more than once"
+}
+
+test_each_offered_command_is_the_one_shown_in_the_guide() {
+  # The command run is exactly a command line the guide showed, for every
+  # offer: git on macOS and Windows, gh missing or too old on macOS (with
+  # brew) and Windows (with winget).
+  local d os tool times want case_
+  for case_ in "macos git 1 xcode-select --install" \
+    "windows git 1 winget install --id Git.Git -e --source winget" \
+    "macos gh-missing 1 brew install gh" "macos gh-old 1 brew upgrade gh" \
+    "windows gh-missing 1 winget install --id GitHub.cli -e --source winget" \
+    "windows gh-old 1 winget upgrade --id GitHub.cli -e --source winget"; do
+    set -- $case_
+    os="$1" tool="$2" times="$3"; shift 3; want="$*"
+    d="$(tmpdir)"
+    on_os "$d" "$os"
+    fake_tool "$d" brew
+    fake_tool "$d" winget
+    printf 'yes\n' >"$d/tty"
+    case "$tool" in
+      git) missing "$d" git "$times"; pre "$d" preflight_git ;;
+      *) make_stub_gh "$d/gh"; echo "$times" >"$d/$tool"; working_git "$d"; pre "$d" preflight_gh ;;
+    esac
+    expect_rc 0 "$d"
+    [ "$(cat "$d/run.log")" = "$want" ] || { cat "$d/out" "$d/run.log" >&2; die "$case_: ran something else"; }
+    grep -qxF "    $want" "$d/out" || { cat "$d/out" >&2; die "$case_: the command run was not shown"; }
+  done
+}
+
+test_no_offer_without_brew_or_winget_and_never_on_linux() {
+  # Without brew (macOS) or winget (Windows) the guide points to a web
+  # page. On Linux the package-manager line needs sudo, so it is only
+  # shown, never offered.
+  local d
+  d="$(tmpdir)"
+  on_os "$d" macos
+  make_stub_gh "$d/gh"; echo 1 >"$d/gh-missing"; working_git "$d"
+  printf 'yes\n' >"$d/tty"; printf '\n' >"$d/in"
+  pre "$d" preflight_gh
+  expect_rc 0 "$d"; expect_nothing_ran "$d"; expect_no_out "$d" "Run it now?"
+  expect_out "$d" "https://cli.github.com"
+  d="$(tmpdir)"
+  on_os "$d" windows
+  missing "$d" git 1
+  printf 'yes\n' >"$d/tty"; printf '\n' >"$d/in"
+  pre "$d" preflight_git
+  expect_rc 0 "$d"; expect_nothing_ran "$d"; expect_no_out "$d" "Run it now?"
+  expect_out "$d" "https://git-scm.com/download/win"
+  local distro line
+  for distro in "debian sudo apt install git" "fedora sudo dnf install git" \
+    "arch sudo pacman -S git" "suse sudo zypper install git"; do
+    set -- $distro
+    d="$(tmpdir)"
+    on_os "$d" linux "$1"; shift; line="$*"
+    missing "$d" git 1
+    fake_tool "$d" sudo
+    printf 'yes\n' >"$d/tty"; printf '\n' >"$d/in"
+    pre "$d" preflight_git
+    expect_rc 0 "$d"; expect_nothing_ran "$d"; expect_no_out "$d" "Run it now?"
+    grep -qxF "    $line" "$d/out" || { cat "$d/out" >&2; die "$distro: package line not shown"; }
+    ! grep -q '^sudo' "$d/tools.log" || die "sudo ran"
+  done
+  d="$(tmpdir)"
+  on_os "$d" linux other
+  missing "$d" git 1
+  printf '\n' >"$d/in"
+  pre "$d" preflight_git
+  expect_rc 0 "$d"
+  expect_out "$d" "https://git-scm.com/download/linux"
+}
+
+test_gh_missing_or_too_old_is_guided() {
+  local d
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  working_git "$d"
+  make_stub_gh "$d/gh"; echo 1 >"$d/gh-missing"
+  printf '\n' >"$d/in"
+  pre "$d" preflight_gh
+  expect_rc 0 "$d"
+  expect_out "$d" "The GitHub command-line tool (gh) is not installed."
+  expect_out "$d" "    Done. gh is installed and can create a project from a template."
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  make_stub_gh "$d/gh"; echo 1 >"$d/gh-old"
+  printf '\n' >"$d/in"
+  pre "$d" preflight_gh
+  expect_rc 0 "$d"
+  expect_out "$d" "The GitHub command-line tool (gh) on this computer is too old."
+  # The feature check, not a version number: repo create --help lists
+  # --template. gh's prompts are off for both checks.
+  [ "$(grep -c "$(printf '^GH_PROMPT_DISABLED=1\trepo\tcreate\t--help$')" "$d/gh.log")" -eq 2 ] \
+    || { cat "$d/gh.log" >&2; die "the feature was not checked twice through run_gh"; }
+  ! grep -q '^GH_PROMPT_DISABLED=<unset>' "$d/gh.log" || die "gh ran with its prompts on"
+}
+
+test_npm_is_needed_only_for_node_web_and_react_native() {
+  local d p
+  d="$(tmpdir)"
+  missing "$d" npm
+  pre "$d" ni with_pack python preflight_npm
+  expect_rc 0 "$d"
+  [ ! -e "$d/tools.log" ] || { cat "$d/tools.log" >&2; die "npm was checked for python"; }
+  [ ! -s "$d/out" ] || { cat "$d/out" >&2; die "python printed an npm check"; }
+  for p in node web react-native; do
+    d="$(tmpdir)"
+    on_os "$d" linux debian
+    missing "$d" npm
+    pre "$d" ni with_pack "$p" preflight_npm
+    expect_rc 3 "$d"
+    expect_out "$d" "npm (part of Node.js) is not installed."
+    expect_out "$d" "https://nodejs.org"
+    expect_nothing_ran "$d"
+    d="$(tmpdir)"
+    fake_tool "$d" npm 10.0.0
+    pre "$d" ni with_pack "$p" preflight_npm
+    expect_rc 0 "$d"
+    expect_out "$d" "    Done. npm is installed."
+  done
+}
+
+test_bash_older_than_3_2_is_refused_with_steps() {
+  local d v
+  for v in "3 2" "3 10" "4 0" "5 2"; do
+    ( load_script; check_bash_version $v ) || die "bash $v refused"
+  done
+  for v in "3 1" "3 0" "2 9"; do
+    ! ( load_script; check_bash_version $v ) || die "bash $v accepted"
+  done
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  printf '\n' >"$d/in"
+  pre "$d" preflight_bash 3 1
+  # A re-check in the same run cannot change the bash that runs it, so it
+  # does not wait: steps, the command to start again, exit 3.
+  expect_rc 3 "$d"
+  expect_out "$d" "This bash is too old for the script: it needs version 3.2 or later."
+  expect_out "$d" "To start again, run this command:"
+  expect_no_out "$d" "Press Enter"
+  d="$(tmpdir)"
+  pre "$d" preflight_bash 3 2
+  expect_rc 0 "$d"
+  expect_out "$d" "    Done. bash 3.2 is new enough."
+}
+
+test_the_tool_checks_print_a_start_and_a_done_line() {
+  local d
+  d="$(tmpdir)"
+  working_git "$d"
+  fake_tool "$d" npm 10.0.0
+  pre "$d" ni preflight_tools
+  expect_rc 0 "$d"
+  grep -qE '^==> Checking .*bash' "$d/out" || { cat "$d/out" >&2; die "no start line for bash"; }
+  grep -qE '^==> Checking .*git' "$d/out" || { cat "$d/out" >&2; die "no start line for git"; }
+  grep -qE '^==> Checking .*gh' "$d/out" || { cat "$d/out" >&2; die "no start line for gh"; }
+  [ "$(grep -c '^==> ' "$d/out")" -eq "$(grep -c '^    Done\. ' "$d/out")" ] \
+    || { cat "$d/out" >&2; die "not every start line has a done line"; }
+}
+
+test_target_folder_absent_or_empty_passes_and_nothing_is_made() {
+  local d
+  d="$(tmpdir)"
+  pre "$d" ni with_dir "$d/new folder" preflight_target_dir
+  expect_rc 0 "$d"
+  [ ! -e "$d/new folder" ] || die "the folder was made by the check"
+  expect_out "$d" "    Done. "
+  mkdir "$d/empty"
+  pre "$d" ni with_dir "$d/empty" preflight_target_dir
+  expect_rc 0 "$d"
+}
+
+test_target_folder_with_files_is_a_guided_refusal() {
+  local d
+  d="$(tmpdir)"
+  mkdir "$d/full"; touch "$d/full/.hidden"
+  pre "$d" ni with_dir "$d/full" preflight_target_dir
+  expect_rc 3 "$d"
+  expect_out "$d" "The folder $d/full already has files in it."
+  expect_out "$d" "--dir"
+  expect_out "$d" "To start again, run this command:"
+  [ -e "$d/full/.hidden" ] || die "a file in the folder was touched"
+  printf 'q\n' >"$d/in"
+  pre "$d" with_dir "$d/full" preflight_target_dir
+  expect_rc 3 "$d"
+  expect_out "$d" "Press Enter to check again"
+}
+
+test_a_folder_emptied_after_the_guide_passes_on_the_next_check() {
+  # The user empties the folder while the script waits; Enter checks again.
+  local d n=0
+  d="$(tmpdir)"
+  mkdir "$d/full"; touch "$d/full/x"
+  prepare "$d"
+  { while ! grep -q 'Press Enter' "$d/out" 2>/dev/null; do
+      n=$((n + 1)); [ "$n" -lt 600 ] || break; sleep 0.1
+    done
+    rm -f "$d/full/x"; echo
+  } | { pre_from_stdin "$d" with_dir "$d/full" preflight_target_dir; echo "$RC" >"$d/rc"; }
+  [ "$(cat "$d/rc")" -eq 0 ] || { cat "$d/out" "$d/err" >&2; die "exit $(cat "$d/rc"), want 0"; }
+  [ "$(grep -c 'already has files in it' "$d/out")" -eq 1 ] || die "guide not shown exactly once"
+  [ "$(tail -1 "$d/out")" = "    Done. The folder is new or empty." ] || { cat "$d/out" >&2; die "no done line"; }
+}
+
+test_resume_allows_a_folder_with_files_but_not_a_file() {
+  local d
+  d="$(tmpdir)"
+  mkdir "$d/full"; touch "$d/full/x"
+  pre "$d" ni resume with_dir "$d/full" preflight_target_dir
+  expect_rc 0 "$d"
+  touch "$d/a-file"
+  pre "$d" ni resume with_dir "$d/a-file" preflight_target_dir
+  expect_rc 3 "$d"
+  expect_out "$d" "$d/a-file is a file, not a folder."
+  pre "$d" ni with_dir "$d/a-file" preflight_target_dir
+  expect_rc 3 "$d"
+}
+
+test_a_folder_starting_with_a_tilde_is_in_the_home_folder() {
+  # Review note (#146): a typed ~/projects/app made a folder named ~.
+  local d
+  d="$(tmpdir)"
+  printf '%s\n' my-app "" "Lends tools." "" "" python "" none "~/projects/app" "" "" >"$d/in"
+  inputs "$d"
+  expect_inputs "$d" "DIR=$d/home/projects/app"
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner a --po-name b --dir "~"
+  expect_inputs "$d" "DIR=$d/home"
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner a --po-name b "--dir=~/x y"
+  expect_inputs "$d" "DIR=$d/home/x y"
+  # Only ~ and ~/ are understood; another account's ~name is refused.
+  refuses --dir "~other/app" "~other"
+  accepts --dir "a~b" "DIR=a~b"
+}
+
+test_git_name_and_email_default_from_the_global_git_settings() {
+  local d
+  d="$(tmpdir)"
+  fake_home "$d/home" "Grace Hopper" grace@example.com
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner a --po-name b
+  expect_inputs "$d" "GIT_NAME=Grace Hopper" GIT_EMAIL=grace@example.com
+  d="$(tmpdir)"
+  fake_home "$d/home" "Grace Hopper" grace@example.com
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner a --po-name b --git-name "Ada L" \
+    --git-email=ada@example.com
+  expect_inputs "$d" "GIT_NAME=Ada L" GIT_EMAIL=ada@example.com
+  # Asked, with the git settings as the default.
+  d="$(tmpdir)"
+  fake_home "$d/home" "Grace Hopper" grace@example.com
+  printf '%s\n' my-app "" "Lends tools." "" "" python "" none "" "" "" >"$d/in"
+  inputs "$d"
+  expect_inputs "$d" "GIT_NAME=Grace Hopper" GIT_EMAIL=grace@example.com
+  expect_out "$d" "Your name for git [Grace Hopper]: "
+  expect_out "$d" "Your email address for git [grace@example.com]: "
+}
+
+test_missing_git_name_and_email_join_the_list_of_missing_options() {
+  local d
+  d="$(tmpdir)"
+  fake_home "$d/home"
+  inputs "$d" --non-interactive --name my-app
+  expect_refused "$d" --git-name
+  expect_refused "$d" --git-email
+  expect_refused "$d" --description
+  [ ! -e "$d/gh.log" ] || die "GitHub was asked before the missing options were reported"
+  d="$(tmpdir)"
+  fake_home "$d/home" "Grace Hopper"
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}"
+  expect_refused "$d" --git-email
+  ! grep -q -- '- --git-name:' "$d/err" || die "a name from the git settings was listed as missing"
+}
+
+test_git_questions_without_a_default_need_an_answer() {
+  local d
+  d="$(tmpdir)"
+  fake_home "$d/home"
+  printf '%s\n' my-app "" "Lends tools." "" "" python "" none "" "" "Ada L" "" ada@example.com >"$d/in"
+  inputs "$d"
+  expect_inputs "$d" "GIT_NAME=Ada L" GIT_EMAIL=ada@example.com
+  [ "$(grep -c '^Your name for git: $' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "name not asked again"; }
+  [ "$(grep -c '^Your email address for git: $' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "email not asked again"; }
+}
+
+test_git_name_and_email_are_checked_like_the_other_names() {
+  local c
+  for c in '"' '\' '<' '>' '&' '`' "$(printf '\t')"; do
+    refuses --git-name "a${c}b"
+    refuses --git-email "a${c}b@example.com"
+  done
+  refuses --git-email "ada" "ada@" "@example.com" "ada lovelace@example.com" "ada@exa mple.com"
+  accepts --git-name "Ada Lovelace | Team" "GIT_NAME=Ada Lovelace | Team"
+  accepts --git-email " ada@example.com " GIT_EMAIL=ada@example.com
+  # A name from the git settings that cannot be used is refused with its
+  # option, so the user knows which one to give.
+  local d
+  d="$(tmpdir)"
+  fake_home "$d/home" 'Ada "the first"' ada@example.com
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner a --po-name b
+  expect_refused "$d" --git-name
+}
+
+test_git_name_and_email_are_only_collected_not_written() {
+  local d before
+  d="$(tmpdir)"
+  fake_home "$d/home" "Grace Hopper" grace@example.com
+  before="$(cat "$d/home/.gitconfig")"
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner a --po-name b --git-name "Ada L" \
+    --git-email ada@example.com
+  expect_inputs "$d" "GIT_NAME=Ada L"
+  [ "$(cat "$d/home/.gitconfig")" = "$before" ] || die "the global git settings were changed"
+  [ -z "$(ls -A "$d/cwd")" ] || die "something was written in the current folder"
+}
+
+test_checks_on_this_computer_come_before_any_github_call_and_question() {
+  # gh too old: the script stops at the gh check, before reading the
+  # GitHub account and before the first question.
+  local d
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  working_git "$d"
+  echo 9999 >"$d/gh-old"
+  printf '%s\n' my-app q >"$d/in"
+  whole "$d"
+  expect_rc 3 "$d"
+  ! grep -q "$(printf '\tapi\t')" "$d/gh.log" || { cat "$d/gh.log" >&2; die "GitHub was asked before the checks passed"; }
+  expect_no_out "$d" "Project name"
+  # All pass: the tool checks come first, then the account.
+  d="$(tmpdir)"
+  working_git "$d"
+  fake_tool "$d" npm 10.0.0
+  whole "$d" --non-interactive "${REQUIRED_OPTS[@]}"
+  expect_rc 1 "$d"
+  [ "$(cut -f2 "$d/gh.log" | tr '\n' ' ')" = "--version repo api " ] \
+    || { cat "$d/gh.log" >&2; die "gh calls not in the order: checks, then the account"; }
+}
+
+test_npm_and_folder_checks_come_after_the_questions() {
+  local d
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  working_git "$d"
+  missing "$d" npm
+  printf '%s\n' my-app "" "Lends tools." "" "" node "" none "" "" "" q >"$d/in"
+  whole "$d"
+  expect_rc 3 "$d"
+  expect_out "$d" "npm (part of Node.js) is not installed."
+  grep -n 'Your email address for git' "$d/out" | head -1 | cut -d: -f1 >"$d/q"
+  grep -n 'npm (part of Node.js)' "$d/out" | head -1 | cut -d: -f1 >"$d/g"
+  [ "$(cat "$d/q")" -lt "$(cat "$d/g")" ] || { cat "$d/out" >&2; die "npm was checked before the questions"; }
+  d="$(tmpdir)"
+  working_git "$d"
+  fake_tool "$d" npm 10.0.0
+  mkdir -p "$d/cwd/my-app"; touch "$d/cwd/my-app/x"
+  whole "$d" --non-interactive "${REQUIRED_OPTS[@]}"
+  expect_rc 3 "$d"
+  expect_out "$d" "The folder ./my-app already has files in it."
+}
+
+# guide_text <dir> <os> <guide function> [setup...]: the guide's output.
+guide_cases() {
+  printf '%s\n' guide_git guide_gh_missing guide_gh_old guide_npm guide_dir_not_empty \
+    guide_dir_is_file guide_bash_old
+}
+
+test_every_guide_says_why_how_what_you_see_and_how_it_is_checked() {
+  # Ease-of-use requirements: every guide says why the step is needed,
+  # gives numbered steps, what the user sees when it worked, what to do
+  # otherwise, and how the script checks it; on every OS, with and without
+  # brew or winget. Its output has no banned word.
+  local d os g with label hits
+  for os in macos linux windows; do
+    for with in "" brew winget; do
+      for g in $(guide_cases); do
+        d="$(tmpdir)"
+        on_os "$d" "$os"
+        [ -z "$with" ] || fake_tool "$d" "$with"
+        pre "$d" with_pack web with_dir "$d/f" "$g"
+        label="$os/${with:-none}/$g"
+        [ "$RC" -eq 0 ] || { cat "$d/err" >&2; die "$label failed"; }
+        sed -n 1p "$d/out" | grep -qE '^[A-Za-z].{10,}\.$' || { cat "$d/out" >&2; die "$label: no one-line title first"; }
+        grep -qE '^Why this is needed: ([^ ]+ ){5,}' "$d/out" || { cat "$d/out" >&2; die "$label: no why"; }
+        grep -qE '^  1\. .{10,}' "$d/out" || { cat "$d/out" >&2; die "$label: no numbered step"; }
+        grep -qE '^When it has worked: .{10,}' "$d/out" || { cat "$d/out" >&2; die "$label: no result"; }
+        grep -qE '^If you see something else: .{10,}' "$d/out" || { cat "$d/out" >&2; die "$label: no fallback"; }
+        grep -qE '^How the script checks it: .{10,}' "$d/out" || { cat "$d/out" >&2; die "$label: no check named"; }
+        hits="$(grep -v '^    ' "$d/out" | awk '{print NR ": " $0}' | banned_hits)"
+        [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "$label: banned word in the guide"; }
+      done
+    done
+  done
+}
+
+test_the_os_is_read_from_uname_and_the_linux_release_file() {
+  local d want got
+  for want in "Darwin macos" "Linux linux" "MINGW64_NT-10.0 windows" "MSYS_NT-10.0 windows" \
+    "CYGWIN_NT-10.0 windows" "FreeBSD other"; do
+    set -- $want
+    d="$(tmpdir)"
+    fake_tool "$d" uname "$1"
+    pre "$d" eval 'say "$OS_KIND"'
+    got="$(cat "$d/out")"
+    [ "$got" = "$2" ] || die "uname $1 gave $got, want $2"
+  done
+  for want in "debian apt" "fedora dnf" "arch pacman" "suse zypper" "other none"; do
+    set -- $want
+    d="$(tmpdir)"
+    on_os "$d" linux "$1"
+    pre "$d" eval 'say "${LINUX_PM:-none}"'
+    got="$(cat "$d/out")"
+    [ "$got" = "$2" ] || die "release $1 gave $got, want $2"
+  done
+}
+
+test_every_say_command_call_on_a_line_is_checked() {
+  # Review note B (#136): only the first call on a line was checked, and
+  # a sentence that starts with a command word passed.
+  local copy hits from n
+  copy="$(plant 'cmd_x() {' \
+    '  say_command "gh auth status"; say_command "Then open the page"' \
+    '  say_command "git push, then open the page and approve it"' \
+    '  say_command "brew install gh."' \
+    '  say_command "gh auth status"; say_command "git --version"' \
+    '}')"
+  from="$(planted_from)"
+  hits="$(command_arg_violations "$copy" | only_planted "$from")"
+  n="$(printf '%s\n' "$hits" | grep -c . || true)"
+  [ "$n" -eq 3 ] || { printf '%s\n' "$hits" >&2; die "flagged $n, want the first 3 planted lines"; }
+  ! printf '%s\n' "$hits" | awk -F'[:\t]' -v f="$from" '$1 == f + 4' | grep -q . \
+    || { printf '%s\n' "$hits" >&2; die "two good commands on one line were flagged"; }
 }
 
 # ---------- run ----------
