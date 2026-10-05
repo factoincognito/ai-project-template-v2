@@ -330,24 +330,35 @@ SAY_CMD_WORDS="$CMD_WORDS sudo"
 
 # command_arg_violations <file>: say_command and run_offered calls whose
 # argument is not one quoted literal starting with an allowed command
-# word. A run_offered argument may hold no $ or backtick at all: it runs
-# through bash -c, so it must be a fixed string, never built from input.
+# word, or that reads as a sentence (a ", " in it, or a full stop at the
+# end). Every call on a line is checked, not only the first (#136 review,
+# note B). A run_offered argument may hold no $ or backtick at all: it
+# runs through bash -c, so it must be a fixed string, never built from
+# input. Not seen: a sentence with no comma and no full stop whose first
+# word is a command word ("git then open the page").
 command_arg_violations() {
   awk -v sq="'" -v say_words=" $SAY_CMD_WORDS " -v run_words=" $CMD_WORDS " '
     /^[[:space:]]*#/ { next }
-    match($0, /(^|[^A-Za-z0-9_])(say_command|run_offered)([[:space:]]|$)/) {
-      rest = substr($0, RSTART + RLENGTH)
-      kind = ($0 ~ /(^|[^A-Za-z0-9_])run_offered([[:space:]]|$)/) ? "run" : "say"
-      sub(/^[[:space:]]+/, "", rest)
-      q = substr(rest, 1, 1)
-      if (q != "\"" && q != sq) { print NR ": " $0; next }
-      arg = substr(rest, 2); end = index(arg, q)
-      if (end == 0) { print NR ": " $0; next }
-      arg = substr(arg, 1, end - 1)
-      word = arg; sub(/[[:space:]].*/, "", word)
-      words = (kind == "run") ? run_words : say_words
-      if (word == "" || index(words, " " word " ") == 0) { print NR ": " $0; next }
-      if (kind == "run" && arg ~ /[$`]/) { print NR ": " $0; next }
+    {
+      line = $0; bad = 0
+      while (!bad && match(line, /(^|[^A-Za-z0-9_])(say_command|run_offered)([[:space:]]|$)/)) {
+        call = substr(line, RSTART, RLENGTH)
+        kind = (call ~ /run_offered/) ? "run" : "say"
+        rest = substr(line, RSTART + RLENGTH)
+        sub(/^[[:space:]]+/, "", rest)
+        q = substr(rest, 1, 1)
+        if (q != "\"" && q != sq) { bad = 1; break }
+        arg = substr(rest, 2); end = index(arg, q)
+        if (end == 0) { bad = 1; break }
+        line = substr(arg, end + 1)
+        arg = substr(arg, 1, end - 1)
+        word = arg; sub(/[[:space:]].*/, "", word)
+        words = (kind == "run") ? run_words : say_words
+        if (word == "" || index(words, " " word " ") == 0) bad = 1
+        else if (arg ~ /, / || arg ~ /\.$/) bad = 1
+        else if (kind == "run" && arg ~ /[$`]/) bad = 1
+      }
+      if (bad) print NR ": " $0
     }
   ' "$1"
 }
@@ -1905,9 +1916,12 @@ test_stopping_at_a_guide_prints_the_command_to_start_again() {
     d="$(tmpdir)"
     on_os "$d" linux debian
     missing "$d" git
-    [ -z "$input" ] || printf '%s\n' "$input" >"$d/in"
+    # Enter lines after the answer: q must stop at once, not read them.
+    [ -z "$input" ] || printf '%s\n' "$input" "" "" >"$d/in"
     whole "$d" --name my-app --description "Lends tools." --pack node
     expect_rc 3 "$d"
+    [ "$(grep -c '^git is not installed\.$' "$d/out")" -eq 1 ] \
+      || { cat "$d/out" >&2; die "the guide was shown again after '$input'"; }
     expect_out "$d" "To start again, run this command:"
     grep -qE "^    bash .*bootstrap-project\.sh --name my-app --description 'Lends tools\.' --pack node$" "$d/out" \
       || { cat "$d/out" >&2; die "the command to start again is not the one that was run (input '$input')"; }
@@ -2440,6 +2454,12 @@ test_the_os_is_read_from_uname_and_the_linux_release_file() {
     got="$(cat "$d/out")"
     [ "$got" = "$2" ] || die "release $1 gave $got, want $2"
   done
+  # Carriage returns (a file saved on Windows) and no last line break.
+  d="$(tmpdir)"
+  fake_tool "$d" uname Linux
+  printf 'NAME="Fedora"\r\nID=fedora\r' >"$d/os-release"
+  pre "$d" eval 'say "${LINUX_PM:-none}"'
+  [ "$(cat "$d/out")" = dnf ] || die "a release file with carriage returns gave $(cat "$d/out")"
 }
 
 test_every_say_command_call_on_a_line_is_checked() {
