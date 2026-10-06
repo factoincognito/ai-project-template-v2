@@ -569,6 +569,10 @@ TEXT
 # A token in the environment changes the permission guide; the tests set
 # one themselves when they need it.
 unset GH_TOKEN GITHUB_TOKEN
+# Whether git may ask at the terminal: the script sets it itself, and the
+# tests check that it does, so none comes from the environment the tests
+# run in.
+unset GIT_TERMINAL_PROMPT GIT_ASKPASS
 
 # ---------- fake tools and a fake home ----------
 # git is real (its path is kept here); a test that needs git, npm, uname,
@@ -5191,7 +5195,7 @@ test_git_borrows_the_gh_sign_in_for_one_command_and_no_settings_change() {
   prepare "$d"
   "$REAL_GIT" config --file "$d/home/.gitconfig" credential.helper "!f() { touch '$d/global-helper-ran'; }; f"
   printf '%s\n' protocol=https host=github.com path=octo-user/my-app.git '' >"$d/ask"
-  ( load_script; in_env "$d"; with_gh_sign_in credential fill ) <"$d/ask" >"$d/out" 2>"$d/err" \
+  ( load_script; in_env "$d"; with_gh_sign_in "$d/out" "$d/err" credential fill ) <"$d/ask" \
     || { cat "$d/err" >&2; die "git credential fill failed"; }
   grep -qxF username=stub-user "$d/out" && grep -qxF password=stub-password "$d/out" || { cat "$d/out" "$d/err" >&2; die "git did not get the sign-in from gh"; }
   [ "$(cut -f2- "$d/gh.log")" = "$(printf 'auth\tgit-credential\tget')" ] || { cat "$d/gh.log" >&2; die "gh was not asked as git's helper"; }
