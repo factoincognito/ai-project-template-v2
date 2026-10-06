@@ -4758,6 +4758,16 @@ test_the_npm_packs_get_a_lockfile_made_by_npm_after_the_fill() {
     # npm's own text is not shown when it works.
     expect_no_out "$d" "up to date"
   done
+  # A folder whose name starts with -: npm still runs in it (cd would
+  # read -app as an option; check_dir makes it ./-app).
+  d="$(tmpdir)"
+  fake_tool "$d" npm 10.0.0
+  setup_run "$d" --non-interactive --yes --pack node --dir=-app
+  expect_rc 1 "$d"
+  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "-app: did not reach the end"; }
+  printf '%s\tinstall\t--package-lock-only\t--no-audit\t--no-fund\n' "$(cd "$d/cwd/-app" && pwd)" >"$d/want-npm"
+  expect_same "-app: the npm calls" "$d/want-npm" "$d/npm.log"
+  [ -f "$d/cwd/-app/package-lock.json" ] || die "-app: no lockfile"
   # python: no npm call, no lockfile.
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes

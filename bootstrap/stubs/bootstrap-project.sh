@@ -2640,15 +2640,15 @@ fill_placeholders() {
 # ETIMEDOUT, ECONNREFUSED, ECONNRESET or ENETUNREACH code) asks to check
 # the connection; anything else gets the plain fallback.
 make_lockfile() {
-  local out rc=0 raw dir="$IN_DIR" what next
+  local out rc=0 raw what next
   case "$IN_PACK" in
     node | web | react-native) ;;
     *) return 0 ;;
   esac
   step_start "Recording the exact versions of the $IN_PACK pack's tools in package-lock.json"
-  case "$dir" in -*) dir="./$dir" ;; esac
   out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  (CDPATH='' cd "$dir" && run_npm install --package-lock-only --no-audit --no-fund) </dev/null >"$out" 2>&1 || rc=$?
+  # IN_DIR never starts with - (check_dir puts ./ before a relative one).
+  (CDPATH='' cd "$IN_DIR" && run_npm install --package-lock-only --no-audit --no-fund) </dev/null >"$out" 2>&1 || rc=$?
   raw="$(tr -d '\r' <"$out")"
   rm -f "$out"
   if [ "$rc" -ne 0 ]; then
