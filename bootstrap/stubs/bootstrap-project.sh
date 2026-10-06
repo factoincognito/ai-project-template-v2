@@ -7,8 +7,10 @@
 # guided checks of this computer (bash, git, gh, npm, the git name and
 # email, the target folder), the guided checks on GitHub (signed in, the
 # current version of this script, the permissions gh has, the project
-# name still free) and the layout-pack subcommand. After those checks the
-# script stops: the setup steps come in later parts.
+# name still free), the plan and its "Proceed?" question, creating the
+# project on GitHub and protecting its main version, and the layout-pack
+# subcommand. After protecting the project the script stops: the later
+# setup steps come in later parts.
 #
 # Usage:
 #   bash bootstrap-project.sh [options]
@@ -19,10 +21,11 @@
 #     absent. The packs are read from PACKS_DIR, by default the
 #     languages/ folder next to this script.
 #
-# Exit codes: 0 done, 1 failed, 2 usage error, unknown pack, or an input
-# that is missing or cannot be used, 3 a check of this computer or on
-# GitHub did not pass: its steps were shown, with the command to start
-# again.
+# Exit codes: 0 done (or a --dry-run that passed its checks), 1 failed or
+# stopped, 2 usage error, unknown pack, or an input that is missing or
+# cannot be used, 3 a check of this computer or on GitHub did not pass, or
+# a step on GitHub was refused: its steps were shown, with the command to
+# start again (or, once the project exists, to continue with --resume).
 # Runs on bash 3.2 (macOS /bin/bash): no associative arrays, no mapfile,
 # no ${var,,}.
 #
@@ -34,6 +37,8 @@
 #   BOOTSTRAP_TTY  the terminal the yes to an offered command is read from
 #                  (default: /dev/tty), never stdin.
 #   BOOTSTRAP_OS_RELEASE  the Linux release file (default: /etc/os-release).
+#   BOOTSTRAP_SLEEP  the command that waits between two checks of GitHub
+#                  (default: sleep). It gets the seconds as its argument.
 #
 # Sourcing this file defines its functions and runs nothing (the tests
 # load it that way); running it with bash runs the main part at the end.
@@ -151,6 +156,8 @@ ASK_NO_DEFAULT="There is no default, because only you can choose it."
 ASK_RETRY="Please try again."
 ASK_NEEDED="An answer is needed here."
 OPTIONS_NEXT="To see every option, run the script with --help."
+START_AGAIN_INTRO="To start again, run this command:"
+CONTINUE_INTRO="To continue the setup, run this command:"
 
 # ask <explanation> <question> <default> [choice...]: shows the
 # explanation (why the question is asked, in a sentence), the choices,
@@ -519,11 +526,14 @@ check_name() {
       return 1
       ;;
   esac
-  slug="$(slug_of "$TRIMMED")"
-  if [ "${#slug}" -gt 214 ]; then
-    PROBLEM="It is too long: use at most 214 characters."
+  # GitHub's limit ("Creating a new repository" doc: at most 100
+  # characters) is stricter than npm's 214 for the slug, which has the
+  # same length as the name.
+  if [ "${#TRIMMED}" -gt 100 ]; then
+    PROBLEM="It is too long: GitHub allows at most 100 characters."
     return 1
   fi
+  slug="$(slug_of "$TRIMMED")"
   if [ "$slug" = node_modules ]; then
     PROBLEM="That name is kept for the project's own tools; choose another one."
     return 1
@@ -531,12 +541,15 @@ check_name() {
   CHECKED="$TRIMMED"
 }
 
+# check_owner: an account of an Enterprise Managed User has an _ before
+# its enterprise's short code, as in mona-cat_octo (GitHub's "Username
+# considerations for external authentication" doc), so _ is allowed.
 check_owner() {
   trim_into "$1"
   case "$TRIMMED" in
     "") PROBLEM="It cannot be empty."; return 1 ;;
-    [!$ALNUM]* | *[!$ALNUM-]*)
-      PROBLEM="Use the name of a GitHub account or organisation: letters, digits and dashes (-), starting with a letter or a digit."
+    [!$ALNUM]* | *[!${ALNUM}_-]*)
+      PROBLEM="Use the name of a GitHub account or organisation: letters, digits, dashes (-) and underscores (_), starting with a letter or a digit."
       return 1
       ;;
   esac
@@ -1002,9 +1015,17 @@ remember_command() {
 # stop_at_guide: the user stopped at a guide, or --non-interactive (or a
 # check that cannot pass in this run) showed it: exit 3 with the command
 # to start again.
+# Once the project exists on GitHub (CREATED_NOTE set), the command shown
+# continues the setup with --resume, and the stop says what exists.
 stop_at_guide() {
   [ -n "$RESTART_CMD" ] || remember_command
-  say "To start again, run this command:"
+  if [ -n "$CREATED_NOTE" ]; then
+    say "$CONTINUE_INTRO"
+    say_command "bash $RESTART_CMD"
+    fail 3 "$GUIDE_TITLE The script stopped here. $CREATED_NOTE" \
+      "Follow the steps above, then run the command shown to continue the setup."
+  fi
+  say "$START_AGAIN_INTRO"
   say_command "bash $RESTART_CMD"
   fail 3 "$GUIDE_TITLE The script stopped here, and nothing was created." \
     "Follow the steps above, then run the command shown to start again."
@@ -1384,6 +1405,7 @@ preflight_target_dir() {
 
 BOOTSTRAPPER=factoincognito/ai-project-bootstrap
 SIGN_IN_COMMAND_NEXT="Sign in to GitHub with gh as in step 0 of the README, with the command gh auth login -h github.com -p https -w -s workflow, then start the script again."
+SIGN_IN_CONTINUE_NEXT="Sign in to GitHub with gh as in step 0 of the README, with the command gh auth login -h github.com -p https -w -s workflow, then continue the setup with the command shown above."
 
 API_RC=0 API_STATUS="" API_HEADERS="" API_BODY="" API_MESSAGE="" API_ERR="" API_RAW=""
 
@@ -1445,52 +1467,67 @@ api_raw() {
 }
 
 # stop_with_error <what happened> <what to do next> <raw text>: a GitHub
-# check that cannot go on: the command to start again, then the error
-# (exit 1).
+# check or step that cannot go on: the command to start again (or, once
+# the project exists, to continue the setup), then the error (exit 1).
 stop_with_error() {
   [ -n "$RESTART_CMD" ] || remember_command
-  say "To start again, run this command:"
+  if [ -n "$CREATED_NOTE" ]; then say "$CONTINUE_INTRO"; else say "$START_AGAIN_INTRO"; fi
   say_command "bash $RESTART_CMD"
-  fail 1 "$1" "$2" "$3"
+  fail 1 "${1:-Something unexpected happened.}${CREATED_NOTE:+ $CREATED_NOTE}" "$2" "$3"
 }
 
-# api_fail <what the script was doing, as "read your GitHub account">:
-# stops with the plain message for the last answer (exit 1).
+# api_fail <what the script was doing, as "read your GitHub account">
+# [next action for a 404]: stops with the plain message for the last
+# answer (exit 1). What a 404 means depends on the call, so each call
+# that can get one gives its own next action (#149 review, finding 3).
+# A status with no arm of its own is "Something unexpected happened"
+# with what the script was doing (#150 review, finding 1). Once the
+# project exists, the next action is to continue the setup with the
+# command shown, never to start again (#150 review, finding 2).
 api_fail() {
-  local doing="$1" what="" next=""
+  local doing="$1" not_found_next="${2:-}" what="" next="" again="start the script again" sign_in="$SIGN_IN_COMMAND_NEXT"
+  if [ -n "$CREATED_NOTE" ]; then
+    again="continue the setup with the command shown above"
+    sign_in="$SIGN_IN_CONTINUE_NEXT"
+  fi
   case "$API_STATUS" in
     "")
       if [ "$API_RC" -eq 4 ]; then
         what="gh (the GitHub command-line tool) is not signed in to your GitHub account, so the script could not $doing."
-        next="$SIGN_IN_COMMAND_NEXT"
+        next="$sign_in"
       else
         what="The script could not reach GitHub to $doing."
-        next="Check that this computer is connected to the internet, then start the script again."
+        next="Check that this computer is connected to the internet, then $again."
       fi
       ;;
     401)
       what="GitHub no longer accepts the sign-in that gh has on this computer, so the script could not $doing."
-      next="$SIGN_IN_COMMAND_NEXT"
+      next="$sign_in"
       ;;
-    403)
-      case "$(lower "$API_MESSAGE")" in
-        *"rate limit"*)
+    403 | 429)
+      # 429 is GitHub's answer for its secondary rate limit.
+      case "$API_STATUS $(lower "$API_MESSAGE")" in
+        429* | *"rate limit"*)
           what="GitHub has paused answering your account for a while, because it was asked too often, so the script could not $doing."
-          next="Wait an hour, then start the script again."
+          next="Wait an hour, then $again."
           ;;
         *)
           what="GitHub refused to let the script $doing."
-          next="Check that your GitHub account may do this; for an organisation, one of its owners may have to allow it. Then start the script again."
+          next="Check that your GitHub account may do this; for an organisation, one of its owners may have to allow it. Then $again."
           ;;
       esac
       ;;
     404)
       what="GitHub did not find what the script needed to $doing."
-      next="Check the names you gave, then start the script again."
+      next="${not_found_next:-Wait a few minutes, then $again. If the same thing happens, ask for help and show the details below.}"
       ;;
     5[0-9][0-9])
       what="GitHub had a problem of its own, so the script could not $doing."
-      next="Wait a few minutes, then start the script again; https://www.githubstatus.com shows whether GitHub has a known problem."
+      next="Wait a few minutes, then $again; https://www.githubstatus.com shows whether GitHub has a known problem."
+      ;;
+    *)
+      what="Something unexpected happened, so the script could not $doing."
+      next="Wait a few minutes, then $again. If the same thing happens, ask for help and show the details below."
       ;;
   esac
   api_raw
@@ -1645,7 +1682,10 @@ guide_published_version() {
         "Start the script again later. If the same thing happens, report it to the bootstrapper's maintainers and show them the details below." \
         "No line with \", built from\" in $BOOTSTRAPPER CHANGELOG.md. Its first lines:$NL$(sed -n 1,5p <<<"$API_BODY")"
       ;;
-    *) api_fail "read the current version of the bootstrapper" ;;
+    *)
+      api_fail "read the current version of the bootstrapper" \
+        "Download the script again with the command from the README, then start it. If the same thing happens, report it to the bootstrapper's maintainers and show them the details below."
+      ;;
   esac
 }
 
@@ -1810,20 +1850,318 @@ preflight_project_absent() {
   step_end "$PROJECT_DONE"
 }
 
+# ---------- the plan, create and protect ----------
+# The end of spec step 1 (the plan, and "Proceed?" unless --yes; a
+# --dry-run stops after the plan), then step 2 (create the project from
+# the bootstrapper and wait until GitHub has copied its files) and step 3
+# (protect main straight away, then the merge settings). Nothing is
+# created before the "Proceed?" answer. Once the project exists, every
+# stop shows the command to continue with --resume (continue_after_create).
+
+# The spec's protection body for step 3, field for field. Step 16 later
+# adds the required check with a second PUT.
+PROTECT_BODY='{"required_status_checks":null,"enforce_admins":true,"required_pull_request_reviews":{"required_approving_review_count":0},"restrictions":null,"allow_force_pushes":false,"allow_deletions":false}'
+# Waiting for the template's files: up to POLL_TRIES waits of POLL_DELAY
+# seconds (60 s in all), retrying only on 404.
+POLL_TRIES=30
+POLL_DELAY=2
+GIVEN_NAME=""
+GIVEN_OWNER=""
+CREATED_NOTE=""
+CREATE_ERR=""
+PROTECT_PROBLEM=""
+
+# pause_for <seconds>: waits, or hands the wait to $BOOTSTRAP_SLEEP.
+pause_for() {
+  "${BOOTSTRAP_SLEEP:-sleep}" "$1"
+}
+
+show_plan() {
+  local vis licence deploy=""
+  if [ "$IN_VISIBILITY" = private ]; then
+    vis="private (only you and the people you invite can see it)"
+  else
+    vis="public (anyone can see it and its code)"
+  fi
+  if [ "$IN_LICENSE" = none ]; then
+    licence="none (no licence file, so nobody else may copy, change or share the code)"
+  else
+    licence="$IN_LICENSE, in the name of $IN_COPYRIGHT_HOLDER"
+  fi
+  [ "$IN_WITH_DEPLOY" != yes ] || deploy=", with the files that publish the website"
+  say "Here is the plan. Nothing has been created yet."
+  say "The project:"
+  say "    On GitHub: $IN_OWNER/$IN_NAME, $vis"
+  say "    Its page: https://github.com/$IN_OWNER/$IN_NAME"
+  say "    Display name: $IN_PROJECT_NAME"
+  say "    Description: $IN_DESCRIPTION"
+  say "    Product owner: $IN_PO_NAME"
+  say "    Language pack: $IN_PACK$deploy"
+  say "    Licence: $licence"
+  say "    Copy on this computer: $IN_DIR"
+  say "    Your name and email for git: $IN_GIT_NAME, $IN_GIT_EMAIL"
+  say "    Waiting for the project's checks: up to $IN_CI_TIMEOUT minutes"
+  say "The steps, in this order:"
+  say "  1. Create the project on GitHub, with the bootstrapper's files in it."
+  say "  2. Protect its main version, so that from then on every change comes as a proposed change, not straight into it."
+  say "  3. Make a copy of the project on this computer, in $IN_DIR."
+  say "  4. Add the language pack's files, fill in the project's names and description, and add the licence."
+  say "  5. Send these changes to GitHub as one proposed change, wait for the project's checks to pass, then add the change to the main version."
+  say "  6. Show what was made, and the one thing to do next."
+  if [ "$IN_VISIBILITY" = private ]; then
+    # Spec, "Private repo, no protection possible": the plan cannot be
+    # read before creating (it needs a permission gh lacks), so it warns.
+    say "Warning: protection for a private project needs a paid GitHub plan (Pro, Team or Enterprise); on the free plan GitHub protects only public projects. The script cannot see your plan before it creates the project, so on the free plan it stops right after creating it and shows what you can do then: upgrade the plan, make the project public, or carry on without protection."
+  fi
+}
+
+# confirm_plan: "Proceed?", unless --yes. The default is no; a no stops
+# with nothing created (exit 1). --non-interactive without --yes never
+# gets here: cmd_setup refuses it with the other option problems.
+confirm_plan() {
+  [ -z "$OPT_YES" ] || return 0
+  prompt_for check_yes_no \
+    "If you answer yes, the script creates the project on GitHub and carries out the plan above; if you answer no, it stops and creates nothing." \
+    "Proceed? (yes or no)" no
+  [ "$CHECKED" != yes ] || return 0
+  fail 1 "You answered no, so the script stopped, and nothing was created." \
+    "To set up the project, start the script again and answer yes."
+}
+
+# continue_after_create: the project exists now. From here on, the
+# command shown at a stop continues the setup: the command the user ran
+# with --resume, and --owner and --name when they were answered rather
+# than given as options. --resume itself is built in a later part.
+continue_after_create() {
+  local extra=""
+  [ -n "$RESTART_CMD" ] || remember_command
+  [ -n "$OPT_RESUME" ] || extra=" --resume"
+  if [ -z "$GIVEN_OWNER" ]; then
+    quote_word "$IN_OWNER"
+    extra="$extra --owner $QUOTED"
+  fi
+  if [ -z "$GIVEN_NAME" ]; then
+    quote_word "$IN_NAME"
+    extra="$extra --name $QUOTED"
+  fi
+  RESTART_CMD="$RESTART_CMD$extra"
+  CREATED_NOTE="The project $IN_OWNER/$IN_NAME exists on GitHub, with only the bootstrapper's files in it."
+}
+
+# create_project: spec step 2, gh repo create from the bootstrapper. gh
+# repo create gives no HTTP status, so a failure is read from gh's exit
+# code, then from GitHub itself (does the project exist now?), and only
+# the two cases the spec guides at this step are told apart by gh's
+# text: the name is taken, or the account may not create it.
+create_project() {
+  local out err rc=0
+  step_start "Creating the project $IN_OWNER/$IN_NAME on GitHub"
+  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  run_gh repo create "$IN_OWNER/$IN_NAME" --template "$BOOTSTRAPPER" "--$IN_VISIBILITY" --description "$IN_DESCRIPTION" >"$out" 2>"$err" || rc=$?
+  CREATE_ERR="$(tr -d '\r' <"$err")"
+  rm -f "$out" "$err"
+  if [ "$rc" -eq 0 ]; then
+    continue_after_create
+    step_end "The project $IN_OWNER/$IN_NAME was created: https://github.com/$IN_OWNER/$IN_NAME"
+    return 0
+  fi
+  [ -n "$CREATE_ERR" ] || CREATE_ERR="gh stopped with exit code $rc and no message."
+  if [ "$rc" -eq 4 ]; then
+    stop_with_error "gh (the GitHub command-line tool) is not signed in to your GitHub account, so the script could not create the project. Nothing was created." \
+      "$SIGN_IN_COMMAND_NEXT" "$CREATE_ERR"
+  fi
+  case "$(lower "$CREATE_ERR")" in
+    *"already exists"*)
+      guide_create_taken
+      stop_at_guide
+      ;;
+    *"not accessible"* | *permission* | *forbidden* | *"http 403"*)
+      guide_create_refused
+      stop_at_guide
+      ;;
+  esac
+  api_call "repos/$IN_OWNER/$IN_NAME"
+  if [ "$API_STATUS" = 200 ]; then
+    continue_after_create
+    stop_with_error "gh (the GitHub command-line tool) reported an error while it created the project." \
+      "Continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+      "$CREATE_ERR"
+  fi
+  stop_with_error "gh (the GitHub command-line tool) could not create the project $IN_OWNER/$IN_NAME on GitHub." \
+    "Open https://github.com/$IN_OWNER/$IN_NAME in your browser. If the project is not there, start the script again with the command shown above; if it is there, add --resume to that command. If the same thing happens again, ask for help and show the details below." \
+    "$CREATE_ERR"
+}
+
+# guide_create_taken: the name check saw no project, but GitHub says the
+# name is taken (#149 review, finding 7): most likely a private project
+# the account cannot see. Nothing exists, so it is a plain new run.
+guide_create_taken() {
+  guide_begin "GitHub says that a project named $IN_OWNER/$IN_NAME already exists." \
+    "The setup creates a new project, and GitHub gives each name to one project only. The check before could not see this one, so it is probably a private project that your account cannot see."
+  guide_step "Choose another name: start the script again with the command shown below, with the name after --name changed (or --name and a new name added), such as --name $IN_NAME-2."
+  guide_step "If the project is yours, sign in to GitHub in your browser with the account that owns it and open https://github.com/$IN_OWNER/$IN_NAME to see it."
+  guide_end "the script says \"Done. The project\" with the new name and \"was created\"." \
+    "if you do not know who owns the name, choose another one." \
+    "it asks GitHub to create the project, and GitHub answers whether the name is free. It cannot check again in this run, so it stops here."
+  guide_details "$CREATE_ERR"
+}
+
+# guide_create_refused: the account, or the key gh signs in with, may not
+# create the project (spec, "Failed at create, step 2"). It keeps the
+# promise of the fine-grained token warning: this step says so.
+guide_create_refused() {
+  guide_begin "GitHub did not let your account create the project $IN_OWNER/$IN_NAME." \
+    "The setup starts by creating the project on GitHub, and GitHub refused: the account or the key that gh signs in with may not create projects there."
+  if [ "$IN_OWNER" != "$GH_LOGIN" ]; then
+    guide_step "The project would belong to the organisation $IN_OWNER. Ask one of its owners to let members create projects (on GitHub, in the organisation's Settings, under Member privileges), or to give you a role that may."
+  fi
+  if [ -z "$GH_SCOPES_SEEN" ]; then
+    guide_step "gh signs in with a fine-grained token (a key made on GitHub with chosen permissions). Open https://github.com/settings/personal-access-tokens, edit that token, give it access to All repositories (every project of the account), and set Administration, Contents, Workflows and Pull requests to \"Read and write\"."
+  fi
+  guide_step "To see GitHub's own reason, open https://github.com/new in your browser and try to create a project for $IN_OWNER there."
+  guide_step "Then start the script again with the command shown below."
+  guide_end "the script says \"Done. The project $IN_OWNER/$IN_NAME was created\"." \
+    "ask the person who manages your GitHub account or organisation, and show them the details below." \
+    "it asks GitHub to create the project, and GitHub answers whether your account may. It cannot check again in this run, so it stops here."
+  guide_details "$CREATE_ERR"
+}
+
+# wait_for_files: GitHub can copy the template's files after the project
+# exists, so main and CHANGELOG.md are read until both are there,
+# retrying only on 404, for up to POLL_TRIES waits of POLL_DELAY seconds.
+wait_for_files() {
+  local tries=0 what
+  step_start "Waiting for GitHub to put the bootstrapper's files into the project"
+  for what in branches/main contents/CHANGELOG.md; do
+    while :; do
+      api_call "repos/$IN_OWNER/$IN_NAME/$what"
+      if [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ]; then
+        break
+      fi
+      [ "$API_STATUS" = 404 ] || api_fail "check that the project's files are there"
+      if [ "$tries" -ge "$POLL_TRIES" ]; then
+        api_raw
+        stop_with_error "GitHub has not finished putting the bootstrapper's files into the project $IN_OWNER/$IN_NAME after a minute." \
+          "Wait a few minutes, then continue the setup with the command shown above; https://www.githubstatus.com shows whether GitHub has a known problem." \
+          "$API_RAW"
+      fi
+      [ "$tries" -gt 0 ] || say "GitHub is still copying the files; the script checks again every $POLL_DELAY seconds, for up to a minute."
+      tries=$((tries + 1))
+      pause_for "$POLL_DELAY"
+    done
+  done
+  step_end "The project's files are there."
+}
+
+# protect_main: spec step 3, straight after the files are there. A 403 is
+# told apart by GitHub's message (the spec: not by the status alone): the
+# plan (a private project on a plan without protection) or the key's
+# permission; one that fits neither gets both explanations. Each stops at
+# once with its guide, before anything else changes.
+protect_main() {
+  step_start "Protecting the main version of the project"
+  api_call -X PUT "repos/$IN_OWNER/$IN_NAME/branches/main/protection" --input - <<<"$PROTECT_BODY"
+  if [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ]; then
+    step_end "Its main version is protected: from now on every change comes as a proposed change, not straight into it."
+    return 0
+  fi
+  if [ "$API_STATUS" = 403 ]; then
+    case "$(lower "$API_MESSAGE")" in
+      *"rate limit"*) PROTECT_PROBLEM="" ;;
+      *upgrade* | *"github pro"*) PROTECT_PROBLEM=plan ;;
+      *"not accessible"* | *"access token"* | *integration*) PROTECT_PROBLEM=token ;;
+      *) PROTECT_PROBLEM=unknown ;;
+    esac
+    if [ -n "$PROTECT_PROBLEM" ]; then
+      guide_protect
+      stop_at_guide
+    fi
+  fi
+  api_fail "protect the main version of the project" \
+    "Open https://github.com/$IN_OWNER/$IN_NAME in your browser and check that the project has its files and that your account is one of its admins (who may change its settings); then continue the setup with the command shown above."
+}
+
+# guide_protect: the 403 at step 3, by PROTECT_PROBLEM (plan, token or
+# unknown). It cannot be fixed in this run, so it stops (spec: a
+# post-create guide that does not retry); the three ways on for a plan
+# without protection are those of the spec, and --resume and
+# --allow-unprotected are only shown here: they are built in a later part.
+guide_protect() {
+  local title why
+  case "$PROTECT_PROBLEM" in
+    plan)
+      title="GitHub cannot protect the main version of $IN_OWNER/$IN_NAME: protection for a private project needs a paid GitHub plan."
+      why="Protection makes every change come as a proposed change, and GitHub offers it for private projects only on the Pro, Team and Enterprise plans."
+      ;;
+    token)
+      title="GitHub did not let gh protect the main version of $IN_OWNER/$IN_NAME: the key that gh signs in with lacks a permission."
+      why="Turning on protection needs the Administration permission set to \"Read and write\", and the fine-grained token (a key made on GitHub with chosen permissions) that gh signs in with does not have it."
+      ;;
+    *)
+      title="GitHub refused to protect the main version of $IN_OWNER/$IN_NAME, and its message does not say why."
+      why="Protection makes every change come as a proposed change. GitHub refuses it for one of two reasons, and the steps cover both: a private project on a plan without protection, or a key without the Administration permission."
+      ;;
+  esac
+  guide_begin "$title" "$why"
+  if [ "$PROTECT_PROBLEM" = unknown ]; then
+    guide_step "If the project is private: protection for a private project needs a paid GitHub plan, so choose one of the next three steps."
+  fi
+  if [ "$PROTECT_PROBLEM" != token ]; then
+    guide_step "Upgrade your GitHub plan to Pro (or Team, for an organisation): open https://github.com/settings/billing, or the organisation's Settings and then Billing and plans. Then continue the setup with the command shown below."
+    guide_step "Or make the project public, which needs no paid plan: anyone can then see the project and its code. This command does it; then continue the setup with the command shown below:"
+    say_command "gh repo edit $IN_OWNER/$IN_NAME --visibility public --accept-visibility-change-consequences"
+    guide_step "Or carry on without protection: changes could then go straight into the main version, and the setup writes that decision into the project. Continue with this command:"
+    say_command "bash $RESTART_CMD --allow-unprotected"
+  fi
+  if [ "$PROTECT_PROBLEM" != plan ]; then
+    guide_step "If gh signs in with a fine-grained token: open https://github.com/settings/personal-access-tokens in your browser, edit that token, and set Administration, Contents, Workflows and Pull requests to \"Read and write\"; for an organisation's project, one of its owners may have to approve the change. Then continue the setup with the command shown below."
+  fi
+  guide_end "the script says \"Done. Its main version is protected\" when you continue the setup." \
+    "if you changed the plan or the token and still see this, wait a few minutes and continue again; if it goes on, ask for help and show the details below." \
+    "it asks GitHub to turn on the protection, and GitHub answers whether it may. It cannot check again in this run, so it stops here."
+  api_raw
+  guide_details "$API_RAW"
+}
+
+# set_merge_settings: the end of step 3, gh repo edit: proposed changes
+# are added as one change, and their line of work is deleted after.
+set_merge_settings() {
+  local out err rc=0 raw
+  step_start "Setting how proposed changes are added to the project"
+  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  run_gh repo edit "$IN_OWNER/$IN_NAME" --delete-branch-on-merge --enable-squash-merge >"$out" 2>"$err" || rc=$?
+  raw="$(tr -d '\r' <"$err")"
+  rm -f "$out" "$err"
+  if [ "$rc" -ne 0 ]; then
+    [ -n "$raw" ] || raw="gh stopped with exit code $rc and no message."
+    stop_with_error "GitHub did not take the project's settings for adding proposed changes." \
+      "Check on https://github.com/$IN_OWNER/$IN_NAME that your account is one of the project's admins (who may change its settings), then continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+      "$raw"
+  fi
+  step_end "Each proposed change will be added as one change, and the line of work it was made on is deleted afterwards."
+}
+
 # cmd_setup <options...>: the setup. Built so far: the checks of this
-# computer and on GitHub, and the inputs. The options are checked first,
-# then the checks that need no answer (the tools, the GitHub sign-in and
-# the current version), so that nothing is asked in vain; the npm,
-# folder, permission and name checks need answers, so they follow the
-# questions.
+# computer and on GitHub, the inputs, the plan, and steps 2 and 3. The
+# options are checked first, then the checks that need no answer (the
+# tools, the GitHub sign-in and the current version), so that nothing is
+# asked in vain; the npm, folder, permission and name checks need
+# answers, so they follow the questions.
 cmd_setup() {
   parse_args "$@"
+  GIVEN_NAME="$IN_NAME"
+  GIVEN_OWNER="$IN_OWNER"
   if [ -n "$SCRIPT_PIPED" ] && [ -z "$OPT_NON_INTERACTIVE" ]; then
     fail 2 "The script was piped into bash, so it cannot ask its questions: they would read the script itself." \
       "Run the command from the README, which saves the script to a file first and then runs that file."
   fi
   remember_command "$@"
   detect_os
+  if [ -n "$OPT_NON_INTERACTIVE" ] && [ -z "$OPT_YES$OPT_DRY_RUN" ]; then
+    add_problem --yes "With --non-interactive the script asks nothing, so it cannot ask \"Proceed?\" before it creates the project: add --yes to go ahead, or --dry-run to only see the plan."
+  fi
   check_options
   preflight_tools
   preflight_github_account
@@ -1833,8 +2171,22 @@ cmd_setup() {
   preflight_target_dir
   preflight_github_permissions
   preflight_project_absent
-  fail 1 "This version of the script stops after its checks of this computer and of GitHub: setting up the project is not built yet. Nothing was created." \
-    "Use a released version of the bootstrapper to set up a project."
+  if [ -n "$OPT_RESUME" ]; then
+    fail 1 "Continuing a setup that stopped part way (--resume) is not built yet in this version of the script. Nothing was changed." \
+      "Use a released version of the bootstrapper to continue the setup."
+  fi
+  show_plan
+  if [ -n "$OPT_DRY_RUN" ]; then
+    say "This was a dry run (--dry-run): the checks passed, and nothing was created."
+    exit 0
+  fi
+  confirm_plan
+  create_project
+  wait_for_files
+  protect_main
+  set_merge_settings
+  fail 1 "The project $IN_OWNER/$IN_NAME was created on GitHub and its main version is protected. This version of the script stops here: the next steps of the setup are not built yet." \
+    "Use a released version of the bootstrapper to set up a project. The project stays on GitHub; if you do not need it, delete it there, in its Settings."
 }
 
 # ---------- main ----------
