@@ -1875,7 +1875,7 @@ test_answers_have_spaces_and_carriage_returns_removed() {
     "public$cr" "none$cr" "work$cr" " Ada L $cr" "ada@example.com$cr" >"$d/in"
   inputs "$d"
   expect_inputs "$d" NAME=my-app "PROJECT_NAME=My App" "DESCRIPTION=Lends tools." OWNER=acme \
-    PO_NAME=Ada PACK=node VISIBILITY=public LICENSE=none DIR=work "GIT_NAME=Ada L" \
+    PO_NAME=Ada PACK=node VISIBILITY=public LICENSE=none DIR=./work "GIT_NAME=Ada L" \
     GIT_EMAIL=ada@example.com
 }
 
@@ -2591,7 +2591,23 @@ test_a_folder_starting_with_a_tilde_is_in_the_home_folder() {
   expect_inputs "$d" "DIR=$d/home/x y"
   # Only ~ and ~/ are understood; another account's ~name is refused.
   refuses --dir "~other/app" "~other"
-  accepts --dir "a~b" "DIR=a~b"
+  accepts --dir "a~b" "DIR=./a~b"
+}
+
+test_a_relative_folder_is_written_with_dot_slash_in_front() {
+  # #152 review, finding 1: a folder such as my=app reached awk as an
+  # operand, which awk reads as a variable setting (name=value), not a
+  # file; one starting with - reached gh, ls, rm and mkdir as an option.
+  # A relative folder gets ./ in front; ~, absolute, ./ and ../ paths
+  # stay as they are.
+  accepts --dir "my=app" "DIR=./my=app"
+  accepts "--dir=-app" "DIR=./-app"
+  accepts --dir "projects/app" "DIR=./projects/app"
+  accepts --dir "./app" "DIR=./app"
+  accepts --dir "../app" "DIR=../app"
+  accepts --dir "/srv/app" "DIR=/srv/app"
+  accepts --dir "." "DIR=."
+  accepts --dir ".." "DIR=.."
 }
 
 test_git_defaults_are_the_global_settings_not_those_of_a_local_project() {
@@ -3944,6 +3960,71 @@ test_the_setup_starts_its_own_line_of_work_and_nothing_is_saved_or_sent() {
   [ "$(calls_from_create "$d" | tail -1)" = "$CLONE_CALL" ] || { cat "$d/gh.log" >&2; die "gh was used after the copy"; }
 }
 
+# expect_setup_tree <dir> <copy> <pack> [--with-deploy]: the copy holds
+# exactly the tree the setup must leave for that pack (see the test
+# below), file by file.
+expect_setup_tree() {
+  local d="$1" c="$2" p="$3" deploy="${4:-}" fresh f other kept
+  fresh="$d/fresh"
+  PACKS_DIR="$BUILT/languages" bash "$BUILT/bootstrap-project.sh" layout-pack "$p" "$fresh" >/dev/null
+  kept=code-standards.md
+  [ "$p" != web ] || [ -n "$deploy" ] || kept="$kept deploy.yml wrangler.jsonc"
+  { tree_of "$BUILT" | grep -v '^languages/' | grep -vx 'bootstrap-project.sh'
+    tree_of "$fresh"
+    for f in $kept; do echo "languages/$p/$f"; done
+    [ -z "$deploy" ] || printf '%s\n' .github/workflows/deploy.yml wrangler.jsonc
+  } | LC_ALL=C sort -u >"$d/want"
+  tree_of "$c" >"$d/got"
+  expect_same "$p$deploy: the tree" "$d/want" "$d/got"
+  # Kept in every pack: the check that each pack's CI runs, and the
+  # template's licence folder.
+  [ -x "$c/.github/scripts/require-test-change.sh" ] || die "$p$deploy: require-test-change.sh is not kept as a script"
+  [ -f "$c/licenses/NOTICE" ] || die "$p$deploy: licenses/ is not kept"
+  # Laid out: the same bytes as layout-pack lays out; ci.yml is the
+  # pack's, not the stub.
+  while IFS= read -r f; do
+    [ "$f" != .gitignore ] || continue
+    cmp -s "$fresh/$f" "$c/$f" || die "$p$deploy: $f is not the pack's"
+  done < <(tree_of "$fresh")
+  cmp -s "$BUILT/languages/$p/ci.yml" "$c/.github/workflows/ci.yml" || die "$p$deploy: ci.yml is not the pack's"
+  if [ -n "$deploy" ]; then
+    cmp -s "$BUILT/languages/web/deploy.yml" "$c/.github/workflows/deploy.yml" || die "deploy.yml is not the pack's"
+    cmp -s "$BUILT/languages/web/wrangler.jsonc" "$c/wrangler.jsonc" || die "wrangler.jsonc is not the pack's"
+  fi
+  for f in $kept; do
+    cmp -s "$BUILT/languages/$p/$f" "$c/languages/$p/$f" || die "$p$deploy: kept $f changed"
+  done
+  # Every other file of the bootstrapper is unchanged, mode included.
+  while IFS= read -r f; do
+    case "$f" in README.md | .gitignore | docs/DEV_INFRASTRUCTURE.md | .github/workflows/ci.yml) continue ;; esac
+    cmp -s "$BUILT/$f" "$c/$f" || die "$p$deploy: $f changed"
+    [ "$(xbit "$BUILT/$f")" = "$(xbit "$c/$f")" ] || die "$p$deploy: the mode of $f changed"
+  done < <(tree_of "$BUILT" | grep -v '^languages/' | grep -vx 'bootstrap-project.sh')
+  # .gitignore: the bootstrapper's, then the pack's lines it lacked.
+  { cat "$BUILT/.gitignore"
+    while IFS= read -r f; do grep -qxF -- "$f" "$BUILT/.gitignore" || printf '%s\n' "$f"; done <"$BUILT/languages/$p/gitignore"
+  } >"$d/gitignore"
+  expect_same "$p$deploy: .gitignore" "$d/gitignore" "$c/.gitignore"
+  # README.md: the section from "## After bootstrapping" up to the next
+  # heading (## Setup) is gone, nothing else.
+  grep -q '^## After bootstrapping' "$BUILT/README.md" || die "the built README has no setup section (test is stale)"
+  sed '/^## After bootstrapping/,/^## Setup$/{/^## Setup$/!d;}' "$BUILT/README.md" >"$d/readme"
+  [ "$(wc -l <"$d/readme")" -lt "$(wc -l <"$BUILT/README.md")" ] || die "the test's README expectation removed nothing"
+  expect_same "$p$deploy: README.md" "$d/readme" "$c/README.md"
+  # docs/DEV_INFRASTRUCTURE.md: the links to the other packs'
+  # code-standards.md point to the template on GitHub; its own stays.
+  cp "$BUILT/docs/DEV_INFRASTRUCTURE.md" "$d/dev"
+  for other in node web python react-native; do
+    [ "$other" != "$p" ] || continue
+    grep -qF "\`languages/$other/code-standards.md\`" "$d/dev" || die "the doc has no link to $other (test is stale)"
+    sed "s|\`languages/$other/code-standards.md\`|https://github.com/factoincognito/ai-project-template-v2/blob/main/languages/$other/code-standards.md|g" "$d/dev" >"$d/dev2"
+    mv "$d/dev2" "$d/dev"
+    ! grep -qE "(^|[^/])languages/$other/" "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: a link to the removed $other pack is left"
+  done
+  expect_same "$p$deploy: DEV_INFRASTRUCTURE.md" "$d/dev" "$c/docs/DEV_INFRASTRUCTURE.md"
+  grep -qF "\`languages/$p/code-standards.md\`" "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: the link to its own pack was rewritten"
+}
+
 test_every_pack_leaves_exactly_the_expected_tree() {
   # Spec, Testing: "every pack's final tree is exactly what is expected",
   # and "the README section is gone and languages/ is pruned". The
@@ -3951,7 +4032,7 @@ test_every_pack_leaves_exactly_the_expected_tree() {
   # languages/, plus what layout-pack lays out into an empty folder (its
   # table is pinned in tools/test-layout-pack.sh), plus the pack's files
   # that were not laid out.
-  local d c p deploy fresh f other kept
+  local d p deploy
   built_bootstrapper
   for p in node web python react-native web+deploy; do
     deploy=""
@@ -3961,65 +4042,7 @@ test_every_pack_leaves_exactly_the_expected_tree() {
     setup_run "$d" --non-interactive --yes --pack "$p" $deploy
     expect_rc 1 "$d"
     grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/err" >&2; die "$p$deploy: did not reach the end"; }
-    c="$(copy_of "$d")"
-    fresh="$d/fresh"
-    PACKS_DIR="$BUILT/languages" bash "$BUILT/bootstrap-project.sh" layout-pack "$p" "$fresh" >/dev/null
-    kept=code-standards.md
-    [ "$p" != web ] || [ -n "$deploy" ] || kept="$kept deploy.yml wrangler.jsonc"
-    { tree_of "$BUILT" | grep -v '^languages/' | grep -vx 'bootstrap-project.sh'
-      tree_of "$fresh"
-      for f in $kept; do echo "languages/$p/$f"; done
-      [ -z "$deploy" ] || printf '%s\n' .github/workflows/deploy.yml wrangler.jsonc
-    } | LC_ALL=C sort -u >"$d/want"
-    tree_of "$c" >"$d/got"
-    expect_same "$p$deploy: the tree" "$d/want" "$d/got"
-    # Kept in every pack: the check that each pack's CI runs, and the
-    # template's licence folder.
-    [ -x "$c/.github/scripts/require-test-change.sh" ] || die "$p$deploy: require-test-change.sh is not kept as a script"
-    [ -f "$c/licenses/NOTICE" ] || die "$p$deploy: licenses/ is not kept"
-    # Laid out: the same bytes as layout-pack lays out; ci.yml is the
-    # pack's, not the stub.
-    while IFS= read -r f; do
-      [ "$f" != .gitignore ] || continue
-      cmp -s "$fresh/$f" "$c/$f" || die "$p$deploy: $f is not the pack's"
-    done < <(tree_of "$fresh")
-    cmp -s "$BUILT/languages/$p/ci.yml" "$c/.github/workflows/ci.yml" || die "$p$deploy: ci.yml is not the pack's"
-    if [ -n "$deploy" ]; then
-      cmp -s "$BUILT/languages/web/deploy.yml" "$c/.github/workflows/deploy.yml" || die "deploy.yml is not the pack's"
-      cmp -s "$BUILT/languages/web/wrangler.jsonc" "$c/wrangler.jsonc" || die "wrangler.jsonc is not the pack's"
-    fi
-    for f in $kept; do
-      cmp -s "$BUILT/languages/$p/$f" "$c/languages/$p/$f" || die "$p$deploy: kept $f changed"
-    done
-    # Every other file of the bootstrapper is unchanged, mode included.
-    while IFS= read -r f; do
-      case "$f" in README.md | .gitignore | docs/DEV_INFRASTRUCTURE.md | .github/workflows/ci.yml) continue ;; esac
-      cmp -s "$BUILT/$f" "$c/$f" || die "$p$deploy: $f changed"
-      [ "$(xbit "$BUILT/$f")" = "$(xbit "$c/$f")" ] || die "$p$deploy: the mode of $f changed"
-    done < <(tree_of "$BUILT" | grep -v '^languages/' | grep -vx 'bootstrap-project.sh')
-    # .gitignore: the bootstrapper's, then the pack's lines it lacked.
-    { cat "$BUILT/.gitignore"
-      while IFS= read -r f; do grep -qxF -- "$f" "$BUILT/.gitignore" || printf '%s\n' "$f"; done <"$BUILT/languages/$p/gitignore"
-    } >"$d/gitignore"
-    expect_same "$p$deploy: .gitignore" "$d/gitignore" "$c/.gitignore"
-    # README.md: the section from "## After bootstrapping" up to the next
-    # heading (## Setup) is gone, nothing else.
-    grep -q '^## After bootstrapping' "$BUILT/README.md" || die "the built README has no setup section (test is stale)"
-    sed '/^## After bootstrapping/,/^## Setup$/{/^## Setup$/!d;}' "$BUILT/README.md" >"$d/readme"
-    [ "$(wc -l <"$d/readme")" -lt "$(wc -l <"$BUILT/README.md")" ] || die "the test's README expectation removed nothing"
-    expect_same "$p$deploy: README.md" "$d/readme" "$c/README.md"
-    # docs/DEV_INFRASTRUCTURE.md: the links to the other packs'
-    # code-standards.md point to the template on GitHub; its own stays.
-    cp "$BUILT/docs/DEV_INFRASTRUCTURE.md" "$d/dev"
-    for other in node web python react-native; do
-      [ "$other" != "$p" ] || continue
-      grep -qF "\`languages/$other/code-standards.md\`" "$d/dev" || die "the doc has no link to $other (test is stale)"
-      sed "s|\`languages/$other/code-standards.md\`|https://github.com/factoincognito/ai-project-template-v2/blob/main/languages/$other/code-standards.md|g" "$d/dev" >"$d/dev2"
-      mv "$d/dev2" "$d/dev"
-      ! grep -qE "(^|[^/])languages/$other/" "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: a link to the removed $other pack is left"
-    done
-    expect_same "$p$deploy: DEV_INFRASTRUCTURE.md" "$d/dev" "$c/docs/DEV_INFRASTRUCTURE.md"
-    grep -qF "\`languages/$p/code-standards.md\`" "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: the link to its own pack was rewritten"
+    expect_setup_tree "$d" "$(copy_of "$d")" "$p" "$deploy"
   done
 }
 
@@ -4130,7 +4153,57 @@ test_a_copy_that_does_not_fit_the_setup_stops_with_the_continue_command() {
     || { cat "$d/err" >&2; die "the missing section is not explained"; }
   expect_continue_command "$d" " --resume"
   ! grep -qF "$NOT_BUILT" "$d/err" || die "it went on after the error"
+  # #152 review, finding 2: these files come from the project GitHub made
+  # from the current bootstrapper, so downloading the script again cannot
+  # help: the next action is to report it.
+  sed -n 2p "$d/err" | grep -qF "Report it to the bootstrapper's maintainers" || { cat "$d/err" >&2; die "README: the next action is not to report it"; }
+  ! grep -qF 'Download it again' "$d/err" || { cat "$d/err" >&2; die "README: told to download again"; }
+  # A pack file missing from the project's languages/: the same.
+  d="$(tmpdir)"
+  cp -R "$BUILT" "$d/template"
+  rm "$d/template/languages/python/pyproject.toml"
+  export STUB_GH_TEMPLATE="$d/template"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  sed -n 1p "$d/err" | grep -qF "What happened: missing from the pack: pyproject.toml" || { cat "$d/err" >&2; die "the missing pack file is not named"; }
+  sed -n 2p "$d/err" | grep -qF "Report it to the bootstrapper's maintainers" || { cat "$d/err" >&2; die "pack file: the next action is not to report it"; }
+  ! grep -qF 'Download it again' "$d/err" || { cat "$d/err" >&2; die "pack file: told to download again"; }
+  expect_continue_command "$d" " --resume"
   unset STUB_GH_TEMPLATE
+}
+
+test_a_folder_named_like_a_setting_or_an_option_gets_the_whole_tree_and_stdin_is_not_read() {
+  # #152 review, finding 1 (blocking): with --dir my=app, awk read the
+  # operand my=app/README.md as a variable setting and read stdin instead:
+  # README.md and DEV_INFRASTRUCTURE.md came out empty, .gitignore held
+  # the rest of the layout table, and the rows after it were never laid
+  # out, while every step said Done. A folder starting with - reached gh,
+  # git and rm as an option. Both must give the full python tree, and
+  # --non-interactive must leave stdin unread: the first line is still
+  # there after the script ends.
+  local d dir
+  built_bootstrapper
+  for dir in my=app -app; do
+    d="$(tmpdir)"
+    working_git "$d"
+    prepare "$d"
+    use_built "$d"
+    printf '%s\n' first-line second-line >"$d/in"
+    ( in_env "$d"
+      rc=0
+      "$BASH" "$RUN_SCRIPT" "${REQUIRED_OPTS[@]}" --pack python "${ALL_OPTS[@]}" --public \
+        --non-interactive --yes "--dir=$dir" || rc=$?
+      echo "$rc" >"$d/rc"
+      IFS= read -r line || line="(nothing: stdin was read to its end)"
+      printf '%s\n' "$line" >"$d/first"
+    ) <"$d/in" >"$d/out" 2>"$d/err"
+    [ "$(cat "$d/rc")" -eq 1 ] || { cat "$d/out" "$d/err" >&2; die "$dir: exit $(cat "$d/rc"), want 1"; }
+    grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/err" >&2; die "$dir: did not reach the end"; }
+    [ "$(cat "$d/first")" = first-line ] || die "$dir: stdin was read; the next line is: $(cat "$d/first")"
+    [ "$(calls_from_create "$d" | tail -1)" = "repo clone octo-user/my-app ./$dir" ] || { cat "$d/gh.log" >&2; die "$dir: not copied into ./$dir"; }
+    [ "$(ls -A "$d/cwd")" = "$dir" ] || { ls -A "$d/cwd" >&2; die "$dir: the copy is not in the folder named"; }
+    expect_setup_tree "$d" "$d/cwd/$dir" python ""
+  done
 }
 
 test_a_failed_copy_is_explained_with_the_continue_command() {
