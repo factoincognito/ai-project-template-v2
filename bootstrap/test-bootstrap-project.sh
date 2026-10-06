@@ -5410,6 +5410,27 @@ test_changes_the_setup_did_not_make_stop_before_anything_is_saved() {
   ! calls_from_create "$d" | grep -q '^pr ' || die "a change was proposed"
 }
 
+test_a_setup_file_that_git_is_told_to_ignore_stops_before_anything_is_saved() {
+  # Spec step 12, git status: a file the setup adds must be in the saved
+  # change. A list of files to ignore in the user's global git settings
+  # (here one that ignores .vscode/, which many editors' users have)
+  # would leave the pack's .vscode files out of the change without a
+  # word; the self-check names them and stops instead.
+  local d c
+  d="$(tmpdir)"
+  prepare "$d"
+  printf '%s\n' '.vscode/' >"$d/home/global-ignore"
+  "$REAL_GIT" config --file "$d/home/.gitconfig" core.excludesFile "$d/home/global-ignore"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "Some files that the setup adds are ignored by git, so they would be left out of the saved change, and the script saved and sent nothing: \\.vscode/extensions\\.json, \\.vscode/settings\\.json\\. "
+  grep -qF 'core.excludesFile' "$d/err" || { cat "$d/err" >&2; die "the next action does not name the setting"; }
+  expect_continue_command "$d" " --resume"
+  c="$(copy_of "$d")"
+  [ "$(in_git -C "$c" rev-list --count HEAD)" -eq 1 ] || die "a change was saved"
+  ! grep -qF ' push ' "$d/tools.log" || die "something was sent"
+}
+
 test_a_github_key_in_the_changes_stops_before_anything_is_saved_and_is_never_shown() {
   # Spec step 12 and "No secrets": what looks like a GitHub key (a
   # classic gh[pousr]_ token or a fine-grained github_pat_ one) in the
