@@ -154,6 +154,7 @@ fail() {
 # check them with the rest.
 LP_PACK_NEXT="Choose one of the packs: node, web, python or react-native."
 LP_BROKEN_NEXT="This copy of the bootstrapper is incomplete. Download it again; if that does not help, report it to the bootstrapper's maintainers."
+SETUP_BROKEN_NEXT="The project was made from the current bootstrapper, so downloading the script again does not help. Report it to the bootstrapper's maintainers and show them the details below."
 ASK_NO_DEFAULT="There is no default, because only you can choose it."
 ASK_RETRY="Please try again."
 ASK_NEEDED="An answer is needed here."
@@ -305,8 +306,11 @@ LP_MODE=""
 LP_KEPT=""
 layout_into() {
   local pack="$1" packs_dir="$2" out="$3" deploy="${5:-}"
-  local common typescript table not_laid_out src from to f covered skip
+  local common typescript table not_laid_out src from to f covered skip broken="$LP_BROKEN_NEXT"
   LP_MODE="$4"
+  # In the setup the packs come from the project GitHub made (#152 review,
+  # finding 2): downloading the script again would not change them.
+  [ "$LP_MODE" != overlay ] || broken="$SETUP_BROKEN_NEXT"
 
   common="ci.yml .github/workflows/ci.yml
 gitignore .gitignore
@@ -367,7 +371,7 @@ starter/src/ src/"
       lp_fail "pack folder not found: $src" \
         "Check that the languages folder is next to this script, or set PACKS_DIR to the folder that holds the packs."
     fi
-    lp_fail "pack folder not found: $src" "$LP_BROKEN_NEXT"
+    lp_fail "pack folder not found: $src" "$broken" "Not a folder: $src"
   fi
 
   if [ "$LP_MODE" = strict ] && [ -e "$out" ] && [ -n "$(ls -A "$out")" ]; then
@@ -377,9 +381,9 @@ starter/src/ src/"
   # Every table source must exist.
   while read -r from _; do
     if [ "${from%/}" != "$from" ]; then
-      [ -d "$src/$from" ] || lp_fail "missing from the pack: $from" "$LP_BROKEN_NEXT"
+      [ -d "$src/$from" ] || lp_fail "missing from the pack: $from" "$broken" "Not in $src: $from"
     else
-      [ -f "$src/$from" ] || lp_fail "missing from the pack: $from" "$LP_BROKEN_NEXT"
+      [ -f "$src/$from" ] || lp_fail "missing from the pack: $from" "$broken" "Not in $src: $from"
     fi
   done <<<"$table"
 
@@ -393,7 +397,7 @@ starter/src/ src/"
       if [ "$f" = "$from" ]; then covered=1; fi
       case "$from" in */) case "$f" in "$from"*) covered=1 ;; esac ;; esac
     done <<<"$table"
-    [ -n "$covered" ] || lp_fail "not in the layout table: $f" "$LP_BROKEN_NEXT"
+    [ -n "$covered" ] || lp_fail "not in the layout table: $f" "$broken" "In $src but not in the table: $f"
   done < <(cd "$src" && find . -type f | sed 's|^\./||' | LC_ALL=C sort)
 
   # Overlay: the targets other than ci.yml and .gitignore must not be
@@ -423,6 +427,17 @@ starter/src/ src/"
   done <<<"$table"
 }
 
+# as_operand <path>: OPERAND is the path as a file operand for awk: awk
+# reads an operand of the form name=value as a variable setting, so a
+# path that does not start with / gets ./ in front (#152 review, finding
+# 1). The other helpers that run awk on a file read it from stdin.
+as_operand() {
+  case "$1" in
+    /*) OPERAND="$1" ;;
+    *) OPERAND="./$1" ;;
+  esac
+}
+
 # lp_fail <what happened> <what to do next> [raw text]: a layout error.
 # The subcommand names itself and exits 1; in the setup the copy and the
 # project exist, so it shows the command to continue (stop_with_error).
@@ -436,12 +451,14 @@ lp_fail() {
 # added; <to>'s own lines stay as they are, and its last line is ended
 # first. Carriage returns do not count when lines are compared.
 add_missing_lines() {
-  local tmp
+  local tmp from to
   tmp="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
   [ -f "$2" ] || : >"$2"
+  as_operand "$1"; from="$OPERAND"
+  as_operand "$2"; to="$OPERAND"
   awk 'FILENAME == ARGV[1] { print; sub(/\r$/, ""); have[$0] = 1; next }
     { sub(/\r$/, "") }
-    $0 != "" && !($0 in have) { have[$0] = 1; print }' "$2" "$1" >"$tmp"
+    $0 != "" && !($0 in have) { have[$0] = 1; print }' "$to" "$from" >"$tmp"
   cat "$tmp" >"$2"
   rm -f "$tmp"
 }
@@ -453,7 +470,8 @@ cmd_layout_pack() {
   # the same name, or make it print the folder into $here.
   here="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
   packs_dir="${PACKS_DIR:-$here/languages}"
-  layout_into "$1" "$packs_dir" "$2" strict
+  as_operand "$2"
+  layout_into "$1" "$packs_dir" "$OPERAND" strict
   say "Laid out the $1 pack in $2"
 }
 
@@ -680,7 +698,14 @@ check_dir() {
       return 1
       ;;
   esac
-  CHECKED="$TRIMMED"
+  # A relative folder gets ./ in front (#152 review, finding 1): awk reads
+  # an operand such as my=app/README.md as a variable setting, not a file,
+  # and gh, git, ls and rm read one starting with - as an option. A
+  # Windows drive path (C:/... or C:\...) is not relative.
+  case "$TRIMMED" in
+    /* | ./* | ../* | . | .. | [A-Za-z]:/* | [A-Za-z]:\\*) CHECKED="$TRIMMED" ;;
+    *) CHECKED="./$TRIMMED" ;;
+  esac
 }
 
 # check_email: one line with no spaces, something before and after a
@@ -2370,11 +2395,11 @@ lay_out_pack() {
 # end of the file). Returns 1, changing nothing, when there is none.
 remove_setup_section() {
   local tmp
-  grep -q '^## After bootstrapping' "$1" || return 1
+  grep -q '^## After bootstrapping' <"$1" || return 1
   tmp="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
   awk '/^## After bootstrapping/ { skip = 1; next }
     skip && /^## / { skip = 0 }
-    !skip' "$1" >"$tmp"
+    !skip' <"$1" >"$tmp"
   cat "$tmp" >"$1"
   rm -f "$tmp"
 }
@@ -2393,7 +2418,7 @@ replace_text() {
         line = substr(line, i + length(from))
       }
       print out line
-    }' "$1" >"$tmp"
+    }' <"$1" >"$tmp"
   cat "$tmp" >"$1"
   rm -f "$tmp"
 }
@@ -2408,7 +2433,7 @@ tidy_up() {
   step_start "Removing what only the setup needed from the copy"
   if ! remove_setup_section "$IN_DIR/README.md"; then
     stop_with_error "The file README.md in the copy of the project has no section that starts with \"## After bootstrapping\", which the setup removes." \
-      "$LP_BROKEN_NEXT" "No line starting with \"## After bootstrapping\" in $IN_DIR/README.md."
+      "$SETUP_BROKEN_NEXT" "No line starting with \"## After bootstrapping\" in $IN_DIR/README.md."
   fi
   keep="$(mktemp -d "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
   for f in $LP_KEPT; do

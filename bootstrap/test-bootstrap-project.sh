@@ -2601,13 +2601,16 @@ test_a_relative_folder_is_written_with_dot_slash_in_front() {
   # A relative folder gets ./ in front; ~, absolute, ./ and ../ paths
   # stay as they are.
   accepts --dir "my=app" "DIR=./my=app"
-  accepts "--dir=-app" "DIR=./-app"
+  accepts --dir -app "DIR=./-app"
   accepts --dir "projects/app" "DIR=./projects/app"
   accepts --dir "./app" "DIR=./app"
   accepts --dir "../app" "DIR=../app"
   accepts --dir "/srv/app" "DIR=/srv/app"
   accepts --dir "." "DIR=."
   accepts --dir ".." "DIR=.."
+  # Git Bash also takes Windows paths with a drive letter.
+  accepts --dir "C:/work/app" "DIR=C:/work/app"
+  accepts --dir 'D:\work\app' 'DIR=D:\work\app'
 }
 
 test_git_defaults_are_the_global_settings_not_those_of_a_local_project() {
@@ -4170,6 +4173,29 @@ test_a_copy_that_does_not_fit_the_setup_stops_with_the_continue_command() {
   ! grep -qF 'Download it again' "$d/err" || { cat "$d/err" >&2; die "pack file: told to download again"; }
   expect_continue_command "$d" " --resume"
   unset STUB_GH_TEMPLATE
+}
+
+test_the_awk_helpers_take_a_path_named_like_a_setting() {
+  # #152 review, finding 1, second line of defence: even with ./ in front
+  # of the folder, the helpers that run awk on a file must read the file
+  # itself when its path looks like name=value (here a=b/...), never
+  # stdin. stdin holds a line that must not show up anywhere.
+  local d
+  d="$(tmpdir)"
+  mkdir -p "$d/a=b"
+  printf '%s\n' '# App' '## After bootstrapping' 'x' '## Setup' 'see languages/node/x' >"$d/a=b/README.md"
+  printf '%s\n' 'dist/' >"$d/a=b/gitignore"
+  printf '%s\n' 'node_modules/' >"$d/a=b/.gitignore"
+  printf '%s\n' 'FROM-STDIN' >"$d/in"
+  ( load_script; cd "$d"
+    remove_setup_section a=b/README.md
+    replace_text a=b/README.md languages/node/x URL
+    add_missing_lines a=b/gitignore a=b/.gitignore ) <"$d/in" >"$d/out" 2>"$d/err" || { cat "$d/err" >&2; die "a helper failed"; }
+  printf '%s\n' '# App' '## Setup' 'see URL' >"$d/want"
+  expect_same "README" "$d/want" "$d/a=b/README.md"
+  printf '%s\n' node_modules/ dist/ >"$d/want"
+  expect_same ".gitignore" "$d/want" "$d/a=b/.gitignore"
+  ! grep -rqF FROM-STDIN "$d/a=b" || die "a helper read stdin"
 }
 
 test_a_folder_named_like_a_setting_or_an_option_gets_the_whole_tree_and_stdin_is_not_read() {
