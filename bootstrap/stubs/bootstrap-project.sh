@@ -12,9 +12,11 @@
 # project on this computer (with the git name and email, the line of work
 # bootstrap-setup, the language pack laid out, the tidy-up, the
 # placeholders filled in, the lockfile of the npm packs, the licence and
-# the CHANGELOG entry), and the layout-pack subcommand. After the
-# CHANGELOG the script stops: the later setup steps (nothing is saved or
-# sent yet) come in later parts.
+# the CHANGELOG entry), the self-check, saving the setup's changes,
+# sending them to GitHub and proposing them there, and the layout-pack
+# subcommand. After the proposed change the script stops: the later
+# setup steps (waiting for the checks, adding the change to main) come
+# in later parts.
 #
 # Usage:
 #   bash bootstrap-project.sh [options]
@@ -304,7 +306,8 @@ run_offered() {
 #
 # layout_into <pack> <packs dir> <target> <strict|overlay> [yes]: lays
 # out the pack from <packs dir>/<pack> into <target>. LP_KEPT lists the
-# pack's files that were not laid out (the setup keeps them).
+# pack's files that were not laid out (the setup keeps them), LP_TARGETS
+# the paths they are laid out to.
 #   strict: the layout-pack subcommand; the target must be empty or
 #     absent.
 #   overlay: the setup (spec step 6), over the copy of the project: the
@@ -314,6 +317,7 @@ run_offered() {
 #     argument "yes" (--with-deploy, web) lays out the deploy files too.
 LP_MODE=""
 LP_KEPT=""
+LP_TARGETS=""
 layout_into() {
   local pack="$1" packs_dir="$2" out="$3" deploy="${5:-}"
   local common typescript table not_laid_out src from to f covered skip broken="$LP_BROKEN_NEXT"
@@ -374,6 +378,10 @@ starter/src/ src/"
       ;;
   esac
   LP_KEPT="$not_laid_out"
+  # The project paths of the table, for the self-check before the commit
+  # (a folder ends in /).
+  LP_TARGETS=""
+  while read -r _ to; do LP_TARGETS="$LP_TARGETS $to"; done <<<"$table"
 
   src="$packs_dir/$pack"
   if [ ! -d "$src" ]; then
@@ -1149,6 +1157,7 @@ offered() {
     gh-refresh-workflow) if [ "$2" = run ]; then run_offered "gh auth refresh -h github.com -s workflow"; else say_command "gh auth refresh -h github.com -s workflow"; fi ;;
     gh-refresh-public) if [ "$2" = run ]; then run_offered "gh auth refresh -h github.com -s public_repo,workflow"; else say_command "gh auth refresh -h github.com -s public_repo,workflow"; fi ;;
     gh-refresh-repo) if [ "$2" = run ]; then run_offered "gh auth refresh -h github.com -s repo,workflow"; else say_command "gh auth refresh -h github.com -s repo,workflow"; fi ;;
+    gh-setup-git) if [ "$2" = run ]; then run_offered "gh auth setup-git"; else say_command "gh auth setup-git"; fi ;;
     *) return 1 ;;
   esac
 }
@@ -2314,34 +2323,26 @@ set_merge_settings() {
 # work bootstrap-setup, the pack laid out over the copy (layout_into
 # overlay, with the packs of the copy itself: the script the user runs
 # sits alone, not next to them), and the tidy-up. Nothing is saved
-# (committed) or sent (pushed) here; that is step 13.
+# (committed) or sent (pushed) here; that is step 13, in "the
+# self-check, saving, sending and proposing the change".
 
 SETUP_BRANCH=bootstrap-setup
 TEMPLATE_URL=https://github.com/factoincognito/ai-project-template-v2
 PACKS="node web python react-native"
 
 # clone_project: spec step 4. gh repo clone gives no HTTP status, so a
-# failure is read from gh's exit code (4: not signed in); anything else
-# is told plainly with gh's and git's text below. Then origin/main must
+# failure is read from gh's exit code (4: not signed in) and from git's
+# text: when git could not sign in to GitHub, the guide of step 13 (gh
+# auth setup-git) applies to the copy too (spec step 4); anything else is
+# told plainly with gh's and git's text below. git may not ask for a name
+# and password at the terminal (GIT_TERMINAL_PROMPT=0): it would wait
+# there, or take the answers meant for the script. Then origin/main must
 # hold CHANGELOG.md stamped with this script's version.
 clone_project() {
-  local out err rc=0 raw changelog
+  local err rc=0 raw changelog
   step_start "Making a copy of the project on this computer, in $IN_DIR"
-  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  run_gh repo clone "$IN_OWNER/$IN_NAME" "$IN_DIR" >"$out" 2>"$err" || rc=$?
-  raw="$(cat "$out" "$err" | tr -d '\r')"
-  rm -f "$out" "$err"
-  if [ "$rc" -ne 0 ]; then
-    [ -n "$raw" ] || raw="gh stopped with exit code $rc and no message."
-    if [ "$rc" -eq 4 ]; then
-      stop_with_error "gh (the GitHub command-line tool) is not signed in to your GitHub account, so the script could not make a copy of the project on this computer." \
-        "$SIGN_IN_CONTINUE_NEXT" "$raw"
-    fi
-    stop_with_error "The script could not make a copy of the project on this computer, in $IN_DIR." \
-      "Check that this computer is connected to the internet and that https://github.com/$IN_OWNER/$IN_NAME opens in your browser, then continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
-      "$raw"
-  fi
+  SIGN_IN_FOR="make the copy of the project on this computer"
+  guided_check try_clone guide_git_sign_in
   CREATED_NOTE="The project $IN_OWNER/$IN_NAME exists on GitHub, with only the bootstrapper's files in it, and a copy of it is on this computer in $IN_DIR."
 
   err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
@@ -2361,6 +2362,31 @@ clone_project() {
       "CHANGELOG.md in the copy: $(grep -F ', built from' <<<"$changelog" | sed -n 1p)"
   fi
   step_end "The copy is in $IN_DIR, with the files of version $SCRIPT_VERSION of the bootstrapper."
+}
+
+# try_clone: one try at the copy, for guided_check. Returns 0 when it is
+# made, 1 when git could not sign in to GitHub (SIGN_IN_ERR holds git's
+# text); stops on any other failure.
+try_clone() {
+  local out err rc=0 raw
+  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  GIT_TERMINAL_PROMPT=0 run_gh repo clone "$IN_OWNER/$IN_NAME" "$IN_DIR" >"$out" 2>"$err" || rc=$?
+  raw="$(cat "$out" "$err" | tr -d '\r')"
+  rm -f "$out" "$err"
+  [ "$rc" -ne 0 ] || return 0
+  [ -n "$raw" ] || raw="gh stopped with exit code $rc and no message."
+  if [ "$rc" -eq 4 ]; then
+    stop_with_error "gh (the GitHub command-line tool) is not signed in to your GitHub account, so the script could not make a copy of the project on this computer." \
+      "$SIGN_IN_CONTINUE_NEXT" "$raw"
+  fi
+  if git_sign_in_failed "$raw"; then
+    SIGN_IN_ERR="$raw"
+    return 1
+  fi
+  stop_with_error "The script could not make a copy of the project on this computer, in $IN_DIR." \
+    "Check that this computer is connected to the internet and that https://github.com/$IN_OWNER/$IN_NAME opens in your browser, then continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+    "$raw"
 }
 
 # in_copy <what the script was doing> <git arguments...>: runs git in the
@@ -2745,6 +2771,444 @@ note_setup_in_changelog() {
   step_end "CHANGELOG.md says which pack and which licence the project was set up with."
 }
 
+# ---------- the self-check, saving, sending and proposing the change ----------
+# Spec steps 12, 13 and 14. The self-check stops before anything is saved
+# when a text of the fill table is left in its file, when git status
+# shows a path the setup does not change, when the changes hold what
+# looks like a GitHub key, or when a file has a carriage return. Then the
+# git name and email are checked, the change "Set up <name>" is saved
+# (committed) and sent (pushed) on bootstrap-setup, and proposed on GitHub
+# (gh pr create, with its title and body given, so gh asks nothing).
+#
+# Signing in (step 13): for the push, git borrows gh's sign-in for that
+# one command, through -c, so no git settings change: an empty
+# credential.https://github.com.helper drops the helpers set before it,
+# then gh's own helper. These are the two settings gh auth setup-git
+# writes into the global git settings (gh 2.89.0, run once into a
+# throwaway settings file), with the gh this script runs. When git still
+# cannot sign in, guide_git_sign_in offers gh auth setup-git itself,
+# which changes the global git settings: the guide says so, and it runs
+# only after a yes typed at the terminal. Later tries then push without
+# the -c settings, which would hide the helper gh auth setup-git (or the
+# user) set. The copy (step 4) gets the same guide. git never asks at the
+# terminal (GIT_TERMINAL_PROMPT=0): it would wait there, or read answers
+# meant for the script.
+#
+# No key is ever shown, saved or written (spec, "No secrets"): the
+# checks name the files that hold one, never the key, and the sign-in
+# helper is a command, not a key.
+
+SIGN_IN_FOR=""
+SIGN_IN_ERR=""
+SEND_TRIES=0
+PR_URL=""
+# What a GitHub key looks like: a classic one (ghp_, gho_, ghu_, ghs_,
+# ghr_ and at least 20 letters or digits) or a fine-grained one.
+KEY_PATTERN_CLASSIC='gh[pousr]_[A-Za-z0-9]{20,}'
+KEY_PATTERN_FINE='github_pat_[A-Za-z0-9_]{20,}'
+
+# git_sign_in_failed <git's text>: true when git says it could not sign
+# in to GitHub (git's own words, which are stable across versions).
+git_sign_in_failed() {
+  case "$1" in
+    *"could not read Username"* | *"could not read Password"* | *"Authentication failed"* | *"terminal prompts disabled"* | *"Invalid username or password"*) return 0 ;;
+  esac
+  return 1
+}
+
+# guide_git_sign_in: git could not sign in to GitHub to SIGN_IN_FOR.
+guide_git_sign_in() {
+  guide_begin "git could not sign in to GitHub to $SIGN_IN_FOR." \
+    "git (the tool that keeps the project's history) needs your GitHub sign-in for this. The script lends it the sign-in of gh (the GitHub command-line tool) for this one step, and git still could not sign in."
+  guide_step "Let gh sign git in to GitHub with this command. It changes your global git settings (the settings git uses for every project on this computer): from then on, git signs in to GitHub through gh in every project, not only this one."
+  say_command "gh auth setup-git"
+  guide_step "Then come back here and press Enter: the script tries again."
+  guide_end "the script says \"Done.\" after it tries again." \
+    "check that gh is signed in: the command gh auth status shows your GitHub account. If it does not, sign in as in step 0 of the README; if it does and this still happens, ask for help and show the details below." \
+    "it tries again, and git says whether GitHub let it in."
+  guide_details "$SIGN_IN_ERR"
+  OFFER=gh-setup-git
+}
+
+# fill_texts_left: LEFT lists the pairs of the fill table whose text is
+# still in its file, one "<text> in <file>" per line (a text over two
+# lines is written on one). A text that is part of a value the user gave
+# (a display name such as "[PO NAME] App") is not left: each occurrence of
+# such a value is covered first. Kept files are not rows of the table,
+# so the texts they document stay (spec step 12).
+LEFT=""
+fill_texts_left() {
+  local rows file key f k t v s keys mask
+  mask="$(printf '\037')"
+  LEFT=""
+  fill_rows "$IN_PACK" "$IN_WITH_DEPLOY"
+  rows="$FILL_ROWS"
+  while read -r file key; do
+    fill_text "$key"
+    t="$FILL_TEXT"
+    s="$(cat "$IN_DIR/$file"; printf x)"
+    s="${s%x}"
+    keys="$(while read -r f k; do [ "$f" != "$file" ] || printf '%s ' "$k"; done <<<"$rows")"
+    for k in $keys; do
+      fill_value "$k"
+      v="$FILL_VALUE"
+      case "$v" in *"$t"*) s="${s//"$v"/$mask}" ;; esac
+    done
+    case "$s" in *"$t"*) LEFT="$LEFT${t//$NL/ } in $file$NL" ;; esac
+  done <<<"$rows"
+  LEFT="${LEFT%"$NL"}"
+}
+
+# check_texts_left: stops when fill_texts_left finds any.
+check_texts_left() {
+  local raw
+  fill_texts_left
+  [ -n "$LEFT" ] || return 0
+  raw="Left in their files:$NL$LEFT"
+  stop_with_error "Some texts that the setup fills in are still in the copy of the project, so the script saved and sent nothing: ${LEFT//$NL/; }." \
+    "$SETUP_BROKEN_NEXT" "$raw"
+}
+
+# expected_change <git status code> <path>: true when the setup changes
+# that path that way: it deletes the script and the languages/ files it
+# does not keep, changes the bootstrapper's files it fills in or edits,
+# and adds the pack's files, the lockfile and the licence files.
+expected_change() {
+  local code="$1" path="$2" f t
+  case "$code" in
+    "D ")
+      [ "$path" != bootstrap-project.sh ] || return 0
+      case "$path" in
+        languages/*)
+          for f in $LP_KEPT; do [ "$path" != "languages/$IN_PACK/$f" ] || return 1; done
+          return 0
+          ;;
+      esac
+      ;;
+    "M ")
+      # A pack file the setup adds is new, never changed: a fill-table
+      # file such as package.json is changed only when the bootstrapper
+      # has it (ci.yml and .gitignore are the two the pack overlays).
+      case " $LP_TARGETS " in
+        *" $path "*) case "$path" in .github/workflows/ci.yml | .gitignore) ;; *) return 1 ;; esac ;;
+      esac
+      case " README.md CHANGELOG.md .gitignore .github/workflows/ci.yml docs/DEV_INFRASTRUCTURE.md $FILL_FILES " in
+        *" $path "*) return 0 ;;
+      esac
+      ;;
+    "A ")
+      for t in $LP_TARGETS; do
+        case "$t" in
+          */) case "$path" in "$t"*) return 0 ;; esac ;;
+          *) [ "$path" != "$t" ] || return 0 ;;
+        esac
+      done
+      case "$path" in
+        package-lock.json) case "$IN_PACK" in node | web | react-native) return 0 ;; esac ;;
+        LICENSE) [ "$IN_LICENSE" = none ] || return 0 ;;
+        NOTICE) [ "$IN_LICENSE" != "$POLYFORM_KEY" ] || return 0 ;;
+      esac
+      ;;
+  esac
+  return 1
+}
+
+# check_changed_paths: with every change staged (git add -A), git status
+# must show only changes the setup makes, and no file the setup adds may
+# be ignored by git (a list of files to ignore in the global git settings
+# would leave it out of the change without a word). CHANGED (an array)
+# holds the paths added or changed, for the key check.
+CHANGED=()
+check_changed_paths() {
+  local status err rc=0 raw entry code path f unexpected="" lines="" ignored="" ignored_lines=""
+  fill_rows "$IN_PACK" "$IN_WITH_DEPLOY"
+  FILL_FILES="$(while read -r f _; do printf '%s ' "$f"; done <<<"$FILL_ROWS")"
+  status="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  git -C "$IN_DIR" status --porcelain -z --no-renames --untracked-files=all --ignored=traditional >"$status" 2>"$err" || rc=$?
+  raw="$(tr -d '\r' <"$err")"
+  if [ "$rc" -ne 0 ]; then
+    rm -f "$status" "$err"
+    [ -n "$raw" ] || raw="git stopped with exit code $rc and no message."
+    stop_with_error "git could not list the setup's changes in the copy of the project on this computer." \
+      "Continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+      "$raw"
+  fi
+  CHANGED=()
+  while IFS= read -r -d '' entry; do
+    code="${entry:0:2}"
+    path="${entry:3}"
+    if [ "$code" = "!!" ]; then
+      if expected_change "A " "$path"; then
+        ignored="$ignored, $path"
+        ignored_lines="$ignored_lines$entry$NL"
+      fi
+      continue
+    fi
+    if ! expected_change "$code" "$path"; then
+      unexpected="$unexpected, $path"
+      lines="$lines$entry$NL"
+    fi
+    [ "$code" = "D " ] || CHANGED[${#CHANGED[@]}]="$path"
+  done <"$status"
+  rm -f "$status" "$err"
+  if [ -n "$unexpected" ]; then
+    stop_with_error "The copy of the project on this computer has changes that the setup did not make, so the script saved and sent nothing: ${unexpected#, }." \
+      "Move those files out of $IN_DIR, or undo your changes to them, then continue the setup with the command shown above. If you did not make them, ask for help and show the details below." \
+      "${lines%"$NL"}"
+  fi
+  [ -n "$ignored" ] || return 0
+  stop_with_error "Some files that the setup adds are ignored by git, so they would be left out of the saved change, and the script saved and sent nothing: ${ignored#, }." \
+    "Most likely your global git settings name a list of files to ignore (the setting core.excludesFile, or the file .config/git/ignore in your home folder) that matches them. Remove those lines from that list, then continue the setup with the command shown above. If you cannot find them, ask for help and show the details below." \
+    "${ignored_lines%"$NL"}"
+}
+
+# check_no_key: no file the setup adds or changes holds what looks like a
+# GitHub key, as staged. Only the files are named, never what matched.
+check_no_key() {
+  local out err rc=0 raw files
+  [ "${#CHANGED[@]}" -gt 0 ] || return 0
+  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  git --literal-pathspecs -C "$IN_DIR" grep --cached -l -E -e "$KEY_PATTERN_CLASSIC" -e "$KEY_PATTERN_FINE" -- "${CHANGED[@]}" \
+    >"$out" 2>"$err" || rc=$?
+  files="$(tr -d '\r' <"$out")"
+  raw="$(tr -d '\r' <"$err")"
+  rm -f "$out" "$err"
+  case "$rc" in
+    0)
+      stop_with_error "The setup's changes hold what looks like a sign-in key for GitHub (a token), in ${files//$NL/, }, so the script saved and sent nothing." \
+        "Remove the key from those files, then continue the setup with the command shown above. If it is a real key, also delete it on https://github.com/settings/tokens, because it may have been seen. If you did not put it there, ask for help and show the details below." \
+        "Files with text of the form gh[pousr]_... or github_pat_...:$NL$files"
+      ;;
+    1) return 0 ;;
+  esac
+  [ -n "$raw" ] || raw="git stopped with exit code $rc and no message."
+  stop_with_error "git could not check the setup's changes for sign-in keys." \
+    "Continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+    "$raw"
+}
+
+# check_line_endings: every text file in the copy has LF line endings,
+# with no carriage return (git grep -I leaves out files git takes for
+# binary).
+check_line_endings() {
+  local out err rc=0 raw files
+  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  git -C "$IN_DIR" grep -I -l -e "$CR" >"$out" 2>"$err" || rc=$?
+  files="$(tr -d '\r' <"$out")"
+  raw="$(tr -d '\r' <"$err")"
+  rm -f "$out" "$err"
+  case "$rc" in
+    0)
+      stop_with_error "Some files in the copy of the project end their lines with a carriage return (as on Windows), so the script saved and sent nothing: ${files//$NL/, }." \
+        "The project keeps LF line endings (as on macOS and Linux) in every file. If you changed those files, save them with LF line endings; otherwise ask for help and show the details below. Then continue the setup with the command shown above." \
+        "Files with a carriage return:$NL$files"
+      ;;
+    1) return 0 ;;
+  esac
+  [ -n "$raw" ] || raw="git stopped with exit code $rc and no message."
+  stop_with_error "git could not check the line endings of the files in the copy of the project." \
+    "Continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+    "$raw"
+}
+
+# self_check: spec step 12, in the spec's order.
+self_check() {
+  step_start "Checking the setup's changes before saving them"
+  check_texts_left
+  in_copy "mark the setup's changes to be saved" add -A
+  check_changed_paths
+  check_no_key
+  check_line_endings
+  step_end "No text is left to fill in, only the files the setup changes have changed, none holds a sign-in key, and every file has LF line endings."
+}
+
+# git_ident_form <name or email>: IDENT_FORM is the text as git writes it
+# into a change: git drops spaces and , : ; ' at both ends (the inputs
+# refuse its other such characters, " < > and \).
+git_ident_form() {
+  local s="$1" crud=",:;$SQ"
+  while :; do
+    case "$s" in
+      [[:space:]$crud]*) s="${s#?}" ;;
+      *[[:space:]$crud]) s="${s%?}" ;;
+      *) break ;;
+    esac
+  done
+  IDENT_FORM="$s"
+}
+
+# check_git_identity: spec step 13, before the commit. git var says under
+# which name and email git would save the change, the copy's settings and
+# anything that overrides them (the GIT_AUTHOR_* and GIT_COMMITTER_*
+# settings of the terminal) taken together; both must be the ones given.
+check_git_identity() {
+  local which err rc ident want raw
+  git_ident_form "$IN_GIT_NAME"
+  want="$IDENT_FORM <"
+  git_ident_form "$IN_GIT_EMAIL"
+  want="$want$IDENT_FORM>"
+  for which in AUTHOR COMMITTER; do
+    err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+    rc=0
+    ident="$(git -C "$IN_DIR" var "GIT_${which}_IDENT" 2>"$err")" || rc=$?
+    raw="$(tr -d '\r' <"$err")"
+    rm -f "$err"
+    ident="${ident//$CR/}"
+    if [ "$rc" -ne 0 ]; then
+      [ -n "$raw" ] || raw="git stopped with exit code $rc and no message."
+      stop_with_error "git could not tell under which name and email it would save the setup's changes." \
+        "Continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+        "$raw"
+    fi
+    # "Name <email> <time> <zone>": the last two words go.
+    ident="${ident% *}"
+    ident="${ident% *}"
+    if [ "$ident" != "$want" ]; then
+      stop_with_error "git would save the setup's changes under $ident, not under the name and email you gave, $want." \
+      "A setting of this terminal overrides the copy's own git settings: GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME or GIT_COMMITTER_EMAIL. Open a new terminal window without them, or give the same name and email to the script, then continue the setup with the command shown above." \
+        "git var GIT_${which}_IDENT: $ident"
+    fi
+  done
+}
+
+# save_change: spec step 13, the commit.
+save_change() {
+  step_start "Saving the setup's changes in the copy as one change, \"Set up $IN_NAME\""
+  check_git_identity
+  in_copy "save the setup's changes" commit -q -m "Set up $IN_NAME"
+  CREATED_NOTE="The project $IN_OWNER/$IN_NAME exists on GitHub, and the setup's changes are saved in its copy on this computer, in $IN_DIR, but not sent to GitHub yet."
+  step_end "The changes are saved in the copy under $IN_GIT_NAME, $IN_GIT_EMAIL."
+}
+
+# with_gh_sign_in <stdout file> <stderr file> <git arguments...>: runs
+# git with gh as its sign-in helper for GitHub, for this one command (see
+# the top of this section), never asking at the terminal; git's output
+# goes to the two files.
+with_gh_sign_in() {
+  local out="$1" err="$2"
+  shift 2
+  # The gh that run_gh runs, named here (not run) because git runs it as
+  # its helper and reads its answer; the terminal never sees it.
+  quote_word "${BOOTSTRAP_GH:-gh}" # not-user-facing
+  GIT_TERMINAL_PROMPT=0 git -c credential.https://github.com.helper= \
+    -c "credential.https://github.com.helper=!$QUOTED auth git-credential" "$@" >"$out" 2>"$err"
+}
+
+# try_push: one try at sending the change, for guided_check. The first
+# try borrows gh's sign-in; a later one uses git's own settings. Returns
+# 0 when it is sent, 1 when git could not sign in (SIGN_IN_ERR holds
+# git's text); stops on any other failure.
+try_push() {
+  local out err rc=0 raw
+  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  SEND_TRIES=$((SEND_TRIES + 1))
+  if [ "$SEND_TRIES" -eq 1 ]; then
+    with_gh_sign_in "$out" "$err" -C "$IN_DIR" push origin "$SETUP_BRANCH" || rc=$?
+  else
+    GIT_TERMINAL_PROMPT=0 git -C "$IN_DIR" push origin "$SETUP_BRANCH" >"$out" 2>"$err" || rc=$?
+  fi
+  raw="$(cat "$out" "$err" | tr -d '\r')"
+  rm -f "$out" "$err"
+  [ "$rc" -ne 0 ] || return 0
+  [ -n "$raw" ] || raw="git stopped with exit code $rc and no message."
+  if git_sign_in_failed "$raw"; then
+    SIGN_IN_ERR="$raw"
+    return 1
+  fi
+  case "$raw" in
+    *"refusing to allow"*workflow*)
+      stop_with_error "GitHub refused the setup's changes, because the sign-in that gh lends to git may not change the project's workflow files (the files that run its checks on GitHub)." \
+        "Give gh that permission with the command gh auth refresh -h github.com -s workflow, then continue the setup with the command shown above." \
+        "$raw"
+      ;;
+    *"Could not resolve host"* | *"Failed to connect"* | *"Connection timed out"* | *"Could not connect"*)
+      stop_with_error "git could not send the setup's changes to GitHub." \
+        "Check that this computer is connected to the internet, then continue the setup with the command shown above." \
+        "$raw"
+      ;;
+  esac
+  stop_with_error "git could not send the setup's changes to GitHub." \
+    "Continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+    "$raw"
+}
+
+# send_change: spec step 13, the push of bootstrap-setup.
+send_change() {
+  step_start "Sending the setup's changes to GitHub, on the line of work $SETUP_BRANCH"
+  SIGN_IN_FOR="send the setup's changes"
+  SEND_TRIES=0
+  guided_check try_push guide_git_sign_in
+  CREATED_NOTE="The project $IN_OWNER/$IN_NAME exists on GitHub, and the setup's changes are saved in its copy on this computer, in $IN_DIR, and sent to GitHub on the line of work $SETUP_BRANCH."
+  step_end "The changes are on GitHub, on the line of work $SETUP_BRANCH."
+}
+
+# pr_body: PR_BODY is the text of the proposed change, in plain words.
+PR_BODY=""
+pr_body() {
+  local deploy="" licence
+  [ "$IN_WITH_DEPLOY" != yes ] || deploy=", with the files that publish the website"
+  if [ "$IN_LICENSE" = none ]; then
+    licence="- Licence: none, so no licence file."
+  else
+    licence="- Licence: $IN_LICENSE, in the name of $IN_COPYRIGHT_HOLDER."
+  fi
+  PR_BODY="This proposed change sets up $IN_PROJECT_NAME. The setup script bootstrap-project.sh made it, from version $SCRIPT_VERSION of the bootstrapper.$NL$NL"
+  PR_BODY="$PR_BODY- Language pack: the $IN_PACK language pack$deploy.$NL"
+  PR_BODY="$PR_BODY- Filled in: the project's name, description and product owner, where its files asked for them.$NL"
+  PR_BODY="$PR_BODY$licence$NL"
+  case "$IN_PACK" in
+    node | web | react-native) PR_BODY="$PR_BODY- package-lock.json: the exact version of every tool the project uses.$NL" ;;
+  esac
+  PR_BODY="$PR_BODY- Removed: the setup section of README.md, the other language packs and the setup script itself.$NL$NL"
+  PR_BODY="${PR_BODY}Once the project's checks on GitHub pass, this change is added to the main version."
+}
+
+# propose_change: spec step 14. The body goes in a temporary file outside
+# the copy. gh prints the link of the proposed change.
+propose_change() {
+  local body out err rc=0 raw
+  step_start "Proposing the setup's changes on GitHub, where the project's checks run on them"
+  pr_body
+  body="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  cat <<<"$PR_BODY" >"$body"
+  run_gh pr create --repo "$IN_OWNER/$IN_NAME" --base main --head "$SETUP_BRANCH" --title "Set up $IN_NAME" \
+    --body-file "$body" >"$out" 2>"$err" || rc=$?
+  PR_URL="$(tr -d '\r' <"$out" | grep -E '^https://[^ ]*/pull/[0-9]+$' | tail -1)" || PR_URL=""
+  raw="$(cat "$out" "$err" | tr -d '\r')"
+  rm -f "$body" "$out" "$err"
+  if [ "$rc" -ne 0 ]; then
+    [ -n "$raw" ] || raw="gh stopped with exit code $rc and no message."
+    if [ "$rc" -eq 4 ]; then
+      stop_with_error "gh (the GitHub command-line tool) is not signed in to your GitHub account, so the script could not propose the setup's changes on GitHub." \
+        "$SIGN_IN_CONTINUE_NEXT" "$raw"
+    fi
+    case "$raw" in
+      *"already exists"*)
+        stop_with_error "GitHub already has a proposed change for the line of work $SETUP_BRANCH." \
+          "Open the link below in your browser to see it, then continue the setup with the command shown above." \
+          "$raw"
+        ;;
+    esac
+    stop_with_error "gh (the GitHub command-line tool) could not propose the setup's changes on GitHub." \
+      "Open https://github.com/$IN_OWNER/$IN_NAME/pulls in your browser to see whether the proposed change is there, then continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+      "$raw"
+  fi
+  if [ -z "$PR_URL" ]; then
+    [ -n "$raw" ] || raw="gh stopped with exit code 0 and printed nothing."
+    stop_with_error "gh (the GitHub command-line tool) did not say where the proposed change is." \
+      "Open https://github.com/$IN_OWNER/$IN_NAME/pulls in your browser to see whether it is there, then continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+      "$raw"
+  fi
+  CREATED_NOTE="The project $IN_OWNER/$IN_NAME exists on GitHub, and the setup's changes are proposed there: $PR_URL"
+  step_end "The proposed change is on GitHub: $PR_URL"
+}
+
 # say_left_for_clead: the texts the setup leaves for the first session
 # with Clead (spec step 8), for the report at the end (step 19).
 say_left_for_clead() {
@@ -2757,7 +3221,7 @@ say_left_for_clead() {
 
 # cmd_setup <options...>: the setup. Built so far: the checks of this
 # computer and on GitHub, the inputs, the plan, and steps 2 to 6, 9, 8, 7,
-# 10 and 11 (in that order: see "filling in the placeholders" and
+# and 10 to 14 (in that order: see "filling in the placeholders" and
 # make_lockfile). The
 # options are checked first, then the checks that need no answer (the
 # tools, the GitHub sign-in and the current version), so that nothing is
@@ -2808,10 +3272,14 @@ cmd_setup() {
   make_lockfile
   add_licence
   note_setup_in_changelog
+  self_check
+  save_change
+  send_change
+  propose_change
   say "$CONTINUE_INTRO"
   say_command "bash $RESTART_CMD"
-  fail 1 "The project $IN_OWNER/$IN_NAME was created on GitHub and its main version is protected. Its copy on this computer, in $IN_DIR, has the $IN_PACK pack's files, ready for the next steps. This version of the script stops here: the next steps of the setup are not built yet." \
-    "Use a released version of the bootstrapper to set up a project. The project stays on GitHub and its copy stays in $IN_DIR: the command shown above continues the setup once a version of the script has the next steps. If you do not need them, delete the project on GitHub, in its Settings, and delete the folder $IN_DIR."
+  fail 1 "The project $IN_OWNER/$IN_NAME was created on GitHub and its main version is protected. The setup's changes were saved in its copy on this computer, in $IN_DIR, sent to GitHub and proposed there: $PR_URL. This version of the script stops here: the next steps of the setup are not built yet." \
+    "Use a released version of the bootstrapper to set up a project. The project and its proposed change stay on GitHub and its copy stays in $IN_DIR: the command shown above continues the setup once a version of the script has the next steps (waiting for the project's checks, then adding the change to the main version). If you do not need them, delete the project on GitHub, in its Settings, and delete the folder $IN_DIR."
 }
 
 # ---------- main ----------
