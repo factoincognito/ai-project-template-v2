@@ -2908,16 +2908,18 @@ expected_change() {
 }
 
 # check_changed_paths: with every change staged (git add -A), git status
-# must show only changes the setup makes. CHANGED (an array) holds the
-# paths added or changed, for the key check.
+# must show only changes the setup makes, and no file the setup adds may
+# be ignored by git (a list of files to ignore in the global git settings
+# would leave it out of the change without a word). CHANGED (an array)
+# holds the paths added or changed, for the key check.
 CHANGED=()
 check_changed_paths() {
-  local status err rc=0 raw entry code path f unexpected="" lines=""
+  local status err rc=0 raw entry code path f unexpected="" lines="" ignored="" ignored_lines=""
   fill_rows "$IN_PACK" "$IN_WITH_DEPLOY"
   FILL_FILES="$(while read -r f _; do printf '%s ' "$f"; done <<<"$FILL_ROWS")"
   status="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
   err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  git -C "$IN_DIR" status --porcelain -z --no-renames --untracked-files=all >"$status" 2>"$err" || rc=$?
+  git -C "$IN_DIR" status --porcelain -z --no-renames --untracked-files=all --ignored=traditional >"$status" 2>"$err" || rc=$?
   raw="$(tr -d '\r' <"$err")"
   if [ "$rc" -ne 0 ]; then
     rm -f "$status" "$err"
@@ -2930,6 +2932,13 @@ check_changed_paths() {
   while IFS= read -r -d '' entry; do
     code="${entry:0:2}"
     path="${entry:3}"
+    if [ "$code" = "!!" ]; then
+      if expected_change "A " "$path"; then
+        ignored="$ignored, $path"
+        ignored_lines="$ignored_lines$entry$NL"
+      fi
+      continue
+    fi
     if ! expected_change "$code" "$path"; then
       unexpected="$unexpected, $path"
       lines="$lines$entry$NL"
@@ -2937,10 +2946,15 @@ check_changed_paths() {
     [ "$code" = "D " ] || CHANGED[${#CHANGED[@]}]="$path"
   done <"$status"
   rm -f "$status" "$err"
-  [ -n "$unexpected" ] || return 0
-  stop_with_error "The copy of the project on this computer has changes that the setup did not make, so the script saved and sent nothing: ${unexpected#, }." \
-    "Move those files out of $IN_DIR, or undo your changes to them, then continue the setup with the command shown above. If you did not make them, ask for help and show the details below." \
-    "${lines%"$NL"}"
+  if [ -n "$unexpected" ]; then
+    stop_with_error "The copy of the project on this computer has changes that the setup did not make, so the script saved and sent nothing: ${unexpected#, }." \
+      "Move those files out of $IN_DIR, or undo your changes to them, then continue the setup with the command shown above. If you did not make them, ask for help and show the details below." \
+      "${lines%"$NL"}"
+  fi
+  [ -n "$ignored" ] || return 0
+  stop_with_error "Some files that the setup adds are ignored by git, so they would be left out of the saved change, and the script saved and sent nothing: ${ignored#, }." \
+    "Most likely your global git settings name a list of files to ignore (the setting core.excludesFile, or the file .config/git/ignore in your home folder) that matches them. Remove those lines from that list, then continue the setup with the command shown above. If you cannot find them, ask for help and show the details below." \
+    "${ignored_lines%"$NL"}"
 }
 
 # check_no_key: no file the setup adds or changes holds what looks like a
