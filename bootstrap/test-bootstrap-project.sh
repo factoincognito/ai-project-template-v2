@@ -113,17 +113,92 @@ case "${1:-}" in
     fi
     ;;
   api)
-    # The signed-in account: login, then profile name (empty when the
-    # profile has none), one per line. STUB_GH_LOGIN and STUB_GH_NAME
-    # set them, STUB_GH_CR adds a carriage return to each line (as on
-    # Windows), STUB_GH_USER_ERROR makes the call fail with that text.
-    if [ "$#" -eq 4 ] && [ "$2" = user ] && [ "$3" = --jq ] && [ "$4" = '.login, (.name // "")' ]; then
-      if [ -n "${STUB_GH_USER_ERROR:-}" ]; then
-        printf '%s\n' "$STUB_GH_USER_ERROR" >&2
-        exit 1
+    # gh api -i: the status line, the header lines (ending in \r\n, as gh
+    # prints them), a blank line, then the body; on an HTTP error gh
+    # prints the raw JSON body (no --jq), "gh: <message> (HTTP <n>)" on
+    # stderr, and exits 1. Three calls are emulated:
+    #   - the signed-in account (api -i user --jq ...): login, then
+    #     profile name, one per line. STUB_GH_LOGIN and STUB_GH_NAME set
+    #     them, STUB_GH_CR adds a carriage return to each body line (as
+    #     on Windows). The X-OAuth-Scopes header is STUB_GH_SCOPES
+    #     (default "repo, read:org, gist, workflow"; "-" sends no header,
+    #     as for a fine-grained token). With STUB_GH_SCOPES_LATER set,
+    #     that value is sent once the counter file scopes-old runs out.
+    #   - the bootstrapper's CHANGELOG.md (raw contents): the file
+    #     STUB_GH_CHANGELOG (the harness sets the template's own stub).
+    #   - a project, api -i repos/OWNER/NAME: found (200) when OWNER/NAME
+    #     is in STUB_GH_EXISTING (space-separated) and the counter file
+    #     repo-gone has not run out, else 404.
+    # STUB_GH_USER_FAIL, STUB_GH_CHANGELOG_FAIL and STUB_GH_REPO_FAIL make
+    # those calls fail as <mode> (see emit_failure): always, or while the
+    # counter file user-fails, changelog-fails or repo-fails is above 0.
+    should_fail() {
+      [ -f "${STUB_GH_LOG%/*}/$1" ] || return 0
+      fails_left "$1"
+    }
+    respond() {
+      local st="$1" rs="$2" ctype="$3" h
+      shift 3
+      printf 'HTTP/2.0 %s %s\n' "$st" "$rs"
+      printf 'Content-Type: %s\r\n' "$ctype"
+      for h in "$@"; do printf '%s\r\n' "$h"; done
+      printf '\r\n'
+    }
+    http_error() {
+      respond "$1" "$2" 'application/json; charset=utf-8'
+      printf '{"message":"%s","documentation_url":"https://docs.github.com/rest","status":"%s"}' "$3" "$1"
+      printf 'gh: %s (HTTP %s)\n' "$3" "$1" >&2
+      exit 1
+    }
+    emit_failure() {
+      case "$1" in
+        signed-out)
+          printf '%s\n' 'To get started with GitHub CLI, please run:  gh auth login' \
+            'Alternatively, populate the GH_TOKEN environment variable with a GitHub API authentication token.' >&2
+          exit 4
+          ;;
+        expired) http_error 401 Unauthorized 'Bad credentials' ;;
+        offline)
+          printf '%s\n' 'error connecting to api.github.com' \
+            'check your internet connection or https://githubstatus.com' >&2
+          exit 1
+          ;;
+        server) http_error 503 'Service Unavailable' 'Service Unavailable' ;;
+        rate-limit) http_error 403 Forbidden 'API rate limit exceeded for user ID 1.' ;;
+        forbidden) http_error 403 Forbidden 'Resource not accessible by integration' ;;
+        not-found) http_error 404 'Not Found' 'Not Found' ;;
+        teapot) http_error 418 'I am a teapot' 'Short and stout' ;;
+        *) echo "stub gh: unknown failure mode: $1" >&2; exit 64 ;;
+      esac
+    }
+    if [ "$*" = 'api -i user --jq .login, (.name // "")' ]; then
+      if [ -n "${STUB_GH_USER_FAIL:-}" ] && should_fail user-fails; then emit_failure "$STUB_GH_USER_FAIL"; fi
+      scopes="${STUB_GH_SCOPES-repo, read:org, gist, workflow}"
+      if [ -n "${STUB_GH_SCOPES_LATER+x}" ] && ! fails_left scopes-old; then scopes="$STUB_GH_SCOPES_LATER"; fi
+      if [ "$scopes" = - ]; then
+        respond 200 OK 'application/json; charset=utf-8'
+      else
+        respond 200 OK 'application/json; charset=utf-8' "X-Oauth-Scopes: $scopes"
       fi
       printf '%s%s\n%s%s\n' "${STUB_GH_LOGIN:-octo-user}" "${STUB_GH_CR:-}" \
         "${STUB_GH_NAME-Octo User}" "${STUB_GH_CR:-}"
+    elif [ "$*" = 'api -i -H Accept: application/vnd.github.raw+json repos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md' ]; then
+      if [ -n "${STUB_GH_CHANGELOG_FAIL:-}" ] && should_fail changelog-fails; then emit_failure "$STUB_GH_CHANGELOG_FAIL"; fi
+      : "${STUB_GH_CHANGELOG:?stub gh: STUB_GH_CHANGELOG is not set}"
+      respond 200 OK 'application/vnd.github.raw'
+      cat "$STUB_GH_CHANGELOG"
+    elif [ "$#" -eq 3 ] && [ "$2" = -i ] && [ "${3#repos/}" != "$3" ]; then
+      if [ -n "${STUB_GH_REPO_FAIL:-}" ] && should_fail repo-fails; then emit_failure "$STUB_GH_REPO_FAIL"; fi
+      case " ${STUB_GH_EXISTING:-} " in
+        *" ${3#repos/} "*)
+          if ! fails_left repo-gone; then
+            respond 200 OK 'application/json; charset=utf-8'
+            printf '{"full_name":"%s","private":false}\n' "${3#repos/}"
+            exit 0
+          fi
+          ;;
+      esac
+      emit_failure not-found
     else
       echo "stub gh: no emulation for: $*" >&2; exit 64
     fi
@@ -177,6 +252,13 @@ export BOOTSTRAP_RUN="$WORK/refuse/run" BOOTSTRAP_GH="$WORK/refuse/gh"
 # exist, so no test ever waits on the real terminal and no yes is given
 # unless a test writes one.
 export BOOTSTRAP_TTY="$WORK/no-terminal"
+# The bootstrapper's CHANGELOG.md as the stub gh serves it: the template's
+# own, unstamped stub, so the unstamped script under test finds its own
+# version there. Tests that need another version serve a stamped copy.
+export STUB_GH_CHANGELOG="$REPO/bootstrap/stubs/CHANGELOG.md"
+# A token in the environment changes the permission guide; the tests set
+# one themselves when they need it.
+unset GH_TOKEN GITHUB_TOKEN
 
 # ---------- fake tools and a fake home ----------
 # git is real (its path is kept here); a test that needs git, npm, uname,
@@ -280,18 +362,27 @@ banned_hits() {
 # literal somewhere, so this sees it. The arguments of say_command and
 # run_offered are left out: they are exact commands (checked by
 # command_arg_violations instead).
+# Opt-out (#136 review, note D): a literal that is not a message (text
+# matched against a tool's output, or a command captured in $( )) is
+# left out when it starts and ends on a line whose comment is exactly
+# "# not-a-message". Only this scan honours it: a message helper's text
+# on such a line is still collected by user_strings, and a literal over
+# several lines is never left out.
 literal_strings() {
   awk -v sq="'" '
     function flush() {
-      if (lit ~ / / && !skip) { gsub(/\n/, " ", lit); print start ": " lit }
+      if (lit ~ / / && !skip) { np++; plit[np] = lit; pstart[np] = start }
     }
     {
-      line = $0; n = length(line); i = 1
+      line = $0; n = length(line); i = 1; np = 0; marked = 0
       if (q == "") prefix = ""
       while (i <= n) {
         c = substr(line, i, 1)
         if (q == "") {
-          if (c == "#" && (i == 1 || substr(line, i - 1, 1) ~ /[[:space:];]/)) break
+          if (c == "#" && (i == 1 || substr(line, i - 1, 1) ~ /[[:space:];]/)) {
+            marked = (substr(line, i) ~ /^# not-a-message[[:space:]]*$/)
+            break
+          }
           if (c == "\\") { prefix = prefix substr(line, i, 2); i += 2; continue }
           if (c == "\"" || c == sq) {
             q = c; lit = ""; start = NR
@@ -310,6 +401,10 @@ literal_strings() {
         i++
       }
       if (q != "") lit = lit "\n"
+      for (k = 1; k <= np; k++) {
+        if (marked && pstart[k] == NR) continue
+        gsub(/\n/, " ", plit[k]); print pstart[k] ": " plit[k]
+      }
     }
   ' "$1" | sed -E 's/\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|\$[0-9@*#?]//g'
 }
@@ -818,10 +913,12 @@ test_user_facing_strings_are_collected() {
     'Choose a folder that is empty' 'Check that the languages folder' \
     'There is no default, because only you can choose it' 'Please try again' \
     'not one this script knows' 'needs a value after it' 'Some options are missing or cannot be used' \
-    'a question got no answer' 'Could not read your GitHub account' \
+    'a question got no answer' 'is not signed in to your GitHub account' \
+    'not the current version' 'already exists on GitHub' 'Details for support' \
+    'does not have every permission on GitHub' 'Could not reach GitHub' \
     'Why this is needed: ' 'When it has worked: ' 'If you see something else: ' \
     'How the script checks it: ' 'To start again, run this command' 'git is not installed' \
-    'stops after checking this computer' 'Your name for git' 'Your email address for git'; do
+    'stops after its checks of this computer and of GitHub' 'Your name for git' 'Your email address for git'; do
     grep -qF -- "$t" "$s" || { cat "$s" >&2; die "collector missed: $t"; }
   done
 }
@@ -1285,8 +1382,8 @@ test_defaults_fill_the_options_left_out() {
   expect_inputs "$d" OWNER=octo-user PROJECT_NAME=my-app "PO_NAME=Octo User" \
     "COPYRIGHT_HOLDER=Octo User" VISIBILITY=public WITH_DEPLOY=no DIR=./my-app \
     CI_TIMEOUT=20 SLUG=my-app YES= DRY_RUN= RESUME=
-  # One gh call, with gh's prompts off.
-  [ "$(cat "$d/gh.log")" = "$(printf 'GH_PROMPT_DISABLED=1\tapi\tuser\t--jq\t.login, (.name // "")')" ] \
+  # One gh call, with gh's prompts off: the account, with its headers.
+  [ "$(cat "$d/gh.log")" = "$(printf 'GH_PROMPT_DISABLED=1\tapi\t-i\tuser\t--jq\t.login, (.name // "")')" ] \
     || { cat "$d/gh.log" >&2; die "GitHub was not asked exactly once, as expected"; }
 }
 
@@ -1315,26 +1412,26 @@ test_github_account_answer_has_carriage_returns_removed() {
   expect_inputs "$d" OWNER=octo-user "PO_NAME=Octo User"
   # Removed where the output is read, not only by the later checks.
   make_stub_gh "$d/gh2"
-  [ "$( load_script; STUB_GH_LOG="$d/gh2.log" BOOTSTRAP_GH="$d/gh2" read_github_user
-        printf '%s|%s' "$GH_LOGIN" "$GH_PROFILE_NAME" )" = "octo-user|Octo User" ] \
+  [ "$( load_script; STUB_GH_LOG="$d/gh2.log" BOOTSTRAP_GH="$d/gh2" check_github_account
+        printf '%s|%s|%s' "$GH_LOGIN" "$GH_PROFILE_NAME" "$GH_SCOPES" )" = "octo-user|Octo User|repo,read:org,gist,workflow" ] \
     || die "a carriage return is left in what GitHub answered"
 }
 
 test_github_account_failure_is_explained_with_the_raw_text_below() {
-  # gh's own error text is raw: it is shown only below a plain message
-  # and a next action, for support. Nothing is collected, exit 1.
+  # An answer from GitHub that has no guide (here GitHub's own trouble)
+  # is explained in plain words with the next action; gh's raw text comes
+  # only below, for support. Nothing is collected, exit 1.
   local d
   d="$(tmpdir)"
-  export STUB_GH_USER_ERROR="HTTP 401: Bad credentials (https://api.github.com/user)"
+  export STUB_GH_USER_FAIL=server
   inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}"
   [ "$RC" -eq 1 ] || { cat "$d/err" >&2; die "exit $RC, want 1"; }
-  sed -n 1p "$d/err" | grep -q '^What happened: Could not read your GitHub account' \
+  sed -n 1p "$d/err" | grep -q '^What happened: GitHub had a problem of its own' \
     || { cat "$d/err" >&2; die "no plain message first"; }
-  sed -n 2p "$d/err" | grep -qE '^What to do next: .*--owner' || { cat "$d/err" >&2; die "no next action"; }
+  sed -n 2p "$d/err" | grep -qE '^What to do next: .*few minutes' || { cat "$d/err" >&2; die "no next action"; }
   sed -n 3p "$d/err" | grep -qF 'Details for support' || { cat "$d/err" >&2; die "raw text not introduced"; }
-  sed -n 4p "$d/err" | grep -qxF '    HTTP 401: Bad credentials (https://api.github.com/user)' \
-    || { cat "$d/err" >&2; die "raw text not shown below"; }
-  [ ! -s "$d/out" ] || { cat "$d/out" >&2; die "something went to stdout"; }
+  grep -qxF '    HTTP 503: Service Unavailable' "$d/err" || { cat "$d/err" >&2; die "status and message not shown below"; }
+  grep -qxF '    gh: Service Unavailable (HTTP 503)' "$d/err" || { cat "$d/err" >&2; die "gh's own text not shown below"; }
   [ ! -e "$d/dump" ] || die "answers were collected"
 }
 
@@ -1376,9 +1473,9 @@ test_non_interactive_never_reads_stdin() {
 }
 
 test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
-  # The whole script, as a user runs it. The steps after the checks on
-  # this computer are not built yet: it stops there, with exit 1, having
-  # created nothing.
+  # The whole script, as a user runs it. The steps after the checks of
+  # this computer and of GitHub are not built yet: it stops there, with
+  # exit 1, having created nothing.
   local d rc
   d="$(tmpdir)"
   make_stub_gh "$d/gh"
@@ -1389,16 +1486,22 @@ test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
   ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
     bash "$SCRIPT" --non-interactive "${REQUIRED_OPTS[@]}" ) </dev/null >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "exit $rc, want 1"; }
-  grep -qF 'stops after checking this computer' "$d/err" || { cat "$d/err" >&2; die "no stop message"; }
+  grep -qF 'stops after its checks of this computer and of GitHub' "$d/err" || { cat "$d/err" >&2; die "no stop message"; }
   rc=0
   ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
     bash "$SCRIPT" --non-interactive "${REQUIRED_OPTS[@]}" ) <&- >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "stdin closed: exit $rc, want 1"; }
-  grep -qF 'stops after checking this computer' "$d/err" || { cat "$d/err" >&2; die "stdin closed: no stop message"; }
-  # gh: the two checks on this computer, and the account for the defaults.
-  [ "$(cut -f2- "$d/gh.log" | LC_ALL=C sort -u)" = "$(printf '%s\n' '--version' "$(printf 'api\tuser\t--jq\t.login, (.name // "")')" \
-      "$(printf 'repo\tcreate\t--help')" | LC_ALL=C sort)" ] \
-    || { cat "$d/gh.log" >&2; die "gh was used for more than its checks and reading the account"; }
+  grep -qF 'stops after its checks of this computer and of GitHub' "$d/err" || { cat "$d/err" >&2; die "stdin closed: no stop message"; }
+  # gh: the two checks on this computer, then the GitHub checks (the
+  # account, the published version, the name), every one with gh's own
+  # prompts off; nothing is created.
+  [ "$(cut -f2- "$d/gh.log" | LC_ALL=C sort -u)" = "$(printf '%s\n' '--version' "$(printf 'repo\tcreate\t--help')" \
+      "$(printf 'api\t-i\tuser\t--jq\t.login, (.name // "")')" \
+      "$(printf 'api\t-i\t-H\tAccept: application/vnd.github.raw+json\trepos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md')" \
+      "$(printf 'api\t-i\trepos/octo-user/my-app')" | LC_ALL=C sort)" ] \
+    || { cat "$d/gh.log" >&2; die "gh was used for more than its checks"; }
+  [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] \
+    || { cat "$d/gh.log" >&2; die "a gh call ran with gh's prompts on"; }
   [ -z "$(ls -A "$d/cwd")" ] || { ls -A "$d/cwd" >&2; die "something was created"; }
 }
 
@@ -1906,6 +2009,9 @@ test_a_guide_shows_again_until_the_check_passes() {
   expect_rc 0 "$d"
   [ "$(grep -c '^git is not installed\.$' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "the guide was not shown twice"; }
   [ "$(grep -c '^git --version' "$d/tools.log")" -eq 3 ] || die "git was not checked three times"
+  # Each showing numbers its steps from 1 (#148 review, finding 1).
+  [ "$(grep -c '^  1\. ' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "the second showing does not start at 1."; }
+  ! grep -q '^  3\. ' "$d/out" || { cat "$d/out" >&2; die "the step numbers carried on into the second showing"; }
 }
 
 test_stopping_at_a_guide_prints_the_command_to_start_again() {
@@ -2278,6 +2384,53 @@ test_a_folder_starting_with_a_tilde_is_in_the_home_folder() {
   accepts --dir "a~b" "DIR=a~b"
 }
 
+test_git_defaults_are_the_global_settings_not_those_of_a_local_project() {
+  # #148 review, finding 1: started inside a git project whose own
+  # settings hold another name and email, the defaults are still the
+  # global ones (git config --global, not --get, which would read the
+  # project's own settings first).
+  local d
+  d="$(tmpdir)"
+  fake_home "$d/home" "Grace Hopper" grace@example.com
+  mkdir -p "$d/cwd"
+  "$REAL_GIT" init -q "$d/cwd"
+  "$REAL_GIT" -C "$d/cwd" config user.name "Local Person"
+  "$REAL_GIT" -C "$d/cwd" config user.email local@example.com
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner a --po-name b
+  expect_inputs "$d" "GIT_NAME=Grace Hopper" GIT_EMAIL=grace@example.com
+}
+
+test_a_tilde_folder_is_refused_when_the_home_folder_is_not_known() {
+  # #148 review, finding 1: the branch of check_dir for an empty HOME.
+  local h
+  for h in empty unset; do
+    ( load_script
+      if [ "$h" = empty ]; then HOME=""; else unset HOME; fi
+      ! check_dir "~/projects/app" || die "HOME $h: ~/projects/app was taken as $CHECKED"
+      case "$PROBLEM" in
+        *"home folder is not known"*"full path"*) ;;
+        *) die "HOME $h: problem not explained: $PROBLEM" ;;
+      esac
+      check_dir "/tmp/app" || die "HOME $h: a full path was refused"
+    ) || exit 1
+  done
+}
+
+test_a_dangling_link_at_the_folder_path_is_refused_like_a_file() {
+  # #148 review, finding 1: a symbolic link whose target is gone is not
+  # "absent": the copy cannot be made there, with or without --resume.
+  local d
+  d="$(tmpdir)"
+  ln -s "$d/gone" "$d/link" 2>/dev/null || { echo "no symbolic links here; skipped" >&2; return 0; }
+  [ -L "$d/link" ] && [ ! -e "$d/link" ] || { echo "not a dangling link here; skipped" >&2; return 0; }
+  pre "$d" ni with_dir "$d/link" preflight_target_dir
+  expect_rc 3 "$d"
+  expect_out "$d" "$d/link is a file, not a folder."
+  pre "$d" ni resume with_dir "$d/link" preflight_target_dir
+  expect_rc 3 "$d"
+  [ -L "$d/link" ] || die "the link was touched"
+}
+
 test_git_name_and_email_default_from_the_global_git_settings() {
   local d
   d="$(tmpdir)"
@@ -2332,7 +2485,8 @@ test_git_name_and_email_are_checked_like_the_other_names() {
     refuses --git-name "a${c}b"
     refuses --git-email "a${c}b@example.com"
   done
-  refuses --git-email "ada" "ada@" "@example.com" "ada lovelace@example.com" "ada@exa mple.com"
+  refuses --git-email "ada" "ada@" "@example.com" "ada lovelace@example.com" "ada@exa mple.com" \
+    "a@b@c"
   accepts --git-name "Ada Lovelace | Team" "GIT_NAME=Ada Lovelace | Team"
   accepts --git-email " ada@example.com " GIT_EMAIL=ada@example.com
   # A name from the git settings that cannot be used is refused with its
@@ -2369,14 +2523,17 @@ test_checks_on_this_computer_come_before_any_github_call_and_question() {
   expect_rc 3 "$d"
   ! grep -q "$(printf '\tapi\t')" "$d/gh.log" || { cat "$d/gh.log" >&2; die "GitHub was asked before the checks passed"; }
   expect_no_out "$d" "Project name"
-  # All pass: the tool checks come first, then the account.
+  # All pass: the tool checks come first, then the account and the
+  # published version (before the questions), then the name.
   d="$(tmpdir)"
   working_git "$d"
   fake_tool "$d" npm 10.0.0
   whole "$d" --non-interactive "${REQUIRED_OPTS[@]}"
   expect_rc 1 "$d"
-  [ "$(cut -f2 "$d/gh.log" | tr '\n' ' ')" = "--version repo api " ] \
-    || { cat "$d/gh.log" >&2; die "gh calls not in the order: checks, then the account"; }
+  [ "$(awk -F'\t' '{ print $2 " " $NF }' "$d/gh.log")" = "$(printf '%s\n' '--version --version' 'repo --help' \
+      'api .login, (.name // "")' 'api repos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md' \
+      'api repos/octo-user/my-app')" ] \
+    || { cat "$d/gh.log" >&2; die "gh calls not in the order: tools, account, version, name"; }
 }
 
 test_npm_and_folder_checks_come_after_the_questions() {
@@ -2401,11 +2558,21 @@ test_npm_and_folder_checks_come_after_the_questions() {
   expect_out "$d" "The folder ./my-app already has files in it."
 }
 
-# guide_text <dir> <os> <guide function> [setup...]: the guide's output.
+# guide_cases: every guide, as a function to run after detect_os. The
+# GitHub guides read what their check found; the gg_ wrappers set it.
 guide_cases() {
   printf '%s\n' guide_git guide_gh_missing guide_gh_old guide_npm guide_dir_not_empty \
-    guide_dir_is_file guide_bash_old
+    guide_dir_is_file guide_bash_old gg_signed_out gg_expired gg_offline gg_permissions \
+    gg_permissions_repo gg_permissions_token gg_old_script gg_project_exists
 }
+gg_signed_out() { ACCOUNT_PROBLEM=signed-out; guide_github_account; }
+gg_expired() { ACCOUNT_PROBLEM=expired; API_STATUS=401; API_MESSAGE="Bad credentials"; guide_github_account; }
+gg_offline() { ACCOUNT_PROBLEM=offline; API_ERR="error connecting to api.github.com"; guide_github_account; }
+gg_permissions() { PERM_PROBLEM=missing; PERM_MISSING=workflow; IN_VISIBILITY=public; guide_github_permissions; }
+gg_permissions_repo() { PERM_PROBLEM=missing; PERM_MISSING="repo workflow"; IN_VISIBILITY=private; guide_github_permissions; }
+gg_permissions_token() { GH_TOKEN=x; PERM_PROBLEM=missing; PERM_MISSING=workflow; IN_VISIBILITY=public; guide_github_permissions; }
+gg_old_script() { PUBLISHED_VERSION=v9.9.9; guide_old_script; }
+gg_project_exists() { IN_OWNER=acme; IN_NAME=my-app; guide_project_exists; }
 
 test_every_guide_says_why_how_what_you_see_and_how_it_is_checked() {
   # Ease-of-use requirements: every guide says why the step is needed,
@@ -2478,6 +2645,462 @@ test_every_say_command_call_on_a_line_is_checked() {
   [ "$n" -eq 3 ] || { printf '%s\n' "$hits" >&2; die "flagged $n, want the first 3 planted lines"; }
   ! printf '%s\n' "$hits" | awk -F'[:\t]' -v f="$from" '$1 == f + 4' | grep -q . \
     || { printf '%s\n' "$hits" >&2; die "two good commands on one line were flagged"; }
+}
+
+test_the_literal_scan_opt_out_marker_leaves_out_only_its_own_line() {
+  # #136 review, note D: matching a tool's own text (here gh's) needs a
+  # literal with a banned word in it. "# not-a-message" at the end of
+  # the line leaves that line's literals out of the scan, and nothing
+  # else: the same literal unmarked, a marked message helper call, a
+  # literal on the next line, a marker that is not the whole comment and
+  # a literal over several lines are all still caught.
+  local copy hits from got
+  copy="$(plant 'cmd_x() {' \
+    '  case "$raw" in *"Repository not found"*) ;; esac # not-a-message' \
+    '  case "$raw" in *"Repository not found"*) ;; esac' \
+    '  say "The repo was not found." # not-a-message' \
+    '  # not-a-message' \
+    '  local m="Open the repo page"' \
+    '  x="the repo"; y="other text" # not-a-message: gh text' \
+    '  help="$(run_gh repo create --help 2>&1)" || help="" # not-a-message' \
+    '  z="first line # not-a-message' \
+    '  the repo"' \
+    '}')"
+  from="$(planted_from)"
+  hits="$(all_banned_hits "$copy" | only_planted "$from")"
+  got="$(printf '%s\n' "$hits" | awk -F: -v f="$from" 'NF { printf "%s%d", sep, $1 - f + 1; sep = " " }')"
+  [ "$got" = "3 4 6 7 9" ] || { printf '%s\n' "$hits" >&2; die "flagged planted lines [$got], want [3 4 6 7 9]"; }
+}
+
+test_ask_terminal_says_no_at_once_when_there_is_no_terminal() {
+  # #148 review, finding 2: with no terminal to read from, the answer is
+  # no, the question line is ended, and nothing is read from stdin.
+  local d
+  d="$(tmpdir)"
+  printf 'yes\n' >"$d/in"
+  set +e
+  ( load_script
+    export BOOTSTRAP_TTY="$d/no-such-terminal"
+    rc=0
+    ask_terminal "Why it is asked, in a sentence." "Run it now? (yes or no)" || rc=$?
+    echo "rc=$rc"
+    IFS= read -r line; echo "stdin=$line"
+  ) <"$d/in" >"$d/out" 2>"$d/err"
+  set -e
+  [ "$(cat "$d/out")" = "$(printf '%s\n' 'Why it is asked, in a sentence.' 'Run it now? (yes or no) [no]: ' 'rc=1' 'stdin=yes')" ] \
+    || { cat "$d/out" "$d/err" >&2; die "no terminal: not a plain no"; }
+  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "an error was shown"; }
+}
+
+test_non_interactive_reports_every_option_problem_before_the_checks() {
+  # #148 review, finding 5: with --non-interactive the options are checked
+  # before the checks of this computer and of GitHub, so one run lists
+  # every missing or wrong option even when gh is missing.
+  local d
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  working_git "$d"
+  echo 9999 >"$d/gh-missing"
+  whole "$d" --non-interactive --name my-app --pack nodes
+  expect_rc 2 "$d"
+  grep -qE -- '^    - --pack: ' "$d/err" || { cat "$d/err" >&2; die "the wrong pack was not listed"; }
+  grep -qE -- '^    - --description: ' "$d/err" || { cat "$d/err" >&2; die "the missing description was not listed"; }
+  grep -qE -- '^    - --license: ' "$d/err" || { cat "$d/err" >&2; die "the missing licence was not listed"; }
+  [ ! -e "$d/gh.log" ] || { cat "$d/gh.log" >&2; die "gh was used before the options were reported"; }
+  expect_no_out "$d" "==> Checking"
+  # With git missing, git's settings cannot be read: the git name and
+  # email are not reported as missing; the git guide comes first.
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  missing "$d" git
+  fake_home "$d/home"
+  whole "$d" --non-interactive "${REQUIRED_OPTS[@]}"
+  expect_rc 3 "$d"
+  expect_out "$d" "git is not installed."
+  ! grep -q -- '--git-name' "$d/err" || { cat "$d/err" >&2; die "the git name was listed although git is missing"; }
+}
+
+# ---------- guided preflight: GitHub checks ----------
+# After the checks of this computer and before the questions, the script
+# checks that gh is signed in to GitHub (gh api -i user, which also gives
+# the defaults for the owner and product owner name and the permissions
+# gh has) and that it is the current published version (CHANGELOG.md of
+# the bootstrapper, read through the contents API). After the questions
+# it checks that gh has the permissions the setup needs for the chosen
+# visibility, and that OWNER/NAME does not exist yet. Each uses the same
+# guided loop as the checks of this computer. An answer from GitHub that
+# has no guide stops with a plain message, the next action and gh's raw
+# text below it, exit 1.
+
+with_vis() { IN_VISIBILITY="$1"; shift; "$@"; }
+with_project() { IN_OWNER="$1"; IN_NAME="$2"; shift 2; "$@"; }
+
+# expect_err_shape <dir> <first line pattern>: the plain error, then the
+# next action, then the raw text under "Details for support".
+expect_err_shape() {
+  sed -n 1p "$1/err" | grep -qE "^What happened: $2" || { cat "$1/err" >&2; die "first line is not: $2"; }
+  sed -n 2p "$1/err" | grep -qE '^What to do next: .{10,}' || { cat "$1/err" >&2; die "no next action"; }
+  sed -n 3p "$1/err" | grep -qxF 'Details for support (you can ignore these):' || { cat "$1/err" >&2; die "raw text not introduced"; }
+  [ "$(sed -n '4,$p' "$1/err" | grep -vc '^    ')" -eq 0 ] || { cat "$1/err" >&2; die "raw text not indented below"; }
+}
+
+test_a_signed_out_gh_is_guided_to_sign_in() {
+  # gh exits 4 when it is not signed in. The guide shows the sign-in
+  # command of the README's step 0 for the user to run; it is not offered
+  # (signing in is the README's step 0, done before the script exists).
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_USER_FAIL=signed-out
+  printf 'yes\n' >"$d/tty"
+  pre "$d" ni preflight_github_account
+  expect_rc 3 "$d"
+  expect_out "$d" "gh (the GitHub command-line tool) is not signed in to your GitHub account."
+  grep -qxF '    gh auth login -h github.com -p https -w -s workflow' "$d/out" \
+    || { cat "$d/out" >&2; die "the sign-in command is not shown"; }
+  expect_out "$d" "Authenticate Git"
+  expect_out "$d" "To start again, run this command:"
+  expect_no_out "$d" "Run it now?"
+  expect_nothing_ran "$d"
+  sed -n 1p "$d/err" | grep -qE '^What happened: gh .* is not signed in' || { cat "$d/err" >&2; die "no plain error"; }
+  # Interactive: signed in while the script waits, Enter checks again.
+  d="$(tmpdir)"
+  echo 1 >"$d/user-fails"
+  printf '\n' >"$d/in"
+  pre "$d" preflight_github_account
+  expect_rc 0 "$d"
+  expect_out "$d" "Press Enter to check again"
+  [ "$(tail -1 "$d/out")" = "    Done. gh is signed in to GitHub as octo-user." ] || { cat "$d/out" >&2; die "no done line"; }
+  [ "$(grep -c "$(printf '\tuser\t')" "$d/gh.log")" -eq 2 ] || { cat "$d/gh.log" >&2; die "the account was not read twice"; }
+}
+
+test_a_sign_in_github_no_longer_accepts_is_guided_with_details() {
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_USER_FAIL=expired
+  pre "$d" ni preflight_github_account
+  expect_rc 3 "$d"
+  expect_out "$d" "GitHub no longer accepts the sign-in that gh (the GitHub command-line tool) has on this computer."
+  grep -qxF '    gh auth login -h github.com -p https -w -s workflow' "$d/out" || { cat "$d/out" >&2; die "no sign-in command"; }
+  expect_out "$d" "Details for support (you can ignore these):"
+  grep -qxF '    HTTP 401: Bad credentials' "$d/out" || { cat "$d/out" >&2; die "raw text not shown below the guide"; }
+}
+
+test_github_out_of_reach_is_guided_and_checked_again() {
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_USER_FAIL=offline
+  echo 1 >"$d/user-fails"
+  printf '\n' >"$d/in"
+  pre "$d" preflight_github_account
+  expect_rc 0 "$d"
+  expect_out "$d" "The script could not reach GitHub."
+  expect_out "$d" "https://www.githubstatus.com"
+  grep -qxF '    error connecting to api.github.com' "$d/out" || { cat "$d/out" >&2; die "gh's text not shown below the guide"; }
+  [ "$(tail -1 "$d/out")" = "    Done. gh is signed in to GitHub as octo-user." ] || { cat "$d/out" >&2; die "no done line"; }
+}
+
+test_other_github_errors_are_explained_with_the_raw_text_below() {
+  # Every other answer: a plain message chosen from the status and the
+  # message GitHub sent, the next action, the command to start again,
+  # and the raw text below, exit 1; for each GitHub call of the preflight.
+  local d mode want
+  for mode in "server GitHub had a problem of its own" "rate-limit GitHub has paused" \
+    "forbidden GitHub refused" "teapot Something unexpected happened"; do
+    want="${mode#* }"; mode="${mode%% *}"
+    d="$(tmpdir)"
+    export STUB_GH_USER_FAIL="$mode"
+    pre "$d" ni preflight_github_account
+    expect_rc 1 "$d"
+    expect_err_shape "$d" "$want"
+    grep -qE '^    HTTP [0-9]{3}: .' "$d/err" || { cat "$d/err" >&2; die "$mode: status and message not below"; }
+    grep -qE '^    gh: .*\(HTTP [0-9]{3}\)$' "$d/err" || { cat "$d/err" >&2; die "$mode: gh's text not below"; }
+    expect_out "$d" "To start again, run this command:"
+    unset STUB_GH_USER_FAIL
+  done
+  d="$(tmpdir)"
+  export STUB_GH_CHANGELOG_FAIL=not-found
+  pre "$d" ni preflight_published_version
+  expect_rc 1 "$d"
+  expect_err_shape "$d" ".*(current version|bootstrapper)"
+  grep -qxF '    HTTP 404: Not Found' "$d/err" || { cat "$d/err" >&2; die "404 not shown below"; }
+  unset STUB_GH_CHANGELOG_FAIL
+  d="$(tmpdir)"
+  export STUB_GH_REPO_FAIL=forbidden
+  pre "$d" ni with_project acme my-app preflight_project_absent
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "GitHub refused"
+  grep -qxF '    HTTP 403: Resource not accessible by integration' "$d/err" || { cat "$d/err" >&2; die "403 not shown below"; }
+}
+
+test_github_sign_in_is_checked_before_the_questions() {
+  # #146 review note: a user who is not signed in got exit 1 partway
+  # through the questions. Now the sign-in is checked before the first
+  # question, with its guide (exit 3 with --non-interactive), also when
+  # the owner and product owner name are given and need no default.
+  local d
+  d="$(tmpdir)"
+  working_git "$d"
+  export STUB_GH_USER_FAIL=signed-out
+  printf '%s\n' my-app q >"$d/in"
+  whole "$d"
+  expect_rc 3 "$d"
+  expect_out "$d" "is not signed in to your GitHub account."
+  expect_no_out "$d" "Project name"
+  d="$(tmpdir)"
+  working_git "$d"
+  whole "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner acme --po-name Ada
+  expect_rc 3 "$d"
+  expect_out "$d" "is not signed in to your GitHub account."
+  unset STUB_GH_USER_FAIL
+  # Signed in: the answers to the questions use the account it read,
+  # which is read once.
+  d="$(tmpdir)"
+  working_git "$d"
+  fake_tool "$d" npm 10.0.0
+  printf '%s\n' my-app "" "Lends tools." "" "" python "" none "" "" "" >"$d/in"
+  whole "$d"
+  expect_rc 1 "$d"
+  expect_out "$d" "Owner [octo-user]: "
+  [ "$(grep -c "$(printf '\tuser\t')" "$d/gh.log")" -eq 2 ] \
+    || { cat "$d/gh.log" >&2; die "the account was not read once before the questions and once for the permissions"; }
+  grep -n '==> Checking that gh is signed in' "$d/out" | head -1 | cut -d: -f1 >"$d/a"
+  grep -n '^Project name: ' "$d/out" | head -1 | cut -d: -f1 >"$d/q"
+  [ "$(cat "$d/a")" -lt "$(cat "$d/q")" ] || { cat "$d/out" >&2; die "the sign-in was checked after the questions"; }
+}
+
+test_a_missing_workflow_permission_offers_the_refresh_and_checks_again() {
+  # The refresh runs only after a yes typed at the terminal, through the
+  # runner, with gh's prompts on for that one command; then the check
+  # runs again at once.
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_SCOPES="repo, read:org, gist" STUB_GH_SCOPES_LATER="repo, read:org, gist, workflow"
+  echo 1 >"$d/scopes-old"
+  printf 'yes\n' >"$d/tty"
+  prepare "$d"
+  cat >"$d/run" <<'RUN'
+#!/usr/bin/env bash
+printf '%s|%s\n' "$*" "${GH_PROMPT_DISABLED-<unset>}" >>"$STUB_RUN_LOG"
+RUN
+  chmod +x "$d/run"
+  pre "$d" with_vis public preflight_github_permissions
+  expect_rc 0 "$d"
+  expect_out "$d" "does not have every permission on GitHub that the setup needs."
+  expect_out "$d" "workflow (to add and change the files that run your project's checks)"
+  grep -qxF '    gh auth refresh -h github.com -s workflow' "$d/out" || { cat "$d/out" >&2; die "the refresh command is not shown"; }
+  expect_out "$d" "https://github.com/login/device"
+  [ "$(cat "$d/run.log")" = "gh auth refresh -h github.com -s workflow|<unset>" ] \
+    || { cat "$d/run.log" >&2; die "the refresh did not run once, with gh's prompts on"; }
+  expect_no_out "$d" "Press Enter"
+  [ "$(tail -1 "$d/out")" = "    Done. gh has the permissions on GitHub that the setup needs." ] || { cat "$d/out" >&2; die "no done line"; }
+  ! grep -q "$(printf '\tauth\t')" "$d/gh.log" || die "the refresh ran through gh with prompts off"
+}
+
+test_the_refresh_asks_for_every_missing_permission() {
+  # Public: public_repo (or repo) and workflow; private: repo and
+  # workflow. The offer adds whatever is missing to workflow.
+  local d c vis scopes want
+  for c in "public|read:org, gist|gh auth refresh -h github.com -s public_repo,workflow" \
+    "private|public_repo, workflow|gh auth refresh -h github.com -s repo,workflow" \
+    "private|read:org|gh auth refresh -h github.com -s repo,workflow" \
+    "public|public_repo|gh auth refresh -h github.com -s workflow" \
+    "private|repo|gh auth refresh -h github.com -s workflow"; do
+    vis="${c%%|*}"; scopes="${c#*|}"; want="${scopes#*|}"; scopes="${scopes%%|*}"
+    d="$(tmpdir)"
+    export STUB_GH_SCOPES="$scopes"
+    printf 'yes\n' >"$d/tty"
+    printf 'q\n' >"$d/in"
+    pre "$d" with_vis "$vis" preflight_github_permissions
+    expect_rc 3 "$d"
+    grep -qxF "    $want" "$d/out" || { cat "$d/out" >&2; die "$c: offer not shown"; }
+    # What ran is exactly what was shown, once.
+    [ "$(cat "$d/run.log")" = "$want" ] || { cat "$d/run.log" >&2; die "$c: ran something else"; }
+  done
+  for c in "public|public_repo, workflow" "public|repo, workflow" "private|repo, workflow, gist"; do
+    d="$(tmpdir)"
+    export STUB_GH_SCOPES="${c#*|}"
+    pre "$d" ni with_vis "${c%%|*}" preflight_github_permissions
+    expect_rc 0 "$d"
+    expect_no_out "$d" "does not have every permission"
+  done
+}
+
+test_the_refresh_never_runs_without_a_yes_typed_at_the_terminal() {
+  local d answer
+  export STUB_GH_SCOPES="repo"
+  for answer in no "" maybe; do
+    d="$(tmpdir)"
+    printf '%s\n' "$answer" >"$d/tty"
+    printf 'q\n' >"$d/in"
+    pre "$d" with_vis public preflight_github_permissions
+    expect_rc 3 "$d"
+    expect_nothing_ran "$d"
+    expect_out "$d" "Not run."
+  done
+  # A yes on stdin, or --yes, does not approve it.
+  d="$(tmpdir)"
+  : >"$d/tty"
+  printf '%s\n' yes q >"$d/in"
+  pre "$d" yes_opt with_vis public preflight_github_permissions
+  expect_rc 3 "$d"
+  expect_nothing_ran "$d"
+}
+
+test_a_token_from_the_environment_is_not_refreshed() {
+  # A token in GH_TOKEN or GITHUB_TOKEN cannot be given more permissions
+  # by gh, and changing it needs a new window: no offer, no wait, exit 3.
+  local d v
+  for v in GH_TOKEN GITHUB_TOKEN; do
+    d="$(tmpdir)"
+    export STUB_GH_SCOPES="repo" "$v=ghp_faketoken000000000000000000000000000"
+    printf 'yes\n' >"$d/tty"
+    printf '\n\n' >"$d/in"
+    pre "$d" with_vis public preflight_github_permissions
+    expect_rc 3 "$d"
+    expect_out "$d" "https://github.com/settings/tokens"
+    expect_no_out "$d" "Run it now?"
+    expect_no_out "$d" "Press Enter"
+    expect_nothing_ran "$d"
+    ! grep -q ghp_faketoken "$d/out" "$d/err" || die "$v: the token was shown"
+    unset "$v"
+  done
+}
+
+test_a_fine_grained_token_gets_a_warning_and_the_setup_carries_on() {
+  # No X-OAuth-Scopes header: the script cannot see the permissions, so
+  # it names the ones the setup needs and carries on.
+  local d p
+  d="$(tmpdir)"
+  export STUB_GH_SCOPES=-
+  pre "$d" ni with_vis private preflight_github_permissions
+  expect_rc 0 "$d"
+  expect_out "$d" "fine-grained token"
+  for p in Administration Contents Workflows "Pull requests" "Read and write" "create repositories (new projects on GitHub)"; do
+    expect_out "$d" "$p"
+  done
+  expect_no_out "$d" "does not have every permission"
+  expect_nothing_ran "$d"
+  grep -q '^    Done\. ' "$d/out" || { cat "$d/out" >&2; die "no done line"; }
+}
+
+test_an_older_script_is_told_to_download_the_current_one() {
+  # The published CHANGELOG names another version: the steps give the
+  # download command of the README and the command to start the new copy
+  # again; no Enter wait (a re-check in this run cannot change the
+  # script), exit 3, nothing created.
+  local d
+  d="$(tmpdir)"
+  sed -e 's/{{TEMPLATE_VERSION}}/v9.9.9/' -e "s/{{TEMPLATE_COMMIT}}/$(printf '%040d' 0)/" \
+    "$REPO/bootstrap/stubs/CHANGELOG.md" >"$d/published.md"
+  export STUB_GH_CHANGELOG="$d/published.md"
+  working_git "$d"
+  printf '\n\n' >"$d/in"
+  whole "$d" --name my-app --description "Lends tools."
+  expect_rc 3 "$d"
+  expect_out "$d" "This copy of the script is not the current version"
+  expect_out "$d" "v9.9.9"
+  grep -qxF '    gh api repos/factoincognito/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh' "$d/out" \
+    || { cat "$d/out" >&2; die "the download command is not shown"; }
+  grep -qxF "    bash bootstrap-project.sh --name my-app --description 'Lends tools.'" "$d/out" \
+    || { cat "$d/out" >&2; die "the command to start the downloaded copy is not shown"; }
+  expect_no_out "$d" "Press Enter"
+  expect_no_out "$d" "Project name"
+  [ -z "$(ls -A "$d/cwd")" ] || die "something was created"
+}
+
+test_the_published_version_is_compared_with_the_script_version() {
+  # The unstamped script (in the template) matches the template's own
+  # unstamped CHANGELOG stub; a stamped copy matches the same stamp and
+  # not another one.
+  local d sha
+  sha="$(printf '%040d' 0)"
+  d="$(tmpdir)"
+  pre "$d" ni preflight_published_version
+  expect_rc 0 "$d"
+  grep -q '^    Done\. This is the current version of the script' "$d/out" || { cat "$d/out" >&2; die "no done line"; }
+  d="$(tmpdir)"
+  sed -e 's/{{TEMPLATE_VERSION}}/v2.4.0/' -e "s/{{TEMPLATE_COMMIT}}/$sha/" \
+    "$REPO/bootstrap/stubs/CHANGELOG.md" >"$d/published.md"
+  export STUB_GH_CHANGELOG="$d/published.md"
+  pre "$d" ni eval 'SCRIPT_VERSION=v2.4.0; preflight_published_version'
+  expect_rc 0 "$d"
+  pre "$d" ni eval 'SCRIPT_VERSION=v2.3.0; preflight_published_version'
+  expect_rc 3 "$d"
+  expect_out "$d" "v2.3.0"
+  expect_out "$d" "v2.4.0"
+}
+
+test_the_published_version_is_read_from_the_built_changelog() {
+  # The parser reads the CHANGELOG.md that build.sh really ships, and
+  # finds the version stamped into the shipped script.
+  local out="$WORK/built.$RANDOM" got want
+  bash "$REPO/bootstrap/build.sh" "$out" v7.8.9 "$(printf '%040d' 1)" >/dev/null || die "build failed"
+  want="$(sed -n "s/^SCRIPT_VERSION='\(.*\)'$/\1/p" "$out/bootstrap-project.sh")"
+  [ "$want" = v7.8.9 ] || die "the shipped script is not stamped v7.8.9: $want"
+  got="$( load_script; read_published_version "$(cat "$out/CHANGELOG.md")" && printf '%s' "$PUBLISHED_VERSION" )" \
+    || die "no version found in the built CHANGELOG.md"
+  [ "$got" = "$want" ] || die "read $got from the built CHANGELOG.md, want $want"
+  # Carriage returns (a copy saved on Windows) do not change it.
+  got="$( load_script; read_published_version "$(sed 's/$/\r/' "$out/CHANGELOG.md")" && printf '%s' "$PUBLISHED_VERSION" )"
+  [ "$got" = "$want" ] || die "with carriage returns: read $got"
+}
+
+test_a_changelog_without_a_version_is_explained() {
+  local d
+  d="$(tmpdir)"
+  printf '%s\n' '# Changelog' '' 'Nothing here.' >"$d/published.md"
+  export STUB_GH_CHANGELOG="$d/published.md"
+  pre "$d" ni preflight_published_version
+  expect_rc 1 "$d"
+  expect_err_shape "$d" ".*version"
+}
+
+test_an_existing_project_is_refused_unless_resume() {
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_EXISTING="acme/my-app"
+  pre "$d" ni with_project acme my-app preflight_project_absent
+  expect_rc 3 "$d"
+  expect_out "$d" "A project named acme/my-app already exists on GitHub."
+  expect_out "$d" "--name"
+  expect_out "$d" "--resume"
+  expect_out "$d" "https://github.com/acme/my-app"
+  pre "$d" ni resume with_project acme my-app preflight_project_absent
+  expect_rc 0 "$d"
+  expect_out "$d" "    Done. The project acme/my-app exists on GitHub, which --resume allows."
+  pre "$d" ni with_project acme other-app preflight_project_absent
+  expect_rc 0 "$d"
+  expect_out "$d" "    Done. No project named acme/other-app exists on GitHub yet."
+  # Interactive: renamed or deleted on GitHub while the script waits.
+  d="$(tmpdir)"
+  echo 1 >"$d/repo-gone"
+  printf '\n' >"$d/in"
+  pre "$d" with_project acme my-app preflight_project_absent
+  expect_rc 0 "$d"
+  expect_out "$d" "Press Enter to check again"
+  [ "$(tail -1 "$d/out")" = "    Done. No project named acme/my-app exists on GitHub yet." ] || { cat "$d/out" >&2; die "no done line"; }
+}
+
+test_the_name_and_permissions_are_checked_after_the_questions() {
+  # They need the answers (owner, name, visibility); a whole run with the
+  # name taken stops there, after the last question.
+  local d
+  d="$(tmpdir)"
+  working_git "$d"
+  export STUB_GH_EXISTING="octo-user/my-app" STUB_GH_SCOPES="repo"
+  printf '%s\n' my-app "" "Lends tools." "" "" python "" none "" "" "" >"$d/in"
+  printf 'no\n' >"$d/tty"
+  whole "$d"
+  expect_rc 3 "$d"
+  grep -n 'Your email address for git' "$d/out" | head -1 | cut -d: -f1 >"$d/q"
+  grep -n 'does not have every permission' "$d/out" | head -1 | cut -d: -f1 >"$d/g"
+  [ -s "$d/g" ] && [ "$(cat "$d/q")" -lt "$(cat "$d/g")" ] || { cat "$d/out" >&2; die "permissions not checked after the questions"; }
+  d="$(tmpdir)"
+  working_git "$d"
+  export STUB_GH_SCOPES="repo, workflow"
+  whole "$d" --non-interactive "${REQUIRED_OPTS[@]}" --pack python
+  expect_rc 3 "$d"
+  expect_out "$d" "A project named octo-user/my-app already exists on GitHub."
 }
 
 # ---------- run ----------
