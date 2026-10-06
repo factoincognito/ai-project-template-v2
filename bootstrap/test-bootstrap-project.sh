@@ -133,7 +133,7 @@ emit_failure() {
     forbidden) http_error 403 Forbidden 'Resource not accessible by integration' ;;
     not-found) http_error 404 'Not Found' 'Not Found' ;;
     teapot) http_error 418 'I am a teapot' 'Short and stout' ;;
-    too-many) http_error 429 'Too Many Requests' 'You have exceeded a secondary rate limit.' ;;
+    too-many) http_error 429 'Too Many Requests' 'Too Many Requests' ;;
     plan) http_error 403 Forbidden 'Upgrade to GitHub Pro or make this repository public to enable this feature.' ;;
     token) http_error 403 Forbidden 'Resource not accessible by personal access token' ;;
     mystery) http_error 403 Forbidden 'Something about this request was refused.' ;;
@@ -3629,7 +3629,8 @@ test_the_lines_that_opt_out_of_the_literal_scan_are_pinned() {
 test_a_404_or_429_gets_the_next_action_of_its_own_call() {
   # #149 review, finding 3: the 404 on the bootstrapper's CHANGELOG.md is
   # not about names the user gave; a 429 (GitHub's secondary rate limit)
-  # shares the rate-limit text.
+  # shares the rate-limit text. The stub's 429 message does not say "rate
+  # limit", so the status alone must map it.
   local d
   d="$(tmpdir)"
   export STUB_GH_CHANGELOG_FAIL=not-found
