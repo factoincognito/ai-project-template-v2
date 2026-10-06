@@ -430,7 +430,10 @@ STUB
 # show that the script keeps npm away from the answers on stdin).
 # STUB_NPM_CRLF set: the lockfile has Windows line endings (CR LF), as a
 # tool on Windows might write it. STUB_NPM_STRAY=<name>: npm also leaves
-# a file of that name in the folder it ran in.
+# a file of that name in the folder it ran in. STUB_NPM_TOUCH=<path>: npm
+# also adds a line to that file of the folder; STUB_NPM_DELETE=<path>:
+# npm also deletes it (#155 review, finding 1: a changed or deleted file
+# the setup does not change).
 
 make_stub_npm() {
   local path="$1"
@@ -479,6 +482,8 @@ if [ -n "${STUB_NPM_CRLF:-}" ]; then
   mv package-lock.json.tmp package-lock.json
 fi
 [ -z "${STUB_NPM_STRAY:-}" ] || printf 'stray\n' >"$STUB_NPM_STRAY"
+[ -z "${STUB_NPM_TOUCH:-}" ] || printf 'touched\n' >>"$STUB_NPM_TOUCH"
+[ -z "${STUB_NPM_DELETE:-}" ] || rm "$STUB_NPM_DELETE"
 printf '\nup to date in 2s\n'
 STUB
   chmod +x "$path"
@@ -616,8 +621,9 @@ EOF
 #   workflow  GitHub refuses a change to a workflow file without the
 #             workflow permission
 #   other     an error the script has no explanation for
-# Each failing push also records GIT_TERMINAL_PROMPT, as it got it, in
-# <dir>/push-prompt.
+# Every push, failing or not, records GIT_TERMINAL_PROMPT, as it got it,
+# in <dir>/push-prompt (#155 review, finding 2: the retry that works is
+# pinned too). failing_push <dir> ok 0 records without ever failing.
 failing_push() {
   printf '%s\n' "$2" >"$1/push-mode"
   printf '%s\n' "${3:-9999}" >"$1/push-fails"
@@ -625,10 +631,10 @@ failing_push() {
 #!/usr/bin/env bash
 here="$(dirname "$0")"
 case " $* " in *" push "*) ;; *) exit 0 ;; esac
+printf '%s\n' "${GIT_TERMINAL_PROMPT-<unset>}" >>"$here/push-prompt"
 n="$(cat "$here/push-fails")"
 [ "$n" -gt 0 ] || exit 0
 echo $((n - 1)) >"$here/push-fails"
-printf '%s\n' "${GIT_TERMINAL_PROMPT-<unset>}" >>"$here/push-prompt"
 case "$(cat "$here/push-mode")" in
   auth) echo "fatal: could not read Username for 'https://github.com': terminal prompts disabled" >&2 ;;
   offline) echo "fatal: unable to access 'https://github.com/octo-user/my-app.git/': Could not resolve host: github.com" >&2 ;;
@@ -5243,6 +5249,7 @@ test_a_push_git_cannot_sign_in_for_offers_gh_auth_setup_git_after_saying_what_it
   [ "$(grep -F ' push ' "$d/tools.log" | sed -n 2p)" = "git -C ./my-app push origin bootstrap-setup" ] \
     || { grep -F ' push ' "$d/tools.log" >&2 || true; die "yes: the second push is not a plain one"; }
   grep -qF 'changes your global git settings' "$d/out" || die "yes: the guide does not say what the command changes"
+  [ "$(cat "$d/push-prompt")" = "$(printf '0\n0')" ] || { cat "$d/push-prompt" >&2; die "yes: a push was allowed to ask at the terminal"; }
   [ "$(calls_from_create "$d" | tail -1)" = "$PR_CALL" ] || { cat "$d/gh.log" >&2; die "yes: no proposed change"; }
   # --yes and no answer at the terminal: nothing runs; Enter on stdin
   # checks again, and the user's own fix works.
@@ -5391,6 +5398,117 @@ test_values_holding_texts_of_the_fill_table_get_through_the_whole_setup() {
   [ -z "$(in_git -C "$c" status --porcelain)" ] || die "something is left unsaved"
 }
 
+# expected_case <pack> <deploy: yes or empty> <licence> <code> <path>
+# <yes|no>: one row of the table below. The pack's LP_TARGETS and LP_KEPT
+# come from layout_into itself (into a scratch folder), and FILL_FILES from
+# fill_rows, as in a setup run.
+expected_case() {
+  local got=no
+  ( load_script
+    IN_PACK="$1" IN_WITH_DEPLOY="$2" IN_LICENSE="$3"
+    layout_into "$1" "$REPO/languages" "$WORK/expected.$RANDOM" strict "$2" >/dev/null
+    fill_rows "$1" "$2"
+    FILL_FILES="$(while read -r f _; do printf '%s ' "$f"; done <<<"$FILL_ROWS")"
+    expected_change "$4" "$5" ) && got=yes
+  [ "$got" = "$6" ] || die "expected_change $1${2:+ with deploy}, licence $3, '$4' $5: got $got, want $6"
+}
+
+test_expected_change_accepts_exactly_the_changes_the_setup_makes() {
+  # #155 review, finding 1 (blocking): every branch of the git status
+  # check, accepted and refused. The pack is python, mit, unless a row
+  # says otherwise.
+  local pack deploy licence code path want
+  while IFS='|' read -r pack deploy licence code path want; do
+    [ -n "$pack" ] || continue
+    expected_case "$pack" "$deploy" "$licence" "$code" "$path" "$want"
+  done <<'ROWS'
+python||mit|M |README.md|yes
+python||mit|M |CHANGELOG.md|yes
+python||mit|M |.gitignore|yes
+python||mit|M |.github/workflows/ci.yml|yes
+python||mit|M |docs/DEV_INFRASTRUCTURE.md|yes
+python||mit|M |CLAUDE.md|yes
+python||mit|M |docs/SPEC.md|yes
+python||mit|M |memory/project.md|yes
+python||mit|M |memory/roles.md|no
+python||mit|M |docs/CROG_ONBOARDING.md|no
+python||mit|M |licenses/NOTICE|no
+python||mit|M |pyproject.toml|no
+node||mit|M |package.json|no
+react-native||mit|M |app.json|no
+web|yes|mit|M |wrangler.jsonc|no
+python||mit|D |bootstrap-project.sh|yes
+python||mit|D |languages/README.md|yes
+python||mit|D |languages/node/package.json|yes
+python||mit|D |languages/node/code-standards.md|yes
+python||mit|D |languages/python/pyproject.toml|yes
+python||mit|D |languages/python/code-standards.md|no
+python||mit|D |docs/SPEC.md|no
+python||mit|D |README.md|no
+python||mit|D |licenses/NOTICE|no
+web||mit|D |languages/web/deploy.yml|no
+web||mit|D |languages/web/wrangler.jsonc|no
+web|yes|mit|D |languages/web/deploy.yml|yes
+web|yes|mit|D |languages/web/code-standards.md|no
+python||mit|A |src/my_app/__init__.py|yes
+python||mit|A |src/deep/er/x.py|yes
+python||mit|A |srcx.py|no
+python||mit|A |e2e/x.spec.ts|no
+python||mit|A |pyproject.toml|yes
+python||mit|A |.vscode/settings.json|yes
+python||mit|A |.vscode/other.json|no
+python||mit|A |stray.txt|no
+python||mit|A |package-lock.json|no
+python||mit|A |LICENSE|yes
+python||mit|A |NOTICE|no
+python||none|A |LICENSE|no
+python||polyform-noncommercial-1.0.0|A |NOTICE|yes
+python||polyform-noncommercial-1.0.0|A |LICENSE|yes
+node||mit|A |package-lock.json|yes
+node||mit|A |src/placeholder.test.ts|yes
+node||mit|A |src/other.ts|no
+web||mit|A |e2e/app.spec.ts|yes
+web||mit|A |wrangler.jsonc|no
+web||mit|A |.github/workflows/deploy.yml|no
+web|yes|none|A |wrangler.jsonc|yes
+web|yes|none|A |.github/workflows/deploy.yml|yes
+web|yes|none|A |package-lock.json|yes
+web|yes|none|A |LICENSE|no
+react-native||mit|A |app.json|yes
+react-native||mit|A |package-lock.json|yes
+python||mit|MM|README.md|no
+python||mit|AM|pyproject.toml|no
+python||mit|R |README.md|no
+python||mit|T |README.md|no
+python||mit|??|stray.txt|no
+ROWS
+}
+
+test_a_file_changed_or_deleted_that_the_setup_does_not_change_stops_before_anything_is_saved() {
+  # #155 review, finding 1: the "M " and "D " branches through a whole run
+  # (node): something else (here npm) changes memory/roles.md, or deletes
+  # docs/ROUTINES.md, which the setup never touches.
+  local d c var path line epat
+  for var in TOUCH:memory/roles.md DELETE:docs/ROUTINES.md; do
+    path="${var#*:}"
+    d="$(tmpdir)"
+    fake_tool "$d" npm 10.0.0
+    export "STUB_NPM_${var%%:*}=$path"
+    setup_run "$d" --non-interactive --yes --pack node
+    unset STUB_NPM_TOUCH STUB_NPM_DELETE
+    expect_rc 1 "$d"
+    epat="$(printf '%s' "$path" | sed 's/[.]/[.]/g')"
+    expect_err_shape "$d" "The copy of the project on this computer has changes that the setup did not make, so the script saved and sent nothing: $epat[.] "
+    if [ "${var%%:*}" = TOUCH ]; then line="    M  $path"; else line="    D  $path"; fi
+    grep -qxF "$line" "$d/err" || { cat "$d/err" >&2; die "$path: git's line is not below"; }
+    expect_continue_command "$d" " --resume"
+    c="$(copy_of "$d")"
+    [ "$(in_git -C "$c" rev-list --count HEAD)" -eq 1 ] || die "$path: a change was saved"
+    ! grep -qF ' push ' "$d/tools.log" || die "$path: something was sent"
+    ! calls_from_create "$d" | grep -q '^pr ' || die "$path: a change was proposed"
+  done
+}
+
 test_changes_the_setup_did_not_make_stop_before_anything_is_saved() {
   # Spec step 12: git status shows only the paths the setup changes. A
   # file something else left in the copy (here npm) stops it, named.
@@ -5476,8 +5594,9 @@ test_a_key_in_the_environment_never_appears_in_output_or_files() {
   # Spec, "No secrets": with keys in GH_TOKEN and GITHUB_TOKEN, a whole
   # run up to the proposed change shows neither and writes neither into
   # any file: the output, the logs of gh and git (so no command line holds
-  # them), the copy and its git settings, the project's git data on
-  # "GitHub", the home folder.
+  # them), the copy and its git settings, the settings and refs of the
+  # project on "GitHub", the home folder, the body of the proposed change;
+  # nor into the saved change itself, in either place.
   local d t1 t2
   t1=ghp_FakeEnvKey0123456789abcdefghijklmnopq
   t2=github_pat_11FAKEENVKEY_abcdefghijklmnopqrstuvwxyz0123456789
@@ -5488,6 +5607,13 @@ test_a_key_in_the_environment_never_appears_in_output_or_files() {
   expect_rc 1 "$d"
   [ "$(calls_from_create "$d" | tail -1)" = "$PR_CALL" ] || { cat "$d/out" "$d/err" >&2; die "did not reach the proposed change"; }
   ! grep -rlF -e "$t1" -e "$t2" "$d" >"$d/hits" 2>/dev/null || { cat "$d/hits" >&2; die "a key from the environment was written"; }
+  # git keeps the saved change compressed, where grep -r cannot see it
+  # (#155 review, finding 8): every change, with its message and full
+  # content, of the copy and of the project on "GitHub", read through git.
+  { in_git -C "$(copy_of "$d")" log --all -p --format=fuller
+    in_git --git-dir="$(bare_of "$d")" log --all -p --format=fuller; } >"$d/history"
+  grep -qF 'Set up my-app' "$d/history" || die "test setup: the saved change is not in the history read"
+  ! grep -qF -e "$t1" -e "$t2" "$d/history" || die "a key from the environment is in the saved change"
 }
 
 test_failures_to_propose_the_change_are_explained_with_the_continue_command() {
