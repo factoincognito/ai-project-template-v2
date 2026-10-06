@@ -385,6 +385,7 @@ unset GH_TOKEN GITHUB_TOKEN
 # brew or winget to behave otherwise puts a fake one first on PATH.
 
 REAL_GIT="$(command -v git)"
+REAL_DATE="$(command -v date)"
 # The stub gh seeds and copies projects with the real git.
 export STUB_GIT="$REAL_GIT"
 
@@ -1044,7 +1045,9 @@ test_user_facing_strings_are_collected() {
     'needs a paid GitHub plan' 'the next steps of the setup are not built yet' \
     'To continue the setup, run this command' 'Making a copy of the project on this computer' \
     'line of work' 'already has' 'is inside another project that git keeps track of' \
-    'The script may not write in the folder' 'does not exist'; do
+    'The script may not write in the folder' 'does not exist' \
+    "Filling in the project's name, description and product owner" 'in which the setup fills in' \
+    'left for your first session with Clead'; do
     grep -qF -- "$t" "$s" || { cat "$s" >&2; die "collector missed: $t"; }
   done
 }
@@ -3397,9 +3400,18 @@ built_bootstrapper() {
 # test put another one there. The stub gh serves the built CHANGELOG.md
 # (or <dir>/changelog when the test wrote one) and makes each new
 # project from the built files (or from STUB_GH_TEMPLATE when set).
+# Today's date is FAKE_TODAY: a fake date answers +%Y-%m-%d with it (and
+# runs the real date for anything else), so a run that crosses midnight
+# cannot make a test fail.
+FAKE_TODAY=2031-02-03
 use_built() {
   built_bootstrapper
-  mkdir -p "$1/dl"
+  mkdir -p "$1/dl" "$1/bin"
+  cat >"$1/bin/date" <<EOF
+#!/usr/bin/env bash
+if [ "\$*" = +%Y-%m-%d ]; then echo $FAKE_TODAY; else exec "$REAL_DATE" "\$@"; fi
+EOF
+  chmod +x "$1/bin/date"
   [ -f "$1/dl/bootstrap-project.sh" ] || cp "$BUILT/bootstrap-project.sh" "$1/dl/bootstrap-project.sh"
   RUN_SCRIPT="$1/dl/bootstrap-project.sh"
   if [ -f "$1/changelog" ]; then STUB_GH_CHANGELOG="$1/changelog"; else STUB_GH_CHANGELOG="$BUILT/CHANGELOG.md"; fi
@@ -3903,7 +3915,8 @@ STEPS_AFTER_SETTINGS='==> Making a copy of the project on this computer, in ./my
 ==> Writing your name and email into the copy'"'"'s own git settings
 ==> Starting a separate line of work for the setup, named bootstrap-setup
 ==> Adding the python language pack'"'"'s files to the copy
-==> Removing what only the setup needed from the copy'
+==> Removing what only the setup needed from the copy
+==> Filling in the project'"'"'s name, description and product owner in its files'
 
 test_the_copy_is_made_by_gh_and_checked_against_the_script_version() {
   local d c
@@ -3917,7 +3930,7 @@ test_the_copy_is_made_by_gh_and_checked_against_the_script_version() {
     || die "the copy is not of the project that was made"
   # The new steps, in order, each with a start and a done line.
   [ "$(grep '^==> ' "$d/out" | sed -n '/^==> Setting how proposed/,$p' | sed 1d)" = "$STEPS_AFTER_SETTINGS" ] \
-    || { cat "$d/out" >&2; die "the steps after the settings are not the copy, name, line of work, pack, tidy-up"; }
+    || { cat "$d/out" >&2; die "the steps after the settings are not the copy, name, line of work, pack, tidy-up, fill"; }
   [ "$(grep -c '^==> ' "$d/out")" -eq "$(grep -c '^    Done\. ' "$d/out")" ] || { cat "$d/out" >&2; die "a step has no done line"; }
   expect_out "$d" "    Done. The copy is in ./my-app, with the files of version $BUILT_VERSION of the bootstrapper."
   # The stop: what exists, that the next steps are not built, and the
@@ -3963,12 +3976,92 @@ test_the_setup_starts_its_own_line_of_work_and_nothing_is_saved_or_sent() {
   [ "$(calls_from_create "$d" | tail -1)" = "$CLONE_CALL" ] || { cat "$d/gh.log" >&2; die "gh was used after the copy"; }
 }
 
+# The spec's fill table (step 8), written out here on purpose rather than
+# read from the script, so the test checks the script against the spec:
+# one row per (file, exact text, value) for <pack> [--with-deploy], as
+# "<file>|<text>|<value key>"; \n in a text is a line break.
+want_fill_rows() {
+  printf '%s\n' \
+    'README.md|[PROJECT NAME]|display' \
+    'README.md|[PO NAME]|po' \
+    'README.md|[One or two sentences: what this project is and who it is for.]|description' \
+    'CLAUDE.md|[PROJECT NAME]|display' \
+    'CHANGELOG.md|[PROJECT NAME]|display' \
+    'docs/SPEC.md|[PROJECT NAME]|display' \
+    'docs/SPEC.md|[DATE]|date' \
+    'docs/BACKLOG.md|[PROJECT NAME]|display' \
+    'docs/BACKLOG.md|[PO NAME]|po' \
+    'docs/NEXT_SESSION.md|[PROJECT NAME]|display' \
+    'docs/NEXT_SESSION.md|[DATE]|date' \
+    'memory/project.md|[PROJECT NAME]|display' \
+    'memory/project.md|[OWNER/REPO]|owner-and-name' \
+    'memory/project.md|[What the project is, who it is for, and what problem\nit solves.]|description'
+  case "$1" in
+    node | web | react-native)
+      printf '%s\n' 'package.json|[project-description]|description' 'package.json|[project-name]|slug' ;;
+  esac
+  case "$1" in
+    web)
+      echo 'index.html|[project-name]|display'
+      [ -z "${2:-}" ] || echo 'wrangler.jsonc|[project-name]|slug'
+      ;;
+    react-native) printf '%s\n' 'app.json|[PROJECT NAME]|display' 'app.json|[project-slug]|slug' ;;
+  esac
+}
+
+# W_*: the values the fill must use. The defaults are setup_run's
+# answers; a test that gives others sets these to match.
+W_DISPLAY="My App" W_PO=Ada W_OWNER_AND_NAME=octo-user/my-app
+W_DESCRIPTION="Lends tools to neighbours." W_SLUG=my-app
+want_value() {
+  case "$1" in
+    display) printf '%s' "$W_DISPLAY" ;;
+    po) printf '%s' "$W_PO" ;;
+    owner-and-name) printf '%s' "$W_OWNER_AND_NAME" ;;
+    description) printf '%s' "$W_DESCRIPTION" ;;
+    slug) printf '%s' "$W_SLUG" ;;
+    date) printf '%s' "$FAKE_TODAY" ;;
+    *) die "want_value: unknown key $1" ;;
+  esac
+}
+
+# filled_as <dir> <pack> <deploy> <file> <source> <out>: writes <source>
+# with the fill rows of <file> applied, using bash's own literal
+# replacement (not the script's awk). Each row's text must be in
+# <source>, or the test is stale. The rows used are added to
+# <dir>/applied, so the caller can check that every row was used.
+filled_as() {
+  local d="$1" p="$2" deploy="$3" f="$4" s rf t key v nl=$'\n'
+  s="$(cat "$5"; printf x)"
+  s="${s%x}"
+  while IFS='|' read -r rf t key; do
+    [ "$rf" = "$f" ] || continue
+    t="${t//\\n/$nl}"
+    v="$(want_value "$key")"
+    case "$s" in *"$t"*) ;; *) die "$p$deploy: $f has no $t before the fill (test is stale)" ;; esac
+    s=${s//"$t"/$v}
+    printf '%s|%s\n' "$rf" "$key" >>"$d/applied"
+  done < <(want_fill_rows "$p" "$deploy")
+  printf '%s' "$s" >"$6"
+}
+
+# expect_filled <dir> <pack> <deploy> <file> <source> <copy file>: the
+# copy's file is <source> with exactly its fill rows applied, and has the
+# same mode.
+expect_filled() {
+  filled_as "$1" "$2" "$3" "$4" "$5" "$1/filled"
+  cmp -s "$1/filled" "$6" || { diff "$1/filled" "$6" >&2 || true; die "$2$3: $4 is not the template's with exactly its texts filled in (want, then got, above)"; }
+  [ "$(xbit "$5")" = "$(xbit "$6")" ] || die "$2$3: the mode of $4 changed"
+}
+
 # expect_setup_tree <dir> <copy> <pack> [--with-deploy]: the copy holds
 # exactly the tree the setup must leave for that pack (see the test
-# below), file by file.
+# below), file by file, with the placeholders filled in (spec step 8)
+# in exactly the files the fill table names, and nowhere else.
 expect_setup_tree() {
   local d="$1" c="$2" p="$3" deploy="${4:-}" fresh f other kept
   fresh="$d/fresh"
+  : >"$d/applied"
   PACKS_DIR="$BUILT/languages" bash "$BUILT/bootstrap-project.sh" layout-pack "$p" "$fresh" >/dev/null
   kept=code-standards.md
   [ "$p" != web ] || [ -n "$deploy" ] || kept="$kept deploy.yml wrangler.jsonc"
@@ -3983,25 +4076,31 @@ expect_setup_tree() {
   # template's licence folder.
   [ -x "$c/.github/scripts/require-test-change.sh" ] || die "$p$deploy: require-test-change.sh is not kept as a script"
   [ -f "$c/licenses/NOTICE" ] || die "$p$deploy: licenses/ is not kept"
-  # Laid out: the same bytes as layout-pack lays out; ci.yml is the
-  # pack's, not the stub.
+  # Laid out: the same bytes as layout-pack lays out, with the fill rows
+  # of that file applied; ci.yml is the pack's, not the stub.
   while IFS= read -r f; do
     [ "$f" != .gitignore ] || continue
-    cmp -s "$fresh/$f" "$c/$f" || die "$p$deploy: $f is not the pack's"
+    expect_filled "$d" "$p" "$deploy" "$f" "$fresh/$f" "$c/$f"
   done < <(tree_of "$fresh")
   cmp -s "$BUILT/languages/$p/ci.yml" "$c/.github/workflows/ci.yml" || die "$p$deploy: ci.yml is not the pack's"
   if [ -n "$deploy" ]; then
     cmp -s "$BUILT/languages/web/deploy.yml" "$c/.github/workflows/deploy.yml" || die "deploy.yml is not the pack's"
-    cmp -s "$BUILT/languages/web/wrangler.jsonc" "$c/wrangler.jsonc" || die "wrangler.jsonc is not the pack's"
+    expect_filled "$d" "$p" "$deploy" wrangler.jsonc "$BUILT/languages/web/wrangler.jsonc" "$c/wrangler.jsonc"
   fi
+  # Kept pack files are not filled in: the spec names two that keep a
+  # text of the fill table.
   for f in $kept; do
     cmp -s "$BUILT/languages/$p/$f" "$c/languages/$p/$f" || die "$p$deploy: kept $f changed"
   done
-  # Every other file of the bootstrapper is unchanged, mode included.
+  [ "$p" != react-native ] || grep -qF '[project-slug]' "$c/languages/react-native/code-standards.md" \
+    || die "react-native: code-standards.md lost its [project-slug]"
+  [ "$p" != web ] || [ -n "$deploy" ] || grep -qF '"[project-name]"' "$c/languages/web/wrangler.jsonc" \
+    || die "web: the kept wrangler.jsonc lost its [project-name]"
+  # Every other file of the bootstrapper is unchanged, mode included,
+  # except for the fill rows of that file.
   while IFS= read -r f; do
     case "$f" in README.md | .gitignore | docs/DEV_INFRASTRUCTURE.md | .github/workflows/ci.yml) continue ;; esac
-    cmp -s "$BUILT/$f" "$c/$f" || die "$p$deploy: $f changed"
-    [ "$(xbit "$BUILT/$f")" = "$(xbit "$c/$f")" ] || die "$p$deploy: the mode of $f changed"
+    expect_filled "$d" "$p" "$deploy" "$f" "$BUILT/$f" "$c/$f"
   done < <(tree_of "$BUILT" | grep -v '^languages/' | grep -vx 'bootstrap-project.sh')
   # .gitignore: the bootstrapper's, then the pack's lines it lacked.
   { cat "$BUILT/.gitignore"
@@ -4009,11 +4108,11 @@ expect_setup_tree() {
   } >"$d/gitignore"
   expect_same "$p$deploy: .gitignore" "$d/gitignore" "$c/.gitignore"
   # README.md: the section from "## After bootstrapping" up to the next
-  # heading (## Setup) is gone, nothing else.
+  # heading (## Setup) is gone, nothing else, and the rest filled in.
   grep -q '^## After bootstrapping' "$BUILT/README.md" || die "the built README has no setup section (test is stale)"
   sed '/^## After bootstrapping/,/^## Setup$/{/^## Setup$/!d;}' "$BUILT/README.md" >"$d/readme"
   [ "$(wc -l <"$d/readme")" -lt "$(wc -l <"$BUILT/README.md")" ] || die "the test's README expectation removed nothing"
-  expect_same "$p$deploy: README.md" "$d/readme" "$c/README.md"
+  expect_filled "$d" "$p" "$deploy" README.md "$d/readme" "$c/README.md"
   # docs/DEV_INFRASTRUCTURE.md: the links to the other packs'
   # code-standards.md point to the template on GitHub; its own stays.
   cp "$BUILT/docs/DEV_INFRASTRUCTURE.md" "$d/dev"
@@ -4026,15 +4125,27 @@ expect_setup_tree() {
   done
   expect_same "$p$deploy: DEV_INFRASTRUCTURE.md" "$d/dev" "$c/docs/DEV_INFRASTRUCTURE.md"
   grep -qF "\`languages/$p/code-standards.md\`" "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: the link to its own pack was rewritten"
+  # Every row of the fill table was checked against some file.
+  want_fill_rows "$p" "$deploy" | awk -F'|' '{ print $1 "|" $3 }' | LC_ALL=C sort -u >"$d/rows"
+  LC_ALL=C sort -u "$d/applied" >"$d/applied-rows"
+  expect_same "$p$deploy: the fill rows checked" "$d/rows" "$d/applied-rows"
+  # Left for the first session with Clead (spec step 8): not filled in.
+  grep -qF '[PHASE NAME]' "$c/docs/BACKLOG.md" || die "$p$deploy: [PHASE NAME] was filled in"
+  grep -qxF -- '- [Goal]' "$c/memory/project.md" || die "$p$deploy: [Goal] was filled in"
+  grep -qF '[What the system does' "$c/docs/SPEC.md" || die "$p$deploy: the SPEC section prompts were filled in"
+  # The format token [DATE] stays where the spec says it does.
+  grep -qF 'Adam approved [DATE]' "$c/memory/roles.md" || die "$p$deploy: [DATE] in memory/roles.md was filled in"
+  grep -qF '[DATE]**' "$c/docs/CROG_ONBOARDING.md" || die "$p$deploy: [DATE] in docs/CROG_ONBOARDING.md was filled in"
 }
 
 test_every_pack_leaves_exactly_the_expected_tree() {
   # Spec, Testing: "every pack's final tree is exactly what is expected",
-  # and "the README section is gone and languages/ is pruned". The
-  # expected tree is the built bootstrapper without the script and
-  # languages/, plus what layout-pack lays out into an empty folder (its
-  # table is pinned in tools/test-layout-pack.sh), plus the pack's files
-  # that were not laid out.
+  # "no fill-table text is left", and "the README section is gone and
+  # languages/ is pruned". The expected tree is the built bootstrapper
+  # without the script and languages/, plus what layout-pack lays out
+  # into an empty folder (its table is pinned in tools/test-layout-pack.sh),
+  # plus the pack's files that were not laid out; each file has exactly
+  # the fill rows of the spec's table applied (want_fill_rows).
   local d p deploy
   built_bootstrapper
   for p in node web python react-native web+deploy; do
@@ -4296,6 +4407,118 @@ test_a_copy_from_another_version_or_without_its_stamp_is_refused() {
     [ -z "$(in_git -C "$(copy_of "$d")" status --porcelain)" ] || die "$what: the copy was changed"
     unset STUB_GH_TEMPLATE
   done
+}
+
+# ---------- filling in the placeholders (spec step 8) ----------
+# After the tidy-up, the texts of the spec's fill table are replaced in
+# exactly the files the table names (want_fill_rows above, checked file by
+# file in expect_setup_tree for every pack). Then the script stops: the
+# next steps are not built yet (exit 1).
+
+test_values_with_special_characters_are_copied_literally() {
+  # Spec step 8: the replacement is literal (awk index() and substr(),
+  # values passed through ENVIRON), so no character of a value is read
+  # as part of a pattern or a replacement. The inputs refuse & \ " < > and
+  # a backtick (they break JSON and HTML), so this run uses the other
+  # characters that sed, awk or bash give a meaning to (. * $ ^ / % [ ]
+  # ~ '), spaces and non-ASCII letters, and a dot in the project name,
+  # which becomes a - in the slug. The description starts with
+  # "## After bootstrapping": the fill runs after the tidy-up, so only the
+  # README's real setup section is removed and the description stays.
+  local d
+  built_bootstrapper
+  d="$(tmpdir)"
+  fake_tool "$d" npm 10.0.0
+  W_DISPLAY="Zoë's Shed *.* \$1 ^a/b\$ ~ [x] 100%s"
+  W_PO="Zoë O'Brien \$HOME .* a/b [y]"
+  W_DESCRIPTION="## After bootstrapping: lends tools (.*) \$0 a/b ^x\$ to Zoë's street, 100%."
+  W_OWNER_AND_NAME=octo-user/Tool.Shed
+  W_SLUG=tool-shed
+  setup_run "$d" --non-interactive --yes --pack react-native --name Tool.Shed \
+    --project-name "$W_DISPLAY" --po-name "$W_PO" --description "$W_DESCRIPTION"
+  expect_rc 1 "$d"
+  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
+  expect_setup_tree "$d" "$(copy_of "$d")" react-native
+  # The values as typed, where a reader looks for them.
+  grep -qxF "# $W_DISPLAY" "$(copy_of "$d")/README.md" || die "README.md: the display name is not the heading"
+  grep -qxF "$W_DESCRIPTION" "$(copy_of "$d")/README.md" || die "README.md: the description line is not there"
+  grep -qF '"slug": "tool-shed"' "$(copy_of "$d")/app.json" || die "app.json: the slug is not tool-shed"
+}
+
+test_the_fill_is_literal_in_one_pass_and_keeps_line_endings_and_the_mode() {
+  # fill_file <file> <key...>: every text of the keys given is replaced
+  # in one pass over the whole file, so:
+  #   - a text over two lines (memory/project.md) is found;
+  #   - a value that holds another row's text is not filled in again;
+  #   - & \ $ . * % in a value are copied as they are;
+  #   - CR LF line endings, a missing newline at the end, an empty file
+  #     and the executable bit are kept;
+  #   - a path named like a setting (a=b/...) is read, never stdin (the
+  #     #152 review's finding 1, for the new awk call).
+  local d cr=$'\r' nl=$'\n' v p s
+  d="$(tmpdir)"
+  mkdir -p "$d/a=b"
+  printf '%s\n' '# [PROJECT NAME]' '**Owner:** [PO NAME] and [PO NAME]' \
+    '**Description:** [What the project is, who it is for, and what problem' 'it solves.]' '[DATE] stays' >"$d/a=b/lf.md"
+  printf '%s' "# [PROJECT NAME]$cr$nl**Owner:** [PO NAME]$cr${nl}last [PROJECT NAME]" >"$d/a=b/crlf.sh"
+  chmod +x "$d/a=b/crlf.sh"
+  : >"$d/a=b/empty.md"
+  printf '%s\n' FROM-STDIN >"$d/in"
+  v='[PO NAME] & \1 $0 .* a/b %s Zoë'
+  p='[PROJECT NAME] \\& ^$'
+  s='Lends .* to $HOME/x & y \n'
+  ( load_script; cd "$d"
+    IN_PROJECT_NAME="$v" IN_PO_NAME="$p" IN_DESCRIPTION="$s"
+    fill_file a=b/lf.md name po project-description
+    fill_file a=b/crlf.sh name po
+    fill_file a=b/empty.md name ) <"$d/in" >"$d/out" 2>"$d/err" || { cat "$d/err" >&2; die "fill_file failed"; }
+  printf '%s\n' "# $v" "**Owner:** $p and $p" "**Description:** $s" '[DATE] stays' >"$d/want"
+  expect_same "the LF file" "$d/want" "$d/a=b/lf.md"
+  printf '%s' "# $v$cr$nl**Owner:** $p$cr${nl}last $v" >"$d/want"
+  cmp -s "$d/want" "$d/a=b/crlf.sh" || { od -c "$d/a=b/crlf.sh" >&2; die "the CR LF file without a newline at the end changed otherwise"; }
+  [ -x "$d/a=b/crlf.sh" ] || die "the executable bit was lost"
+  [ ! -s "$d/a=b/empty.md" ] || die "the empty file is no longer empty"
+  ! grep -rqF FROM-STDIN "$d/a=b" "$d/out" || die "fill_file read stdin"
+}
+
+test_a_file_to_fill_that_is_missing_stops_before_any_file_is_filled() {
+  # A file of the fill table that the project lacks: the project came from
+  # the current bootstrapper, so the next action is to report it, and
+  # every file is checked before the first one is changed.
+  local d c
+  built_bootstrapper
+  d="$(tmpdir)"
+  cp -R "$BUILT" "$d/template"
+  rm "$d/template/docs/NEXT_SESSION.md"
+  export STUB_GH_TEMPLATE="$d/template"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  sed -n 1p "$d/err" | grep -qF "What happened: The copy of the project on this computer has no docs/NEXT_SESSION.md, in which the setup fills in the project's name and other details. The project octo-user/my-app exists on GitHub, with only the bootstrapper's files in it, and a copy of it is on this computer in ./my-app." \
+    || { cat "$d/err" >&2; die "the missing file is not named with what exists"; }
+  sed -n 2p "$d/err" | grep -qF "Report it to the bootstrapper's maintainers" || { cat "$d/err" >&2; die "the next action is not to report it"; }
+  expect_continue_command "$d" " --resume"
+  ! grep -qF "$NOT_BUILT" "$d/err" || die "it went on after the error"
+  c="$(copy_of "$d")"
+  [ "$(sed -n 1p "$c/README.md")" = '# [PROJECT NAME]' ] || die "README.md was filled in before the stop"
+  grep -qF '[PROJECT NAME]' "$c/memory/project.md" || die "memory/project.md was filled in before the stop"
+  [ ! -e "$c/docs/NEXT_SESSION.md" ] || die "the missing file was made"
+  unset STUB_GH_TEMPLATE
+}
+
+test_the_placeholders_left_for_clead_are_listed_in_plain_words() {
+  # Spec step 8: "Left for the first Clead session (the script lists them
+  # at the end)". The end report is a later step; the list is ready for
+  # it. That these texts are left as they are is checked for every pack
+  # in expect_setup_tree.
+  local d t
+  d="$(tmpdir)"
+  ( load_script; say_left_for_clead ) >"$d/out" 2>"$d/err" || { cat "$d/err" >&2; die "say_left_for_clead failed"; }
+  for t in 'left for your first session with Clead' '[PHASE NAME]' docs/BACKLOG.md '[Goal]' \
+    memory/project.md docs/SPEC.md memory/context.md; do
+    grep -qF -- "$t" "$d/out" || { cat "$d/out" >&2; die "the list does not name $t"; }
+  done
+  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "it wrote to stderr"; }
+  [ -z "$(banned_hits <"$d/out")" ] || { cat "$d/out" >&2; die "a banned word in the list"; }
 }
 
 # ---------- run ----------

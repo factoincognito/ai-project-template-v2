@@ -10,9 +10,10 @@
 # name still free), the plan and its "Proceed?" question, creating the
 # project on GitHub and protecting its main version, the copy of the
 # project on this computer (with the git name and email, the line of work
-# bootstrap-setup, the language pack laid out and the tidy-up), and the
-# layout-pack subcommand. After the tidy-up the script stops: the later
-# setup steps (nothing is saved or sent yet) come in later parts.
+# bootstrap-setup, the language pack laid out, the tidy-up and the
+# placeholders filled in), and the layout-pack subcommand. After the
+# placeholders the script stops: the later setup steps (nothing is saved
+# or sent yet) come in later parts.
 #
 # Usage:
 #   bash bootstrap-project.sh [options]
@@ -2454,8 +2455,172 @@ tidy_up() {
   step_end "The setup section of README.md, the other language packs and the setup script itself are gone from the copy."
 }
 
+# ---------- filling in the placeholders ----------
+# Spec step 8. The fill table is in one place: fill_rows (which file holds
+# which text, per pack), fill_text (the exact text) and fill_value (what
+# it becomes). The self-check before the commit (step 12) can reuse
+# fill_rows and fill_text. The fill runs after the tidy-up (step 9): the
+# result is the same, and the README's setup section is then removed
+# before a description that starts with "## After bootstrapping" could
+# be taken for it.
+
+FILL_DATE=""
+
+# fill_rows <pack> <with deploy: yes or empty>: FILL_ROWS is the table for
+# that pack, one row per line, "<file> <key>", the file relative to the
+# copy. Only the files named here are filled in: in memory/roles.md and
+# docs/CROG_ONBOARDING.md [DATE] is a format token and stays, and the
+# kept languages/<pack>/ files keep their texts (react-native
+# code-standards.md, the web wrangler.jsonc without --with-deploy).
+FILL_ROWS=""
+fill_rows() {
+  FILL_ROWS="README.md name
+README.md po
+README.md readme-description
+CLAUDE.md name
+CHANGELOG.md name
+docs/SPEC.md name
+docs/SPEC.md date
+docs/BACKLOG.md name
+docs/BACKLOG.md po
+docs/NEXT_SESSION.md name
+docs/NEXT_SESSION.md date
+memory/project.md name
+memory/project.md owner-and-name
+memory/project.md project-description"
+  case "$1" in
+    node | web | react-native) FILL_ROWS="$FILL_ROWS${NL}package.json package-description${NL}package.json package-name" ;;
+  esac
+  case "$1" in
+    web)
+      FILL_ROWS="$FILL_ROWS${NL}index.html title"
+      [ "${2:-}" != yes ] || FILL_ROWS="$FILL_ROWS${NL}wrangler.jsonc package-name"
+      ;;
+    react-native) FILL_ROWS="$FILL_ROWS${NL}app.json name${NL}app.json slug" ;;
+  esac
+}
+
+# fill_text <key>: FILL_TEXT is the exact text the key stands for. The
+# description in memory/project.md is two lines, matched as one text.
+fill_text() {
+  case "$1" in
+    name) FILL_TEXT='[PROJECT NAME]' ;;
+    po) FILL_TEXT='[PO NAME]' ;;
+    owner-and-name) FILL_TEXT='[OWNER/REPO]' ;;
+    date) FILL_TEXT='[DATE]' ;;
+    readme-description) FILL_TEXT='[One or two sentences: what this project is and who it is for.]' ;;
+    project-description) FILL_TEXT="[What the project is, who it is for, and what problem${NL}it solves.]" ;;
+    package-description) FILL_TEXT='[project-description]' ;;
+    package-name | title) FILL_TEXT='[project-name]' ;;
+    slug) FILL_TEXT='[project-slug]' ;;
+    *) return 1 ;;
+  esac
+}
+
+# fill_value <key>: FILL_VALUE is what the key's text becomes. The npm
+# name and the Expo slug are the slug of the project name (lowercase, a
+# . made a -); the web page title is the display name.
+fill_value() {
+  case "$1" in
+    name | title) FILL_VALUE="$IN_PROJECT_NAME" ;;
+    po) FILL_VALUE="$IN_PO_NAME" ;;
+    owner-and-name) FILL_VALUE="$IN_OWNER/$IN_NAME" ;;
+    date) FILL_VALUE="$FILL_DATE" ;;
+    readme-description | project-description | package-description) FILL_VALUE="$IN_DESCRIPTION" ;;
+    package-name | slug) FILL_VALUE="$IN_SLUG" ;;
+    *) return 1 ;;
+  esac
+}
+
+# fill_file <file> <key...>: replaces the texts of the keys given in the
+# file, literally and in one pass over the whole file (so a text over two
+# lines is found, and a value holding another key's text is not filled
+# in again): awk index() and substr(), the values passed through
+# ENVIRON (never read as a pattern; no sed -i, which differs on macOS),
+# bytes compared as bytes (LC_ALL=C). The file is read from stdin, never
+# as an awk operand (a path such as a=b/x would be read as a setting).
+# Line endings stay as they are (a CR is part of its line), a file
+# without a newline at the end stays without, and the file keeps its
+# mode (it is rewritten in place).
+fill_file() {
+  local file="$1" tmp n=0 key ends_nl=""
+  shift
+  [ -n "$(tail -c 1 <"$file")" ] || ends_nl=yes
+  tmp="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  (
+    for key in "$@"; do
+      n=$((n + 1))
+      fill_text "$key"
+      fill_value "$key"
+      export "FILL_FROM_$n=$FILL_TEXT" "FILL_TO_$n=$FILL_VALUE"
+    done
+    export FILL_N="$n" FILL_NL="$ends_nl"
+    LC_ALL=C awk 'BEGIN {
+        n = ENVIRON["FILL_N"] + 0
+        for (k = 1; k <= n; k++) { from[k] = ENVIRON["FILL_FROM_" k]; to[k] = ENVIRON["FILL_TO_" k] }
+      }
+      { s = (NR == 1) ? $0 : s "\n" $0 }
+      END {
+        out = ""
+        while (1) {
+          best = 0
+          for (k = 1; k <= n; k++) {
+            i = index(s, from[k])
+            if (i > 0 && (best == 0 || i < best)) { best = i; bk = k }
+          }
+          if (best == 0) break
+          out = out substr(s, 1, best - 1) to[bk]
+          s = substr(s, best + length(from[bk]))
+        }
+        ORS = ""
+        print out s
+        if (NR > 0 && ENVIRON["FILL_NL"] == "yes") print "\n"
+      }' <"$file" >"$tmp"
+  )
+  cat "$tmp" >"$file"
+  rm -f "$tmp"
+}
+
+# fill_placeholders: spec step 8 over the copy. Every file of the table
+# must be there before the first one is changed; a missing one means the
+# project GitHub made does not fit this script.
+fill_placeholders() {
+  local rows file f key keys files="" missing=""
+  step_start "Filling in the project's name, description and product owner in its files"
+  FILL_DATE="$(date +%Y-%m-%d)"
+  fill_rows "$IN_PACK" "$IN_WITH_DEPLOY"
+  rows="$FILL_ROWS"
+  while read -r file key; do
+    case " $files " in *" $file "*) continue ;; esac
+    files="$files $file"
+    [ -f "$IN_DIR/$file" ] || missing="$missing $file"
+  done <<<"$rows"
+  if [ -n "$missing" ]; then
+    missing="${missing# }"
+    stop_with_error "The copy of the project on this computer has no ${missing// /, }, in which the setup fills in the project's name and other details." \
+      "$SETUP_BROKEN_NEXT" "Missing in $IN_DIR: $missing"
+  fi
+  for file in $files; do
+    keys="$(while read -r f key; do [ "$f" != "$file" ] || printf '%s ' "$key"; done <<<"$rows")"
+    # shellcheck disable=SC2086 # the keys are single words
+    fill_file "$IN_DIR/$file" $keys
+  done
+  step_end "The name $IN_PROJECT_NAME, the description, the product owner $IN_PO_NAME, the project's place on GitHub ($IN_OWNER/$IN_NAME) and today's date $FILL_DATE are filled in where the files asked for them."
+}
+
+# say_left_for_clead: the texts the setup leaves for the first session
+# with Clead (spec step 8), for the report at the end (step 19).
+say_left_for_clead() {
+  say "These parts of the project are left for your first session with Clead (Claude, the project's Tech Owner), who writes them with you:"
+  say "  - the name of the first phase, [PHASE NAME], in docs/BACKLOG.md;"
+  say "  - the goals, [Goal], and the rest of memory/project.md;"
+  say "  - the questions in square brackets in the sections of docs/SPEC.md;"
+  say "  - memory/context.md."
+}
+
 # cmd_setup <options...>: the setup. Built so far: the checks of this
-# computer and on GitHub, the inputs, the plan, and steps 2 to 6 and 9. The
+# computer and on GitHub, the inputs, the plan, and steps 2 to 6, 9 and 8
+# (in that order: see "filling in the placeholders"). The
 # options are checked first, then the checks that need no answer (the
 # tools, the GitHub sign-in and the current version), so that nothing is
 # asked in vain; the npm, folder, permission and name checks need
@@ -2501,6 +2666,7 @@ cmd_setup() {
   start_setup_branch
   lay_out_pack
   tidy_up
+  fill_placeholders
   say "$CONTINUE_INTRO"
   say_command "bash $RESTART_CMD"
   fail 1 "The project $IN_OWNER/$IN_NAME was created on GitHub and its main version is protected. Its copy on this computer, in $IN_DIR, has the $IN_PACK pack's files, ready for the next steps. This version of the script stops here: the next steps of the setup are not built yet." \
