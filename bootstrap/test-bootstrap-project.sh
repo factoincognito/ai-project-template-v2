@@ -140,6 +140,24 @@ emit_failure() {
     *) echo "stub gh: unknown failure mode: $1" >&2; exit 64 ;;
   esac
 }
+# seed_project OWNER/NAME: what GitHub makes from the template: a bare
+# repo remotes/OWNER/NAME.git next to the log whose main holds the files
+# of STUB_GH_TEMPLATE (a real build.sh output) as one commit. git is the
+# real one (STUB_GIT), so a fake git's log sees only the script's calls.
+seed_project() {
+  local bare="${STUB_GH_LOG%/*}/remotes/$1.git" w g="${STUB_GIT:-git}"
+  w="$(mktemp -d "${STUB_GH_LOG%/*}/seed.XXXXXX")"
+  mkdir -p "$bare"
+  "$g" -c init.defaultBranch=main init -q --bare "$bare"
+  "$g" --git-dir="$bare" symbolic-ref HEAD refs/heads/main
+  cp -R "$STUB_GH_TEMPLATE/." "$w/"
+  "$g" -c init.defaultBranch=main init -q "$w"
+  "$g" -C "$w" symbolic-ref HEAD refs/heads/main
+  "$g" -C "$w" add -A
+  "$g" -C "$w" -c user.name=GitHub -c user.email=noreply@github.com commit -q -m "Initial commit"
+  "$g" -C "$w" push -q "$bare" main 2>/dev/null
+  rm -rf "$w"
+}
 case "${1:-}" in
   --version)
     # gh-missing: gh is not installed (yet).
@@ -176,7 +194,30 @@ case "${1:-}" in
         exit 1
       fi
       printf '%s\n' "$3" >>"${STUB_GH_LOG%/*}/created"
+      # With STUB_GH_TEMPLATE set, the project also gets its files, so a
+      # later repo clone can copy it (seed_project).
+      [ -z "${STUB_GH_TEMPLATE:-}" ] || seed_project "$3"
       printf 'https://github.com/%s\n' "$3"
+    elif [ "${2:-}" = clone ]; then
+      # gh repo clone OWNER/NAME DIR: a real git clone of the bare repo
+      # that repo create seeded; gh passes git's progress to stderr.
+      # STUB_GH_CLONE_FAIL makes it fail as signed-out (gh's exit 4) or
+      # broken (git's text for a network failure, exit 128, nothing made).
+      case "${STUB_GH_CLONE_FAIL:-}" in
+        "") ;;
+        signed-out) emit_failure signed-out ;;
+        broken)
+          printf "Cloning into '%s'...\nfatal: unable to access 'https://github.com/%s.git/': Could not resolve host: github.com\n" "$4" "$3" >&2
+          exit 128
+          ;;
+        *) echo "stub gh: unknown failure mode: $STUB_GH_CLONE_FAIL" >&2; exit 64 ;;
+      esac
+      bare="${STUB_GH_LOG%/*}/remotes/$3.git"
+      if [ ! -d "$bare" ]; then
+        echo "GraphQL: Could not resolve to a Repository with the name '$3'. (repository)" >&2
+        exit 1
+      fi
+      exec "${STUB_GIT:-git}" clone "$bare" "$4"
     elif [ "${2:-}" = edit ]; then
       # gh repo edit OWNER/NAME --delete-branch-on-merge --enable-squash-merge;
       # STUB_GH_EDIT_FAIL set: it fails with gh's text for a 403.
@@ -344,6 +385,8 @@ unset GH_TOKEN GITHUB_TOKEN
 # brew or winget to behave otherwise puts a fake one first on PATH.
 
 REAL_GIT="$(command -v git)"
+# The stub gh seeds and copies projects with the real git.
+export STUB_GIT="$REAL_GIT"
 
 # fake_tool <dir> <name> [output]: makes <dir>/bin/<name>. Each call is
 # logged to <dir>/tools.log. While <dir>/<name>-fails holds a number above
@@ -999,7 +1042,9 @@ test_user_facing_strings_are_collected() {
     'How the script checks it: ' 'To start again, run this command' 'git is not installed' \
     'Your name for git' 'Your email address for git' 'Proceed? (yes or no)' 'Here is the plan' \
     'needs a paid GitHub plan' 'the next steps of the setup are not built yet' \
-    'To continue the setup, run this command'; do
+    'To continue the setup, run this command' 'Making a copy of the project on this computer' \
+    'line of work' 'already has' 'is inside another project that git keeps track of' \
+    'The script may not write in the folder' 'does not exist'; do
     grep -qF -- "$t" "$s" || { cat "$s" >&2; die "collector missed: $t"; }
   done
 }
@@ -1554,30 +1599,31 @@ test_non_interactive_never_reads_stdin() {
 }
 
 test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
-  # The whole script, as a user runs it, with --yes (needed with
-  # --non-interactive). The steps after creating and protecting the
-  # project are not built yet: it stops there, with exit 1.
+  # The whole script, as a user gets it (the built copy) and runs it, with
+  # --yes (needed with --non-interactive). The steps after the copy on
+  # this computer are not built yet: it stops there, with exit 1.
   local d rc
   d="$(tmpdir)"
   make_stub_gh "$d/gh"
   fake_home "$d/home" "Test Person" test@example.com
   fake_tool "$d" npm 10.0.0
   mkdir -p "$d/cwd"
+  use_built "$d"
   rc=0
   ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
-    bash "$SCRIPT" --non-interactive --yes "${REQUIRED_OPTS[@]}" ) </dev/null >"$d/out" 2>"$d/err" || rc=$?
+    bash "$RUN_SCRIPT" --non-interactive --yes "${REQUIRED_OPTS[@]}" ) </dev/null >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "exit $rc, want 1"; }
   grep -qF 'the next steps of the setup are not built yet' "$d/err" || { cat "$d/err" >&2; die "no stop message"; }
-  rm -f "$d/created"
+  rm -rf "$d/created" "$d/remotes" "$d/cwd/my-app"
   rc=0
   ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
-    bash "$SCRIPT" --non-interactive --yes "${REQUIRED_OPTS[@]}" ) <&- >"$d/out" 2>"$d/err" || rc=$?
+    bash "$RUN_SCRIPT" --non-interactive --yes "${REQUIRED_OPTS[@]}" ) <&- >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "stdin closed: exit $rc, want 1"; }
   grep -qF 'the next steps of the setup are not built yet' "$d/err" || { cat "$d/err" >&2; die "stdin closed: no stop message"; }
   # gh: the two checks on this computer, the GitHub checks (the account,
   # the published version, the name), then creating and protecting the
-  # project, every one with gh's own prompts off; nothing is made on this
-  # computer.
+  # project and making the copy on this computer, every one with gh's own
+  # prompts off; the copy is the only thing made on this computer.
   [ "$(cut -f2- "$d/gh.log" | LC_ALL=C sort -u)" = "$(printf '%s\n' '--version' "$(printf 'repo\tcreate\t--help')" \
       "$(printf 'api\t-i\tuser\t--jq\t.login, (.name // "")')" \
       "$(printf 'api\t-i\t-H\tAccept: application/vnd.github.raw+json\trepos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md')" \
@@ -1586,11 +1632,13 @@ test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
       "$(printf 'api\t-i\trepos/octo-user/my-app/branches/main')" \
       "$(printf 'api\t-i\trepos/octo-user/my-app/contents/CHANGELOG.md')" \
       "$(printf 'api\t-i\t-X\tPUT\trepos/octo-user/my-app/branches/main/protection\t--input\t-')" \
-      "$(printf 'repo\tedit\tocto-user/my-app\t--delete-branch-on-merge\t--enable-squash-merge')" | LC_ALL=C sort)" ] \
-    || { cat "$d/gh.log" >&2; die "gh was used for more than its checks and the two steps"; }
+      "$(printf 'repo\tedit\tocto-user/my-app\t--delete-branch-on-merge\t--enable-squash-merge')" \
+      "$(printf 'repo\tclone\tocto-user/my-app\t./my-app')" | LC_ALL=C sort)" ] \
+    || { cat "$d/gh.log" >&2; die "gh was used for more than its checks and the steps built so far"; }
   [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] \
     || { cat "$d/gh.log" >&2; die "a gh call ran with gh's prompts on"; }
-  [ -z "$(ls -A "$d/cwd")" ] || { ls -A "$d/cwd" >&2; die "something was created"; }
+  [ "$(ls -A "$d/cwd")" = my-app ] || { ls -A "$d/cwd" >&2; die "something other than the copy was made"; }
+  [ -f "$d/cwd/my-app/package.json" ] || die "the node pack was not laid out in the copy"
 }
 
 test_running_with_no_options_starts_the_questions() {
@@ -1988,7 +2036,8 @@ test_pack_and_licence_questions_explain_each_choice() {
 # from <dir>/tty and the Linux release file from <dir>/os-release when
 # they exist, in <dir>/cwd with the fake home <dir>/home. stdout goes to
 # <dir>/out, stderr to <dir>/err, the runner's log to <dir>/run.log.
-# `whole <dir> <options...>` does the same for the whole script.
+# `whole <dir> <options...>` does the same for the whole script (or for
+# $RUN_SCRIPT when a test sets it: see use_built).
 
 prepare() {
   local d="$1"
@@ -2007,6 +2056,9 @@ in_env() {
   use_home "$d/home"
   export PATH="$d/bin:/usr/bin:/bin" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
     STUB_RUN_LOG="$d/run.log" BOOTSTRAP_RUN="$d/run" STUB_SLEEP_LOG="$d/sleep.log"
+  # git never looks above the harness's own temp folder for a project,
+  # so a test sees only the git projects it made itself.
+  export GIT_CEILING_DIRECTORIES="$WORK"
   [ ! -e "$d/tty" ] || export BOOTSTRAP_TTY="$d/tty"
   [ ! -e "$d/os-release" ] || export BOOTSTRAP_OS_RELEASE="$d/os-release"
 }
@@ -2033,7 +2085,7 @@ whole() {
   shift
   prepare "$d"
   set +e
-  ( in_env "$d"; "$BASH" "$SCRIPT" "$@" ) <"$d/in" >"$d/out" 2>"$d/err"
+  ( in_env "$d"; "$BASH" "${RUN_SCRIPT:-$SCRIPT}" "$@" ) <"$d/in" >"$d/out" 2>"$d/err"
   RC=$?
   set -e
 }
@@ -2465,6 +2517,65 @@ test_resume_allows_a_folder_with_files_but_not_a_file() {
   expect_rc 3 "$d"
 }
 
+test_the_folder_must_be_in_a_folder_that_exists_and_is_outside_any_git_project() {
+  # #148 review, finding 7, the part that belongs to the copy: the folder
+  # above the target exists and may be written, and the target is not
+  # inside another git project. (Whether a folder kept by --resume is
+  # this project's own copy is resume logic, S15.)
+  local d
+  # No folder above it: guided, nothing made.
+  d="$(tmpdir)"
+  pre "$d" ni with_dir "$d/no such/app" preflight_target_dir
+  expect_rc 3 "$d"
+  expect_out "$d" "The folder $d/no such, which would hold the folder $d/no such/app, does not exist."
+  expect_out "$d" "--dir"
+  expect_out "$d" "To start again, run this command:"
+  [ ! -e "$d/no such" ] || die "the folder above was made by the check"
+  # Once that folder is there, the same check passes.
+  mkdir -p "$d/no such"
+  pre "$d" ni with_dir "$d/no such/app" preflight_target_dir
+  expect_rc 0 "$d"
+  # Inside another git project, new or empty: guided, and the guide names
+  # the folder where that project starts.
+  d="$(tmpdir)"
+  "$REAL_GIT" init -q "$d/outer"
+  mkdir -p "$d/outer/sub/empty"
+  pre "$d" ni with_dir "$d/outer/sub/app" preflight_target_dir
+  expect_rc 3 "$d"
+  expect_out "$d" "The folder $d/outer/sub/app is inside another project that git keeps track of (the one in $d/outer)."
+  pre "$d" ni with_dir "$d/outer/sub/empty" preflight_target_dir
+  expect_rc 3 "$d"
+  expect_out "$d" "is inside another project that git keeps track of"
+  # With --resume too: a kept folder is checked by the folder above it.
+  mkdir -p "$d/outer/sub/kept"; touch "$d/outer/sub/kept/x"
+  pre "$d" ni resume with_dir "$d/outer/sub/kept" preflight_target_dir
+  expect_rc 3 "$d"
+  # A copy that is a git project of its own, in a plain folder, still
+  # passes with --resume: only the folders above it count.
+  "$REAL_GIT" init -q "$d/plain/copy"; touch "$d/plain/copy/x"
+  pre "$d" ni resume with_dir "$d/plain/copy" preflight_target_dir
+  expect_rc 0 "$d"
+  # Not writable. Only where the test can make such a folder: as root, or
+  # on Windows, every folder can be written, and the case is skipped.
+  d="$(tmpdir)"
+  mkdir -p "$d/locked"
+  chmod 555 "$d/locked"
+  if [ -w "$d/locked" ]; then
+    echo "note: this account can write in any folder here; the not-writable case was not run"
+  else
+    pre "$d" ni with_dir "$d/locked/app" preflight_target_dir
+    expect_rc 3 "$d"
+    expect_out "$d" "The script may not write in the folder $d/locked."
+    mkdir -p "$d/locked2/empty"
+    chmod 555 "$d/locked2/empty"
+    pre "$d" ni with_dir "$d/locked2/empty" preflight_target_dir
+    expect_rc 3 "$d"
+    expect_out "$d" "The script may not write in the folder $d/locked2/empty."
+    chmod 755 "$d/locked2/empty"
+  fi
+  chmod 755 "$d/locked"
+}
+
 test_a_folder_starting_with_a_tilde_is_in_the_home_folder() {
   # Review note (#146): a typed ~/projects/app made a folder named ~.
   local d
@@ -2664,8 +2775,12 @@ guide_cases() {
   printf '%s\n' guide_git guide_gh_missing guide_gh_old guide_npm guide_dir_not_empty \
     guide_dir_is_file guide_bash_old gg_signed_out gg_expired gg_offline gg_permissions \
     gg_permissions_repo gg_permissions_token gg_old_script gg_project_exists \
-    gg_create_taken gg_create_refused gg_protect_plan gg_protect_token gg_protect_unknown
+    gg_create_taken gg_create_refused gg_protect_plan gg_protect_token gg_protect_unknown \
+    guide_dir_no_parent gg_dir_not_writable gg_dir_in_git gg_dir_in_git_unknown
 }
+gg_dir_not_writable() { DIR_UNWRITABLE=/srv/shared; guide_dir_not_writable; }
+gg_dir_in_git() { DIR_OUTER=/home/me/work; guide_dir_in_git; }
+gg_dir_in_git_unknown() { DIR_OUTER=""; guide_dir_in_git; }
 gg_signed_out() { ACCOUNT_PROBLEM=signed-out; guide_github_account; }
 gg_expired() { ACCOUNT_PROBLEM=expired; API_STATUS=401; API_MESSAGE="Bad credentials"; guide_github_account; }
 gg_offline() { ACCOUNT_PROBLEM=offline; API_ERR="error connecting to api.github.com"; guide_github_account; }
@@ -3230,7 +3345,8 @@ test_the_name_and_permissions_are_checked_after_the_questions() {
 # protection of main with the spec's body, then gh repo edit. A 403 on the
 # protection is classified by GitHub's message and stops before anything
 # else. After the project exists, every stop shows the command to
-# continue with --resume. After step 3 the script stops: the next steps
+# continue with --resume. Then the copy on this computer (see "the copy
+# on this computer" below), after which the script stops: the next steps
 # are not built yet (exit 1).
 
 # Every answer given as an option, so a run without --non-interactive asks
@@ -3243,18 +3359,43 @@ FILES_CALL='api -i repos/octo-user/my-app/contents/CHANGELOG.md'
 PROTECT_CALL='api -i -X PUT repos/octo-user/my-app/branches/main/protection --input -'
 EDIT_CALL='repo edit octo-user/my-app --delete-branch-on-merge --enable-squash-merge'
 PROBE_CALL='api -i repos/octo-user/my-app'
+CLONE_CALL='repo clone octo-user/my-app ./my-app'
 # The spec's body for step 3, field for field.
 PROTECT_BODY='{"required_status_checks":null,"enforce_admins":true,"required_pull_request_reviews":{"required_approving_review_count":0},"restrictions":null,"allow_force_pushes":false,"allow_deletions":false}'
 NOT_BUILT='the next steps of the setup are not built yet'
 
-# setup_run <dir> <options...>: the whole script with every input given
-# (pack python, so npm is not needed; public unless --private is given)
-# and a working git.
+# built_bootstrapper: BUILT is a bootstrapper made by bootstrap/build.sh
+# from this template, stamped BUILT_VERSION; built once per harness run.
+BUILT="$WORK/built"
+BUILT_VERSION=v9.8.7
+built_bootstrapper() {
+  [ -d "$BUILT" ] || bash "$REPO/bootstrap/build.sh" "$BUILT" "$BUILT_VERSION" \
+    0123456789abcdef0123456789abcdef01234567 >/dev/null
+}
+
+# use_built <dir>: the run uses the script as a user gets it: the built,
+# stamped copy, alone in <dir>/dl (not next to the packs), unless the
+# test put another one there. The stub gh serves the built CHANGELOG.md
+# (or <dir>/changelog when the test wrote one) and makes each new
+# project from the built files (or from STUB_GH_TEMPLATE when set).
+use_built() {
+  built_bootstrapper
+  mkdir -p "$1/dl"
+  [ -f "$1/dl/bootstrap-project.sh" ] || cp "$BUILT/bootstrap-project.sh" "$1/dl/bootstrap-project.sh"
+  RUN_SCRIPT="$1/dl/bootstrap-project.sh"
+  if [ -f "$1/changelog" ]; then STUB_GH_CHANGELOG="$1/changelog"; else STUB_GH_CHANGELOG="$BUILT/CHANGELOG.md"; fi
+  export STUB_GH_CHANGELOG STUB_GH_TEMPLATE="${STUB_GH_TEMPLATE:-$BUILT}"
+}
+
+# setup_run <dir> <options...>: the whole script, as a user gets it (see
+# use_built), with every input given (pack python, so npm is not needed;
+# public unless --private is given) and a working git.
 setup_run() {
   local d="$1" vis=--public
   shift
   case " $* " in *" --private "*) vis="" ;; esac
   working_git "$d"
+  use_built "$d"
   whole "$d" "${REQUIRED_OPTS[@]}" --pack python "${ALL_OPTS[@]}" $vis "$@"
 }
 
@@ -3397,7 +3538,7 @@ test_create_waits_for_the_files_then_protects_main_with_the_exact_body() {
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
-  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL"
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$CLONE_CALL"
   # Byte for byte: the body as sent, then the line break the stub adds
   # (a here-string ends in one too, so two in all).
   printf '%s\n\n' "$PROTECT_BODY" >"$d/want-body"
@@ -3433,7 +3574,7 @@ test_the_files_are_waited_for_retrying_on_404_for_up_to_a_minute() {
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
   expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$BRANCH_CALL" "$BRANCH_CALL" "$BRANCH_CALL" \
-    "$FILES_CALL" "$FILES_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL"
+    "$FILES_CALL" "$FILES_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$CLONE_CALL"
   [ "$(cat "$d/sleep.log")" = "$(printf '2\n2\n2\n2\n2')" ] || { cat "$d/sleep.log" >&2; die "not 5 waits of 2 seconds"; }
   grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/err" >&2; die "did not reach the end of step 3"; }
   # Never there: 30 waits of 2 seconds (60 s), then a plain stop with the
@@ -3713,6 +3854,349 @@ test_a_404_or_429_gets_the_next_action_of_its_own_call() {
   pre "$d" ni preflight_github_account
   expect_rc 1 "$d"
   expect_err_shape "$d" "GitHub has paused"
+}
+
+# ---------- the copy on this computer ----------
+# After step 3 (spec "Steps, in order" 4, 5, 6 and 9): gh repo clone
+# makes the copy in the target folder; origin/main must hold CHANGELOG.md
+# stamped with the script's own version; the git name and email are
+# written into the copy's own settings (never --global); the line of work
+# bootstrap-setup starts from origin/main; the pack is laid out over the
+# copy (ci.yml replaced, the pack's gitignore lines added when missing,
+# any other target already there an error; --with-deploy adds the web
+# deploy files); then the tidy-up. Nothing is saved (committed) or sent
+# (pushed) yet. Then the script stops: the next steps are not built yet
+# (exit 1). These runs use the built, stamped script (use_built), and the
+# stub gh makes each project from a real build.sh output.
+
+copy_of() { printf '%s\n' "$1/cwd/my-app"; }
+bare_of() { printf '%s\n' "$1/remotes/octo-user/my-app.git"; }
+in_git() { "$REAL_GIT" "$@"; }
+
+# tree_of <dir>: every file under <dir> (not .git), one per line, sorted.
+tree_of() {
+  (cd "$1" && find . -path ./.git -prune -o \( -type f -o -type l \) -print) | sed 's|^\./||' | LC_ALL=C sort
+}
+# xbit <file>: x when the file can be run, else -.
+xbit() { if [ -x "$1" ]; then echo x; else echo -; fi; }
+
+STEPS_AFTER_SETTINGS='==> Making a copy of the project on this computer, in ./my-app
+==> Writing your name and email into the copy'"'"'s own git settings
+==> Starting a separate line of work for the setup, named bootstrap-setup
+==> Adding the python language pack'"'"'s files to the copy
+==> Removing what only the setup needed from the copy'
+
+test_the_copy_is_made_by_gh_and_checked_against_the_script_version() {
+  local d c
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$CLONE_CALL"
+  [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] || { cat "$d/gh.log" >&2; die "a gh call ran with prompts on"; }
+  c="$(copy_of "$d")"
+  [ "$(in_git -C "$c" rev-parse origin/main)" = "$(in_git --git-dir="$(bare_of "$d")" rev-parse main)" ] \
+    || die "the copy is not of the project that was made"
+  # The new steps, in order, each with a start and a done line.
+  [ "$(grep '^==> ' "$d/out" | sed -n '/^==> Setting how proposed/,$p' | sed 1d)" = "$STEPS_AFTER_SETTINGS" ] \
+    || { cat "$d/out" >&2; die "the steps after the settings are not the copy, name, line of work, pack, tidy-up"; }
+  [ "$(grep -c '^==> ' "$d/out")" -eq "$(grep -c '^    Done\. ' "$d/out")" ] || { cat "$d/out" >&2; die "a step has no done line"; }
+  expect_out "$d" "    Done. The copy is in ./my-app, with the files of version $BUILT_VERSION of the bootstrapper."
+  # The stop: what exists, that the next steps are not built, and the
+  # command to continue.
+  sed -n 1p "$d/err" | grep -qF "What happened: The project octo-user/my-app was created on GitHub and its main version is protected. Its copy on this computer, in ./my-app, has the python pack's files, ready for the next steps." \
+    || { cat "$d/err" >&2; die "the stop does not say what exists"; }
+  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/err" >&2; die "the stop does not say the next steps are not built"; }
+  expect_continue_command "$d" " --resume"
+}
+
+test_the_git_name_and_email_are_written_into_the_copy_only() {
+  local d c
+  d="$(tmpdir)"
+  prepare "$d"
+  cp "$d/home/.gitconfig" "$d/global-before"
+  setup_run "$d" --non-interactive --yes --git-name "Ada Lovelace" --git-email ada@example.com
+  expect_rc 1 "$d"
+  c="$(copy_of "$d")"
+  [ "$(in_git -C "$c" config --local --get user.name)" = "Ada Lovelace" ] || die "the name is not in the copy's settings"
+  [ "$(in_git -C "$c" config --local --get user.email)" = ada@example.com ] || die "the email is not in the copy's settings"
+  cmp -s "$d/global-before" "$d/home/.gitconfig" || { cat "$d/home/.gitconfig" >&2; die "the global git settings changed"; }
+  # Written right after the copy is made, before the line of work starts,
+  # and never with --global or --system.
+  grep -n 'config user\.name Ada Lovelace' "$d/tools.log" | head -1 | cut -d: -f1 >"$d/n"
+  grep -n ' checkout ' "$d/tools.log" | head -1 | cut -d: -f1 >"$d/b"
+  [ -s "$d/n" ] && [ -s "$d/b" ] && [ "$(cat "$d/n")" -lt "$(cat "$d/b")" ] || { cat "$d/tools.log" >&2; die "the name was not written before the line of work"; }
+  ! grep -E 'config (--global|--system|--file)' "$d/tools.log" | grep -qv -- ' --get ' || { cat "$d/tools.log" >&2; die "git settings outside the copy were written"; }
+}
+
+test_the_setup_starts_its_own_line_of_work_and_nothing_is_saved_or_sent() {
+  local d c bare
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  c="$(copy_of "$d")"
+  bare="$(bare_of "$d")"
+  [ "$(in_git -C "$c" symbolic-ref --short HEAD)" = bootstrap-setup ] || die "the copy is not on bootstrap-setup"
+  [ "$(in_git -C "$c" rev-parse HEAD)" = "$(in_git --git-dir="$bare" rev-parse main)" ] || die "bootstrap-setup does not start at main"
+  [ "$(in_git -C "$c" rev-list --count HEAD)" -eq 1 ] || die "a commit was made"
+  ! in_git -C "$c" rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1 || die "bootstrap-setup follows a branch on GitHub"
+  [ "$(in_git --git-dir="$bare" for-each-ref --format='%(refname)')" = refs/heads/main ] || die "something was sent to GitHub"
+  [ -n "$(in_git -C "$c" status --porcelain)" ] || die "the setup's changes are not in the copy"
+  [ "$(calls_from_create "$d" | tail -1)" = "$CLONE_CALL" ] || { cat "$d/gh.log" >&2; die "gh was used after the copy"; }
+}
+
+test_every_pack_leaves_exactly_the_expected_tree() {
+  # Spec, Testing: "every pack's final tree is exactly what is expected",
+  # and "the README section is gone and languages/ is pruned". The
+  # expected tree is the built bootstrapper without the script and
+  # languages/, plus what layout-pack lays out into an empty folder (its
+  # table is pinned in tools/test-layout-pack.sh), plus the pack's files
+  # that were not laid out.
+  local d c p deploy fresh f other kept
+  built_bootstrapper
+  for p in node web python react-native web+deploy; do
+    deploy=""
+    [ "$p" != web+deploy ] || { p=web; deploy=--with-deploy; }
+    d="$(tmpdir)"
+    fake_tool "$d" npm 10.0.0
+    setup_run "$d" --non-interactive --yes --pack "$p" $deploy
+    expect_rc 1 "$d"
+    grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/err" >&2; die "$p$deploy: did not reach the end"; }
+    c="$(copy_of "$d")"
+    fresh="$d/fresh"
+    PACKS_DIR="$BUILT/languages" bash "$BUILT/bootstrap-project.sh" layout-pack "$p" "$fresh" >/dev/null
+    kept=code-standards.md
+    [ "$p" != web ] || [ -n "$deploy" ] || kept="$kept deploy.yml wrangler.jsonc"
+    { tree_of "$BUILT" | grep -v '^languages/' | grep -vx 'bootstrap-project.sh'
+      tree_of "$fresh"
+      for f in $kept; do echo "languages/$p/$f"; done
+      [ -z "$deploy" ] || printf '%s\n' .github/workflows/deploy.yml wrangler.jsonc
+    } | LC_ALL=C sort -u >"$d/want"
+    tree_of "$c" >"$d/got"
+    expect_same "$p$deploy: the tree" "$d/want" "$d/got"
+    # Kept in every pack: the check that each pack's CI runs, and the
+    # template's licence folder.
+    [ -x "$c/.github/scripts/require-test-change.sh" ] || die "$p$deploy: require-test-change.sh is not kept as a script"
+    [ -f "$c/licenses/NOTICE" ] || die "$p$deploy: licenses/ is not kept"
+    # Laid out: the same bytes as layout-pack lays out; ci.yml is the
+    # pack's, not the stub.
+    while IFS= read -r f; do
+      [ "$f" != .gitignore ] || continue
+      cmp -s "$fresh/$f" "$c/$f" || die "$p$deploy: $f is not the pack's"
+    done < <(tree_of "$fresh")
+    cmp -s "$BUILT/languages/$p/ci.yml" "$c/.github/workflows/ci.yml" || die "$p$deploy: ci.yml is not the pack's"
+    if [ -n "$deploy" ]; then
+      cmp -s "$BUILT/languages/web/deploy.yml" "$c/.github/workflows/deploy.yml" || die "deploy.yml is not the pack's"
+      cmp -s "$BUILT/languages/web/wrangler.jsonc" "$c/wrangler.jsonc" || die "wrangler.jsonc is not the pack's"
+    fi
+    for f in $kept; do
+      cmp -s "$BUILT/languages/$p/$f" "$c/languages/$p/$f" || die "$p$deploy: kept $f changed"
+    done
+    # Every other file of the bootstrapper is unchanged, mode included.
+    while IFS= read -r f; do
+      case "$f" in README.md | .gitignore | docs/DEV_INFRASTRUCTURE.md | .github/workflows/ci.yml) continue ;; esac
+      cmp -s "$BUILT/$f" "$c/$f" || die "$p$deploy: $f changed"
+      [ "$(xbit "$BUILT/$f")" = "$(xbit "$c/$f")" ] || die "$p$deploy: the mode of $f changed"
+    done < <(tree_of "$BUILT" | grep -v '^languages/' | grep -vx 'bootstrap-project.sh')
+    # .gitignore: the bootstrapper's, then the pack's lines it lacked.
+    { cat "$BUILT/.gitignore"
+      while IFS= read -r f; do grep -qxF -- "$f" "$BUILT/.gitignore" || printf '%s\n' "$f"; done <"$BUILT/languages/$p/gitignore"
+    } >"$d/gitignore"
+    expect_same "$p$deploy: .gitignore" "$d/gitignore" "$c/.gitignore"
+    # README.md: the section from "## After bootstrapping" up to the next
+    # heading (## Setup) is gone, nothing else.
+    grep -q '^## After bootstrapping' "$BUILT/README.md" || die "the built README has no setup section (test is stale)"
+    sed '/^## After bootstrapping/,/^## Setup$/{/^## Setup$/!d;}' "$BUILT/README.md" >"$d/readme"
+    [ "$(wc -l <"$d/readme")" -lt "$(wc -l <"$BUILT/README.md")" ] || die "the test's README expectation removed nothing"
+    expect_same "$p$deploy: README.md" "$d/readme" "$c/README.md"
+    # docs/DEV_INFRASTRUCTURE.md: the links to the other packs'
+    # code-standards.md point to the template on GitHub; its own stays.
+    cp "$BUILT/docs/DEV_INFRASTRUCTURE.md" "$d/dev"
+    for other in node web python react-native; do
+      [ "$other" != "$p" ] || continue
+      grep -qF "\`languages/$other/code-standards.md\`" "$d/dev" || die "the doc has no link to $other (test is stale)"
+      sed "s|\`languages/$other/code-standards.md\`|https://github.com/factoincognito/ai-project-template-v2/blob/main/languages/$other/code-standards.md|g" "$d/dev" >"$d/dev2"
+      mv "$d/dev2" "$d/dev"
+      ! grep -qE "(^|[^/])languages/$other/" "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: a link to the removed $other pack is left"
+    done
+    expect_same "$p$deploy: DEV_INFRASTRUCTURE.md" "$d/dev" "$c/docs/DEV_INFRASTRUCTURE.md"
+    grep -qF "\`languages/$p/code-standards.md\`" "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: the link to its own pack was rewritten"
+  done
+}
+
+test_the_pack_overlay_replaces_ci_yml_adds_missing_gitignore_lines_and_refuses_other_targets() {
+  local d out rc
+  d="$(tmpdir)"
+  out="$d/copy"
+  mkdir -p "$out/.github/workflows"
+  printf 'stub\n' >"$out/.github/workflows/ci.yml"
+  printf 'node_modules/\n.env\n*.log' >"$out/.gitignore"
+  printf 'keep\n' >"$out/README.md"
+  rc=0
+  ( load_script; layout_into node "$REPO/languages" "$out" overlay ) >"$d/out" 2>"$d/err" || rc=$?
+  [ "$rc" -eq 0 ] || { cat "$d/out" "$d/err" >&2; die "overlay failed"; }
+  cmp -s "$REPO/languages/node/ci.yml" "$out/.github/workflows/ci.yml" || die "ci.yml was not replaced"
+  # The lines that were there stay, the missing ones follow in the pack's
+  # order, none twice, and the last line of the old file is ended first.
+  printf '%s\n' node_modules/ .env '*.log' dist/ coverage/ .DS_Store Thumbs.db >"$d/want"
+  expect_same ".gitignore" "$d/want" "$out/.gitignore"
+  [ "$(cat "$out/README.md")" = keep ] || die "a file the pack does not have was changed"
+  cmp -s "$REPO/languages/node/package.json" "$out/package.json" || die "package.json not laid out"
+  cmp -s "$REPO/languages/node/placeholder.test.ts" "$out/src/placeholder.test.ts" || die "the test file not laid out"
+  # Another target already there: an error, before anything is written.
+  out="$d/copy2"
+  mkdir -p "$out/.github/workflows"
+  printf 'stub\n' >"$out/.github/workflows/ci.yml"
+  printf 'x\n' >"$out/.gitignore"
+  printf '{}\n' >"$out/tsconfig.json"
+  rc=0
+  ( load_script; layout_into node "$REPO/languages" "$out" overlay ) >"$d/out" 2>"$d/err" || rc=$?
+  [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "exit $rc, want 1"; }
+  sed -n 1p "$d/err" | grep -qF "What happened: The copy of the project on this computer already has tsconfig.json, which the node pack would add." \
+    || { cat "$d/err" >&2; die "the existing target is not named"; }
+  sed -n 2p "$d/err" | grep -qE '^What to do next: .{10,}' || { cat "$d/err" >&2; die "no next action"; }
+  [ ! -e "$out/package.json" ] && [ "$(cat "$out/.github/workflows/ci.yml")" = stub ] && [ "$(cat "$out/.gitignore")" = x ] \
+    && [ "$(cat "$out/tsconfig.json")" = '{}' ] || die "something was written before the error"
+  # A folder target (python: starter/src/ to src/) that is there already.
+  out="$d/copy3"
+  mkdir -p "$out/src"
+  rc=0
+  ( load_script; layout_into python "$REPO/languages" "$out" overlay ) >"$d/out" 2>"$d/err" || rc=$?
+  [ "$rc" -eq 1 ] || die "src/ there: exit $rc, want 1"
+  sed -n 1p "$d/err" | grep -qF "already has src/, which the python pack would add." || { cat "$d/err" >&2; die "src/ not named"; }
+  [ ! -e "$out/pyproject.toml" ] || die "src/ there: something was written"
+  # web with the deploy files: laid out, and only code-standards.md is
+  # kept in the pack; without them, the deploy files are kept.
+  out="$d/copy4"
+  ( load_script; layout_into web "$REPO/languages" "$out" overlay yes; printf '%s\n' "$LP_KEPT" >"$d/kept" ) >"$d/out" 2>"$d/err" \
+    || { cat "$d/err" >&2; die "web with deploy failed"; }
+  cmp -s "$REPO/languages/web/deploy.yml" "$out/.github/workflows/deploy.yml" || die "deploy.yml not laid out"
+  cmp -s "$REPO/languages/web/wrangler.jsonc" "$out/wrangler.jsonc" || die "wrangler.jsonc not laid out"
+  [ "$(cat "$d/kept")" = code-standards.md ] || die "kept with deploy: $(cat "$d/kept")"
+  out="$d/copy5"
+  ( load_script; layout_into web "$REPO/languages" "$out" overlay; printf '%s\n' "$LP_KEPT" >"$d/kept" ) >"$d/out" 2>"$d/err" \
+    || { cat "$d/err" >&2; die "web without deploy failed"; }
+  [ ! -e "$out/.github/workflows/deploy.yml" ] && [ ! -e "$out/wrangler.jsonc" ] || die "deploy files laid out without --with-deploy"
+  [ "$(cat "$d/kept")" = "code-standards.md deploy.yml wrangler.jsonc" ] || die "kept without deploy: $(cat "$d/kept")"
+}
+
+test_the_readme_setup_section_is_removed_up_to_the_next_heading() {
+  local d rc
+  d="$(tmpdir)"
+  printf '%s\n' '# App' '' 'Intro.' '' '## After bootstrapping (delete this section when done)' '' 'Steps.' \
+    '### A smaller heading' '##Not a heading' '' '## Setup' '' 'Run it.' >"$d/a"
+  ( load_script; remove_setup_section "$d/a" ) || die "the section was not found"
+  printf '%s\n' '# App' '' 'Intro.' '' '## Setup' '' 'Run it.' >"$d/want"
+  expect_same "README" "$d/want" "$d/a"
+  # The last section: removed up to the end of the file.
+  printf '%s\n' '# App' '' '## Setup' 'x' '' '## After bootstrapping' 'y' >"$d/b"
+  ( load_script; remove_setup_section "$d/b" ) || die "the last section was not found"
+  printf '%s\n' '# App' '' '## Setup' 'x' '' >"$d/want"
+  expect_same "README, last section" "$d/want" "$d/b"
+  # No such section: the file is left as it is, and the function says so.
+  printf '%s\n' '# App' '## Setup' 'After bootstrapping, run it.' >"$d/c"
+  cp "$d/c" "$d/c0"
+  rc=0
+  ( load_script; remove_setup_section "$d/c" ) || rc=$?
+  [ "$rc" -eq 1 ] || die "no section: returned $rc, want 1"
+  cmp -s "$d/c0" "$d/c" || die "no section: the file changed"
+}
+
+test_a_copy_that_does_not_fit_the_setup_stops_with_the_continue_command() {
+  local d c
+  built_bootstrapper
+  # A file the pack would add is already in the project: a plain stop,
+  # nothing laid out, nothing removed.
+  d="$(tmpdir)"
+  cp -R "$BUILT" "$d/template"
+  printf 'x\n' >"$d/template/requirements.txt"
+  export STUB_GH_TEMPLATE="$d/template"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  sed -n 1p "$d/err" | grep -qF "What happened: The copy of the project on this computer already has requirements.txt, which the python pack would add. The project octo-user/my-app exists on GitHub, with only the bootstrapper's files in it, and a copy of it is on this computer in ./my-app." \
+    || { cat "$d/err" >&2; die "the stop does not name the file and what exists"; }
+  sed -n 2p "$d/err" | grep -qE '^What to do next: .{10,}' || { cat "$d/err" >&2; die "no next action"; }
+  expect_continue_command "$d" " --resume"
+  ! grep -qF "$NOT_BUILT" "$d/err" || die "it went on after the error"
+  c="$(copy_of "$d")"
+  [ ! -e "$c/pyproject.toml" ] && [ -d "$c/languages/node" ] && [ -f "$c/bootstrap-project.sh" ] || die "something was laid out or removed"
+  # A README.md without its setup section: a plain stop.
+  d="$(tmpdir)"
+  cp -R "$BUILT" "$d/template"
+  sed '/^## After bootstrapping/d' "$BUILT/README.md" >"$d/template/README.md"
+  export STUB_GH_TEMPLATE="$d/template"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  sed -n 1p "$d/err" | grep -qF "What happened: The file README.md in the copy of the project has no section that starts with \"## After bootstrapping\", which the setup removes." \
+    || { cat "$d/err" >&2; die "the missing section is not explained"; }
+  expect_continue_command "$d" " --resume"
+  ! grep -qF "$NOT_BUILT" "$d/err" || die "it went on after the error"
+  unset STUB_GH_TEMPLATE
+}
+
+test_a_failed_copy_is_explained_with_the_continue_command() {
+  local d
+  # gh could not make the copy (git's error): plain message, git's text
+  # below, the command to continue; nothing else runs.
+  d="$(tmpdir)"
+  export STUB_GH_CLONE_FAIL=broken
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "The script could not make a copy of the project on this computer, in \./my-app\. The project octo-user/my-app exists on GitHub, with only the bootstrapper's files in it\.\$"
+  grep -qxF "    fatal: unable to access 'https://github.com/octo-user/my-app.git/': Could not resolve host: github.com" "$d/err" \
+    || { cat "$d/err" >&2; die "git's text is not below"; }
+  sed -n 2p "$d/err" | grep -qF 'continue the setup with the command shown above' || { cat "$d/err" >&2; die "next action is not to continue"; }
+  expect_continue_command "$d" " --resume"
+  [ "$(calls_from_create "$d" | tail -1)" = "$CLONE_CALL" ] || { cat "$d/gh.log" >&2; die "gh was used after the failed copy"; }
+  [ -z "$(ls -A "$d/cwd")" ] || { ls -A "$d/cwd" >&2; die "something was left on this computer"; }
+  ! grep -qF "$NOT_BUILT" "$d/err" || die "it went on after the error"
+  # gh signed out in between: the sign-in next action, to continue.
+  d="$(tmpdir)"
+  export STUB_GH_CLONE_FAIL=signed-out
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  expect_err_shape "$d" ".*is not signed in"
+  sed -n 2p "$d/err" | grep -qF 'continue the setup with the command shown above' || { cat "$d/err" >&2; die "signed out: next action is not to continue"; }
+  expect_continue_command "$d" " --resume"
+  unset STUB_GH_CLONE_FAIL
+}
+
+test_a_copy_from_another_version_or_without_its_stamp_is_refused() {
+  local d c
+  built_bootstrapper
+  # The script is v9.8.8 (and the bootstrapper said so in the checks
+  # before), but the project was made from v9.8.7: a newer release came
+  # out in between. Refused before anything is changed in the copy.
+  d="$(tmpdir)"
+  mkdir -p "$d/dl"
+  sed "s/^SCRIPT_VERSION='$BUILT_VERSION'\$/SCRIPT_VERSION='v9.8.8'/" "$BUILT/bootstrap-project.sh" >"$d/dl/bootstrap-project.sh"
+  grep -qx "SCRIPT_VERSION='v9.8.8'" "$d/dl/bootstrap-project.sh" || die "test setup: the version was not changed"
+  sed "s/$BUILT_VERSION/v9.8.8/" "$BUILT/CHANGELOG.md" >"$d/changelog"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "The copy of the project on this computer is from version v9\.8\.7 of the bootstrapper, but this script is version v9\.8\.8\. "
+  grep -qF "$BUILT_VERSION, built from" "$d/err" || { cat "$d/err" >&2; die "the stamp is not shown below"; }
+  expect_continue_command "$d" " --resume"
+  c="$(copy_of "$d")"
+  [ "$(in_git -C "$c" symbolic-ref --short HEAD)" = main ] || die "the line of work was started"
+  [ -z "$(in_git -C "$c" config --local --get user.name)" ] || die "the name was written"
+  [ -z "$(in_git -C "$c" status --porcelain)" ] || die "the copy was changed"
+  # No CHANGELOG.md, or one without a stamp: not from a bootstrapper.
+  for what in missing unstamped; do
+    d="$(tmpdir)"
+    cp -R "$BUILT" "$d/template"
+    if [ "$what" = missing ]; then
+      rm "$d/template/CHANGELOG.md"
+    else
+      printf '# Changelog\n' >"$d/template/CHANGELOG.md"
+    fi
+    export STUB_GH_TEMPLATE="$d/template"
+    setup_run "$d" --non-interactive --yes
+    expect_rc 1 "$d"
+    expect_err_shape "$d" "The copy of the project on this computer does not say which version of the bootstrapper it came from"
+    expect_continue_command "$d" " --resume"
+    [ -z "$(in_git -C "$(copy_of "$d")" status --porcelain)" ] || die "$what: the copy was changed"
+    unset STUB_GH_TEMPLATE
+  done
 }
 
 # ---------- run ----------
