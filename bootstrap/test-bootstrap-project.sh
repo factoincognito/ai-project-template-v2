@@ -2974,7 +2974,7 @@ test_github_sign_in_is_checked_before_the_questions() {
   d="$(tmpdir)"
   working_git "$d"
   fake_tool "$d" npm 10.0.0
-  printf '%s\n' my-app "" "Lends tools." "" "" python "" none "" "" "" >"$d/in"
+  printf '%s\n' my-app "" "Lends tools." "" "" python "" none "" "" "" no >"$d/in"
   whole "$d"
   expect_rc 1 "$d"
   expect_out "$d" "Owner [octo-user]: "
@@ -3480,9 +3480,12 @@ test_a_403_on_protection_stops_before_anything_else_with_its_guide() {
         expect_out "$d" "https://github.com/settings/personal-access-tokens"
         ;;
     esac
+    # The guide covers only its own cause (the plan above it warned
+    # about the paid plan already, because the project is private).
+    sed -n '/^==> Protecting/,$p' "$d/out" >"$d/guide"
     case "$mode" in
-      plan) expect_no_out "$d" "Administration" ;;
-      token) expect_no_out "$d" "needs a paid GitHub plan" ;;
+      plan) ! grep -qF "Administration" "$d/guide" || { cat "$d/guide" >&2; die "plan: the token steps are shown"; } ;;
+      token) ! grep -qF "needs a paid GitHub plan" "$d/guide" || { cat "$d/guide" >&2; die "token: the plan steps are shown"; } ;;
     esac
     unset STUB_GH_PROTECT_FAIL
   done
