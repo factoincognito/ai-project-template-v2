@@ -261,6 +261,13 @@ case "${1:-}" in
     #     the body read from stdin is appended, with a line break, to the
     #     file protection-bodies next to the log; 200, or <mode> with
     #     STUB_GH_PROTECT_FAIL (plan, token, mystery, not-found, ...).
+    # And the licence text (step 10):
+    #   - api -i licenses/<key> --jq .body: the file <key> in the folder
+    #     STUB_GH_LICENSES (the harness writes mit and apache-2.0 from
+    #     GitHub's texts), printed as gh prints a string picked by --jq:
+    #     as is, plus a line break (so it ends in a blank line); with
+    #     STUB_GH_CR each line ends in a carriage return. Any other key is
+    #     GitHub's 404. STUB_GH_LICENSE_FAIL fails it as <mode>.
     if [ "$*" = 'api -i user --jq .login, (.name // "")' ]; then
       if [ -n "${STUB_GH_USER_FAIL:-}" ] && should_fail user-fails; then emit_failure "$STUB_GH_USER_FAIL"; fi
       scopes="${STUB_GH_SCOPES-repo, read:org, gist, workflow}"
@@ -310,6 +317,14 @@ case "${1:-}" in
           ;;
       esac
       emit_failure not-found
+    elif [ "$#" -eq 5 ] && [ "$2" = -i ] && [ "${3#licenses/}" != "$3" ] && [ "$4 $5" = "--jq .body" ]; then
+      if [ -n "${STUB_GH_LICENSE_FAIL:-}" ]; then emit_failure "$STUB_GH_LICENSE_FAIL"; fi
+      : "${STUB_GH_LICENSES:?stub gh: STUB_GH_LICENSES is not set}"
+      [ -f "$STUB_GH_LICENSES/${3#licenses/}" ] || emit_failure not-found
+      respond 200 OK 'application/json; charset=utf-8'
+      { cat "$STUB_GH_LICENSES/${3#licenses/}"; printf '\n'; } | while IFS= read -r line || [ -n "$line" ]; do
+        printf '%s%s\n' "$line" "${STUB_GH_CR:-}"
+      done
     else
       echo "stub gh: no emulation for: $*" >&2; exit 64
     fi
@@ -339,8 +354,66 @@ STUB
   chmod +x "$path"
 }
 
+# ---------- stub npm ----------
+# A stand-in for npm, selected with BOOTSTRAP_NPM, so CI never reaches
+# the npm registry. Every call appends one line to $STUB_NPM_LOG: the
+# folder it ran in, then each argument, tab-separated. It emulates only
+# the lockfile command, `install --package-lock-only --no-audit --no-fund`,
+# as npm 10.9 does it (seen in a real run on the node pack): it writes
+# package-lock.json (lockfileVersion 3, its name and version read from
+# package.json at that moment, two spaces of indent, LF, a newline at the
+# end), changes nothing else, prints "up to date in <time>" after a blank
+# line on stdout and exits 0. STUB_NPM_FAIL makes it fail as npm 10 does:
+# offline (no network: npm's ENOTFOUND text) or notarget (a version the
+# registry lacks: ETARGET), on stderr, exit 1, writing nothing. Any other
+# call fails loudly (exit 64).
+
+make_stub_npm() {
+  local path="$1"
+  mkdir -p "$(dirname "$path")"
+  cat >"$path" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+: "${STUB_NPM_LOG:?stub npm: STUB_NPM_LOG is not set}"
+{
+  printf '%s' "$PWD"
+  for a in "$@"; do printf '\t%s' "$a"; done
+  printf '\n'
+} >>"$STUB_NPM_LOG"
+if [ "$*" != "install --package-lock-only --no-audit --no-fund" ]; then
+  echo "stub npm: no emulation for: $*" >&2; exit 64
+fi
+case "${STUB_NPM_FAIL:-}" in
+  "") ;;
+  offline)
+    printf '%s\n' 'npm error code ENOTFOUND' 'npm error syscall getaddrinfo' 'npm error errno ENOTFOUND' \
+      'npm error network request to https://registry.npmjs.org/@biomejs%2fbiome failed, reason: getaddrinfo ENOTFOUND registry.npmjs.org' \
+      'npm error network This is a problem related to network connectivity.' \
+      'npm error network In most cases you are behind a proxy or have bad network settings.' \
+      "npm error A complete log of this run can be found in: $HOME/.npm/_logs/2031-02-03T10_00_00_000Z-debug-0.log" >&2
+    exit 1
+    ;;
+  notarget)
+    printf '%s\n' 'npm error code ETARGET' 'npm error notarget No matching version found for jest@30.5.2.' \
+      'npm error notarget In most cases you or one of your dependencies are requesting' \
+      "npm error notarget a package version that doesn't exist." >&2
+    exit 1
+    ;;
+  *) echo "stub npm: unknown failure mode: $STUB_NPM_FAIL" >&2; exit 64 ;;
+esac
+[ -f package.json ] || { echo 'npm error code ENOENT' >&2; exit 254; }
+name="$(grep -m1 '^  "name": ' package.json | sed 's/^  "name": "\(.*\)",$/\1/')"
+version="$(grep -m1 '^  "version": ' package.json | sed 's/^  "version": "\(.*\)",$/\1/')"
+printf '%s\n' '{' "  \"name\": \"$name\"," "  \"version\": \"$version\"," '  "lockfileVersion": 3,' \
+  '  "requires": true,' '  "packages": {' '    "": {' "      \"name\": \"$name\"," \
+  "      \"version\": \"$version\"" '    }' '  }' '}' >package-lock.json
+printf '\nup to date in 2s\n'
+STUB
+  chmod +x "$path"
+}
+
 # ---------- safe defaults for the hooks ----------
-# Every test runs with both hooks pointing at stubs that refuse: they log
+# Every test runs with the hooks pointing at stubs that refuse: they log
 # the call to $REFUSE_LOG, say which hook to set, and exit 70. So a test
 # that forgets to set a hook runs no real install, login or gh, and
 # fails. A test that needs the real default unsets the hook itself.
@@ -358,7 +431,8 @@ STUB
 mkdir -p "$WORK/refuse"
 make_refuser "$WORK/refuse/run" BOOTSTRAP_RUN
 make_refuser "$WORK/refuse/gh" BOOTSTRAP_GH
-export BOOTSTRAP_RUN="$WORK/refuse/run" BOOTSTRAP_GH="$WORK/refuse/gh"
+make_refuser "$WORK/refuse/npm" BOOTSTRAP_NPM
+export BOOTSTRAP_RUN="$WORK/refuse/run" BOOTSTRAP_GH="$WORK/refuse/gh" BOOTSTRAP_NPM="$WORK/refuse/npm"
 # The pause between two checks of GitHub (BOOTSTRAP_SLEEP): a stand-in
 # that waits for nothing, so no test waits for real. It appends the
 # seconds it was asked to wait to $STUB_SLEEP_LOG (default $WORK/sleep.log).
@@ -376,6 +450,50 @@ export BOOTSTRAP_TTY="$WORK/no-terminal"
 # own, unstamped stub, so the unstamped script under test finds its own
 # version there. Tests that need another version serve a stamped copy.
 export STUB_GH_CHANGELOG="$REPO/bootstrap/stubs/CHANGELOG.md"
+# The licence texts the stub gh serves (licenses/<key>), as GitHub has
+# them: MIT with choosealicense.com's [year] and [fullname], and the
+# start and the appendix of Apache 2.0, whose placeholders are others
+# ([yyyy], [name of copyright owner]) and stay as they are.
+export STUB_GH_LICENSES="$WORK/licence-texts"
+mkdir -p "$STUB_GH_LICENSES"
+cat >"$STUB_GH_LICENSES/mit" <<'TEXT'
+MIT License
+
+Copyright (c) [year] [fullname]
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+TEXT
+cat >"$STUB_GH_LICENSES/apache-2.0" <<'TEXT'
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+TEXT
 # A token in the environment changes the permission guide; the tests set
 # one themselves when they need it.
 unset GH_TOKEN GITHUB_TOKEN
@@ -1001,9 +1119,9 @@ test_run_offered_runs_with_gh_prompts_enabled() {
 
 test_a_test_that_forgets_the_hooks_runs_nothing_real() {
   # Review round 1: CI must be safe by structure, not by each test
-  # remembering the hooks. A test that sets neither hook runs no real
-  # install, login or gh: the harness defaults both to stubs that refuse
-  # loudly (non-zero exit), so the forgetful test fails.
+  # remembering the hooks. A test that sets no hook runs no real
+  # install, login, gh or npm: the harness defaults each to a stub that
+  # refuses loudly (non-zero exit), so the forgetful test fails.
   local d rc
   d="$(tmpdir)"; mkdir -p "$d/bin"
   printf '#!/usr/bin/env bash\ntouch "%s/real-gh-ran"\n' "$d" >"$d/bin/gh"
@@ -1019,7 +1137,15 @@ test_a_test_that_forgets_the_hooks_runs_nothing_real() {
   [ "$rc" -ne 0 ] || die "run_gh without a hook returned 0; a forgetful test would pass"
   grep -qF 'BOOTSTRAP_RUN' "$d/err" && grep -qF 'BOOTSTRAP_GH' "$d/err" \
     || { cat "$d/err" >&2; die "the refusals do not name the hook to set"; }
-  [ "$(wc -l <"$d/refused.log" | tr -d ' ')" -eq 2 ] || die "refusals not logged"
+  # The lockfile step's npm (BOOTSTRAP_NPM), likewise.
+  printf '#!/usr/bin/env bash\ntouch "%s/real-npm-ran"\n' "$d" >"$d/bin/npm"
+  chmod +x "$d/bin/npm"
+  rc=0
+  ( load_script; export REFUSE_LOG="$d/refused.log" PATH="$d/bin:$PATH"; run_npm --version ) 2>>"$d/err" || rc=$?
+  [ ! -e "$d/real-npm-ran" ] || die "run_npm ran the npm on PATH in a test that set no hook"
+  [ "$rc" -ne 0 ] || die "run_npm without a hook returned 0; a forgetful test would pass"
+  grep -qF 'BOOTSTRAP_NPM' "$d/err" || { cat "$d/err" >&2; die "the npm refusal does not name the hook to set"; }
+  [ "$(wc -l <"$d/refused.log" | tr -d ' ')" -eq 3 ] || die "refusals not logged"
 }
 
 # ---------- plain language ----------
@@ -1603,30 +1729,34 @@ test_non_interactive_never_reads_stdin() {
 
 test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
   # The whole script, as a user gets it (the built copy) and runs it, with
-  # --yes (needed with --non-interactive). The steps after the copy on
-  # this computer are not built yet: it stops there, with exit 1.
+  # --yes (needed with --non-interactive). The steps after the CHANGELOG
+  # entry are not built yet: it stops there, with exit 1.
   local d rc
   d="$(tmpdir)"
   make_stub_gh "$d/gh"
   fake_home "$d/home" "Test Person" test@example.com
   fake_tool "$d" npm 10.0.0
+  make_stub_npm "$d/npm"
   mkdir -p "$d/cwd"
   use_built "$d"
   rc=0
-  ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
+  ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
+      STUB_NPM_LOG="$d/npm.log" BOOTSTRAP_NPM="$d/npm"
     bash "$RUN_SCRIPT" --non-interactive --yes "${REQUIRED_OPTS[@]}" ) </dev/null >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "exit $rc, want 1"; }
   grep -qF 'the next steps of the setup are not built yet' "$d/err" || { cat "$d/err" >&2; die "no stop message"; }
   rm -rf "$d/created" "$d/remotes" "$d/cwd/my-app"
   rc=0
-  ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
+  ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
+      STUB_NPM_LOG="$d/npm.log" BOOTSTRAP_NPM="$d/npm"
     bash "$RUN_SCRIPT" --non-interactive --yes "${REQUIRED_OPTS[@]}" ) <&- >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "stdin closed: exit $rc, want 1"; }
   grep -qF 'the next steps of the setup are not built yet' "$d/err" || { cat "$d/err" >&2; die "stdin closed: no stop message"; }
   # gh: the two checks on this computer, the GitHub checks (the account,
   # the published version, the name), then creating and protecting the
-  # project and making the copy on this computer, every one with gh's own
-  # prompts off; the copy is the only thing made on this computer.
+  # project, making the copy on this computer and reading the licence,
+  # every one with gh's own prompts off; the copy is the only thing made
+  # on this computer.
   [ "$(cut -f2- "$d/gh.log" | LC_ALL=C sort -u)" = "$(printf '%s\n' '--version' "$(printf 'repo\tcreate\t--help')" \
       "$(printf 'api\t-i\tuser\t--jq\t.login, (.name // "")')" \
       "$(printf 'api\t-i\t-H\tAccept: application/vnd.github.raw+json\trepos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md')" \
@@ -1636,7 +1766,8 @@ test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
       "$(printf 'api\t-i\trepos/octo-user/my-app/contents/CHANGELOG.md')" \
       "$(printf 'api\t-i\t-X\tPUT\trepos/octo-user/my-app/branches/main/protection\t--input\t-')" \
       "$(printf 'repo\tedit\tocto-user/my-app\t--delete-branch-on-merge\t--enable-squash-merge')" \
-      "$(printf 'repo\tclone\tocto-user/my-app\t./my-app')" | LC_ALL=C sort)" ] \
+      "$(printf 'repo\tclone\tocto-user/my-app\t./my-app')" \
+      "$(printf 'api\t-i\tlicenses/mit\t--jq\t.body')" | LC_ALL=C sort)" ] \
     || { cat "$d/gh.log" >&2; die "gh was used for more than its checks and the steps built so far"; }
   [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] \
     || { cat "$d/gh.log" >&2; die "a gh call ran with gh's prompts on"; }
@@ -2035,10 +2166,12 @@ test_pack_and_licence_questions_explain_each_choice() {
 # `pre <dir> <command...>` runs a function of the loaded script after
 # detect_os, with PATH="<dir>/bin:/usr/bin:/bin" (so only the fake tools a
 # test makes, plus the system's own, are found: no brew or winget unless
-# faked), a stub gh and a stub runner, stdin from <dir>/in, the terminal
-# from <dir>/tty and the Linux release file from <dir>/os-release when
-# they exist, in <dir>/cwd with the fake home <dir>/home. stdout goes to
-# <dir>/out, stderr to <dir>/err, the runner's log to <dir>/run.log.
+# faked), a stub gh, a stub runner and a stub npm (BOOTSTRAP_NPM, the
+# npm the lockfile step runs; the check that npm is installed uses a fake
+# npm on PATH), stdin from <dir>/in, the terminal from <dir>/tty and the
+# Linux release file from <dir>/os-release when they exist, in <dir>/cwd
+# with the fake home <dir>/home. stdout goes to <dir>/out, stderr to
+# <dir>/err, the runner's log to <dir>/run.log, npm's to <dir>/npm.log.
 # `whole <dir> <options...>` does the same for the whole script (or for
 # $RUN_SCRIPT when a test sets it: see use_built).
 
@@ -2047,9 +2180,11 @@ prepare() {
   [ -e "$d/in" ] || : >"$d/in"
   [ -x "$d/gh" ] || make_stub_gh "$d/gh"
   [ -x "$d/run" ] || make_stub_run "$d/run"
+  [ -x "$d/npm" ] || make_stub_npm "$d/npm"
   [ -d "$d/home" ] || fake_home "$d/home" "Test Person" test@example.com
   mkdir -p "$d/cwd" "$d/bin"
   : >>"$d/run.log"
+  : >>"$d/npm.log"
 }
 
 # in_env <dir>: the environment of a run, in the current subshell.
@@ -2058,7 +2193,8 @@ in_env() {
   cd "$d/cwd"
   use_home "$d/home"
   export PATH="$d/bin:/usr/bin:/bin" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
-    STUB_RUN_LOG="$d/run.log" BOOTSTRAP_RUN="$d/run" STUB_SLEEP_LOG="$d/sleep.log"
+    STUB_RUN_LOG="$d/run.log" BOOTSTRAP_RUN="$d/run" STUB_SLEEP_LOG="$d/sleep.log" \
+    STUB_NPM_LOG="$d/npm.log" BOOTSTRAP_NPM="$d/npm"
   # git never looks above the harness's own temp folder for a project,
   # so a test sees only the git projects it made itself.
   export GIT_CEILING_DIRECTORIES="$WORK"
@@ -3382,6 +3518,8 @@ PROTECT_CALL='api -i -X PUT repos/octo-user/my-app/branches/main/protection --in
 EDIT_CALL='repo edit octo-user/my-app --delete-branch-on-merge --enable-squash-merge'
 PROBE_CALL='api -i repos/octo-user/my-app'
 CLONE_CALL='repo clone octo-user/my-app ./my-app'
+# Step 10, for setup_run's --license mit: the only gh call after the copy.
+LICENSE_CALL='api -i licenses/mit --jq .body'
 # The spec's body for step 3, field for field.
 PROTECT_BODY='{"required_status_checks":null,"enforce_admins":true,"required_pull_request_reviews":{"required_approving_review_count":0},"restrictions":null,"allow_force_pushes":false,"allow_deletions":false}'
 NOT_BUILT='the next steps of the setup are not built yet'
@@ -3569,7 +3707,7 @@ test_create_waits_for_the_files_then_protects_main_with_the_exact_body() {
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
-  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$CLONE_CALL"
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$CLONE_CALL" "$LICENSE_CALL"
   # Byte for byte: the body as sent, then the line break the stub adds
   # (a here-string ends in one too, so two in all).
   printf '%s\n\n' "$PROTECT_BODY" >"$d/want-body"
@@ -3605,7 +3743,7 @@ test_the_files_are_waited_for_retrying_on_404_for_up_to_a_minute() {
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
   expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$BRANCH_CALL" "$BRANCH_CALL" "$BRANCH_CALL" \
-    "$FILES_CALL" "$FILES_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$CLONE_CALL"
+    "$FILES_CALL" "$FILES_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$CLONE_CALL" "$LICENSE_CALL"
   [ "$(cat "$d/sleep.log")" = "$(printf '2\n2\n2\n2\n2')" ] || { cat "$d/sleep.log" >&2; die "not 5 waits of 2 seconds"; }
   grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/err" >&2; die "did not reach the end of step 3"; }
   # Never there: 30 waits of 2 seconds (60 s), then a plain stop with the
@@ -3916,21 +4054,23 @@ STEPS_AFTER_SETTINGS='==> Making a copy of the project on this computer, in ./my
 ==> Starting a separate line of work for the setup, named bootstrap-setup
 ==> Adding the python language pack'"'"'s files to the copy
 ==> Removing what only the setup needed from the copy
-==> Filling in the project'"'"'s name, description and product owner in its files'
+==> Filling in the project'"'"'s name, description and product owner in its files
+==> Adding the project'"'"'s licence
+==> Noting the setup in CHANGELOG.md, the project'"'"'s list of changes'
 
 test_the_copy_is_made_by_gh_and_checked_against_the_script_version() {
   local d c
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
-  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$CLONE_CALL"
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$CLONE_CALL" "$LICENSE_CALL"
   [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] || { cat "$d/gh.log" >&2; die "a gh call ran with prompts on"; }
   c="$(copy_of "$d")"
   [ "$(in_git -C "$c" rev-parse origin/main)" = "$(in_git --git-dir="$(bare_of "$d")" rev-parse main)" ] \
     || die "the copy is not of the project that was made"
   # The new steps, in order, each with a start and a done line.
   [ "$(grep '^==> ' "$d/out" | sed -n '/^==> Setting how proposed/,$p' | sed 1d)" = "$STEPS_AFTER_SETTINGS" ] \
-    || { cat "$d/out" >&2; die "the steps after the settings are not the copy, name, line of work, pack, tidy-up, fill"; }
+    || { cat "$d/out" >&2; die "the steps after the settings are not the copy, name, line of work, pack, tidy-up, fill, licence, CHANGELOG"; }
   [ "$(grep -c '^==> ' "$d/out")" -eq "$(grep -c '^    Done\. ' "$d/out")" ] || { cat "$d/out" >&2; die "a step has no done line"; }
   expect_out "$d" "    Done. The copy is in ./my-app, with the files of version $BUILT_VERSION of the bootstrapper."
   # The stop: what exists, that the next steps are not built, and the
@@ -3973,7 +4113,7 @@ test_the_setup_starts_its_own_line_of_work_and_nothing_is_saved_or_sent() {
   ! in_git -C "$c" rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1 || die "bootstrap-setup follows a branch on GitHub"
   [ "$(in_git --git-dir="$bare" for-each-ref --format='%(refname)')" = refs/heads/main ] || die "something was sent to GitHub"
   [ -n "$(in_git -C "$c" status --porcelain)" ] || die "the setup's changes are not in the copy"
-  [ "$(calls_from_create "$d" | tail -1)" = "$CLONE_CALL" ] || { cat "$d/gh.log" >&2; die "gh was used after the copy"; }
+  [ "$(calls_from_create "$d" | tail -2)" = "$CLONE_CALL"$'\n'"$LICENSE_CALL" ] || { cat "$d/gh.log" >&2; die "gh was used after the copy for more than the licence"; }
 }
 
 # The spec's fill table (step 8), written out here on purpose rather than
@@ -4013,6 +4153,9 @@ want_fill_rows() {
 # answers; a test that gives others sets these to match.
 W_DISPLAY="My App" W_PO=Ada W_OWNER_AND_NAME=octo-user/my-app
 W_DESCRIPTION="Lends tools to neighbours." W_SLUG=my-app
+# W_LICENSE and W_HOLDER: the licence and copyright holder the run used
+# (setup_run's --license mit and --copyright-holder "Ada L").
+W_LICENSE=mit W_HOLDER="Ada L"
 want_value() {
   case "$1" in
     display) printf '%s' "$W_DISPLAY" ;;
@@ -4039,10 +4182,32 @@ filled_as() {
     t="${t//\\n/$nl}"
     v="$(want_value "$key")"
     case "$s" in *"$t"*) ;; *) die "$p$deploy: $f has no $t before the fill (test is stale)" ;; esac
-    s=${s//"$t"/$v}
+    s=${s//"$t"/"$v"}
     printf '%s|%s\n' "$rf" "$key" >>"$d/applied"
   done < <(want_fill_rows "$p" "$deploy")
   printf '%s' "$s" >"$6"
+}
+
+# want_changelog_lines <pack> <deploy>: the lines step 11 adds to
+# CHANGELOG.md, for the licence W_LICENSE.
+want_changelog_lines() {
+  if [ -n "${2:-}" ]; then
+    printf '%s\n' "- Language pack: $1, with the files that publish the website."
+  else
+    printf '%s\n' "- Language pack: $1."
+  fi
+  printf '%s\n' "- Licence: $W_LICENSE." "- Set up by bootstrap-project.sh."
+}
+
+# want_licence <key>: the LICENSE a GitHub licence becomes: GitHub's text
+# (the stub's) with [year] the year of FAKE_TODAY and [fullname]
+# W_HOLDER, by bash's own literal replacement (not the script's awk).
+want_licence() {
+  local s
+  s="$(cat "$STUB_GH_LICENSES/$1")"
+  s=${s//"[year]"/"${FAKE_TODAY%%-*}"}
+  s=${s//"[fullname]"/"$W_HOLDER"}
+  printf '%s\n' "$s"
 }
 
 # expect_filled <dir> <pack> <deploy> <file> <source> <copy file>: the
@@ -4069,6 +4234,9 @@ expect_setup_tree() {
     tree_of "$fresh"
     for f in $kept; do echo "languages/$p/$f"; done
     [ -z "$deploy" ] || printf '%s\n' .github/workflows/deploy.yml wrangler.jsonc
+    case "$p" in node | web | react-native) echo package-lock.json ;; esac
+    [ "$W_LICENSE" = none ] || echo LICENSE
+    [ "$W_LICENSE" != polyform-noncommercial-1.0.0 ] || echo NOTICE
   } | LC_ALL=C sort -u >"$d/want"
   tree_of "$c" >"$d/got"
   expect_same "$p$deploy: the tree" "$d/want" "$d/got"
@@ -4099,7 +4267,7 @@ expect_setup_tree() {
   # Every other file of the bootstrapper is unchanged, mode included,
   # except for the fill rows of that file.
   while IFS= read -r f; do
-    case "$f" in README.md | .gitignore | docs/DEV_INFRASTRUCTURE.md | .github/workflows/ci.yml) continue ;; esac
+    case "$f" in README.md | .gitignore | docs/DEV_INFRASTRUCTURE.md | .github/workflows/ci.yml | CHANGELOG.md) continue ;; esac
     expect_filled "$d" "$p" "$deploy" "$f" "$BUILT/$f" "$c/$f"
   done < <(tree_of "$BUILT" | grep -v '^languages/' | grep -vx 'bootstrap-project.sh')
   # .gitignore: the bootstrapper's, then the pack's lines it lacked.
@@ -4125,6 +4293,38 @@ expect_setup_tree() {
   done
   expect_same "$p$deploy: DEV_INFRASTRUCTURE.md" "$d/dev" "$c/docs/DEV_INFRASTRUCTURE.md"
   grep -qF "\`languages/$p/code-standards.md\`" "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: the link to its own pack was rewritten"
+  # CHANGELOG.md (step 11): filled in, then the pack, the licence and
+  # "set up by bootstrap-project.sh" at the end of "## Project created",
+  # which is the file's last section.
+  [ "$(grep '^## ' "$BUILT/CHANGELOG.md" | tail -1)" = '## Project created' ] || die "Project created is not the built CHANGELOG's last section (test is stale)"
+  filled_as "$d" "$p" "$deploy" CHANGELOG.md "$BUILT/CHANGELOG.md" "$d/changelog"
+  want_changelog_lines "$p" "$deploy" >>"$d/changelog"
+  expect_same "$p$deploy: CHANGELOG.md" "$d/changelog" "$c/CHANGELOG.md"
+  # The lockfile (step 7), for the npm packs only: made by npm in the
+  # copy after the fill, so it names the project, not [project-name].
+  case "$p" in
+    node | web | react-native)
+      [ "$(sed -n 2p "$c/package-lock.json")" = "  \"name\": \"$W_SLUG\"," ] \
+        || { cat "$c/package-lock.json" >&2; die "$p$deploy: the lockfile does not name the project $W_SLUG"; }
+      ;;
+  esac
+  # The licence (step 10).
+  case "$W_LICENSE" in
+    none) ;;
+    polyform-noncommercial-1.0.0)
+      cmp -s "$BUILT/licenses/PolyForm-Noncommercial-1.0.0.md" "$c/LICENSE" || die "$p$deploy: LICENSE is not the PolyForm text"
+      printf 'Required Notice: Copyright %s\n' "$W_HOLDER" >"$d/notice"
+      expect_same "$p$deploy: NOTICE" "$d/notice" "$c/NOTICE"
+      ;;
+    *)
+      want_licence "$W_LICENSE" >"$d/licence"
+      expect_same "$p$deploy: LICENSE" "$d/licence" "$c/LICENSE"
+      ;;
+  esac
+  # Every file the setup wrote has LF line endings.
+  for f in CHANGELOG.md LICENSE NOTICE package-lock.json; do
+    [ ! -f "$c/$f" ] || ! grep -q "$(printf '\r')" "$c/$f" || die "$p$deploy: $f has a carriage return"
+  done
   # Every row of the fill table was checked against some file.
   want_fill_rows "$p" "$deploy" | awk -F'|' '{ print $1 "|" $3 }' | LC_ALL=C sort -u >"$d/rows"
   LC_ALL=C sort -u "$d/applied" >"$d/applied-rows"
@@ -4337,7 +4537,7 @@ test_a_folder_named_like_a_setting_or_an_option_gets_the_whole_tree_and_stdin_is
     [ "$(cat "$d/rc")" -eq 1 ] || { cat "$d/out" "$d/err" >&2; die "$dir: exit $(cat "$d/rc"), want 1"; }
     grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/err" >&2; die "$dir: did not reach the end"; }
     [ "$(cat "$d/first")" = first-line ] || die "$dir: stdin was read; the next line is: $(cat "$d/first")"
-    [ "$(calls_from_create "$d" | tail -1)" = "repo clone octo-user/my-app ./$dir" ] || { cat "$d/gh.log" >&2; die "$dir: not copied into ./$dir"; }
+    [ "$(calls_from_create "$d" | grep '^repo clone ')" = "repo clone octo-user/my-app ./$dir" ] || { cat "$d/gh.log" >&2; die "$dir: not copied into ./$dir"; }
     [ "$(ls -A "$d/cwd")" = "$dir" ] || { ls -A "$d/cwd" >&2; die "$dir: the copy is not in the folder named"; }
     expect_setup_tree "$d" "$d/cwd/$dir" python ""
   done
@@ -4519,6 +4719,250 @@ test_the_placeholders_left_for_clead_are_listed_in_plain_words() {
   done
   [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "it wrote to stderr"; }
   [ -z "$(banned_hits <"$d/out")" ] || { cat "$d/out" >&2; die "a banned word in the list"; }
+}
+
+# ---------- lockfile, licence and CHANGELOG (spec steps 7, 10, 11) ----------
+# After the fill: for the npm packs, npm records the exact versions of the
+# tools in package-lock.json (step 7, run after the fill so the lockfile
+# names the project, not [project-name]); then the licence (step 10): a
+# GitHub licence's text with [year] and [fullname] filled in, PolyForm
+# Noncommercial from licenses/ with a NOTICE, or no file for none (with a
+# warning when the project is public); then CHANGELOG.md gets the pack,
+# the licence and "set up by bootstrap-project.sh" at the end of its
+# "## Project created" section (step 11). Then the script stops: the
+# next steps are not built yet (exit 1). npm is the stub npm
+# (BOOTSTRAP_NPM), so no test reaches the npm registry.
+
+test_the_npm_packs_get_a_lockfile_made_by_npm_after_the_fill() {
+  local d c p
+  built_bootstrapper
+  for p in node web react-native; do
+    d="$(tmpdir)"
+    fake_tool "$d" npm 10.0.0
+    setup_run "$d" --non-interactive --yes --pack "$p"
+    expect_rc 1 "$d"
+    grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "$p: did not reach the end"; }
+    c="$(copy_of "$d")"
+    # One call, in the copy, with the spec's command (the same as packs.yml).
+    printf '%s\tinstall\t--package-lock-only\t--no-audit\t--no-fund\n' "$(cd "$c" && pwd)" >"$d/want-npm"
+    expect_same "$p: the npm calls" "$d/want-npm" "$d/npm.log"
+    # After the fill: the lockfile names the project.
+    grep -qF "\"name\": \"$W_SLUG\"" "$c/package-lock.json" || die "$p: the lockfile does not name the project"
+    ! grep -qF '[project-name]' "$c/package-lock.json" || die "$p: the lockfile was made before the fill"
+    # Its own step, between the fill and the licence, with a done line.
+    grep '^==> ' "$d/out" | sed -n '/^==> Filling in/,$p' >"$d/steps"
+    [ "$(sed -n 2p "$d/steps")" = "==> Recording the exact versions of the $p pack's tools in package-lock.json" ] \
+      || { cat "$d/out" >&2; die "$p: the lockfile step does not come right after the fill"; }
+    [ "$(sed -n 3p "$d/steps")" = "==> Adding the project's licence" ] || { cat "$d/out" >&2; die "$p: the licence does not follow the lockfile"; }
+    expect_out "$d" "    Done. package-lock.json lists the exact version of every tool the project uses, so its checks on GitHub install the same ones."
+    # npm's own text is not shown when it works.
+    expect_no_out "$d" "up to date"
+  done
+  # A folder whose name starts with -: npm still runs in it (cd would
+  # read -app as an option; check_dir makes it ./-app).
+  d="$(tmpdir)"
+  fake_tool "$d" npm 10.0.0
+  setup_run "$d" --non-interactive --yes --pack node --dir=-app
+  expect_rc 1 "$d"
+  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "-app: did not reach the end"; }
+  printf '%s\tinstall\t--package-lock-only\t--no-audit\t--no-fund\n' "$(cd "$d/cwd/-app" && pwd)" >"$d/want-npm"
+  expect_same "-app: the npm calls" "$d/want-npm" "$d/npm.log"
+  [ -f "$d/cwd/-app/package-lock.json" ] || die "-app: no lockfile"
+  # python: no npm call, no lockfile.
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  [ ! -s "$d/npm.log" ] || { cat "$d/npm.log" >&2; die "python: npm ran"; }
+  [ ! -e "$(copy_of "$d")/package-lock.json" ] || die "python: a lockfile was made"
+}
+
+test_a_failed_npm_is_explained_with_its_text_for_support() {
+  # Spec, Ease-of-use: errors say what happened and the next action, the
+  # raw text below for support. No network: check the connection; any
+  # other npm error: the plain fallback. Either way the project exists,
+  # so the command shown continues the setup, and nothing after the
+  # lockfile runs.
+  local d c mode
+  built_bootstrapper
+  for mode in offline notarget; do
+    d="$(tmpdir)"
+    fake_tool "$d" npm 10.0.0
+    export STUB_NPM_FAIL="$mode"
+    setup_run "$d" --non-interactive --yes --pack node
+    unset STUB_NPM_FAIL
+    expect_rc 1 "$d"
+    sed -n 1p "$d/err" | grep -qF "What happened: npm could not record the exact versions of the node pack's tools in package-lock.json. The project octo-user/my-app exists on GitHub, with only the bootstrapper's files in it" \
+      || { cat "$d/err" >&2; die "$mode: the first line does not say what happened"; }
+    case "$mode" in
+      offline) sed -n 2p "$d/err" | grep -qF "What to do next: Check that this computer is connected to the internet, then continue the setup with the command shown above." \
+        || { cat "$d/err" >&2; die "offline: the next action is not to check the connection"; } ;;
+      notarget) sed -n 2p "$d/err" | grep -qF "What to do next: Continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+        || { cat "$d/err" >&2; die "notarget: the next action is not the plain fallback"; } ;;
+    esac
+    sed -n 3p "$d/err" | grep -qxF 'Details for support (you can ignore these):' || { cat "$d/err" >&2; die "$mode: no support block"; }
+    grep -qxF "    npm error code $( [ "$mode" = offline ] && echo ENOTFOUND || echo ETARGET)" "$d/err" \
+      || { cat "$d/err" >&2; die "$mode: npm's own text is not below for support"; }
+    expect_continue_command "$d" " --resume"
+    ! grep -qF "$NOT_BUILT" "$d/err" || die "$mode: it went on after npm failed"
+    c="$(copy_of "$d")"
+    [ ! -e "$c/package-lock.json" ] && [ ! -e "$c/LICENSE" ] || die "$mode: it went on after npm failed"
+    ! grep -qF 'Set up by bootstrap-project.sh' "$c/CHANGELOG.md" || die "$mode: CHANGELOG.md was changed"
+  done
+}
+
+test_a_github_licence_gets_the_year_and_the_holder_filled_in() {
+  # Spec step 10: gh api licenses/<key> --jq .body goes to LICENSE, with
+  # [year] and [fullname] filled in, literally (S11's fill), LF line
+  # endings even when gh's text has carriage returns (Windows). A
+  # licence without those two (Apache 2.0) is written as GitHub has it.
+  local d c
+  built_bootstrapper
+  d="$(tmpdir)"
+  W_HOLDER="Zoë O'Brien \$1 [x] .* 100%s"
+  export STUB_GH_CR=$'\r'
+  setup_run "$d" --non-interactive --yes --copyright-holder "$W_HOLDER"
+  unset STUB_GH_CR
+  expect_rc 1 "$d"
+  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
+  [ "$(grep -F "$(printf '\tlicenses/')" "$d/gh.log")" = "$(printf 'GH_PROMPT_DISABLED=1\tapi\t-i\tlicenses/mit\t--jq\t.body')" ] \
+    || { cat "$d/gh.log" >&2; die "the licence was not read once, with gh's prompts off"; }
+  c="$(copy_of "$d")"
+  expect_setup_tree "$d" "$c" python
+  [ ! -e "$c/NOTICE" ] || die "a NOTICE was made for mit"
+  expect_out "$d" "    Done. LICENSE holds the licence mit, in the name of $W_HOLDER."
+  d="$(tmpdir)"
+  W_LICENSE=apache-2.0 W_HOLDER="Ada L"
+  setup_run "$d" --non-interactive --yes --license apache-2.0
+  expect_rc 1 "$d"
+  expect_setup_tree "$d" "$(copy_of "$d")" python
+  grep -qF 'Copyright [yyyy] [name of copyright owner]' "$(copy_of "$d")/LICENSE" || die "apache-2.0: its own placeholders changed"
+}
+
+test_polyform_noncommercial_is_copied_from_licenses_with_a_notice() {
+  # Spec step 10: the text is copied from licenses/ to LICENSE, and a root
+  # NOTICE gets "Required Notice: Copyright <holder>". GitHub is not asked.
+  local d c
+  built_bootstrapper
+  d="$(tmpdir)"
+  W_LICENSE=polyform-noncommercial-1.0.0
+  setup_run "$d" --non-interactive --yes --license polyform-noncommercial-1.0.0
+  expect_rc 1 "$d"
+  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
+  ! grep -qF 'licenses/' "$d/gh.log" || { cat "$d/gh.log" >&2; die "GitHub was asked for the PolyForm text"; }
+  c="$(copy_of "$d")"
+  expect_setup_tree "$d" "$c" python
+  cmp -s "$BUILT/licenses/NOTICE" "$c/licenses/NOTICE" || die "the template's own licenses/NOTICE changed"
+  expect_out "$d" "    Done. LICENSE holds the PolyForm Noncommercial licence, and NOTICE names Ada L as the copyright holder."
+}
+
+test_no_licence_adds_no_file_and_warns_only_for_a_public_project() {
+  # Spec step 10: none: no file, with a warning if the project is public.
+  local d vis warning='Warning: the project is public and has no licence: anyone can see its code, but nobody else may copy, change or share it. To add a licence later, see https://choosealicense.com.'
+  built_bootstrapper
+  W_LICENSE=none
+  for vis in --public --private; do
+    d="$(tmpdir)"
+    setup_run "$d" --non-interactive --yes --license none $vis
+    expect_rc 1 "$d"
+    grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "$vis: did not reach the end"; }
+    expect_setup_tree "$d" "$(copy_of "$d")" python
+    ! grep -qF 'licenses/' "$d/gh.log" || die "$vis: GitHub was asked for a licence"
+    expect_out "$d" "    Done. No licence file was added, because you chose none."
+    if [ "$vis" = --public ]; then
+      grep -qxF "$warning" "$d/out" || { cat "$d/out" >&2; die "public: no warning"; }
+    else
+      expect_no_out "$d" "Warning: the project is public"
+    fi
+  done
+}
+
+test_a_licence_github_does_not_know_is_explained_with_the_next_action() {
+  # Spec, Ease-of-use: an unknown key (GitHub's 404) says what happened
+  # and where to find the right name; any other answer gets the usual
+  # plain message. The project exists, so the command shown continues
+  # the setup; no LICENSE is written and CHANGELOG.md is not changed.
+  local d c
+  built_bootstrapper
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes --license made-up-2.0
+  expect_rc 1 "$d"
+  sed -n 1p "$d/err" | grep -qF "What happened: GitHub has no licence with the short name made-up-2.0, so the script could not add it. The project octo-user/my-app exists on GitHub" \
+    || { cat "$d/err" >&2; die "the unknown licence is not named"; }
+  sed -n 2p "$d/err" | grep -qF "https://choosealicense.com/licenses/" || { cat "$d/err" >&2; die "the next action does not say where to find the name"; }
+  grep -qxF '    HTTP 404: Not Found' "$d/err" || { cat "$d/err" >&2; die "GitHub's answer is not below for support"; }
+  expect_continue_command "$d" " --resume"
+  ! grep -qF "$NOT_BUILT" "$d/err" || die "it went on after the 404"
+  c="$(copy_of "$d")"
+  [ ! -e "$c/LICENSE" ] || die "a LICENSE was written"
+  ! grep -qF 'Set up by bootstrap-project.sh' "$c/CHANGELOG.md" || die "CHANGELOG.md was changed"
+  d="$(tmpdir)"
+  export STUB_GH_LICENSE_FAIL=server
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_LICENSE_FAIL
+  expect_rc 1 "$d"
+  sed -n 1p "$d/err" | grep -qF "What happened: GitHub had a problem of its own, so the script could not read the text of the licence mit." \
+    || { cat "$d/err" >&2; die "a server error is not explained"; }
+  expect_continue_command "$d" " --resume"
+  [ ! -e "$(copy_of "$d")/LICENSE" ] || die "a LICENSE was written after a server error"
+}
+
+test_the_plan_says_whether_a_licence_is_added() {
+  # #150 review, finding 8: with --license none the plan's step 4 said
+  # "add the licence". It says what will happen.
+  local d
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --dry-run
+  expect_rc 0 "$d"
+  grep -qxF "  4. Add the language pack's files, fill in the project's names and description, and add the licence mit." "$d/out" \
+    || { cat "$d/out" >&2; die "mit: step 4 does not name the licence"; }
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --dry-run --license none
+  expect_rc 0 "$d"
+  grep -qxF "  4. Add the language pack's files and fill in the project's names and description; no licence file is added, because you chose none." "$d/out" \
+    || { cat "$d/out" >&2; die "none: step 4 does not say that no licence is added"; }
+  expect_no_out "$d" "add the licence"
+}
+
+test_the_changelog_lines_go_at_the_end_of_project_created() {
+  # Spec step 11, "under Project created": after the section's last line,
+  # before the blank lines and the next heading when one follows; a
+  # CHANGELOG.md without the heading stops before changing it.
+  local d
+  d="$(tmpdir)"
+  mkdir -p "$d/copy"
+  printf '%s\n' '# Changelog' '' '## Project created' '' '- Bootstrapped from' '  v1, built.' '' '' '## Later' '' '- other' >"$d/copy/CHANGELOG.md"
+  ( load_script; IN_DIR="$d/copy" IN_PACK=web IN_WITH_DEPLOY=yes IN_LICENSE=gpl-3.0
+    note_setup_in_changelog ) >"$d/out" 2>"$d/err" || { cat "$d/err" >&2; die "note_setup_in_changelog failed"; }
+  printf '%s\n' '# Changelog' '' '## Project created' '' '- Bootstrapped from' '  v1, built.' \
+    '- Language pack: web, with the files that publish the website.' '- Licence: gpl-3.0.' '- Set up by bootstrap-project.sh.' \
+    '' '' '## Later' '' '- other' >"$d/want"
+  expect_same "CHANGELOG.md with a later section" "$d/want" "$d/copy/CHANGELOG.md"
+  printf '%s\n' '# Changelog' '' '## Unreleased' >"$d/copy/CHANGELOG.md"
+  cp "$d/copy/CHANGELOG.md" "$d/before"
+  set +e
+  ( load_script; IN_DIR="$d/copy" IN_PACK=node IN_WITH_DEPLOY="" IN_LICENSE=mit CREATED_NOTE=x RESTART_CMD=x
+    note_setup_in_changelog ) >"$d/out" 2>"$d/err"
+  RC=$?
+  set -e
+  [ "$RC" -eq 1 ] || { cat "$d/out" "$d/err" >&2; die "no heading: exit $RC, want 1"; }
+  sed -n 1p "$d/err" | grep -qF 'has no section "## Project created"' || { cat "$d/err" >&2; die "no heading: not explained"; }
+  sed -n 2p "$d/err" | grep -qF "Report it to the bootstrapper's maintainers" || { cat "$d/err" >&2; die "no heading: the next action is not to report it"; }
+  expect_same "CHANGELOG.md without the heading" "$d/before" "$d/copy/CHANGELOG.md"
+}
+
+test_the_harness_fill_copies_an_ampersand_literally() {
+  # #153 review, finding 4: filled_as replaced with an unquoted value, so
+  # under bash 5.2's patsub_replacement an & in a W_* value became the
+  # text it replaced. The inputs refuse &, so only the harness can meet
+  # one; this pins the quoting.
+  local d
+  d="$(tmpdir)"
+  : >"$d/applied"
+  printf '%s\n' 'x [PROJECT NAME] y' '[PO NAME]' '[One or two sentences: what this project is and who it is for.]' >"$d/src"
+  W_DISPLAY='A & B' W_PO='\& && \\&' W_DESCRIPTION='&'
+  filled_as "$d" node "" README.md "$d/src" "$d/got"
+  printf '%s\n' 'x A & B y' '\& && \\&' '&' >"$d/want"
+  expect_same "an & in the values" "$d/want" "$d/got"
 }
 
 # ---------- run ----------
