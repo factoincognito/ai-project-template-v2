@@ -1,6 +1,6 @@
 # [PROJECT NAME] — Next Session Planning
 
-**Last Updated:** 2026-10-02
+**Last Updated:** 2026-10-06
 **Author:** Clead (Tech Owner)
 **Purpose:** Staging area for reasoning, revised assumptions, and plan-adaptation thoughts that aren't yet mature enough to be a PBI, a decision, a strategy update, or a vision-doc change. Complements `docs/BACKLOG.md` — it does not replace it. Discrete, scoped, actionable work belongs in the backlog as a PBI, not here.
 
@@ -24,7 +24,7 @@ Written 2026-10-02 so the order does not have to be re-derived. "Clead" is the n
 
 | Step | Who | Blocked by |
 |---|---|---|
-| Rest of PBI-1.14 (S4 next), S15 last | Clead (Opus Crog implementer, Opus review) | Nothing; S1, S2 and S3 merged 2026-10-02. Each slice follows the PR loop |
+| Rest of PBI-1.14 (S10 next), S15 last | Clead (Opus Crog implementer, Opus review) | Nothing; S1 to S4 and S6 to S9 merged (item 8). Each slice follows the PR loop |
 | Release prep PR for the next release (put the version heading over Unreleased, as #76 and #126 did) | Clead | S15 merged; written just before the tag so it is complete |
 | Next release tag `v*` | Adam, from the Releases page | Release prep merged (decision of 2026-10-02: no tag until S15 merges) |
 | Release verified | Clead, through the API: the tag run's checks passed, bootstrapper `main` has the new commit, the tag exists on both repos | The tag |
@@ -42,8 +42,8 @@ API (tag run green including `publish` and the pack chain, bootstrapper
 publish token and the tag path of `packs.yml`. The four language packs are
 tested on GitHub's runners on every PR; reviews and merges are delegated
 (CLAUDE.md, "Change execution model"). The test-first rule is in force at
-every level. PBI-1.14 (the turn-key bootstrap script) is planned in 17
-slices and not built (item 8). Adam's order: PBI-1.14, with no tag until
+every level. PBI-1.14 (the turn-key bootstrap script) is being built in 17
+slices; S1 to S4 and S6 to S9 are merged as of 2026-10-06 (item 8). Adam's order: PBI-1.14, with no tag until
 S15 merges, then the end-to-end runs, then acuteping. The parallel
 sessions of 2026-10-01 and 2026-10-02 were consolidated into one session
 on 2026-10-02.
@@ -122,12 +122,12 @@ graduate (see the rule above).
 - S3 `packs.yml` uses the script's lockfile command (independent; touches `packs.yml` and `tools/test-layout-pack.sh`). **Done: #130, 2026-10-02.**
 - S4 test harness `bootstrap/test-bootstrap-project.sh`, test hooks, message helpers, wired into `bootstrapper-test`. **Done: #136, 2026-10-02.**
 - S5 `bootstrapper-test` becomes one aggregate check over an OS matrix (ubuntu, macOS, Windows).
-- S6 inputs and validation. **Done: #146, 2026-10-02.** S7 guided preflight, local checks. S8 guided preflight, GitHub checks. S9 create and protect. S10 local tree. S11 fill placeholders. S12 lockfile, licence, CHANGELOG. S13 self-check, commit, push, PR. S14 wait, require `build`, merge, finish, report. S15 resume, failures, private repos.
+- S6 inputs and validation. **Done: #146, 2026-10-02.** S7 guided preflight, local checks. **Done: #148, 2026-10-06.** S8 guided preflight, GitHub checks. **Done: #149, 2026-10-06.** S9 create and protect. **Done: #150, 2026-10-06** (it also prints the plan and asks "Proceed?"; `--non-interactive` needs `--yes` or `--dry-run`). S10 local tree. S11 fill placeholders. S12 lockfile, licence, CHANGELOG. S13 self-check, commit, push, PR. S14 wait, require `build`, merge, finish, report. S15 resume, failures, private repos.
 - S16 `bootstrap/e2e-check.sh` (read-only checker for Adam's end-to-end runs). S17 docs and process, last.
 **Critical path:** S1, S2, S4, S6 to S15, S17. S3 can start now; S5 after S4; S16 after S5.
 **Cannot be verified in CI (Adam's end-to-end runs only):** GitHub timing and error texts after create, the protection PUT shape, private-repo clone and push, Git Bash prompts, `winget`, a lockfile made on Windows or macOS under `npm ci` on Linux, the unaided README run, and the red-then-`Test-exempt` PR in a real project.
 **Spec meets changed repo (to fix in the slice named):** the placement-table tests in `bootstrap/test.sh` pin both READMEs (S17); `test_workflow_bootstrapper_test_runs_the_require_test_change_tests` conflicts with the aggregate design (S5); the setup PR's tree must keep `.github/scripts/require-test-change.sh` (S10); stamps from releases before the org move name the old owner, so older repos cannot be resumed (S15).
-**Next slice:** S7 (critical path), or S5.
+**Next slice:** S10 (critical path), or S5.
 **Questions for Adam (neither blocks S1):**
 1. Answered by Adam, 2026-10-02 (`memory/decisions.md`): `--resume` refuses a repo stamped by an older bootstrapper version and tells the user to create a fresh repo; a repo stamped by the current version, including one made with "Use this template" from the current release, still resumes. The spec text is corrected in S15.
 2. Answered by Adam, 2026-10-02: v2.3.0 is released before S1 (nothing of PBI-1.14 ships in it), then no tag until S15 merges. acuteping waits for PBI-1.14 and the end-to-end runs either way (decision of 2026-10-01).
@@ -135,15 +135,19 @@ graduate (see the rule above).
 **Review notes deferred to later slices (non-blocking):**
 - Still open after S2 and S4, no slice assigned: the S3 test in `tools/test-layout-pack.sh` only sees `npm install` in single-line `run:` steps; one inside a `run: |` block passes unnoticed (#130 review).
 - Any slice that adds `say_command` calls: the command-argument check sees only the first call on a line and only the first word of its argument (#136 review, B).
-- S8: the literal scan has no opt-out, so matching gh's error text (e.g. `"Repository not found"`) fails the harness. S8 needs an opt-out marker for `literal_strings`, with a self-test, not rewording around the check (#136 review, D).
-- S7: a typed folder answer starting with `~` is not expanded, so it would create a folder literally named `~` (#146 review).
-- S8: the script reads the GitHub account (`gh api user`) for the defaults before the guided preflight, so a user who is not signed in gets exit 1 partway through the questions instead of the spec's guide (exit 3 with `--non-interactive`), and the error is not mapped. Move or guard it when the guided GitHub checks land (#146 review).
-- S9: a repo name is allowed up to 214 characters, but GitHub probably caps it at 100; the owner pattern refuses `_`, which an Enterprise Managed User's login has. Neither is verified (#146 review).
 - S13 (only if a real heredoc hits it): heredoc body lines still go through the per-line checks, so a quiet heredoc whose text says "printf" is flagged, and a body line cannot carry the opt-out marker. It fails loudly (#146 review).
 - Whichever slice touches the usage text, or S17: a bare positional word gets the plain usage text, not the What happened / What to do next format (#146 review).
 - S17: the expected-paths list in `tools/test-layout-pack.sh` (the per-file layout test) is a deliberate third statement of the placement table, next to the script and the README tables; change it together with the README tables (#131 review). `languages/README.md` still says the table lives in `tools/layout-pack.sh` (also S17).
 - Any slice that touches the script's usage text: run through the wrapper, the usage message names `bootstrap-project.sh layout-pack`, not the command the user typed (#131 review, cosmetic).
 - S5: a real bash 3.2 run in CI. A reviewer ran the built script once under a self-built bash 3.2.57 on Linux (all four packs identical); macOS `/bin/bash` and Git for Windows bash are unverified.
+- **Notes from the S7 to S9 reviews (#148, #149, #150), by slice:**
+  - S10: `--resume` allows any non-empty folder; check that it is this project's own copy, that the parent folder exists and is writable, and that the target is not inside another git repo (#148, also S15).
+  - S12: plan step 4 says "add the licence" even with `--license none` (#150).
+  - S13: the spec's check that Actions are turned on, "right after step 3", has no slice yet; the #150 review recommends S13.
+  - S15: answers given to the questions are lost on any stop after them, because the start-again command repeats only the command-line options (#148, #149: name taken, token permission; an interactive run could ask for the name again). The continue commands: `--allow-unprotected`, `--private` carried after making the project public, the other answers (#150). A rate limit on create is read as "not allowed" (#150, or S17). The make-public command is shown to copy, not run; S15 may run it from inside the local copy (#150).
+  - S15 or S17: a renamed project's old name reads as taken, because gh follows the redirect (#149).
+  - S17 and Adam's end-to-end runs: on Windows, `winget` does not refresh the open Git Bash's PATH, so the re-check after an install fails; on macOS, `xcode-select --install` returns as soon as its dialog opens, and the `git` shim may open that dialog itself (#148). "Could not reach GitHub" also catches local gh failures (#149). Each offered command is printed twice (#148). `--help` does not say that `--non-interactive` needs `--yes` or `--dry-run` (#150).
+  - Decisions Clead took in S9 (#150, reviewed): step 2 keeps the spec's `gh repo create` and recognises gh's error text for "name taken" and "not allowed"; the REST `generate` call would give a status code instead, if that text proves unreliable in the end-to-end runs.
 
 
 ### 9. Pending from the previous Clead session (PBI-1.17 build), staged on Adam's request — new (2026-10-02)
@@ -179,6 +183,7 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 - **Tools:** compare what Clead uses in Cowork with what a Code session has. For example, CLAUDE.md names the Chrome extension as Clead's fallback channel.
 - **Token use, Adam's open question:** does Code use more or fewer tokens than Cowork for the same task, small or large? Not measured on either side. Two data points for Code, from the sessions' own usage metadata (`get_session`, list price): the first turn of a trivial task read about 48k tokens of context (system prompt, tools, CLAUDE.md) before its first action, and the round-2 Opus review of #136 cost about $1.73. Run the same task in both before deciding.
 - **Adam's hypothesis:** Code on Code is likely more token-intensive than Cowork on Code, because Cowork is better at bouncing ideas around, discussion and documentation, which is everyday work here. Not measured.
+- **New fact, 2026-10-05:** a Clead session in the Claude app (Cowork) had git, push access and the GitHub REST API once the repo was attached with push access, and started Opus Crog agents for build and review. The main advantage seen in Code is not Code-only. Adam kept this item open; not discussed yet.
 - **Clead's input, from the Code session of 2026-10-02:** that session was mostly discussion and docs, plus subagents. Over about 2 hours it cost about $9.51 at list price, read about 21M tokens from cache, and ended with about 286k tokens of context (session usage metadata). Most of that cost comes from resending the growing conversation on every turn. That happens on either product, so session length may matter more than the product: shorter sessions per topic, or compacting, cut it on both. Two more points: "better at" (quality of the result) and token use are separate questions; and that session ran on Opus while CLAUDE.md sets Clead's default to Sonnet, so part of its cost is the model, not the product.
 
 
