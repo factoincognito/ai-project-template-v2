@@ -279,6 +279,18 @@ case "${1:-}" in
     #     STUB_GH_CR each line ends in a carriage return. Any other key is
     #     GitHub's 404. STUB_GH_LICENSE_FAIL fails it as <mode>, or as
     #     empty: 200 with an empty text (gh prints just a line break).
+    # And the two early stops:
+    #   - the licence check of the preflight, api -i licenses/<key> --jq
+    #     .key: 200 with the key when STUB_GH_LICENSES has a text for it
+    #     or the key is in STUB_GH_LICENSE_KNOWN (space-separated: known
+    #     at the check, but its text is gone at step 10), else GitHub's
+    #     404. STUB_GH_LICENSE_CHECK_FAIL fails it as <mode>.
+    #   - whether Actions is turned on, api -i
+    #     repos/OWNER/NAME/actions/permissions --jq .enabled: 200 with
+    #     true; false while the counter file actions-off is above 0 (then
+    #     the user turned it on); STUB_GH_ACTIONS_ANSWER replaces the
+    #     value printed (an answer of another shape);
+    #     STUB_GH_ACTIONS_FAIL fails it as <mode>.
     if [ "$*" = 'api -i user --jq .login, (.name // "")' ]; then
       if [ -n "${STUB_GH_USER_FAIL:-}" ] && should_fail user-fails; then emit_failure "$STUB_GH_USER_FAIL"; fi
       scopes="${STUB_GH_SCOPES-repo, read:org, gist, workflow}"
@@ -311,6 +323,23 @@ case "${1:-}" in
       if [ -n "${STUB_GH_PROTECT_FAIL:-}" ]; then emit_failure "$STUB_GH_PROTECT_FAIL"; fi
       respond 200 OK 'application/json; charset=utf-8'
       printf '{"url":"https://api.github.com/%s"}\n' "$5"
+    elif [ "$#" -eq 5 ] && [ "$2" = -i ] && [ "${3%/actions/permissions}" != "$3" ] && [ "$4 $5" = "--jq .enabled" ]; then
+      if [ -n "${STUB_GH_ACTIONS_FAIL:-}" ]; then emit_failure "$STUB_GH_ACTIONS_FAIL"; fi
+      respond 200 OK 'application/json; charset=utf-8'
+      if fails_left actions-off; then
+        printf 'false\n'
+      else
+        printf '%s\n' "${STUB_GH_ACTIONS_ANSWER-true}"
+      fi
+    elif [ "$#" -eq 5 ] && [ "$2" = -i ] && [ "${3#licenses/}" != "$3" ] && [ "$4 $5" = "--jq .key" ]; then
+      if [ -n "${STUB_GH_LICENSE_CHECK_FAIL:-}" ]; then emit_failure "$STUB_GH_LICENSE_CHECK_FAIL"; fi
+      : "${STUB_GH_LICENSES:?stub gh: STUB_GH_LICENSES is not set}"
+      case " ${STUB_GH_LICENSE_KNOWN:-} " in
+        *" ${3#licenses/} "*) ;;
+        *) [ -f "$STUB_GH_LICENSES/${3#licenses/}" ] || emit_failure not-found ;;
+      esac
+      respond 200 OK 'application/json; charset=utf-8'
+      printf '%s\n' "${3#licenses/}"
     elif [ "$#" -eq 3 ] && [ "$2" = -i ] && [ "${3#repos/}" != "$3" ]; then
       if [ -n "${STUB_GH_REPO_FAIL:-}" ] && should_fail repo-fails; then emit_failure "$STUB_GH_REPO_FAIL"; fi
       if [ -f "${STUB_GH_LOG%/*}/created" ] && grep -qxF -- "${3#repos/}" "${STUB_GH_LOG%/*}/created"; then
@@ -1875,8 +1904,9 @@ test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
   [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "stdin closed: exit $rc, want 1"; }
   grep -qF 'the next steps of the setup are not built yet' "$d/err" || { cat "$d/err" >&2; die "stdin closed: no stop message"; }
   # gh: the two checks on this computer, the GitHub checks (the account,
-  # the published version, the name), then creating and protecting the
-  # project, making the copy on this computer, reading the licence and
+  # the published version, the name, the licence), then creating and
+  # protecting the project, checking that Actions is on, making the copy
+  # on this computer, reading the licence and
   # proposing the change (its body in a temporary file, written <file>),
   # every one with gh's own prompts off; the copy is the only thing made
   # on this computer.
@@ -1884,11 +1914,13 @@ test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
       "$(printf 'api\t-i\tuser\t--jq\t.login, (.name // "")')" \
       "$(printf 'api\t-i\t-H\tAccept: application/vnd.github.raw+json\trepos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md')" \
       "$(printf 'api\t-i\trepos/octo-user/my-app')" \
+      "$(printf 'api\t-i\tlicenses/mit\t--jq\t.key')" \
       "$(printf 'repo\tcreate\tocto-user/my-app\t--template\tfactoincognito/ai-project-bootstrap\t--public\t--description\tLends tools to neighbours.')" \
       "$(printf 'api\t-i\trepos/octo-user/my-app/branches/main')" \
       "$(printf 'api\t-i\trepos/octo-user/my-app/contents/CHANGELOG.md')" \
       "$(printf 'api\t-i\t-X\tPUT\trepos/octo-user/my-app/branches/main/protection\t--input\t-')" \
       "$(printf 'repo\tedit\tocto-user/my-app\t--delete-branch-on-merge\t--enable-squash-merge')" \
+      "$(printf 'api\t-i\trepos/octo-user/my-app/actions/permissions\t--jq\t.enabled')" \
       "$(printf 'repo\tclone\tocto-user/my-app\t./my-app')" \
       "$(printf 'api\t-i\tlicenses/mit\t--jq\t.body')" \
       "$(printf 'pr\tcreate\t--repo\tocto-user/my-app\t--base\tmain\t--head\tbootstrap-setup\t--title\tSet up my-app\t--body-file\t<file>')" | LC_ALL=C sort)" ] \
@@ -3641,6 +3673,10 @@ FILES_CALL='api -i repos/octo-user/my-app/contents/CHANGELOG.md'
 PROTECT_CALL='api -i -X PUT repos/octo-user/my-app/branches/main/protection --input -'
 EDIT_CALL='repo edit octo-user/my-app --delete-branch-on-merge --enable-squash-merge'
 PROBE_CALL='api -i repos/octo-user/my-app'
+# Right after step 3: is Actions turned on for the project?
+ACTIONS_CALL='api -i repos/octo-user/my-app/actions/permissions --jq .enabled'
+# The preflight's licence check, for --license mit (before create).
+LICENSE_CHECK_CALL='api -i licenses/mit --jq .key'
 CLONE_CALL='repo clone octo-user/my-app ./my-app'
 # Step 10, for setup_run's --license mit: the gh call after the copy.
 LICENSE_CALL='api -i licenses/mit --jq .body'
@@ -3834,7 +3870,7 @@ test_create_waits_for_the_files_then_protects_main_with_the_exact_body() {
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
-  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL"
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL"
   # Byte for byte: the body as sent, then the line break the stub adds
   # (a here-string ends in one too, so two in all).
   printf '%s\n\n' "$PROTECT_BODY" >"$d/want-body"
@@ -3870,7 +3906,7 @@ test_the_files_are_waited_for_retrying_on_404_for_up_to_a_minute() {
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
   expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$BRANCH_CALL" "$BRANCH_CALL" "$BRANCH_CALL" \
-    "$FILES_CALL" "$FILES_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL"
+    "$FILES_CALL" "$FILES_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL"
   [ "$(cat "$d/sleep.log")" = "$(printf '2\n2\n2\n2\n2')" ] || { cat "$d/sleep.log" >&2; die "not 5 waits of 2 seconds"; }
   grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/err" >&2; die "did not reach the end of step 3"; }
   # Never there: 30 waits of 2 seconds (60 s), then a plain stop with the
@@ -3989,6 +4025,212 @@ test_other_answers_to_the_protection_request_are_explained() {
   expect_rc 1 "$d"
   expect_err_shape "$d" "GitHub had a problem of its own"
   expect_continue_command "$d" " --resume"
+}
+
+# ---------- two early stops ----------
+# The licence name is checked with GitHub in the preflight, before
+# anything is created (#154 review, finding 1): none and PolyForm
+# Noncommercial need no call; any other name is asked for with gh api
+# licenses/<key>, and GitHub's 404 means it does not know it. As with
+# S6's other inputs, a name given as an option stops with exit 2 (the
+# options list), and a name typed at the question is asked again. Step
+# 10 keeps its own handling of the 404 (tested above).
+# Right after step 3, the script asks GitHub whether Actions is turned
+# on for the project (spec, post-create guides; the endpoint's answer is
+# UNVERIFIED): when it is off, a guide, before the copy on this computer
+# and the push; a 403 or 404 (or an answer of another shape) only says
+# what could not be checked, and the setup goes on.
+
+test_the_licence_is_checked_with_github_before_anything_is_created() {
+  local d
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
+  [ "$(grep -F "$(printf '\t--jq\t.key')" "$d/gh.log")" = "$(printf 'GH_PROMPT_DISABLED=1\tapi\t-i\tlicenses/mit\t--jq\t.key')" ] \
+    || { cat "$d/gh.log" >&2; die "the licence was not checked once, with gh's prompts off"; }
+  grep -n "$(printf '\tlicenses/mit\t--jq\t.key')" "$d/gh.log" | cut -d: -f1 >"$d/k"
+  grep -n "$(printf '\trepo\tcreate\tocto-user/my-app')" "$d/gh.log" | cut -d: -f1 >"$d/c"
+  [ -s "$d/k" ] && [ -s "$d/c" ] && [ "$(cat "$d/k")" -lt "$(cat "$d/c")" ] || { cat "$d/gh.log" >&2; die "the licence was not checked before create"; }
+  # Its own step, a start and a done line straight after it, before the plan.
+  grep -A1 -xF '==> Checking that GitHub knows the licence mit' "$d/out" | sed -n 2p >"$d/done"
+  [ "$(cat "$d/done")" = "    Done. GitHub knows the licence mit." ] || { cat "$d/out" >&2; die "no step lines for the licence check"; }
+  grep -n '^    Done. GitHub knows the licence mit.$' "$d/out" | cut -d: -f1 >"$d/a"
+  grep -n '^Here is the plan' "$d/out" | cut -d: -f1 >"$d/p"
+  [ "$(cat "$d/a")" -lt "$(cat "$d/p")" ] || { cat "$d/out" >&2; die "the licence was checked after the plan"; }
+  # Step 10 still reads the text.
+  calls_from_create "$d" | grep -qxF "$LICENSE_CALL" || { cat "$d/gh.log" >&2; die "step 10 did not read the text"; }
+  # A dry run checks it too (spec: --dry-run runs the preflight).
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --dry-run --license apache-2.0
+  expect_rc 0 "$d"
+  grep -qF "$(printf '\tapi\t-i\tlicenses/apache-2.0\t--jq\t.key')" "$d/gh.log" || { cat "$d/gh.log" >&2; die "dry run: apache-2.0 not checked"; }
+  expect_out "$d" "    Done. GitHub knows the licence apache-2.0."
+  expect_nothing_created "$d"
+}
+
+test_none_and_polyform_need_no_licence_check() {
+  local d l
+  for l in none polyform-noncommercial-1.0.0; do
+    d="$(tmpdir)"
+    setup_run "$d" --non-interactive --dry-run --license "$l"
+    expect_rc 0 "$d"
+    ! grep -qF 'licenses/' "$d/gh.log" || { cat "$d/gh.log" >&2; die "$l: GitHub was asked about the licence"; }
+    expect_no_out "$d" "==> Checking that GitHub knows the licence"
+  done
+}
+
+test_an_unknown_licence_given_as_an_option_stops_before_anything_is_created() {
+  # S6's rule for an option that cannot be used: exit 2 with the options
+  # list, with --non-interactive and without it (every answer given as an
+  # option, so the run would ask only "Proceed?").
+  local d mode
+  for mode in --non-interactive ""; do
+    d="$(tmpdir)"
+    setup_run "$d" $mode --yes --license made-up-2.0
+    expect_rc 2 "$d"
+    sed -n 1p "$d/err" | grep -qxF 'What happened: Some options are missing or cannot be used:' || { cat "$d/err" >&2; die "[$mode] not the options stop"; }
+    grep -qF -- '    - --license: GitHub has no licence with the short name made-up-2.0. ' "$d/err" || { cat "$d/err" >&2; die "[$mode] the unknown licence is not named"; }
+    grep -qF 'https://choosealicense.com/licenses/' "$d/err" || { cat "$d/err" >&2; die "[$mode] where to find the name is not said"; }
+    [ "$(grep -cF "$(printf '\tapi\t-i\tlicenses/made-up-2.0\t--jq\t.key')" "$d/gh.log")" -eq 1 ] || { cat "$d/gh.log" >&2; die "[$mode] not checked once"; }
+    expect_no_out "$d" "Here is the plan"
+    expect_no_out "$d" "Proceed?"
+    expect_nothing_created "$d"
+  done
+  # Any other answer: the plain message, start again, nothing created.
+  d="$(tmpdir)"
+  export STUB_GH_LICENSE_CHECK_FAIL=server
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_LICENSE_CHECK_FAIL
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "GitHub had a problem of its own, so the script could not check the licence mit with GitHub\."
+  sed -n 2p "$d/err" | grep -qF 'start the script again' || { cat "$d/err" >&2; die "server: next action is not to start again"; }
+  expect_nothing_created "$d"
+}
+
+test_an_unknown_licence_typed_at_the_question_is_asked_again() {
+  # S6's rule for an answer that cannot be used: explained, then the
+  # question again. The new answer is checked too; none needs no check.
+  local d again want
+  for again in mit 1; do
+    d="$(tmpdir)"
+    working_git "$d"
+    # name, display name, description, owner, product owner, pack,
+    # visibility, licence, copyright holder, folder, git name, git email;
+    # then the licence again, then "Proceed?".
+    printf '%s\n' my-app "" "Lends tools." "" "" python "" mti "" "" "" "" "$again" no >"$d/in"
+    whole "$d"
+    expect_rc 1 "$d"
+    sed -n 1p "$d/err" | grep -q '^What happened: You answered no' || { cat "$d/err" >&2; die "[$again] did not reach Proceed?"; }
+    expect_out "$d" "GitHub has no licence with the short name mti. "
+    grep -F 'GitHub has no licence with the short name mti. ' "$d/out" | grep -qF "Please try again." || { cat "$d/out" >&2; die "[$again] not asked to try again"; }
+    [ "$(grep -cF 'Licence (type the number or the name): ' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "[$again] the licence question was not asked twice"; }
+    if [ "$again" = mit ]; then
+      want="$(printf 'api\t-i\tlicenses/mti\t--jq\t.key\napi\t-i\tlicenses/mit\t--jq\t.key')"
+      expect_out "$d" "    Licence: mit, in the name of"
+      expect_out "$d" "    Done. GitHub knows the licence mit."
+    else
+      want="$(printf 'api\t-i\tlicenses/mti\t--jq\t.key')"
+      expect_out "$d" "    Licence: none (no licence file"
+    fi
+    [ "$(grep -F "$(printf '\tlicenses/')" "$d/gh.log" | cut -f2-)" = "$want" ] || { cat "$d/gh.log" >&2; die "[$again] the licence checks were not as expected"; }
+    [ "$(grep -c '^==> Checking that GitHub knows the licence' "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "[$again] the step did not start once"; }
+    expect_nothing_created "$d"
+  done
+}
+
+test_actions_turned_on_are_checked_right_after_protection() {
+  local d
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
+  # After the settings of step 3, before the copy (expect_calls is exact).
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL"
+  grep -A1 -xF "==> Checking that GitHub Actions, which runs the project's checks, is turned on for it" "$d/out" | sed -n 2p >"$d/done"
+  [ "$(cat "$d/done")" = "    Done. GitHub Actions is turned on for the project, so its checks can run there." ] \
+    || { cat "$d/out" >&2; die "no step lines for the Actions check"; }
+  [ "$(grep -F "$(printf '\t--jq\t.enabled')" "$d/gh.log" | cut -f1)" = GH_PROMPT_DISABLED=1 ] || { cat "$d/gh.log" >&2; die "asked with gh's prompts on"; }
+}
+
+test_actions_turned_off_stop_before_the_copy_with_their_guide() {
+  local d
+  d="$(tmpdir)"
+  echo 9999 >"$d/actions-off"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 3 "$d"
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL"
+  expect_out "$d" "GitHub Actions, the GitHub service that runs your project's checks, is turned off for the project octo-user/my-app."
+  expect_out "$d" "Why this is needed: "
+  expect_out "$d" "https://github.com/octo-user/my-app/settings/actions"
+  expect_out "$d" '"Allow all actions and reusable workflows"'
+  expect_out "$d" "one of its owners"
+  expect_out "$d" "How the script checks it: "
+  expect_no_out "$d" "Press Enter"
+  expect_continue_command "$d" " --resume"
+  sed -n 1p "$d/err" | grep -qF "What happened: GitHub Actions, the GitHub service that runs your project's checks, is turned off for the project octo-user/my-app. The script stopped here. The project octo-user/my-app exists on GitHub" \
+    || { cat "$d/err" >&2; die "the stop does not say what is off and what exists"; }
+  [ -z "$(ls -A "$d/cwd")" ] || { ls -A "$d/cwd" >&2; die "something was made on this computer"; }
+  ! grep -qF "$NOT_BUILT" "$d/err" || die "it went on with Actions off"
+  # Interactive: turned on while the script waits; Enter checks again and
+  # the setup goes on.
+  d="$(tmpdir)"
+  echo 1 >"$d/actions-off"
+  printf 'yes\n\n' >"$d/in"
+  setup_run "$d"
+  expect_rc 1 "$d"
+  expect_out "$d" "Press Enter to check again"
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL"
+  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "did not go on after Actions was turned on"; }
+  # Interactive, stopped at the guide (q): the command to continue, and
+  # nothing on this computer.
+  d="$(tmpdir)"
+  echo 9999 >"$d/actions-off"
+  printf 'yes\nq\n' >"$d/in"
+  setup_run "$d"
+  expect_rc 3 "$d"
+  expect_continue_command "$d" " --resume"
+  [ -z "$(ls -A "$d/cwd")" ] || { ls -A "$d/cwd" >&2; die "q: something was made on this computer"; }
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL"
+}
+
+test_an_actions_check_github_does_not_answer_carries_on_with_a_note() {
+  # A 403 (no permission to read the setting) or a 404 (the endpoint not
+  # as the spec has it), or an answer that is neither true nor false,
+  # does not stop the setup: it says what could not be checked, with
+  # GitHub's answer below, and goes on to the copy.
+  local d mode raw
+  for mode in forbidden not-found odd; do
+    d="$(tmpdir)"
+    case "$mode" in
+      odd) export STUB_GH_ACTIONS_ANSWER=null; raw='    HTTP 200: enabled is null' ;;
+      forbidden) export STUB_GH_ACTIONS_FAIL=forbidden; raw='    HTTP 403: Resource not accessible by integration' ;;
+      not-found) export STUB_GH_ACTIONS_FAIL=not-found; raw='    HTTP 404: Not Found' ;;
+    esac
+    setup_run "$d" --non-interactive --yes
+    unset STUB_GH_ACTIONS_ANSWER STUB_GH_ACTIONS_FAIL
+    expect_rc 1 "$d"
+    grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "$mode: did not go on"; }
+    expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL"
+    sed -n "/^==> Checking that GitHub Actions/,/^    Done\. /p" "$d/out" >"$d/step"
+    grep -qF "The script could not check whether GitHub Actions is turned on for the project" "$d/step" || { cat "$d/out" >&2; die "$mode: no note"; }
+    grep -qxF 'Details for support (you can ignore these):' "$d/step" || { cat "$d/out" >&2; die "$mode: the answer is not introduced"; }
+    grep -qxF "$raw" "$d/step" || { cat "$d/out" >&2; die "$mode: GitHub's answer is not below"; }
+    [ "$(tail -1 "$d/step")" != "${raw}" ] && tail -1 "$d/step" | grep -q '^    Done\. Carrying on without this check' \
+      || { cat "$d/out" >&2; die "$mode: the step does not end by carrying on"; }
+    expect_no_out "$d" "turned off for the project"
+  done
+  # Any other answer stops like the other calls after create: the plain
+  # message, the command to continue, nothing on this computer.
+  d="$(tmpdir)"
+  export STUB_GH_ACTIONS_FAIL=server
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_ACTIONS_FAIL
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "GitHub had a problem of its own, so the script could not check whether GitHub Actions is turned on for the project\. "
+  expect_continue_command "$d" " --resume"
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL"
+  [ -z "$(ls -A "$d/cwd")" ] || { ls -A "$d/cwd" >&2; die "server: something was made on this computer"; }
 }
 
 test_create_failures_are_guided_or_explained_and_nothing_else_runs() {
@@ -4177,7 +4419,8 @@ tree_of() {
 # xbit <file>: x when the file can be run, else -.
 xbit() { if [ -x "$1" ]; then echo x; else echo -; fi; }
 
-STEPS_AFTER_SETTINGS='==> Making a copy of the project on this computer, in ./my-app
+STEPS_AFTER_SETTINGS='==> Checking that GitHub Actions, which runs the project'"'"'s checks, is turned on for it
+==> Making a copy of the project on this computer, in ./my-app
 ==> Writing your name and email into the copy'"'"'s own git settings
 ==> Starting a separate line of work for the setup, named bootstrap-setup
 ==> Adding the python language pack'"'"'s files to the copy
@@ -4195,14 +4438,14 @@ test_the_copy_is_made_by_gh_and_checked_against_the_script_version() {
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
-  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL"
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL"
   [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] || { cat "$d/gh.log" >&2; die "a gh call ran with prompts on"; }
   c="$(copy_of "$d")"
   [ "$(in_git -C "$c" rev-parse origin/main)" = "$(in_git --git-dir="$(bare_of "$d")" rev-parse main)" ] \
     || die "the copy is not of the project that was made"
   # The new steps, in order, each with a start and a done line.
   [ "$(grep '^==> ' "$d/out" | sed -n '/^==> Setting how proposed/,$p' | sed 1d)" = "$STEPS_AFTER_SETTINGS" ] \
-    || { cat "$d/out" >&2; die "the steps after the settings are not the copy, name, line of work, pack, tidy-up, fill, licence, CHANGELOG, self-check, save, send, propose"; }
+    || { cat "$d/out" >&2; die "the steps after the settings are not the Actions check, the copy, name, line of work, pack, tidy-up, fill, licence, CHANGELOG, self-check, save, send, propose"; }
   [ "$(grep -c '^==> ' "$d/out")" -eq "$(grep -c '^    Done\. ' "$d/out")" ] || { cat "$d/out" >&2; die "a step has no done line"; }
   expect_out "$d" "    Done. The copy is in ./my-app, with the files of version $BUILT_VERSION of the bootstrapper."
   # The stop: what exists, that the next steps are not built, and the
@@ -4982,8 +5225,10 @@ test_a_github_licence_gets_the_year_and_the_holder_filled_in() {
   unset STUB_GH_CR
   expect_rc 1 "$d"
   grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
-  [ "$(grep -F "$(printf '\tlicenses/')" "$d/gh.log")" = "$(printf 'GH_PROMPT_DISABLED=1\tapi\t-i\tlicenses/mit\t--jq\t.body')" ] \
-    || { cat "$d/gh.log" >&2; die "the licence was not read once, with gh's prompts off"; }
+  # The preflight's check of the name, then the text read once at step
+  # 10, both with gh's prompts off.
+  [ "$(grep -F "$(printf '\tlicenses/')" "$d/gh.log")" = "$(printf 'GH_PROMPT_DISABLED=1\tapi\t-i\tlicenses/mit\t--jq\t.key\nGH_PROMPT_DISABLED=1\tapi\t-i\tlicenses/mit\t--jq\t.body')" ] \
+    || { cat "$d/gh.log" >&2; die "the licence was not checked, then read once, with gh's prompts off"; }
   c="$(copy_of "$d")"
   expect_setup_tree "$d" "$c" python
   [ ! -e "$c/NOTICE" ] || die "a NOTICE was made for mit"
@@ -5039,10 +5284,16 @@ test_a_licence_github_does_not_know_is_explained_with_the_next_action() {
   # and where to find the right name; any other answer gets the usual
   # plain message. The project exists, so the command shown continues
   # the setup; no LICENSE is written and CHANGELOG.md is not changed.
+  # The preflight checks the name before anything is created, so here
+  # GitHub knew it then (STUB_GH_LICENSE_KNOWN) and has no text for it
+  # at step 10: this step keeps its own handling, as a second line of
+  # defence.
   local d c
   built_bootstrapper
   d="$(tmpdir)"
+  export STUB_GH_LICENSE_KNOWN=made-up-2.0
   setup_run "$d" --non-interactive --yes --license made-up-2.0
+  unset STUB_GH_LICENSE_KNOWN
   expect_rc 1 "$d"
   sed -n 1p "$d/err" | grep -qF "What happened: GitHub has no licence with the short name made-up-2.0, so the script could not add it. The project octo-user/my-app exists on GitHub" \
     || { cat "$d/err" >&2; die "the unknown licence is not named"; }
