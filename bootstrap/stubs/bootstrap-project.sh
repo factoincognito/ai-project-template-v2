@@ -5,8 +5,10 @@
 #
 # Built so far: the inputs (options, questions, checks and defaults), the
 # guided checks of this computer (bash, git, gh, npm, the git name and
-# email, the target folder) and the layout-pack subcommand. After those
-# checks the script stops: the setup steps come in later parts.
+# email, the target folder), the guided checks on GitHub (signed in, the
+# current version of this script, the permissions gh has, the project
+# name still free) and the layout-pack subcommand. After those checks the
+# script stops: the setup steps come in later parts.
 #
 # Usage:
 #   bash bootstrap-project.sh [options]
@@ -18,8 +20,9 @@
 #     languages/ folder next to this script.
 #
 # Exit codes: 0 done, 1 failed, 2 usage error, unknown pack, or an input
-# that is missing or cannot be used, 3 a check of this computer did not
-# pass: its steps were shown, with the command to start again.
+# that is missing or cannot be used, 3 a check of this computer or on
+# GitHub did not pass: its steps were shown, with the command to start
+# again.
 # Runs on bash 3.2 (macOS /bin/bash): no associative arrays, no mapfile,
 # no ${var,,}.
 #
@@ -111,19 +114,25 @@ step_end() { printf '    Done. %s\n' "$*"; }
 # plain words with the next action, on stderr. Raw text (an error from a
 # tool or from GitHub) is never shown alone: it comes below, for support.
 show_error() {
-  local what="${1:-}" next="${2:-}" raw="${3:-}" line
+  local what="${1:-}" next="${2:-}" raw="${3:-}"
   [ -n "$what" ] || what="Something unexpected happened."
   [ -n "$next" ] || next="Run the script again. If the same thing happens, ask for help and show the details below."
   {
     printf 'What happened: %s\n' "$what"
     printf 'What to do next: %s\n' "$next"
-    if [ -n "$raw" ]; then
-      printf 'Details for support (you can ignore these):\n'
-      printf '%s\n' "$raw" | tr -d '\r' | while IFS= read -r line; do
-        printf '    %s\n' "$line"
-      done
-    fi
+    [ -z "$raw" ] || details_block "$raw"
   } >&2
+}
+
+# details_block <raw text>: raw text (an error from a tool or from
+# GitHub), indented below a line that says it is for support. It never
+# comes alone: show_error and guide_details put it under a plain message.
+details_block() {
+  local line
+  printf 'Details for support (you can ignore these):\n'
+  printf '%s\n' "$1" | tr -d '\r' | while IFS= read -r line; do
+    printf '    %s\n' "$line"
+  done
 }
 
 # fail <exit code> <what happened> <what to do next> [raw text]
@@ -190,10 +199,17 @@ wait_for_enter() {
 # answer is read from the terminal, never from stdin (the spec: answers
 # piped into the script must not approve an install). The default is no.
 # Returns 0 for yes, 1 for any other answer, an empty one, or when there
-# is no terminal to read from.
+# is no terminal to read from. A terminal that cannot be read is a no at
+# once, with the question line ended. One that can be read but not opened
+# (/dev/tty with no terminal attached) is a no too: the redirection
+# fails, the read does not run, got stays empty, and that is not a yes.
 ask_terminal() {
   local tty="${BOOTSTRAP_TTY:-/dev/tty}" got=""
   printf '%s\n%s [no]: ' "$1" "$2"
+  if [ ! -r "$tty" ]; then
+    printf '\n'
+    return 1
+  fi
   if ! { IFS= read -r got; } 2>/dev/null <"$tty" && [ -z "$got" ]; then
     printf '\n'
     return 1
@@ -223,6 +239,11 @@ guide_step() {
 }
 guide_end() {
   printf '%s\n' "When it has worked: $1" "If you see something else: $2" "How the script checks it: $3"
+}
+# guide_details <raw text>: after guide_end, the raw text of what went
+# wrong (gh's or GitHub's own words), for support; nothing when empty.
+guide_details() {
+  [ -z "$1" ] || details_block "$1"
 }
 
 # ---------- end of messages ----------
@@ -702,35 +723,16 @@ answer() {
   return 1
 }
 
-# read_github_user: GH_LOGIN and GH_PROFILE_NAME (empty when the profile
-# has none) of the signed-in GitHub account, read once.
-GH_LOGIN=""
-GH_PROFILE_NAME=""
-read_github_user() {
-  [ -z "$GH_LOGIN" ] || return 0
-  local out="" raw err_file
-  err_file="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  if ! out="$(run_gh api user --jq '.login, (.name // "")' 2>"$err_file")"; then
-    raw="$(cat "$err_file")"
-    rm -f "$err_file"
-    fail 1 "Could not read your GitHub account, which gives the default owner and product owner name." \
-      "Check that you are signed in to GitHub (step 0 in the README), then run the script again. Or give --owner and --po-name yourself." \
-      "$raw"
-  fi
-  rm -f "$err_file"
-  out="${out//$CR/}"
-  GH_LOGIN="${out%%"$NL"*}"
-  case "$out" in
-    *"$NL"*) GH_PROFILE_NAME="${out#*"$NL"}"; GH_PROFILE_NAME="${GH_PROFILE_NAME%%"$NL"*}" ;;
-  esac
-  [ -n "$GH_LOGIN" ] || fail 1 "Could not read your GitHub account, which gives the default owner and product owner name." \
-    "Check that you are signed in to GitHub (step 0 in the README), then run the script again. Or give --owner and --po-name yourself." \
-    "$out"
-}
-
-collect_inputs() {
-  # The options given are checked first, all of them, so one run lists
-  # every problem.
+# check_options: the options given are checked first, all of them, so
+# one run lists every problem; with --non-interactive the missing ones
+# are listed too. cmd_setup runs it before the checks of this computer
+# and of GitHub (#148 review, finding 5), so a run with a wrong option
+# and a missing tool reports the option at once; collect_inputs runs it
+# when it has not run yet.
+OPTIONS_CHECKED=""
+check_options() {
+  [ -z "$OPTIONS_CHECKED" ] || return 0
+  OPTIONS_CHECKED=1
   check_given --name check_name "$IN_NAME" && IN_NAME="$CHECKED"
   check_given --owner check_owner "$IN_OWNER" && IN_OWNER="$CHECKED"
   check_given --project-name check_table_text "$IN_PROJECT_NAME" && IN_PROJECT_NAME="$CHECKED"
@@ -755,14 +757,22 @@ collect_inputs() {
     [ -n "$IN_PACK" ] || add_problem --pack "It is missing. It has no default, so it must be given."
     [ -n "$IN_LICENSE" ] || add_problem --license "It is missing. It has no default, so it must be given."
     # The git name and email default to git's own settings; without
-    # them they are missing too.
-    read_git_identity
-    [ -n "$IN_GIT_NAME" ] || [ -n "$GIT_CFG_NAME" ] \
-      || add_problem --git-name "It is missing, and git on this computer has no name set, so it must be given."
-    [ -n "$IN_GIT_EMAIL" ] || [ -n "$GIT_CFG_EMAIL" ] \
-      || add_problem --git-email "It is missing, and git on this computer has no email address set, so it must be given."
+    # them they are missing too. Those settings can be read only when
+    # git is installed: without git, the git check shows its guide
+    # first, and a missing name or email is reported after it.
+    if check_git; then
+      read_git_identity
+      [ -n "$IN_GIT_NAME" ] || [ -n "$GIT_CFG_NAME" ] \
+        || add_problem --git-name "It is missing, and git on this computer has no name set, so it must be given."
+      [ -n "$IN_GIT_EMAIL" ] || [ -n "$GIT_CFG_EMAIL" ] \
+        || add_problem --git-email "It is missing, and git on this computer has no email address set, so it must be given."
+    fi
   fi
   stop_if_problems
+}
+
+collect_inputs() {
+  check_options
 
   # Then each one not given, in the order of the questions.
   if [ -z "$IN_NAME" ]; then
@@ -785,14 +795,14 @@ collect_inputs() {
     IN_DESCRIPTION="$CHECKED"
   fi
   if [ -z "$IN_OWNER" ]; then
-    read_github_user
+    need_github_account
     answer --owner check_owner "$GH_LOGIN" \
       "The GitHub account or organisation that will own the project; press Enter to use your own account." \
       "Owner" || true
     IN_OWNER="$CHECKED"
   fi
   if [ -z "$IN_PO_NAME" ]; then
-    read_github_user
+    need_github_account
     answer --po-name check_table_text "${GH_PROFILE_NAME:-$GH_LOGIN}" \
       "The name of the product owner, the person who decides what the project should do (usually you)." \
       "Product owner name" || true
@@ -919,6 +929,8 @@ OS_KIND=""
 LINUX_PM=""
 OFFER=""
 RESTART_CMD=""
+RESTART_ARGS=""
+NO_RECHECK=""
 DQ='"'
 SQ="'"
 
@@ -978,12 +990,13 @@ quote_word() {
 remember_command() {
   local script="${BASH_SOURCE[0]:-}" arg
   if [ -z "$script" ] || [ -n "$SCRIPT_PIPED" ]; then script=bootstrap-project.sh; fi
-  quote_word "$script"
-  RESTART_CMD="$QUOTED"
+  RESTART_ARGS=""
   for arg in "$@"; do
     quote_word "$arg"
-    RESTART_CMD="$RESTART_CMD $QUOTED"
+    RESTART_ARGS="$RESTART_ARGS $QUOTED"
   done
+  quote_word "$script"
+  RESTART_CMD="$QUOTED$RESTART_ARGS"
 }
 
 # stop_at_guide: the user stopped at a guide, or --non-interactive (or a
@@ -1009,6 +1022,9 @@ offered() {
     brew-gh-upgrade) if [ "$2" = run ]; then run_offered "brew upgrade gh"; else say_command "brew upgrade gh"; fi ;;
     winget-gh) if [ "$2" = run ]; then run_offered "winget install --id GitHub.cli -e --source winget"; else say_command "winget install --id GitHub.cli -e --source winget"; fi ;;
     winget-gh-upgrade) if [ "$2" = run ]; then run_offered "winget upgrade --id GitHub.cli -e --source winget"; else say_command "winget upgrade --id GitHub.cli -e --source winget"; fi ;;
+    gh-refresh-workflow) if [ "$2" = run ]; then run_offered "gh auth refresh -h github.com -s workflow"; else say_command "gh auth refresh -h github.com -s workflow"; fi ;;
+    gh-refresh-public) if [ "$2" = run ]; then run_offered "gh auth refresh -h github.com -s public_repo,workflow"; else say_command "gh auth refresh -h github.com -s public_repo,workflow"; fi ;;
+    gh-refresh-repo) if [ "$2" = run ]; then run_offered "gh auth refresh -h github.com -s repo,workflow"; else say_command "gh auth refresh -h github.com -s repo,workflow"; fi ;;
     *) return 1 ;;
   esac
 }
@@ -1032,13 +1048,17 @@ offer_command() {
   return 1
 }
 
-# guided_check <check> <guide>: see the top of this section.
+# guided_check <check> <guide>: see the top of this section. A guide
+# whose check cannot pass again in this run (a new script or a new
+# terminal window is needed) sets NO_RECHECK: it stops at once, as with
+# --non-interactive.
 guided_check() {
   local check="$1" guide="$2" offered_once=""
   while ! "$check"; do
     OFFER=""
+    NO_RECHECK=""
     "$guide"
-    [ -z "$OPT_NON_INTERACTIVE" ] || stop_at_guide
+    [ -z "$OPT_NON_INTERACTIVE" ] && [ -z "$NO_RECHECK" ] || stop_at_guide
     if [ -n "$OFFER" ] && [ -z "$offered_once" ]; then
       offered_once=1
       offer_command && continue
@@ -1169,9 +1189,9 @@ check_gh() {
     GH_PROBLEM=missing
     return 1
   fi
-  # Unquoted on purpose: an assignment is not split, and a quoted gh
-  # command would read as a message to the banned-words check.
-  help=$(run_gh repo create --help 2>&1) || help=""
+  # The command in quotes is not a message: the marker keeps it out of
+  # the banned-words check.
+  help="$(run_gh repo create --help 2>&1)" || help="" # not-a-message
   case "$help" in
     *--template*) return 0 ;;
   esac
@@ -1345,10 +1365,457 @@ preflight_target_dir() {
   step_end "$DIR_DONE"
 }
 
+# ---------- preflight: checks on GitHub ----------
+# After the checks of this computer, with the same guided loop: gh is
+# signed in (which also gives the defaults for the owner and product
+# owner name, and the permissions gh has) and this is the current
+# published version of the script, both before the first question. After
+# the questions, which give the visibility, the owner and the name: gh
+# has the permissions the setup needs, and OWNER/NAME does not exist yet.
+#
+# Every GitHub call goes through api_call (gh api -i), so an error is read
+# from the HTTP status and the message in the answer's JSON body, not
+# from gh's own error text, which is not stable (spec, "Ease-of-use
+# requirements"). Without an answer, gh's exit code tells "not signed
+# in" (4, gh's documented code for it) from "GitHub not reached". An
+# answer that has no guide stops through api_fail: a plain message, the
+# next action, the command to start again, and the raw text below it for
+# support (exit 1).
+
+BOOTSTRAPPER=factoincognito/ai-project-bootstrap
+SIGN_IN_COMMAND_NEXT="Sign in to GitHub with gh as in step 0 of the README, with the command gh auth login -h github.com -p https -w -s workflow, then start the script again."
+
+API_RC=0 API_STATUS="" API_HEADERS="" API_BODY="" API_MESSAGE="" API_ERR="" API_RAW=""
+
+# api_call <args...>: runs gh api -i <args> and reads its answer: API_RC
+# (gh's exit code), API_STATUS (the HTTP status; empty when no answer
+# came), API_HEADERS (one "Name: value" per line), API_BODY, API_MESSAGE
+# (the "message" of a JSON body, as GitHub sends with an error) and
+# API_ERR (gh's own error text). Carriage returns are removed.
+api_call() {
+  local out err line part=status
+  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  API_RC=0
+  run_gh api -i "$@" >"$out" 2>"$err" || API_RC=$?
+  API_STATUS="" API_HEADERS="" API_BODY="" API_MESSAGE=""
+  API_ERR="$(tr -d '\r' <"$err")"
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line//$CR/}"
+    case "$part" in
+      status)
+        case "$line" in
+          HTTP/*)
+            API_STATUS="${line#* }"
+            API_STATUS="${API_STATUS%% *}"
+            part=headers
+            ;;
+          *) part=body; API_BODY="$line$NL" ;;
+        esac
+        ;;
+      headers)
+        if [ -z "$line" ]; then part=body; else API_HEADERS="$API_HEADERS$line$NL"; fi
+        ;;
+      *) API_BODY="$API_BODY$line$NL" ;;
+    esac
+  done <"$out"
+  rm -f "$out" "$err"
+  case "$API_STATUS" in
+    [0-9][0-9][0-9]) ;;
+    *) API_STATUS="" ;;
+  esac
+  case "$API_BODY" in
+    *"${DQ}message${DQ}"*)
+      API_MESSAGE="${API_BODY#*${DQ}message${DQ}}"
+      API_MESSAGE="${API_MESSAGE#*:}"
+      trim_into "$API_MESSAGE"
+      API_MESSAGE="${TRIMMED#"$DQ"}"
+      API_MESSAGE="${API_MESSAGE%%"$DQ"*}"
+      ;;
+  esac
+}
+
+# api_raw: API_RAW is the raw text of the last answer, for support: the
+# HTTP status and GitHub's message, then gh's own error text.
+api_raw() {
+  API_RAW=""
+  [ -z "$API_STATUS" ] || API_RAW="HTTP $API_STATUS: ${API_MESSAGE:-(no message)}"
+  [ -z "$API_ERR" ] || API_RAW="${API_RAW:+$API_RAW$NL}$API_ERR"
+  [ -n "$API_RAW" ] || API_RAW="gh stopped with exit code $API_RC and no message."
+}
+
+# stop_with_error <what happened> <what to do next> <raw text>: a GitHub
+# check that cannot go on: the command to start again, then the error
+# (exit 1).
+stop_with_error() {
+  [ -n "$RESTART_CMD" ] || remember_command
+  say "To start again, run this command:"
+  say_command "bash $RESTART_CMD"
+  fail 1 "$1" "$2" "$3"
+}
+
+# api_fail <what the script was doing, as "read your GitHub account">:
+# stops with the plain message for the last answer (exit 1).
+api_fail() {
+  local doing="$1" what="" next=""
+  case "$API_STATUS" in
+    "")
+      if [ "$API_RC" -eq 4 ]; then
+        what="gh (the GitHub command-line tool) is not signed in to your GitHub account, so the script could not $doing."
+        next="$SIGN_IN_COMMAND_NEXT"
+      else
+        what="The script could not reach GitHub to $doing."
+        next="Check that this computer is connected to the internet, then start the script again."
+      fi
+      ;;
+    401)
+      what="GitHub no longer accepts the sign-in that gh has on this computer, so the script could not $doing."
+      next="$SIGN_IN_COMMAND_NEXT"
+      ;;
+    403)
+      case "$(lower "$API_MESSAGE")" in
+        *"rate limit"*)
+          what="GitHub has paused answering your account for a while, because it was asked too often, so the script could not $doing."
+          next="Wait an hour, then start the script again."
+          ;;
+        *)
+          what="GitHub refused to let the script $doing."
+          next="Check that your GitHub account may do this; for an organisation, one of its owners may have to allow it. Then start the script again."
+          ;;
+      esac
+      ;;
+    404)
+      what="GitHub did not find what the script needed to $doing."
+      next="Check the names you gave, then start the script again."
+      ;;
+    5[0-9][0-9])
+      what="GitHub had a problem of its own, so the script could not $doing."
+      next="Wait a few minutes, then start the script again; https://www.githubstatus.com shows whether GitHub has a known problem."
+      ;;
+  esac
+  api_raw
+  stop_with_error "$what" "$next" "$API_RAW"
+}
+
+# ---- signed in ----
+
+# check_github_account: gh api -i user works. Sets GH_LOGIN and
+# GH_PROFILE_NAME (empty when the profile has none), and GH_SCOPES (the
+# X-OAuth-Scopes header without spaces, as repo,workflow) with
+# GH_SCOPES_SEEN set when that header came (a fine-grained token sends
+# none). ACCOUNT_PROBLEM: signed-out (gh's exit 4), expired (401),
+# offline (no answer) or other.
+GH_LOGIN=""
+GH_PROFILE_NAME=""
+GH_SCOPES=""
+GH_SCOPES_SEEN=""
+ACCOUNT_PROBLEM=""
+check_github_account() {
+  local rest h
+  ACCOUNT_PROBLEM=""
+  api_call user --jq '.login, (.name // "")'
+  if [ "$API_RC" -ne 0 ] || [ "$API_STATUS" != 200 ]; then
+    case "$API_STATUS" in
+      "") if [ "$API_RC" -eq 4 ]; then ACCOUNT_PROBLEM=signed-out; else ACCOUNT_PROBLEM=offline; fi ;;
+      401) ACCOUNT_PROBLEM=expired ;;
+      *) ACCOUNT_PROBLEM=other ;;
+    esac
+    return 1
+  fi
+  GH_LOGIN="${API_BODY%%"$NL"*}"
+  rest="${API_BODY#*"$NL"}"
+  GH_PROFILE_NAME="${rest%%"$NL"*}"
+  if [ -z "$GH_LOGIN" ]; then
+    ACCOUNT_PROBLEM=other
+    return 1
+  fi
+  GH_SCOPES=""
+  GH_SCOPES_SEEN=""
+  while IFS= read -r h; do
+    [ -n "$h" ] || continue
+    if [ "$(lower "${h%%:*}")" = x-oauth-scopes ]; then
+      GH_SCOPES_SEEN=1
+      GH_SCOPES="${h#*:}"
+      GH_SCOPES="${GH_SCOPES// /}"
+    fi
+  done <<<"$API_HEADERS"
+}
+
+guide_github_account() {
+  case "$ACCOUNT_PROBLEM" in
+    other) api_fail "read your GitHub account" ;;
+    offline) guide_github_offline; return 0 ;;
+    expired)
+      guide_begin "GitHub no longer accepts the sign-in that gh (the GitHub command-line tool) has on this computer." \
+        "The script works on GitHub as you, through gh, and GitHub no longer accepts that sign-in: it may have run out or been withdrawn."
+      ;;
+    *)
+      guide_begin "gh (the GitHub command-line tool) is not signed in to your GitHub account." \
+        "The script works on GitHub as you, through gh, so gh has to be signed in to your account."
+      ;;
+  esac
+  guide_step "Open a second terminal window and run this command there; it is the sign-in command from step 0 of the README:"
+  say_command "gh auth login -h github.com -p https -w -s workflow"
+  guide_step "When gh asks \"Authenticate Git with your GitHub credentials?\", answer Yes."
+  guide_step "gh shows a one-time code (eight letters and digits, such as ABCD-1234) and asks you to press Enter: copy the code, then press Enter. Your browser opens GitHub's device page: paste the code, click Continue, then approve with the green Authorize button."
+  guide_step "Come back to this window."
+  guide_end "gh says \"Logged in as\" with your account name, and the script says \"Done. gh is signed in to GitHub as\" with your account name." \
+    "if the browser does not open, open https://github.com/login/device yourself and type the code there." \
+    "it asks GitHub which account gh is signed in to (gh api user), which works only when gh is signed in."
+  api_raw
+  guide_details "$API_RAW"
+}
+
+guide_github_offline() {
+  guide_begin "The script could not reach GitHub." \
+    "The script checks your GitHub account and creates your project there, so this computer has to reach GitHub over the internet."
+  guide_step "Check that this computer is connected to the internet: open https://github.com in your browser."
+  guide_step "If GitHub opens in the browser but the script still cannot reach it, open https://www.githubstatus.com to see whether GitHub has a known problem, and wait until it is solved."
+  guide_step "Come back to this window."
+  guide_end "the script says \"Done. gh is signed in to GitHub as\" with your account name." \
+    "if you are on an office or school network, ask the person who manages it whether it lets gh reach GitHub." \
+    "it asks GitHub which account gh is signed in to, which needs a connection to GitHub."
+  api_raw
+  guide_details "$API_RAW"
+}
+
+preflight_github_account() {
+  step_start "Checking that gh is signed in to GitHub"
+  guided_check check_github_account guide_github_account
+  step_end "gh is signed in to GitHub as $GH_LOGIN."
+}
+
+# need_github_account: the account, read once. cmd_setup reads it before
+# the questions; this is for an input default asked for without it.
+need_github_account() {
+  [ -n "$GH_LOGIN" ] || preflight_github_account
+}
+
+# ---- the current version of this script ----
+
+# read_published_version <text of CHANGELOG.md>: PUBLISHED_VERSION is the
+# version the bootstrapper's CHANGELOG.md was stamped with: the text
+# before ", built from" (its "Project created" entry reads "<version>,
+# built from <template>@<commit>."). Returns 1 when there is none. The
+# unstamped stub in the template holds the same placeholder as the
+# unstamped script, so the two match there; the build stamps both.
+PUBLISHED_VERSION=""
+read_published_version() {
+  local line
+  PUBLISHED_VERSION=""
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line//$CR/}"
+    case "$line" in
+      *", built from"*)
+        trim_into "${line%%, built from*}"
+        PUBLISHED_VERSION="$TRIMMED"
+        [ -z "$PUBLISHED_VERSION" ] || return 0
+        ;;
+    esac
+  done <<<"$1"
+  return 1
+}
+
+# check_published_version: the bootstrapper's CHANGELOG.md on GitHub (its
+# default branch, which "gh repo create --template" copies) names the
+# version this script was stamped with. VERSION_PROBLEM: old, unreadable
+# (no version in it) or api.
+VERSION_PROBLEM=""
+check_published_version() {
+  VERSION_PROBLEM=""
+  api_call -H "Accept: application/vnd.github.raw+json" "repos/$BOOTSTRAPPER/contents/CHANGELOG.md"
+  if [ "$API_RC" -ne 0 ] || [ "$API_STATUS" != 200 ]; then
+    VERSION_PROBLEM=api
+    return 1
+  fi
+  if ! read_published_version "$API_BODY"; then
+    VERSION_PROBLEM=unreadable
+    return 1
+  fi
+  [ "$PUBLISHED_VERSION" = "$SCRIPT_VERSION" ] && return 0
+  VERSION_PROBLEM=old
+  return 1
+}
+
+guide_published_version() {
+  case "$VERSION_PROBLEM" in
+    old) guide_old_script ;;
+    unreadable)
+      stop_with_error "The bootstrapper's CHANGELOG.md file on GitHub does not say which version is current, so the script cannot check that it is the current version." \
+        "Start the script again later. If the same thing happens, report it to the bootstrapper's maintainers and show them the details below." \
+        "No line with \", built from\" in $BOOTSTRAPPER CHANGELOG.md. Its first lines:$NL$(sed -n 1,5p <<<"$API_BODY")"
+      ;;
+    *) api_fail "read the current version of the bootstrapper" ;;
+  esac
+}
+
+# guide_old_script: a re-check in this run cannot change the script that
+# runs, so it stops (NO_RECHECK), and the command to start again runs the
+# downloaded copy in this folder with the same options.
+guide_old_script() {
+  guide_begin "This copy of the script is not the current version: it is $SCRIPT_VERSION, and the current one is $PUBLISHED_VERSION." \
+    "GitHub always copies the current files of the bootstrapper into a new project, so only the current version of the script fits them."
+  guide_step "Download the current version into this folder with this command; it replaces the file bootstrap-project.sh here:"
+  say_command 'gh api repos/factoincognito/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh'
+  guide_step "Start the new copy with the command shown below; it asks again for any answer you did not give as an option."
+  guide_end "the new copy says \"Done. This is the current version of the script\" and goes on." \
+    "if the download command says that gh is not signed in, sign in as in step 0 of the README, then download again." \
+    "it reads the version written in the bootstrapper's CHANGELOG.md file on GitHub and compares it with its own. It cannot check again in this run, so it stops here."
+  NO_RECHECK=1
+  RESTART_CMD="bootstrap-project.sh$RESTART_ARGS"
+}
+
+preflight_published_version() {
+  step_start "Checking that this is the current version of the script"
+  guided_check check_published_version guide_published_version
+  step_end "This is the current version of the script ($SCRIPT_VERSION)."
+}
+
+# ---- the permissions gh has ----
+
+# check_github_permissions: gh has what the setup needs (from a fresh
+# read of the account, so a refresh shows at once): workflow, because the
+# setup changes the file that runs the project's checks, and repo, or
+# public_repo for a public project. PERM_MISSING lists what is missing.
+# Without the X-OAuth-Scopes header (a fine-grained token) the
+# permissions cannot be seen: it passes, and the step warns.
+PERM_PROBLEM=""
+PERM_MISSING=""
+check_github_permissions() {
+  PERM_PROBLEM=""
+  PERM_MISSING=""
+  if ! check_github_account; then
+    PERM_PROBLEM=account
+    return 1
+  fi
+  [ -n "$GH_SCOPES_SEEN" ] || return 0
+  case ",$GH_SCOPES," in
+    *,repo,*) ;;
+    *,public_repo,*) [ "$IN_VISIBILITY" = public ] || PERM_MISSING=repo ;;
+    *) if [ "$IN_VISIBILITY" = public ]; then PERM_MISSING=public_repo; else PERM_MISSING=repo; fi ;;
+  esac
+  case ",$GH_SCOPES," in
+    *,workflow,*) ;;
+    *) PERM_MISSING="${PERM_MISSING:+$PERM_MISSING }workflow" ;;
+  esac
+  [ -n "$PERM_MISSING" ] || return 0
+  PERM_PROBLEM=missing
+  return 1
+}
+
+guide_github_permissions() {
+  local p list=""
+  if [ "$PERM_PROBLEM" = account ]; then
+    guide_github_account
+    return 0
+  fi
+  for p in $PERM_MISSING; do
+    case "$p" in
+      workflow) p="workflow (to add and change the files that run your project's checks)" ;;
+      repo) p="repo (to create your project and change its files)" ;;
+      public_repo) p="public_repo (to create a public project and change its files)" ;;
+    esac
+    list="${list:+$list; }$p"
+  done
+  guide_begin "gh is signed in, but it does not have every permission on GitHub that the setup needs." \
+    "GitHub gives gh each permission separately, and the setup needs these, which gh does not have yet: $list."
+  if [ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then
+    # gh auth refresh cannot change a token from the environment, and a
+    # new one is read only when the script starts again.
+    guide_step "gh signs in with a key (a token) set in GH_TOKEN or GITHUB_TOKEN on this computer, so gh cannot ask GitHub for more permissions itself."
+    guide_step "Open https://github.com/settings/tokens in your browser, make a new token (classic), and tick the boxes named after the permissions listed above."
+    guide_step "Put the new token in GH_TOKEN (or GITHUB_TOKEN) in place of the old one, open a new terminal window, and start the script again there with the command shown below."
+    guide_end "the script says \"Done. gh has the permissions on GitHub that the setup needs.\"" \
+      "if you did not set GH_TOKEN or GITHUB_TOKEN yourself, ask the person who set up this computer." \
+      "it asks GitHub which permissions gh has (gh api -i user). It cannot check again in this run, because the key is read when the script starts, so it stops here."
+    NO_RECHECK=1
+    return 0
+  fi
+  guide_step "Run this command; it asks GitHub to give gh the missing permissions:"
+  case "$PERM_MISSING" in
+    workflow) offered gh-refresh-workflow show; OFFER=gh-refresh-workflow ;;
+    public_repo*) offered gh-refresh-public show; OFFER=gh-refresh-public ;;
+    *) offered gh-refresh-repo show; OFFER=gh-refresh-repo ;;
+  esac
+  guide_step "gh shows a one-time code (eight letters and digits, such as ABCD-1234) and asks you to press Enter: copy the code, then press Enter."
+  guide_step "Your browser opens https://github.com/login/device: paste the code, click Continue, then approve with the green Authorize button."
+  guide_step "Come back to this window."
+  guide_end "gh says that it is done, and the script says \"Done. gh has the permissions on GitHub that the setup needs.\"" \
+    "if the browser does not open, open https://github.com/login/device yourself and type the code there." \
+    "it asks GitHub which permissions gh has (gh api -i user)."
+}
+
+preflight_github_permissions() {
+  step_start "Checking that gh has the permissions on GitHub that the setup needs"
+  guided_check check_github_permissions guide_github_permissions
+  if [ -n "$GH_SCOPES_SEEN" ]; then
+    step_end "gh has the permissions on GitHub that the setup needs."
+    return 0
+  fi
+  say "GitHub does not say which permissions this sign-in has, as with a fine-grained token (a key made on GitHub with chosen permissions)."
+  say "The setup needs these permissions, each set to \"Read and write\": Administration, Contents, Workflows and Pull requests; and your account must be allowed to create repositories (new projects on GitHub)."
+  say "If one of them is missing, a later step stops and says so."
+  step_end "Carrying on without checking the permissions."
+}
+
+# ---- the project name is free ----
+
+# check_project_absent: GitHub has no project OWNER/NAME (404). With
+# --resume one that exists passes too (only the allowance: continuing it
+# comes in a later part). PROJECT_PROBLEM: exists, or api.
+PROJECT_PROBLEM=""
+PROJECT_DONE=""
+check_project_absent() {
+  PROJECT_PROBLEM=""
+  api_call "repos/$IN_OWNER/$IN_NAME"
+  case "$API_STATUS" in
+    404)
+      PROJECT_DONE="No project named $IN_OWNER/$IN_NAME exists on GitHub yet."
+      return 0
+      ;;
+    200)
+      if [ -n "$OPT_RESUME" ]; then
+        PROJECT_DONE="The project $IN_OWNER/$IN_NAME exists on GitHub, which --resume allows."
+        return 0
+      fi
+      PROJECT_PROBLEM=exists
+      ;;
+    *) PROJECT_PROBLEM=api ;;
+  esac
+  return 1
+}
+
+guide_project() {
+  case "$PROJECT_PROBLEM" in
+    exists) guide_project_exists ;;
+    *) api_fail "check whether the name $IN_OWNER/$IN_NAME is free on GitHub" ;;
+  esac
+}
+
+guide_project_exists() {
+  guide_begin "A project named $IN_OWNER/$IN_NAME already exists on GitHub." \
+    "The setup creates a new project, and it never changes or deletes one that is already there."
+  guide_step "To see it, open https://github.com/$IN_OWNER/$IN_NAME in your browser."
+  guide_step "Choose another name: start the script again and give it with --name, such as --name $IN_NAME-2."
+  guide_step "If you are continuing a setup of this project that stopped part way, start the script again with --resume added."
+  guide_step "Or, if the project on GitHub is not needed, rename or delete it there yourself (in its Settings); then come back to this window."
+  guide_end "the script says \"Done. No project named $IN_OWNER/$IN_NAME exists on GitHub yet.\"" \
+    "if the page shows a project with another name, the project was renamed and GitHub still sends the old name to it; choose another name." \
+    "it asks GitHub for a project at that address, and GitHub answers that there is none."
+}
+
+preflight_project_absent() {
+  step_start "Checking that the name $IN_OWNER/$IN_NAME is free on GitHub"
+  guided_check check_project_absent guide_project
+  step_end "$PROJECT_DONE"
+}
+
 # cmd_setup <options...>: the setup. Built so far: the checks of this
-# computer and the inputs. The tool checks need no answer, so they come
-# first; the npm and folder checks need the pack and the folder, so they
-# follow the questions.
+# computer and on GitHub, and the inputs. The options are checked first,
+# then the checks that need no answer (the tools, the GitHub sign-in and
+# the current version), so that nothing is asked in vain; the npm,
+# folder, permission and name checks need answers, so they follow the
+# questions.
 cmd_setup() {
   parse_args "$@"
   if [ -n "$SCRIPT_PIPED" ] && [ -z "$OPT_NON_INTERACTIVE" ]; then
@@ -1357,11 +1824,16 @@ cmd_setup() {
   fi
   remember_command "$@"
   detect_os
+  check_options
   preflight_tools
+  preflight_github_account
+  preflight_published_version
   collect_inputs
   preflight_npm
   preflight_target_dir
-  fail 1 "This version of the script stops after checking this computer: setting up the project is not built yet. Nothing was created." \
+  preflight_github_permissions
+  preflight_project_absent
+  fail 1 "This version of the script stops after its checks of this computer and of GitHub: setting up the project is not built yet. Nothing was created." \
     "Use a released version of the bootstrapper to set up a project."
 }
 

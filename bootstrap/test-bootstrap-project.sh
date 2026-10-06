@@ -127,8 +127,9 @@ case "${1:-}" in
     #   - the bootstrapper's CHANGELOG.md (raw contents): the file
     #     STUB_GH_CHANGELOG (the harness sets the template's own stub).
     #   - a project, api -i repos/OWNER/NAME: found (200) when OWNER/NAME
-    #     is in STUB_GH_EXISTING (space-separated) and the counter file
-    #     repo-gone has not run out, else 404.
+    #     is in STUB_GH_EXISTING (space-separated), else 404. With the
+    #     counter file repo-there, only while it is above 0 (then the
+    #     user deleted or renamed it).
     # STUB_GH_USER_FAIL, STUB_GH_CHANGELOG_FAIL and STUB_GH_REPO_FAIL make
     # those calls fail as <mode> (see emit_failure): always, or while the
     # counter file user-fails, changelog-fails or repo-fails is above 0.
@@ -191,7 +192,7 @@ case "${1:-}" in
       if [ -n "${STUB_GH_REPO_FAIL:-}" ] && should_fail repo-fails; then emit_failure "$STUB_GH_REPO_FAIL"; fi
       case " ${STUB_GH_EXISTING:-} " in
         *" ${3#repos/} "*)
-          if ! fails_left repo-gone; then
+          if [ ! -f "${STUB_GH_LOG%/*}/repo-there" ] || fails_left repo-there; then
             respond 200 OK 'application/json; charset=utf-8'
             printf '{"full_name":"%s","private":false}\n' "${3#repos/}"
             exit 0
@@ -915,7 +916,7 @@ test_user_facing_strings_are_collected() {
     'not one this script knows' 'needs a value after it' 'Some options are missing or cannot be used' \
     'a question got no answer' 'is not signed in to your GitHub account' \
     'not the current version' 'already exists on GitHub' 'Details for support' \
-    'does not have every permission on GitHub' 'Could not reach GitHub' \
+    'does not have every permission on GitHub' 'could not reach GitHub' \
     'Why this is needed: ' 'When it has worked: ' 'If you see something else: ' \
     'How the script checks it: ' 'To start again, run this command' 'git is not installed' \
     'stops after its checks of this computer and of GitHub' 'Your name for git' 'Your email address for git'; do
@@ -2524,7 +2525,8 @@ test_checks_on_this_computer_come_before_any_github_call_and_question() {
   ! grep -q "$(printf '\tapi\t')" "$d/gh.log" || { cat "$d/gh.log" >&2; die "GitHub was asked before the checks passed"; }
   expect_no_out "$d" "Project name"
   # All pass: the tool checks come first, then the account and the
-  # published version (before the questions), then the name.
+  # published version (before the questions), then the permissions (a
+  # fresh read of the account) and the name.
   d="$(tmpdir)"
   working_git "$d"
   fake_tool "$d" npm 10.0.0
@@ -2532,7 +2534,7 @@ test_checks_on_this_computer_come_before_any_github_call_and_question() {
   expect_rc 1 "$d"
   [ "$(awk -F'\t' '{ print $2 " " $NF }' "$d/gh.log")" = "$(printf '%s\n' '--version --version' 'repo --help' \
       'api .login, (.name // "")' 'api repos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md' \
-      'api repos/octo-user/my-app')" ] \
+      'api .login, (.name // "")' 'api repos/octo-user/my-app')" ] \
     || { cat "$d/gh.log" >&2; die "gh calls not in the order: tools, account, version, name"; }
 }
 
@@ -3073,7 +3075,7 @@ test_an_existing_project_is_refused_unless_resume() {
   expect_out "$d" "    Done. No project named acme/other-app exists on GitHub yet."
   # Interactive: renamed or deleted on GitHub while the script waits.
   d="$(tmpdir)"
-  echo 1 >"$d/repo-gone"
+  echo 1 >"$d/repo-there"
   printf '\n' >"$d/in"
   pre "$d" with_project acme my-app preflight_project_absent
   expect_rc 0 "$d"
