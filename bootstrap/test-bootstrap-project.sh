@@ -1729,30 +1729,34 @@ test_non_interactive_never_reads_stdin() {
 
 test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
   # The whole script, as a user gets it (the built copy) and runs it, with
-  # --yes (needed with --non-interactive). The steps after the copy on
-  # this computer are not built yet: it stops there, with exit 1.
+  # --yes (needed with --non-interactive). The steps after the CHANGELOG
+  # entry are not built yet: it stops there, with exit 1.
   local d rc
   d="$(tmpdir)"
   make_stub_gh "$d/gh"
   fake_home "$d/home" "Test Person" test@example.com
   fake_tool "$d" npm 10.0.0
+  make_stub_npm "$d/npm"
   mkdir -p "$d/cwd"
   use_built "$d"
   rc=0
-  ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
+  ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
+      STUB_NPM_LOG="$d/npm.log" BOOTSTRAP_NPM="$d/npm"
     bash "$RUN_SCRIPT" --non-interactive --yes "${REQUIRED_OPTS[@]}" ) </dev/null >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "exit $rc, want 1"; }
   grep -qF 'the next steps of the setup are not built yet' "$d/err" || { cat "$d/err" >&2; die "no stop message"; }
   rm -rf "$d/created" "$d/remotes" "$d/cwd/my-app"
   rc=0
-  ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
+  ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
+      STUB_NPM_LOG="$d/npm.log" BOOTSTRAP_NPM="$d/npm"
     bash "$RUN_SCRIPT" --non-interactive --yes "${REQUIRED_OPTS[@]}" ) <&- >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "stdin closed: exit $rc, want 1"; }
   grep -qF 'the next steps of the setup are not built yet' "$d/err" || { cat "$d/err" >&2; die "stdin closed: no stop message"; }
   # gh: the two checks on this computer, the GitHub checks (the account,
   # the published version, the name), then creating and protecting the
-  # project and making the copy on this computer, every one with gh's own
-  # prompts off; the copy is the only thing made on this computer.
+  # project, making the copy on this computer and reading the licence,
+  # every one with gh's own prompts off; the copy is the only thing made
+  # on this computer.
   [ "$(cut -f2- "$d/gh.log" | LC_ALL=C sort -u)" = "$(printf '%s\n' '--version' "$(printf 'repo\tcreate\t--help')" \
       "$(printf 'api\t-i\tuser\t--jq\t.login, (.name // "")')" \
       "$(printf 'api\t-i\t-H\tAccept: application/vnd.github.raw+json\trepos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md')" \
@@ -1762,7 +1766,8 @@ test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
       "$(printf 'api\t-i\trepos/octo-user/my-app/contents/CHANGELOG.md')" \
       "$(printf 'api\t-i\t-X\tPUT\trepos/octo-user/my-app/branches/main/protection\t--input\t-')" \
       "$(printf 'repo\tedit\tocto-user/my-app\t--delete-branch-on-merge\t--enable-squash-merge')" \
-      "$(printf 'repo\tclone\tocto-user/my-app\t./my-app')" | LC_ALL=C sort)" ] \
+      "$(printf 'repo\tclone\tocto-user/my-app\t./my-app')" \
+      "$(printf 'api\t-i\tlicenses/mit\t--jq\t.body')" | LC_ALL=C sort)" ] \
     || { cat "$d/gh.log" >&2; die "gh was used for more than its checks and the steps built so far"; }
   [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] \
     || { cat "$d/gh.log" >&2; die "a gh call ran with gh's prompts on"; }
@@ -4177,7 +4182,7 @@ filled_as() {
     t="${t//\\n/$nl}"
     v="$(want_value "$key")"
     case "$s" in *"$t"*) ;; *) die "$p$deploy: $f has no $t before the fill (test is stale)" ;; esac
-    s=${s//"$t"/$v}
+    s=${s//"$t"/"$v"}
     printf '%s|%s\n' "$rf" "$key" >>"$d/applied"
   done < <(want_fill_rows "$p" "$deploy")
   printf '%s' "$s" >"$6"
@@ -4532,7 +4537,7 @@ test_a_folder_named_like_a_setting_or_an_option_gets_the_whole_tree_and_stdin_is
     [ "$(cat "$d/rc")" -eq 1 ] || { cat "$d/out" "$d/err" >&2; die "$dir: exit $(cat "$d/rc"), want 1"; }
     grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/err" >&2; die "$dir: did not reach the end"; }
     [ "$(cat "$d/first")" = first-line ] || die "$dir: stdin was read; the next line is: $(cat "$d/first")"
-    [ "$(calls_from_create "$d" | tail -1)" = "repo clone octo-user/my-app ./$dir" ] || { cat "$d/gh.log" >&2; die "$dir: not copied into ./$dir"; }
+    [ "$(calls_from_create "$d" | grep '^repo clone ')" = "repo clone octo-user/my-app ./$dir" ] || { cat "$d/gh.log" >&2; die "$dir: not copied into ./$dir"; }
     [ "$(ls -A "$d/cwd")" = "$dir" ] || { ls -A "$d/cwd" >&2; die "$dir: the copy is not in the folder named"; }
     expect_setup_tree "$d" "$d/cwd/$dir" python ""
   done
@@ -4776,7 +4781,7 @@ test_a_failed_npm_is_explained_with_its_text_for_support() {
     setup_run "$d" --non-interactive --yes --pack node
     unset STUB_NPM_FAIL
     expect_rc 1 "$d"
-    sed -n 1p "$d/err" | grep -qF "What happened: npm could not record the exact versions of the node pack's tools in package-lock.json. The project octo-user/my-app exists on GitHub, with only the bootstrapper's files in it." \
+    sed -n 1p "$d/err" | grep -qF "What happened: npm could not record the exact versions of the node pack's tools in package-lock.json. The project octo-user/my-app exists on GitHub, with only the bootstrapper's files in it" \
       || { cat "$d/err" >&2; die "$mode: the first line does not say what happened"; }
     case "$mode" in
       offline) sed -n 2p "$d/err" | grep -qF "What to do next: Check that this computer is connected to the internet, then continue the setup with the command shown above." \

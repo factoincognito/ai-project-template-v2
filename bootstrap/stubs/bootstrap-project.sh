@@ -10,10 +10,11 @@
 # name still free), the plan and its "Proceed?" question, creating the
 # project on GitHub and protecting its main version, the copy of the
 # project on this computer (with the git name and email, the line of work
-# bootstrap-setup, the language pack laid out, the tidy-up and the
-# placeholders filled in), and the layout-pack subcommand. After the
-# placeholders the script stops: the later setup steps (nothing is saved
-# or sent yet) come in later parts.
+# bootstrap-setup, the language pack laid out, the tidy-up, the
+# placeholders filled in, the lockfile of the npm packs, the licence and
+# the CHANGELOG entry), and the layout-pack subcommand. After the
+# CHANGELOG the script stops: the later setup steps (nothing is saved or
+# sent yet) come in later parts.
 #
 # Usage:
 #   bash bootstrap-project.sh [options]
@@ -42,6 +43,9 @@
 #   BOOTSTRAP_OS_RELEASE  the Linux release file (default: /etc/os-release).
 #   BOOTSTRAP_SLEEP  the command that waits between two checks of GitHub
 #                  (default: sleep). It gets the seconds as its argument.
+#   BOOTSTRAP_NPM  the npm the lockfile step runs (default: npm on the
+#                  PATH), so the tests never reach the npm registry. The
+#                  check that npm is installed runs the npm on the PATH.
 #
 # Sourcing this file defines its functions and runs nothing (the tests
 # load it that way); running it with bash runs the main part at the end.
@@ -266,6 +270,11 @@ guide_details() {
 # its own questions.
 run_gh() {
   GH_PROMPT_DISABLED=1 "${BOOTSTRAP_GH:-gh}" "$@"
+}
+
+# run_npm <args...>: runs npm, or $BOOTSTRAP_NPM.
+run_npm() {
+  "${BOOTSTRAP_NPM:-npm}" "$@"
 }
 
 # run_offered <command>: runs a fixed command that the script offered and
@@ -2057,7 +2066,11 @@ show_plan() {
   say "  1. Create the project on GitHub, with the bootstrapper's files in it."
   say "  2. Protect its main version, so that from then on every change comes as a proposed change, not straight into it."
   say "  3. Make a copy of the project on this computer, in $IN_DIR."
-  say "  4. Add the language pack's files, fill in the project's names and description, and add the licence."
+  if [ "$IN_LICENSE" = none ]; then
+    say "  4. Add the language pack's files and fill in the project's names and description; no licence file is added, because you chose none."
+  else
+    say "  4. Add the language pack's files, fill in the project's names and description, and add the licence $IN_LICENSE."
+  fi
   say "  5. Send these changes to GitHub as one proposed change, wait for the project's checks to pass, then add the change to the main version."
   say "  6. Show what was made, and the one thing to do next."
   if [ "$IN_VISIBILITY" = private ]; then
@@ -2513,13 +2526,19 @@ fill_text() {
     package-description) FILL_TEXT='[project-description]' ;;
     package-name | title) FILL_TEXT='[project-name]' ;;
     slug) FILL_TEXT='[project-slug]' ;;
+    year) FILL_TEXT='[year]' ;;
+    fullname) FILL_TEXT='[fullname]' ;;
     *) return 1 ;;
   esac
 }
 
 # fill_value <key>: FILL_VALUE is what the key's text becomes. The npm
 # name and the Expo slug are the slug of the project name (lowercase, a
-# . made a -); the web page title is the display name.
+# . made a -); the web page title is the display name. year and fullname
+# are the choosealicense.com placeholders of a GitHub licence (step 10):
+# this year (of the fill's date) and the copyright holder. They are not
+# rows of the fill table: only LICENSE has them, and only for a GitHub
+# licence.
 fill_value() {
   case "$1" in
     name | title) FILL_VALUE="$IN_PROJECT_NAME" ;;
@@ -2528,6 +2547,8 @@ fill_value() {
     date) FILL_VALUE="$FILL_DATE" ;;
     readme-description | project-description | package-description) FILL_VALUE="$IN_DESCRIPTION" ;;
     package-name | slug) FILL_VALUE="$IN_SLUG" ;;
+    year) FILL_VALUE="${FILL_DATE%%-*}" ;;
+    fullname) FILL_VALUE="$IN_COPYRIGHT_HOLDER" ;;
     *) return 1 ;;
   esac
 }
@@ -2608,6 +2629,122 @@ fill_placeholders() {
   step_end "The name $IN_PROJECT_NAME, the description, the product owner $IN_PO_NAME, the project's place on GitHub ($IN_OWNER/$IN_NAME) and today's date $FILL_DATE are filled in where the files asked for them."
 }
 
+# ---------- lockfile, licence and CHANGELOG ----------
+
+# make_lockfile: spec step 7, for the npm packs: npm records the exact
+# version of every tool in package-lock.json, without node_modules, with
+# the same command the template's own test of the packs runs. It runs
+# after the fill (step 8), so the lockfile names the project, not
+# [project-name] (#153). npm's own text is shown only when it fails,
+# below the plain message: no network (npm's ENOTFOUND, EAI_AGAIN,
+# ETIMEDOUT, ECONNREFUSED, ECONNRESET or ENETUNREACH code) asks to check
+# the connection; anything else gets the plain fallback.
+make_lockfile() {
+  local out rc=0 raw dir="$IN_DIR" what next
+  case "$IN_PACK" in
+    node | web | react-native) ;;
+    *) return 0 ;;
+  esac
+  step_start "Recording the exact versions of the $IN_PACK pack's tools in package-lock.json"
+  case "$dir" in -*) dir="./$dir" ;; esac
+  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  (CDPATH='' cd "$dir" && run_npm install --package-lock-only --no-audit --no-fund) </dev/null >"$out" 2>&1 || rc=$?
+  raw="$(tr -d '\r' <"$out")"
+  rm -f "$out"
+  if [ "$rc" -ne 0 ]; then
+    [ -n "$raw" ] || raw="npm stopped with exit code $rc and no message."
+    what="npm could not record the exact versions of the $IN_PACK pack's tools in package-lock.json."
+    case "$raw" in
+      *"code ENOTFOUND"* | *"code EAI_AGAIN"* | *"code ETIMEDOUT"* | *"code ECONNREFUSED"* | *"code ECONNRESET"* | *"code ENETUNREACH"*)
+        next="Check that this computer is connected to the internet, then continue the setup with the command shown above."
+        ;;
+      *) next="Continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." ;;
+    esac
+    stop_with_error "$what" "$next" "$raw"
+  fi
+  step_end "package-lock.json lists the exact version of every tool the project uses, so its checks on GitHub install the same ones."
+}
+
+# add_licence: spec step 10. A GitHub licence: its text from GitHub, with
+# [year] and [fullname] filled in by the fill of step 8 (literally);
+# PolyForm Noncommercial: the text from licenses/, and a NOTICE at the
+# root naming the copyright holder; none: no file, and a warning when the
+# project is public. Every file is written with LF line endings.
+POLYFORM_KEY=polyform-noncommercial-1.0.0
+POLYFORM_TEXT=licenses/PolyForm-Noncommercial-1.0.0.md
+add_licence() {
+  local body
+  step_start "Adding the project's licence"
+  case "$IN_LICENSE" in
+    none)
+      if [ "$IN_VISIBILITY" != private ]; then
+        say "Warning: the project is public and has no licence: anyone can see its code, but nobody else may copy, change or share it. To add a licence later, see https://choosealicense.com."
+      fi
+      step_end "No licence file was added, because you chose none."
+      ;;
+    "$POLYFORM_KEY")
+      if [ ! -f "$IN_DIR/$POLYFORM_TEXT" ]; then
+        stop_with_error "The copy of the project on this computer has no $POLYFORM_TEXT, the text of the PolyForm Noncommercial licence." \
+          "$SETUP_BROKEN_NEXT" "Missing in $IN_DIR: $POLYFORM_TEXT"
+      fi
+      tr -d '\r' <"$IN_DIR/$POLYFORM_TEXT" >"$IN_DIR/LICENSE"
+      cat <<<"Required Notice: Copyright $IN_COPYRIGHT_HOLDER" >"$IN_DIR/NOTICE"
+      step_end "LICENSE holds the PolyForm Noncommercial licence, and NOTICE names $IN_COPYRIGHT_HOLDER as the copyright holder."
+      ;;
+    *)
+      api_call "licenses/$IN_LICENSE" --jq .body
+      if [ "$API_STATUS" = 404 ]; then
+        api_raw
+        stop_with_error "GitHub has no licence with the short name $IN_LICENSE, so the script could not add it." \
+          "Find the licence on https://choosealicense.com/licenses/ (its page shows the short name, such as mit), then continue the setup with the command shown above, with --license and that name in place of --license $IN_LICENSE." \
+          "$API_RAW"
+      fi
+      [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ] || api_fail "read the text of the licence $IN_LICENSE"
+      body="$API_BODY"
+      while [ "${body%"$NL"}" != "$body" ]; do body="${body%"$NL"}"; done
+      if [ -z "$body" ]; then
+        stop_with_error "GitHub sent an empty text for the licence $IN_LICENSE, so the script could not add it." \
+          "Wait a few minutes, then continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+          "HTTP 200 with an empty body for licenses/$IN_LICENSE"
+      fi
+      cat <<<"$body" >"$IN_DIR/LICENSE"
+      [ -n "$FILL_DATE" ] || FILL_DATE="$(date +%Y-%m-%d)"
+      fill_file "$IN_DIR/LICENSE" year fullname
+      step_end "LICENSE holds the licence $IN_LICENSE, in the name of $IN_COPYRIGHT_HOLDER."
+      ;;
+  esac
+}
+
+# note_setup_in_changelog: spec step 11. The pack, the licence and "set up
+# by bootstrap-project.sh" go at the end of the "## Project created"
+# section of CHANGELOG.md: after its last line that is not blank, before
+# the blank lines and the next "## " heading when one follows. Without
+# that heading it stops and changes nothing.
+note_setup_in_changelog() {
+  local file="$IN_DIR/CHANGELOG.md" tmp pack_line
+  step_start "Noting the setup in CHANGELOG.md, the project's list of changes"
+  if ! grep -qx '## Project created' <"$file"; then
+    stop_with_error "The file CHANGELOG.md in the copy of the project has no section \"## Project created\", where the setup notes how the project was set up." \
+      "$SETUP_BROKEN_NEXT" "No line \"## Project created\" in $file."
+  fi
+  pack_line="- Language pack: $IN_PACK."
+  [ "$IN_WITH_DEPLOY" != yes ] || pack_line="- Language pack: $IN_PACK, with the files that publish the website."
+  tmp="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  CL_ADD="$pack_line$NL- Licence: $IN_LICENSE.$NL- Set up by bootstrap-project.sh." LC_ALL=C awk '
+    BEGIN { add = ENVIRON["CL_ADD"] }
+    function flush_add() { if (on) { print add; on = 0; done = 1 } }
+    function flush_blanks() { while (blanks > 0) { print ""; blanks-- } }
+    on && /^## / { flush_add() }
+    on && /^$/ { blanks++; next }
+    { flush_blanks() }
+    !done && $0 == "## Project created" { print; on = 1; next }
+    { print }
+    END { flush_add(); flush_blanks() }' <"$file" >"$tmp"
+  cat "$tmp" >"$file"
+  rm -f "$tmp"
+  step_end "CHANGELOG.md says which pack and which licence the project was set up with."
+}
+
 # say_left_for_clead: the texts the setup leaves for the first session
 # with Clead (spec step 8), for the report at the end (step 19).
 say_left_for_clead() {
@@ -2619,8 +2756,9 @@ say_left_for_clead() {
 }
 
 # cmd_setup <options...>: the setup. Built so far: the checks of this
-# computer and on GitHub, the inputs, the plan, and steps 2 to 6, 9 and 8
-# (in that order: see "filling in the placeholders"). The
+# computer and on GitHub, the inputs, the plan, and steps 2 to 6, 9, 8, 7,
+# 10 and 11 (in that order: see "filling in the placeholders" and
+# make_lockfile). The
 # options are checked first, then the checks that need no answer (the
 # tools, the GitHub sign-in and the current version), so that nothing is
 # asked in vain; the npm, folder, permission and name checks need
@@ -2667,6 +2805,9 @@ cmd_setup() {
   lay_out_pack
   tidy_up
   fill_placeholders
+  make_lockfile
+  add_licence
+  note_setup_in_changelog
   say "$CONTINUE_INTRO"
   say_command "bash $RESTART_CMD"
   fail 1 "The project $IN_OWNER/$IN_NAME was created on GitHub and its main version is protected. Its copy on this computer, in $IN_DIR, has the $IN_PACK pack's files, ready for the next steps. This version of the script stops here: the next steps of the setup are not built yet." \
