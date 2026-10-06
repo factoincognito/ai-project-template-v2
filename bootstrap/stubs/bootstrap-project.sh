@@ -2871,8 +2871,8 @@ check_texts_left() {
 
 # expected_change <git status code> <path>: true when the setup changes
 # that path that way: it deletes the script and the languages/ files it
-# does not keep, changes the files it fills in or edits, and adds the
-# pack's files, the lockfile and the licence files.
+# does not keep, changes the bootstrapper's files it fills in or edits,
+# and adds the pack's files, the lockfile and the licence files.
 expected_change() {
   local code="$1" path="$2" f t
   case "$code" in
@@ -2886,6 +2886,12 @@ expected_change() {
       esac
       ;;
     "M ")
+      # A pack file the setup adds is new, never changed: a fill-table
+      # file such as package.json is changed only when the bootstrapper
+      # has it (ci.yml and .gitignore are the two the pack overlays).
+      case " $LP_TARGETS " in
+        *" $path "*) case "$path" in .github/workflows/ci.yml | .gitignore) ;; *) return 1 ;; esac ;;
+      esac
       case " README.md CHANGELOG.md .gitignore .github/workflows/ci.yml docs/DEV_INFRASTRUCTURE.md $FILL_FILES " in
         *" $path "*) return 0 ;;
       esac

@@ -5406,7 +5406,7 @@ expected_case() {
   local got=no
   ( load_script
     IN_PACK="$1" IN_WITH_DEPLOY="$2" IN_LICENSE="$3"
-    layout_into "$1" "$REPO/languages" "$WORK/expected.$RANDOM" strict "$2" >/dev/null
+    layout_into "$1" "$REPO/languages" "$(mktemp -d "$WORK/expected.XXXXXX")/out" strict "$2" >/dev/null
     fill_rows "$1" "$2"
     FILL_FILES="$(while read -r f _; do printf '%s ' "$f"; done <<<"$FILL_ROWS")"
     expected_change "$4" "$5" ) && got=yes
