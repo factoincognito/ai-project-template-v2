@@ -96,6 +96,50 @@ fails_left() {
   [ "$n" -gt 0 ] || return 1
   echo $((n - 1)) >"$f"
 }
+# The helpers of the api emulation (also used by repo create and edit).
+should_fail() {
+  [ -f "${STUB_GH_LOG%/*}/$1" ] || return 0
+  fails_left "$1"
+}
+respond() {
+  local st="$1" rs="$2" ctype="$3" h
+  shift 3
+  printf 'HTTP/2.0 %s %s\n' "$st" "$rs"
+  printf 'Content-Type: %s\r\n' "$ctype"
+  for h in "$@"; do printf '%s\r\n' "$h"; done
+  printf '\r\n'
+}
+http_error() {
+  respond "$1" "$2" 'application/json; charset=utf-8'
+  printf '{"message":"%s","documentation_url":"https://docs.github.com/rest","status":"%s"}' "$3" "$1"
+  printf 'gh: %s (HTTP %s)\n' "$3" "$1" >&2
+  exit 1
+}
+emit_failure() {
+  case "$1" in
+    signed-out)
+      printf '%s\n' 'To get started with GitHub CLI, please run:  gh auth login' \
+        'Alternatively, populate the GH_TOKEN environment variable with a GitHub API authentication token.' >&2
+      exit 4
+      ;;
+    expired) http_error 401 Unauthorized 'Bad credentials' ;;
+    offline)
+      printf '%s\n' 'error connecting to api.github.com' \
+        'check your internet connection or https://githubstatus.com' >&2
+      exit 1
+      ;;
+    server) http_error 503 'Service Unavailable' 'Service Unavailable' ;;
+    rate-limit) http_error 403 Forbidden 'API rate limit exceeded for user ID 1.' ;;
+    forbidden) http_error 403 Forbidden 'Resource not accessible by integration' ;;
+    not-found) http_error 404 'Not Found' 'Not Found' ;;
+    teapot) http_error 418 'I am a teapot' 'Short and stout' ;;
+    too-many) http_error 429 'Too Many Requests' 'You have exceeded a secondary rate limit.' ;;
+    plan) http_error 403 Forbidden 'Upgrade to GitHub Pro or make this repository public to enable this feature.' ;;
+    token) http_error 403 Forbidden 'Resource not accessible by personal access token' ;;
+    mystery) http_error 403 Forbidden 'Something about this request was refused.' ;;
+    *) echo "stub gh: unknown failure mode: $1" >&2; exit 64 ;;
+  esac
+}
 case "${1:-}" in
   --version)
     # gh-missing: gh is not installed (yet).
@@ -108,6 +152,38 @@ case "${1:-}" in
       echo "Create a new GitHub repository."
       echo "  -d, --description string   Description of the repository"
       fails_left gh-old || echo "  -p, --template repository  Make the new repository based on a template repository"
+    elif [ "${2:-}" = create ]; then
+      # gh repo create OWNER/NAME --template ... : the project is made
+      # (its name is added to the file "created" next to the log, so a
+      # later api -i repos/OWNER/NAME finds it) and gh prints its link.
+      # STUB_GH_CREATE_FAIL makes it fail (always, or while the counter
+      # file create-fails is above 0) as: signed-out (gh's exit 4),
+      # taken (GitHub's "name already exists"), refused (no permission),
+      # broken (an error with no known cause), broken-but-made (the same,
+      # after the project was made).
+      if [ -n "${STUB_GH_CREATE_FAIL:-}" ] && should_fail create-fails; then
+        case "$STUB_GH_CREATE_FAIL" in
+          signed-out) emit_failure signed-out ;;
+          taken) echo "GraphQL: Name already exists on this account (cloneTemplateRepository)" >&2 ;;
+          refused) echo "GraphQL: Resource not accessible by personal access token (cloneTemplateRepository)" >&2 ;;
+          broken) echo "stub gh: the connection broke off" >&2 ;;
+          broken-but-made)
+            printf '%s\n' "$3" >>"${STUB_GH_LOG%/*}/created"
+            echo "stub gh: the connection broke off" >&2
+            ;;
+          *) echo "stub gh: unknown failure mode: $STUB_GH_CREATE_FAIL" >&2; exit 64 ;;
+        esac
+        exit 1
+      fi
+      printf '%s\n' "$3" >>"${STUB_GH_LOG%/*}/created"
+      printf 'https://github.com/%s\n' "$3"
+    elif [ "${2:-}" = edit ]; then
+      # gh repo edit OWNER/NAME --delete-branch-on-merge --enable-squash-merge;
+      # STUB_GH_EDIT_FAIL set: it fails with gh's text for a 403.
+      if [ -n "${STUB_GH_EDIT_FAIL:-}" ]; then
+        echo "HTTP 403: Must have admin rights to Repository. (https://api.github.com/repos/$3)" >&2
+        exit 1
+      fi
     else
       echo "stub gh: no emulation for: $*" >&2; exit 64
     fi
@@ -130,48 +206,20 @@ case "${1:-}" in
     #     is in STUB_GH_EXISTING (space-separated), else 404. With the
     #     counter file repo-there, only while it is above 0 (then the
     #     user deleted or renamed it).
+    #     A project made by repo create (in the file "created") is found
+    #     too.
     # STUB_GH_USER_FAIL, STUB_GH_CHANGELOG_FAIL and STUB_GH_REPO_FAIL make
     # those calls fail as <mode> (see emit_failure): always, or while the
     # counter file user-fails, changelog-fails or repo-fails is above 0.
-    should_fail() {
-      [ -f "${STUB_GH_LOG%/*}/$1" ] || return 0
-      fails_left "$1"
-    }
-    respond() {
-      local st="$1" rs="$2" ctype="$3" h
-      shift 3
-      printf 'HTTP/2.0 %s %s\n' "$st" "$rs"
-      printf 'Content-Type: %s\r\n' "$ctype"
-      for h in "$@"; do printf '%s\r\n' "$h"; done
-      printf '\r\n'
-    }
-    http_error() {
-      respond "$1" "$2" 'application/json; charset=utf-8'
-      printf '{"message":"%s","documentation_url":"https://docs.github.com/rest","status":"%s"}' "$3" "$1"
-      printf 'gh: %s (HTTP %s)\n' "$3" "$1" >&2
-      exit 1
-    }
-    emit_failure() {
-      case "$1" in
-        signed-out)
-          printf '%s\n' 'To get started with GitHub CLI, please run:  gh auth login' \
-            'Alternatively, populate the GH_TOKEN environment variable with a GitHub API authentication token.' >&2
-          exit 4
-          ;;
-        expired) http_error 401 Unauthorized 'Bad credentials' ;;
-        offline)
-          printf '%s\n' 'error connecting to api.github.com' \
-            'check your internet connection or https://githubstatus.com' >&2
-          exit 1
-          ;;
-        server) http_error 503 'Service Unavailable' 'Service Unavailable' ;;
-        rate-limit) http_error 403 Forbidden 'API rate limit exceeded for user ID 1.' ;;
-        forbidden) http_error 403 Forbidden 'Resource not accessible by integration' ;;
-        not-found) http_error 404 'Not Found' 'Not Found' ;;
-        teapot) http_error 418 'I am a teapot' 'Short and stout' ;;
-        *) echo "stub gh: unknown failure mode: $1" >&2; exit 64 ;;
-      esac
-    }
+    # After a project is made, three more calls are emulated:
+    #   - api -i repos/OWNER/NAME/branches/main and .../contents/CHANGELOG.md:
+    #     404 while the counter file main-missing (or changelog-missing) is
+    #     above 0, as while GitHub is still copying the template; else 200.
+    #     STUB_GH_BRANCH_FAIL and STUB_GH_FILES_FAIL fail them as <mode>.
+    #   - api -i -X PUT repos/OWNER/NAME/branches/main/protection --input -:
+    #     the body read from stdin is appended, with a line break, to the
+    #     file protection-bodies next to the log; 200, or <mode> with
+    #     STUB_GH_PROTECT_FAIL (plan, token, mystery, not-found, ...).
     if [ "$*" = 'api -i user --jq .login, (.name // "")' ]; then
       if [ -n "${STUB_GH_USER_FAIL:-}" ] && should_fail user-fails; then emit_failure "$STUB_GH_USER_FAIL"; fi
       scopes="${STUB_GH_SCOPES-repo, read:org, gist, workflow}"
@@ -188,8 +236,29 @@ case "${1:-}" in
       : "${STUB_GH_CHANGELOG:?stub gh: STUB_GH_CHANGELOG is not set}"
       respond 200 OK 'application/vnd.github.raw'
       cat "$STUB_GH_CHANGELOG"
+    elif [ "$#" -eq 3 ] && [ "$2" = -i ] && [ "${3%/branches/main}" != "$3" ]; then
+      if [ -n "${STUB_GH_BRANCH_FAIL:-}" ] && should_fail branch-fails; then emit_failure "$STUB_GH_BRANCH_FAIL"; fi
+      if fails_left main-missing; then http_error 404 'Not Found' 'Branch not found'; fi
+      respond 200 OK 'application/json; charset=utf-8'
+      printf '{"name":"main","protected":false}\n'
+    elif [ "$#" -eq 3 ] && [ "$2" = -i ] && [ "${3%/contents/CHANGELOG.md}" != "$3" ]; then
+      if [ -n "${STUB_GH_FILES_FAIL:-}" ] && should_fail files-fail; then emit_failure "$STUB_GH_FILES_FAIL"; fi
+      if fails_left changelog-missing; then http_error 404 'Not Found' 'Not Found'; fi
+      respond 200 OK 'application/json; charset=utf-8'
+      printf '{"name":"CHANGELOG.md","path":"CHANGELOG.md"}\n'
+    elif [ "$#" -eq 7 ] && [ "$3 $4 $6 $7" = "-X PUT --input -" ] && [ "${5%/branches/main/protection}" != "$5" ]; then
+      cat >>"${STUB_GH_LOG%/*}/protection-bodies"
+      printf '\n' >>"${STUB_GH_LOG%/*}/protection-bodies"
+      if [ -n "${STUB_GH_PROTECT_FAIL:-}" ]; then emit_failure "$STUB_GH_PROTECT_FAIL"; fi
+      respond 200 OK 'application/json; charset=utf-8'
+      printf '{"url":"https://api.github.com/%s"}\n' "$5"
     elif [ "$#" -eq 3 ] && [ "$2" = -i ] && [ "${3#repos/}" != "$3" ]; then
       if [ -n "${STUB_GH_REPO_FAIL:-}" ] && should_fail repo-fails; then emit_failure "$STUB_GH_REPO_FAIL"; fi
+      if [ -f "${STUB_GH_LOG%/*}/created" ] && grep -qxF -- "${3#repos/}" "${STUB_GH_LOG%/*}/created"; then
+        respond 200 OK 'application/json; charset=utf-8'
+        printf '{"full_name":"%s","private":false}\n' "${3#repos/}"
+        exit 0
+      fi
       case " ${STUB_GH_EXISTING:-} " in
         *" ${3#repos/} "*)
           if [ ! -f "${STUB_GH_LOG%/*}/repo-there" ] || fails_left repo-there; then
@@ -249,6 +318,15 @@ mkdir -p "$WORK/refuse"
 make_refuser "$WORK/refuse/run" BOOTSTRAP_RUN
 make_refuser "$WORK/refuse/gh" BOOTSTRAP_GH
 export BOOTSTRAP_RUN="$WORK/refuse/run" BOOTSTRAP_GH="$WORK/refuse/gh"
+# The pause between two checks of GitHub (BOOTSTRAP_SLEEP): a stand-in
+# that waits for nothing, so no test waits for real. It appends the
+# seconds it was asked to wait to $STUB_SLEEP_LOG (default $WORK/sleep.log).
+cat >"$WORK/refuse/sleep" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"\${STUB_SLEEP_LOG:-$WORK/sleep.log}"
+STUB
+chmod +x "$WORK/refuse/sleep"
+export BOOTSTRAP_SLEEP="$WORK/refuse/sleep"
 # The terminal an offered command's yes is read from: a file that does not
 # exist, so no test ever waits on the real terminal and no yes is given
 # unless a test writes one.
@@ -919,7 +997,9 @@ test_user_facing_strings_are_collected() {
     'does not have every permission on GitHub' 'could not reach GitHub' \
     'Why this is needed: ' 'When it has worked: ' 'If you see something else: ' \
     'How the script checks it: ' 'To start again, run this command' 'git is not installed' \
-    'stops after its checks of this computer and of GitHub' 'Your name for git' 'Your email address for git'; do
+    'Your name for git' 'Your email address for git' 'Proceed? (yes or no)' 'Here is the plan' \
+    'needs a paid GitHub plan' 'the next steps of the setup are not built yet' \
+    'To continue the setup, run this command'; do
     grep -qF -- "$t" "$s" || { cat "$s" >&2; die "collector missed: $t"; }
   done
 }
@@ -1474,9 +1554,9 @@ test_non_interactive_never_reads_stdin() {
 }
 
 test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
-  # The whole script, as a user runs it. The steps after the checks of
-  # this computer and of GitHub are not built yet: it stops there, with
-  # exit 1, having created nothing.
+  # The whole script, as a user runs it, with --yes (needed with
+  # --non-interactive). The steps after creating and protecting the
+  # project are not built yet: it stops there, with exit 1.
   local d rc
   d="$(tmpdir)"
   make_stub_gh "$d/gh"
@@ -1485,22 +1565,29 @@ test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
   mkdir -p "$d/cwd"
   rc=0
   ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
-    bash "$SCRIPT" --non-interactive "${REQUIRED_OPTS[@]}" ) </dev/null >"$d/out" 2>"$d/err" || rc=$?
+    bash "$SCRIPT" --non-interactive --yes "${REQUIRED_OPTS[@]}" ) </dev/null >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "exit $rc, want 1"; }
-  grep -qF 'stops after its checks of this computer and of GitHub' "$d/err" || { cat "$d/err" >&2; die "no stop message"; }
+  grep -qF 'the next steps of the setup are not built yet' "$d/err" || { cat "$d/err" >&2; die "no stop message"; }
+  rm -f "$d/created"
   rc=0
   ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
-    bash "$SCRIPT" --non-interactive "${REQUIRED_OPTS[@]}" ) <&- >"$d/out" 2>"$d/err" || rc=$?
+    bash "$SCRIPT" --non-interactive --yes "${REQUIRED_OPTS[@]}" ) <&- >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "stdin closed: exit $rc, want 1"; }
-  grep -qF 'stops after its checks of this computer and of GitHub' "$d/err" || { cat "$d/err" >&2; die "stdin closed: no stop message"; }
-  # gh: the two checks on this computer, then the GitHub checks (the
-  # account, the published version, the name), every one with gh's own
-  # prompts off; nothing is created.
+  grep -qF 'the next steps of the setup are not built yet' "$d/err" || { cat "$d/err" >&2; die "stdin closed: no stop message"; }
+  # gh: the two checks on this computer, the GitHub checks (the account,
+  # the published version, the name), then creating and protecting the
+  # project, every one with gh's own prompts off; nothing is made on this
+  # computer.
   [ "$(cut -f2- "$d/gh.log" | LC_ALL=C sort -u)" = "$(printf '%s\n' '--version' "$(printf 'repo\tcreate\t--help')" \
       "$(printf 'api\t-i\tuser\t--jq\t.login, (.name // "")')" \
       "$(printf 'api\t-i\t-H\tAccept: application/vnd.github.raw+json\trepos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md')" \
-      "$(printf 'api\t-i\trepos/octo-user/my-app')" | LC_ALL=C sort)" ] \
-    || { cat "$d/gh.log" >&2; die "gh was used for more than its checks"; }
+      "$(printf 'api\t-i\trepos/octo-user/my-app')" \
+      "$(printf 'repo\tcreate\tocto-user/my-app\t--template\tfactoincognito/ai-project-bootstrap\t--public\t--description\tLends tools to neighbours.')" \
+      "$(printf 'api\t-i\trepos/octo-user/my-app/branches/main')" \
+      "$(printf 'api\t-i\trepos/octo-user/my-app/contents/CHANGELOG.md')" \
+      "$(printf 'api\t-i\t-X\tPUT\trepos/octo-user/my-app/branches/main/protection\t--input\t-')" \
+      "$(printf 'repo\tedit\tocto-user/my-app\t--delete-branch-on-merge\t--enable-squash-merge')" | LC_ALL=C sort)" ] \
+    || { cat "$d/gh.log" >&2; die "gh was used for more than its checks and the two steps"; }
   [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] \
     || { cat "$d/gh.log" >&2; die "a gh call ran with gh's prompts on"; }
   [ -z "$(ls -A "$d/cwd")" ] || { ls -A "$d/cwd" >&2; die "something was created"; }
@@ -1580,11 +1667,17 @@ test_dots_in_the_name_become_dashes_in_the_lowercase_slug() {
 }
 
 test_name_whose_slug_npm_does_not_allow_is_refused() {
-  local long214 long215
-  long214="a$(printf '%0213d' 0)"
-  long215="a$(printf '%0214d' 0)"
-  refuses --name node_modules NODE_MODULES "$long215"
-  accepts --name "$long214" "NAME=$long214"
+  refuses --name node_modules NODE_MODULES
+}
+
+test_name_longer_than_github_allows_is_refused() {
+  # #146 review note: GitHub's "Creating a new repository" doc says the
+  # name "must not exceed 100 characters" (npm's 214 is the looser limit).
+  local long100 long101
+  long100="a$(printf '%099d' 0)"
+  long101="a$(printf '%0100d' 0)"
+  refuses --name "$long101" "a.$(printf '%099d' 0)"
+  accepts --name "$long100" "NAME=$long100"
 }
 
 test_name_values_refuse_characters_that_break_json_or_html() {
@@ -1663,8 +1756,12 @@ test_ci_wait_is_a_whole_number_of_minutes() {
 }
 
 test_owner_is_a_github_account_name() {
-  refuses --owner "my org" a/b -acme ac.me ac_me
+  # #146 review note: an Enterprise Managed User's login is the user name,
+  # an underscore and the enterprise's short code, as in mona-cat_octo
+  # (GitHub's "Username considerations for external authentication").
+  refuses --owner "my org" a/b -acme ac.me _acme
   accepts --owner Acme-Inc OWNER=Acme-Inc
+  accepts --owner mona-cat_octo OWNER=mona-cat_octo
 }
 
 test_every_problem_is_listed_at_once() {
@@ -1908,7 +2005,7 @@ in_env() {
   cd "$d/cwd"
   use_home "$d/home"
   export PATH="$d/bin:/usr/bin:/bin" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
-    STUB_RUN_LOG="$d/run.log" BOOTSTRAP_RUN="$d/run"
+    STUB_RUN_LOG="$d/run.log" BOOTSTRAP_RUN="$d/run" STUB_SLEEP_LOG="$d/sleep.log"
   [ ! -e "$d/tty" ] || export BOOTSTRAP_TTY="$d/tty"
   [ ! -e "$d/os-release" ] || export BOOTSTRAP_OS_RELEASE="$d/os-release"
 }
@@ -2526,12 +2623,12 @@ test_checks_on_this_computer_come_before_any_github_call_and_question() {
   expect_no_out "$d" "Project name"
   # All pass: the tool checks come first, then the account and the
   # published version (before the questions), then the permissions (a
-  # fresh read of the account) and the name.
+  # fresh read of the account) and the name. A dry run stops there.
   d="$(tmpdir)"
   working_git "$d"
   fake_tool "$d" npm 10.0.0
-  whole "$d" --non-interactive "${REQUIRED_OPTS[@]}"
-  expect_rc 1 "$d"
+  whole "$d" --non-interactive --dry-run "${REQUIRED_OPTS[@]}"
+  expect_rc 0 "$d"
   [ "$(awk -F'\t' '{ print $2 " " $NF }' "$d/gh.log")" = "$(printf '%s\n' '--version --version' 'repo --help' \
       'api .login, (.name // "")' 'api repos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md' \
       'api .login, (.name // "")' 'api repos/octo-user/my-app')" ] \
@@ -2555,7 +2652,7 @@ test_npm_and_folder_checks_come_after_the_questions() {
   working_git "$d"
   fake_tool "$d" npm 10.0.0
   mkdir -p "$d/cwd/my-app"; touch "$d/cwd/my-app/x"
-  whole "$d" --non-interactive "${REQUIRED_OPTS[@]}"
+  whole "$d" --non-interactive --yes "${REQUIRED_OPTS[@]}"
   expect_rc 3 "$d"
   expect_out "$d" "The folder ./my-app already has files in it."
 }
@@ -2565,7 +2662,8 @@ test_npm_and_folder_checks_come_after_the_questions() {
 guide_cases() {
   printf '%s\n' guide_git guide_gh_missing guide_gh_old guide_npm guide_dir_not_empty \
     guide_dir_is_file guide_bash_old gg_signed_out gg_expired gg_offline gg_permissions \
-    gg_permissions_repo gg_permissions_token gg_old_script gg_project_exists
+    gg_permissions_repo gg_permissions_token gg_old_script gg_project_exists \
+    gg_create_taken gg_create_refused gg_protect_plan gg_protect_token gg_protect_unknown
 }
 gg_signed_out() { ACCOUNT_PROBLEM=signed-out; guide_github_account; }
 gg_expired() { ACCOUNT_PROBLEM=expired; API_STATUS=401; API_MESSAGE="Bad credentials"; guide_github_account; }
@@ -2575,6 +2673,18 @@ gg_permissions_repo() { PERM_PROBLEM=missing; PERM_MISSING="repo workflow"; IN_V
 gg_permissions_token() { GH_TOKEN=x; PERM_PROBLEM=missing; PERM_MISSING=workflow; IN_VISIBILITY=public; guide_github_permissions; }
 gg_old_script() { PUBLISHED_VERSION=v9.9.9; guide_old_script; }
 gg_project_exists() { IN_OWNER=acme; IN_NAME=my-app; guide_project_exists; }
+gg_create_taken() { IN_OWNER=acme; IN_NAME=my-app; CREATE_ERR="GraphQL: Name already exists on this account"; guide_create_taken; }
+gg_create_refused() {
+  IN_OWNER=acme; IN_NAME=my-app; GH_LOGIN=octo-user; GH_SCOPES_SEEN=""
+  CREATE_ERR="GraphQL: Resource not accessible by personal access token"; guide_create_refused
+}
+gg_protect() {
+  IN_OWNER=acme; IN_NAME=my-app; RESTART_CMD="bootstrap-project.sh --resume"
+  PROTECT_PROBLEM="$1"; API_STATUS=403; API_MESSAGE="$2"; guide_protect
+}
+gg_protect_plan() { gg_protect plan "Upgrade to GitHub Pro or make this repository public to enable this feature."; }
+gg_protect_token() { gg_protect token "Resource not accessible by personal access token"; }
+gg_protect_unknown() { gg_protect unknown "Something about this request was refused."; }
 
 test_every_guide_says_why_how_what_you_see_and_how_it_is_checked() {
   # Ease-of-use requirements: every guide says why the step is needed,
@@ -2667,11 +2777,16 @@ test_the_literal_scan_opt_out_marker_leaves_out_only_its_own_line() {
     '  help="$(run_gh repo create --help 2>&1)" || help="" # not-a-message' \
     '  z="first line # not-a-message' \
     '  the repo"' \
+    '  w="first line' \
+    '  the repo" # not-a-message' \
     '}')"
+  # #149 review, finding 1: the multi-line literal that ends on a marked
+  # line (planted lines 11 and 12) is the shape that matters; it is
+  # flagged on its first line.
   from="$(planted_from)"
   hits="$(all_banned_hits "$copy" | only_planted "$from")"
   got="$(printf '%s\n' "$hits" | awk -F: -v f="$from" 'NF { printf "%s%d", sep, $1 - f + 1; sep = " " }')"
-  [ "$got" = "3 4 6 7 9" ] || { printf '%s\n' "$hits" >&2; die "flagged planted lines [$got], want [3 4 6 7 9]"; }
+  [ "$got" = "3 4 6 7 9 11" ] || { printf '%s\n' "$hits" >&2; die "flagged planted lines [$got], want [3 4 6 7 9 11]"; }
 }
 
 test_ask_terminal_says_no_at_once_when_there_is_no_terminal() {
@@ -2716,7 +2831,7 @@ test_non_interactive_reports_every_option_problem_before_the_checks() {
   on_os "$d" linux debian
   missing "$d" git
   fake_home "$d/home"
-  whole "$d" --non-interactive "${REQUIRED_OPTS[@]}"
+  whole "$d" --non-interactive --yes "${REQUIRED_OPTS[@]}"
   expect_rc 3 "$d"
   expect_out "$d" "git is not installed."
   ! grep -q -- '--git-name' "$d/err" || { cat "$d/err" >&2; die "the git name was listed although git is missing"; }
@@ -2850,7 +2965,7 @@ test_github_sign_in_is_checked_before_the_questions() {
   expect_no_out "$d" "Project name"
   d="$(tmpdir)"
   working_git "$d"
-  whole "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner acme --po-name Ada
+  whole "$d" --non-interactive --yes "${REQUIRED_OPTS[@]}" --owner acme --po-name Ada
   expect_rc 3 "$d"
   expect_out "$d" "is not signed in to your GitHub account."
   unset STUB_GH_USER_FAIL
@@ -3100,9 +3215,432 @@ test_the_name_and_permissions_are_checked_after_the_questions() {
   d="$(tmpdir)"
   working_git "$d"
   export STUB_GH_SCOPES="repo, workflow"
-  whole "$d" --non-interactive "${REQUIRED_OPTS[@]}" --pack python
+  whole "$d" --non-interactive --yes "${REQUIRED_OPTS[@]}" --pack python
   expect_rc 3 "$d"
   expect_out "$d" "A project named octo-user/my-app already exists on GitHub."
+}
+
+# ---------- the plan, the confirmation, create and protect ----------
+# After every check passes, the script prints the plan; --dry-run stops
+# there, creating nothing. Otherwise it asks "Proceed?" (default no; --yes
+# skips it; --non-interactive needs --yes or --dry-run). Then step 2: gh
+# repo create from the bootstrapper, then waiting (up to 60 s, retrying on
+# 404) until GitHub has made main and CHANGELOG.md. Then step 3: PUT the
+# protection of main with the spec's body, then gh repo edit. A 403 on the
+# protection is classified by GitHub's message and stops before anything
+# else. After the project exists, every stop shows the command to
+# continue with --resume. After step 3 the script stops: the next steps
+# are not built yet (exit 1).
+
+# Every answer given as an option, so a run without --non-interactive asks
+# only "Proceed?". The visibility is added by setup_run.
+ALL_OPTS=(--owner octo-user --project-name "My App" --po-name Ada --copyright-holder "Ada L" \
+  --dir ./my-app --git-name "Test Person" --git-email test@example.com)
+CREATE_CALL='repo create octo-user/my-app --template factoincognito/ai-project-bootstrap --public --description Lends tools to neighbours.'
+BRANCH_CALL='api -i repos/octo-user/my-app/branches/main'
+FILES_CALL='api -i repos/octo-user/my-app/contents/CHANGELOG.md'
+PROTECT_CALL='api -i -X PUT repos/octo-user/my-app/branches/main/protection --input -'
+EDIT_CALL='repo edit octo-user/my-app --delete-branch-on-merge --enable-squash-merge'
+PROBE_CALL='api -i repos/octo-user/my-app'
+# The spec's body for step 3, field for field.
+PROTECT_BODY='{"required_status_checks":null,"enforce_admins":true,"required_pull_request_reviews":{"required_approving_review_count":0},"restrictions":null,"allow_force_pushes":false,"allow_deletions":false}'
+NOT_BUILT='the next steps of the setup are not built yet'
+
+# setup_run <dir> <options...>: the whole script with every input given
+# (pack python, so npm is not needed; public unless --private is given)
+# and a working git.
+setup_run() {
+  local d="$1" vis=--public
+  shift
+  case " $* " in *" --private "*) vis="" ;; esac
+  working_git "$d"
+  whole "$d" "${REQUIRED_OPTS[@]}" --pack python "${ALL_OPTS[@]}" $vis "$@"
+}
+
+# calls_from_create <dir>: the gh calls from creating the project on, one
+# per line, the arguments joined by spaces (the prompt column left out).
+calls_from_create() {
+  awk -F'\t' '$2 == "repo" && $3 == "create" && $4 != "--help" { on = 1 }
+    on { out = $2; for (i = 3; i <= NF; i++) out = out " " $i; print out }' "$1/gh.log"
+}
+
+# expect_calls <dir> <call...>: exactly these calls, in this order, from
+# creating the project on.
+expect_calls() {
+  local d="$1" got want
+  shift
+  got="$(calls_from_create "$d")"
+  want="$(printf '%s\n' "$@")"
+  [ "$got" = "$want" ] || { printf 'want:\n%s\ngot:\n%s\n' "$want" "$got" >&2; die "gh calls from the create step differ"; }
+}
+
+expect_nothing_created() {
+  [ -z "$(calls_from_create "$1")" ] || { cat "$1/gh.log" >&2; die "the project was created"; }
+  [ -z "$(ls -A "$1/cwd")" ] || { ls -A "$1/cwd" >&2; die "something was made on this computer"; }
+}
+
+# expect_continue_command <dir> <ending>: the command to continue is
+# shown under its own line, and ends as given.
+expect_continue_command() {
+  local line
+  line="$(grep -A1 -xF 'To continue the setup, run this command:' "$1/out" | sed -n 2p)"
+  case "$line" in
+    "    bash "*"$2") ;;
+    *) cat "$1/out" >&2; die "no command to continue ending in: $2 (got: $line)" ;;
+  esac
+}
+
+test_the_plan_is_shown_after_the_checks_and_a_dry_run_creates_nothing() {
+  local d v
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --dry-run
+  expect_rc 0 "$d"
+  expect_out "$d" "Here is the plan. Nothing has been created yet."
+  for v in "octo-user/my-app" "https://github.com/octo-user/my-app" "My App" "Lends tools to neighbours." \
+    "Ada" "python" "mit" "Ada L" "./my-app" "Test Person" "test@example.com" "20 minutes" \
+    "  1. " "  2. " "  3. " "  4. " "  5. "; do
+    expect_out "$d" "$v"
+  done
+  expect_out "$d" "This was a dry run (--dry-run): the checks passed, and nothing was created."
+  expect_no_out "$d" "Proceed?"
+  expect_no_out "$d" "needs a paid GitHub plan"
+  grep -n 'Done. No project named octo-user/my-app exists on GitHub yet.' "$d/out" | cut -d: -f1 >"$d/a"
+  grep -n 'Here is the plan' "$d/out" | cut -d: -f1 >"$d/p"
+  [ -s "$d/a" ] && [ "$(cat "$d/a")" -lt "$(cat "$d/p")" ] || { cat "$d/out" >&2; die "the plan came before the checks"; }
+  expect_nothing_created "$d"
+  [ -z "$(grep -v '^    ' "$d/out" | awk '{print NR ": " $0}' | banned_hits)" ] || { cat "$d/out" >&2; die "banned word in the plan"; }
+  # A private project: the plan warns that protection needs a paid plan.
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --dry-run --private
+  expect_rc 0 "$d"
+  expect_out "$d" "needs a paid GitHub plan"
+  expect_nothing_created "$d"
+}
+
+test_proceed_is_asked_with_no_as_its_default() {
+  local d n why
+  # yes: asked once, explained, then the project is created.
+  d="$(tmpdir)"
+  printf 'yes\n' >"$d/in"
+  setup_run "$d"
+  expect_rc 1 "$d"
+  n="$(grep -c -xF 'Proceed? (yes or no) [no]: ' "$d/out" || true)"
+  [ "$n" -eq 1 ] || { cat "$d/out" >&2; die "Proceed? asked $n times"; }
+  why="$(grep -B1 -xF 'Proceed? (yes or no) [no]: ' "$d/out" | sed -n 1p)"
+  [ "$(printf '%s\n' "$why" | wc -w | tr -d ' ')" -ge 6 ] && [ "${why%.}" != "$why" ] \
+    || { cat "$d/out" >&2; die "Proceed? has no explanation above it: $why"; }
+  [ "$(calls_from_create "$d" | sed -n 1p)" = "$CREATE_CALL" ] || { cat "$d/gh.log" >&2; die "not created after yes"; }
+  # no, or Enter (the default): nothing is created, exit 1.
+  for a in no ""; do
+    d="$(tmpdir)"
+    printf '%s\n' "$a" >"$d/in"
+    setup_run "$d"
+    expect_rc 1 "$d"
+    sed -n 1p "$d/err" | grep -q '^What happened: You answered no' || { cat "$d/err" >&2; die "answer [$a]: no plain stop"; }
+    expect_nothing_created "$d"
+  done
+  # Another answer is explained and asked again.
+  d="$(tmpdir)"
+  printf '%s\n' maybe yes >"$d/in"
+  setup_run "$d"
+  expect_out "$d" "Answer yes or no. Please try again."
+  [ "$(calls_from_create "$d" | sed -n 1p)" = "$CREATE_CALL" ] || { cat "$d/gh.log" >&2; die "not created after the second answer"; }
+  # No answer at all (stdin ends): exit 2, nothing created.
+  d="$(tmpdir)"
+  setup_run "$d"
+  expect_rc 2 "$d"
+  expect_nothing_created "$d"
+}
+
+test_yes_skips_proceed_and_non_interactive_needs_yes_or_dry_run() {
+  local d
+  d="$(tmpdir)"
+  setup_run "$d" --yes
+  expect_rc 1 "$d"
+  expect_no_out "$d" "Proceed?"
+  [ "$(calls_from_create "$d" | sed -n 1p)" = "$CREATE_CALL" ] || { cat "$d/gh.log" >&2; die "not created with --yes"; }
+  # --non-interactive alone cannot ask: refused with the other option
+  # problems, before any check.
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive
+  expect_rc 2 "$d"
+  grep -qE -- '^    - --yes: .*--dry-run' "$d/err" || { cat "$d/err" >&2; die "--yes not listed as needed"; }
+  [ ! -e "$d/gh.log" ] || { cat "$d/gh.log" >&2; die "gh was used"; }
+  expect_nothing_created "$d"
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --dry-run --yes
+  expect_rc 0 "$d"
+  expect_nothing_created "$d"
+}
+
+test_nothing_is_created_when_a_check_fails() {
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_EXISTING="octo-user/my-app"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 3 "$d"
+  expect_nothing_created "$d"
+  expect_no_out "$d" "Here is the plan"
+  unset STUB_GH_EXISTING
+  d="$(tmpdir)"
+  export STUB_GH_SCOPES="repo"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 3 "$d"
+  expect_nothing_created "$d"
+}
+
+test_create_waits_for_the_files_then_protects_main_with_the_exact_body() {
+  local d n_start n_done
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL"
+  [ "$(cat "$d/protection-bodies")" = "$PROTECT_BODY" ] || { cat "$d/protection-bodies" >&2; die "protection body is not the spec's"; }
+  [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] || { cat "$d/gh.log" >&2; die "a gh call ran with prompts on"; }
+  [ ! -s "$d/sleep.log" ] || die "it waited although the files were there"
+  sed -n 1p "$d/err" | grep -qF "What happened: The project octo-user/my-app was created on GitHub and its main version is protected." \
+    || { cat "$d/err" >&2; die "no plain stop after step 3"; }
+  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/err" >&2; die "the stop does not say the next steps are not built"; }
+  for t in "==> Creating the project octo-user/my-app on GitHub" "==> Waiting for GitHub to put the bootstrapper's files into the project" \
+    "==> Protecting the main version of the project" "==> Setting how proposed changes are added to the project"; do
+    expect_out "$d" "$t"
+  done
+  n_start="$(grep -c '^==> ' "$d/out")"
+  n_done="$(grep -c '^    Done\. ' "$d/out")"
+  [ "$n_start" -eq "$n_done" ] || { cat "$d/out" >&2; die "$n_start steps started, $n_done ended"; }
+  expect_no_out "$d" "needs a paid GitHub plan"
+  # Private: the flag, and the plan warned before creating.
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes --private
+  expect_rc 1 "$d"
+  [ "$(calls_from_create "$d" | sed -n 1p)" = "${CREATE_CALL/--public/--private}" ] || { cat "$d/gh.log" >&2; die "not created private"; }
+  grep -n 'needs a paid GitHub plan' "$d/out" | head -1 | cut -d: -f1 >"$d/w"
+  grep -n '==> Creating the project' "$d/out" | cut -d: -f1 >"$d/c"
+  [ -s "$d/w" ] && [ "$(cat "$d/w")" -lt "$(cat "$d/c")" ] || { cat "$d/out" >&2; die "no warning before creating a private project"; }
+}
+
+test_the_files_are_waited_for_retrying_on_404_for_up_to_a_minute() {
+  local d
+  d="$(tmpdir)"
+  echo 3 >"$d/main-missing"
+  echo 2 >"$d/changelog-missing"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$BRANCH_CALL" "$BRANCH_CALL" "$BRANCH_CALL" \
+    "$FILES_CALL" "$FILES_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL"
+  [ "$(cat "$d/sleep.log")" = "$(printf '2\n2\n2\n2\n2')" ] || { cat "$d/sleep.log" >&2; die "not 5 waits of 2 seconds"; }
+  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/err" >&2; die "did not reach the end of step 3"; }
+  # Never there: 30 waits of 2 seconds (60 s), then a plain stop with the
+  # command to continue; protection is not touched.
+  d="$(tmpdir)"
+  echo 9999 >"$d/main-missing"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  [ "$(grep -c . "$d/sleep.log")" -eq 30 ] && [ "$(sort -u "$d/sleep.log")" = 2 ] || { cat "$d/sleep.log" >&2; die "not 30 waits of 2 seconds"; }
+  [ "$(calls_from_create "$d" | grep -cxF "$BRANCH_CALL")" -eq 31 ] || { cat "$d/gh.log" >&2; die "not 31 checks"; }
+  ! calls_from_create "$d" | grep -qF -- '-X PUT' || { cat "$d/gh.log" >&2; die "protection was touched"; }
+  expect_err_shape "$d" "GitHub has not finished .* after a minute"
+  expect_continue_command "$d" " --resume"
+  # Another answer while waiting: explained, nothing more.
+  d="$(tmpdir)"
+  export STUB_GH_BRANCH_FAIL=server
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "GitHub had a problem of its own"
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL"
+  expect_continue_command "$d" " --resume"
+}
+
+test_a_403_on_protection_stops_before_anything_else_with_its_guide() {
+  local d mode
+  for mode in plan token mystery; do
+    d="$(tmpdir)"
+    export STUB_GH_PROTECT_FAIL="$mode"
+    setup_run "$d" --non-interactive --yes --private
+    expect_rc 3 "$d"
+    expect_calls "$d" "${CREATE_CALL/--public/--private}" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL"
+    expect_out "$d" "Details for support (you can ignore these):"
+    grep -qE '^    HTTP 403: .' "$d/out" || { cat "$d/out" >&2; die "$mode: GitHub's message not shown below"; }
+    expect_continue_command "$d" " --resume"
+    expect_no_out "$d" "Press Enter"
+    sed -n 1p "$d/err" | grep -q '^What happened: .*octo-user/my-app exists on GitHub' || { cat "$d/err" >&2; die "$mode: the stop does not say the project exists"; }
+    expect_no_out "$d" "$NOT_BUILT"
+    [ -z "$(ls -A "$d/cwd")" ] || die "$mode: something was made on this computer"
+    case "$mode" in
+      plan | mystery)
+        expect_out "$d" "needs a paid GitHub plan"
+        grep -qxF '    gh repo edit octo-user/my-app --visibility public --accept-visibility-change-consequences' "$d/out" \
+          || { cat "$d/out" >&2; die "$mode: the command to make it public is not shown"; }
+        grep -qE '^    bash .* --resume --allow-unprotected$' "$d/out" || { cat "$d/out" >&2; die "$mode: --allow-unprotected not shown"; }
+        ;;
+    esac
+    case "$mode" in
+      token | mystery)
+        expect_out "$d" "Administration"
+        expect_out "$d" "https://github.com/settings/personal-access-tokens"
+        ;;
+    esac
+    case "$mode" in
+      plan) expect_no_out "$d" "Administration" ;;
+      token) expect_no_out "$d" "needs a paid GitHub plan" ;;
+    esac
+    unset STUB_GH_PROTECT_FAIL
+  done
+  # Interactive too: it stops at once, with no wait.
+  d="$(tmpdir)"
+  export STUB_GH_PROTECT_FAIL=plan
+  printf 'yes\n\n\n' >"$d/in"
+  setup_run "$d" --private
+  expect_rc 3 "$d"
+  expect_no_out "$d" "Press Enter"
+  ! calls_from_create "$d" | grep -qF "$EDIT_CALL" || die "settings changed after the 403"
+}
+
+test_the_continue_command_names_the_owner_and_name_that_were_answered() {
+  local d line
+  d="$(tmpdir)"
+  working_git "$d"
+  export STUB_GH_PROTECT_FAIL=plan
+  printf '%s\n' my-app "" "Lends tools." "" "" python "" none "" "" "" yes >"$d/in"
+  whole "$d"
+  expect_rc 3 "$d"
+  expect_continue_command "$d" " --resume --owner octo-user --name my-app"
+}
+
+test_other_answers_to_the_protection_request_are_explained() {
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_PROTECT_FAIL=not-found
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "GitHub did not find"
+  ! grep -qF 'Check the names you gave' "$d/err" || { cat "$d/err" >&2; die "the 404 next action is the generic one"; }
+  grep -qF 'https://github.com/octo-user/my-app' "$d/err" || { cat "$d/err" >&2; die "the 404 next action does not point at the project"; }
+  expect_continue_command "$d" " --resume"
+  ! calls_from_create "$d" | grep -qF "$EDIT_CALL" || die "settings changed after the 404"
+  d="$(tmpdir)"
+  export STUB_GH_PROTECT_FAIL=server
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "GitHub had a problem of its own"
+  expect_continue_command "$d" " --resume"
+}
+
+test_create_failures_are_guided_or_explained_and_nothing_else_runs() {
+  local d
+  # Taken although the check saw no project (a private one the account
+  # cannot see): guided, a plain new run (no --resume), exit 3.
+  d="$(tmpdir)"
+  export STUB_GH_CREATE_FAIL=taken
+  setup_run "$d" --non-interactive --yes
+  expect_rc 3 "$d"
+  expect_calls "$d" "$CREATE_CALL"
+  expect_out "$d" "already exists"
+  expect_out "$d" "--name my-app-2"
+  grep -A1 -xF 'To start again, run this command:' "$d/out" | sed -n 2p >"$d/cmd"
+  grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "taken: not a plain new run"; }
+  sed -n 1p "$d/err" | grep -q 'nothing was created' || { cat "$d/err" >&2; die "taken: does not say nothing was created"; }
+  grep -qxF '    GraphQL: Name already exists on this account (cloneTemplateRepository)' "$d/out" || { cat "$d/out" >&2; die "taken: gh's text not below"; }
+  # Refused, for an organisation, with a fine-grained token: the guide
+  # covers both, and keeps the warning's promise ("a later step stops
+  # and says so").
+  d="$(tmpdir)"
+  export STUB_GH_CREATE_FAIL=refused STUB_GH_SCOPES=-
+  setup_run "$d" --non-interactive --yes --owner acme
+  expect_rc 3 "$d"
+  expect_calls "$d" "${CREATE_CALL/octo-user/acme}"
+  expect_out "$d" "GitHub did not let your account create the project acme/my-app."
+  expect_out "$d" "Member privileges"
+  expect_out "$d" "Administration"
+  expect_out "$d" "https://github.com/settings/personal-access-tokens"
+  expect_out "$d" "https://github.com/new"
+  unset STUB_GH_SCOPES
+  # Refused for your own account with a classic token: no organisation
+  # or token steps, still the page to try by hand.
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 3 "$d"
+  expect_no_out "$d" "Member privileges"
+  expect_no_out "$d" "personal-access-tokens"
+  expect_out "$d" "https://github.com/new"
+  # Not signed in any more: explained, exit 1.
+  d="$(tmpdir)"
+  export STUB_GH_CREATE_FAIL=signed-out
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  expect_err_shape "$d" ".*is not signed in"
+  expect_calls "$d" "$CREATE_CALL"
+  # Another error: GitHub is asked whether the project exists. Not there:
+  # a plain new run; there: continue with --resume.
+  d="$(tmpdir)"
+  export STUB_GH_CREATE_FAIL=broken
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "gh .* could not create the project octo-user/my-app"
+  expect_calls "$d" "$CREATE_CALL" "$PROBE_CALL"
+  grep -qxF '    stub gh: the connection broke off' "$d/err" || { cat "$d/err" >&2; die "broken: gh's text not below"; }
+  expect_out "$d" "To start again, run this command:"
+  d="$(tmpdir)"
+  export STUB_GH_CREATE_FAIL=broken-but-made
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  expect_err_shape "$d" ".*octo-user/my-app exists on GitHub"
+  expect_calls "$d" "$CREATE_CALL" "$PROBE_CALL"
+  expect_continue_command "$d" " --resume"
+  unset STUB_GH_CREATE_FAIL
+}
+
+test_a_failed_settings_change_is_explained_with_the_continue_command() {
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_EDIT_FAIL=1
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  expect_err_shape "$d" ".{10,}"
+  grep -qF 'Must have admin rights' "$d/err" || { cat "$d/err" >&2; die "gh's text not below"; }
+  expect_continue_command "$d" " --resume"
+  expect_no_out "$d" "$NOT_BUILT"
+}
+
+test_resume_stops_before_the_plan_until_it_is_built() {
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_EXISTING="octo-user/my-app"
+  setup_run "$d" --non-interactive --yes --resume
+  expect_rc 1 "$d"
+  sed -n 1p "$d/err" | grep -qF -- '--resume' || { cat "$d/err" >&2; die "the stop does not name --resume"; }
+  expect_no_out "$d" "Here is the plan"
+  expect_nothing_created "$d"
+}
+
+test_the_lines_that_opt_out_of_the_literal_scan_are_pinned() {
+  # #149 review, finding 2: a "# not-a-message" line hides its literals
+  # from the banned-words scan, so each one is listed here, and a new
+  # one is a test change a reviewer sees.
+  local got
+  got="$(grep -E '# not-a-message[[:space:]]*$' "$SCRIPT" | sed -E 's/^[[:space:]]+//')"
+  [ "$got" = 'help="$(run_gh repo create --help 2>&1)" || help="" # not-a-message' ] \
+    || { printf '%s\n' "$got" >&2; die "the lines marked # not-a-message changed"; }
+}
+
+test_a_404_or_429_gets_the_next_action_of_its_own_call() {
+  # #149 review, finding 3: the 404 on the bootstrapper's CHANGELOG.md is
+  # not about names the user gave; a 429 (GitHub's secondary rate limit)
+  # shares the rate-limit text.
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_CHANGELOG_FAIL=not-found
+  pre "$d" ni preflight_published_version
+  expect_rc 1 "$d"
+  expect_err_shape "$d" ".{10,}"
+  ! grep -qF 'Check the names you gave' "$d/err" || { cat "$d/err" >&2; die "the CHANGELOG 404 asks to check names"; }
+  grep -q '^What to do next: .*[Dd]ownload' "$d/err" || { cat "$d/err" >&2; die "the CHANGELOG 404 does not say to download again"; }
+  unset STUB_GH_CHANGELOG_FAIL
+  d="$(tmpdir)"
+  export STUB_GH_USER_FAIL=too-many
+  pre "$d" ni preflight_github_account
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "GitHub has paused"
 }
 
 # ---------- run ----------
