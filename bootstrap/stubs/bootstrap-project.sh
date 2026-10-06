@@ -1405,6 +1405,7 @@ preflight_target_dir() {
 
 BOOTSTRAPPER=factoincognito/ai-project-bootstrap
 SIGN_IN_COMMAND_NEXT="Sign in to GitHub with gh as in step 0 of the README, with the command gh auth login -h github.com -p https -w -s workflow, then start the script again."
+SIGN_IN_CONTINUE_NEXT="Sign in to GitHub with gh as in step 0 of the README, with the command gh auth login -h github.com -p https -w -s workflow, then continue the setup with the command shown above."
 
 API_RC=0 API_STATUS="" API_HEADERS="" API_BODY="" API_MESSAGE="" API_ERR="" API_RAW=""
 
@@ -1472,49 +1473,61 @@ stop_with_error() {
   [ -n "$RESTART_CMD" ] || remember_command
   if [ -n "$CREATED_NOTE" ]; then say "$CONTINUE_INTRO"; else say "$START_AGAIN_INTRO"; fi
   say_command "bash $RESTART_CMD"
-  fail 1 "$1${CREATED_NOTE:+ $CREATED_NOTE}" "$2" "$3"
+  fail 1 "${1:-Something unexpected happened.}${CREATED_NOTE:+ $CREATED_NOTE}" "$2" "$3"
 }
 
 # api_fail <what the script was doing, as "read your GitHub account">
 # [next action for a 404]: stops with the plain message for the last
 # answer (exit 1). What a 404 means depends on the call, so each call
 # that can get one gives its own next action (#149 review, finding 3).
+# A status with no arm of its own is "Something unexpected happened"
+# with what the script was doing (#150 review, finding 1). Once the
+# project exists, the next action is to continue the setup with the
+# command shown, never to start again (#150 review, finding 2).
 api_fail() {
-  local doing="$1" not_found_next="${2:-}" what="" next=""
+  local doing="$1" not_found_next="${2:-}" what="" next="" again="start the script again" sign_in="$SIGN_IN_COMMAND_NEXT"
+  if [ -n "$CREATED_NOTE" ]; then
+    again="continue the setup with the command shown above"
+    sign_in="$SIGN_IN_CONTINUE_NEXT"
+  fi
   case "$API_STATUS" in
     "")
       if [ "$API_RC" -eq 4 ]; then
         what="gh (the GitHub command-line tool) is not signed in to your GitHub account, so the script could not $doing."
-        next="$SIGN_IN_COMMAND_NEXT"
+        next="$sign_in"
       else
         what="The script could not reach GitHub to $doing."
-        next="Check that this computer is connected to the internet, then start the script again."
+        next="Check that this computer is connected to the internet, then $again."
       fi
       ;;
     401)
       what="GitHub no longer accepts the sign-in that gh has on this computer, so the script could not $doing."
-      next="$SIGN_IN_COMMAND_NEXT"
+      next="$sign_in"
       ;;
     403 | 429)
       # 429 is GitHub's answer for its secondary rate limit.
       case "$API_STATUS $(lower "$API_MESSAGE")" in
         429* | *"rate limit"*)
           what="GitHub has paused answering your account for a while, because it was asked too often, so the script could not $doing."
-          next="Wait an hour, then start the script again."
+          next="Wait an hour, then $again."
           ;;
         *)
           what="GitHub refused to let the script $doing."
-          next="Check that your GitHub account may do this; for an organisation, one of its owners may have to allow it. Then start the script again."
+          next="Check that your GitHub account may do this; for an organisation, one of its owners may have to allow it. Then $again."
           ;;
       esac
       ;;
     404)
       what="GitHub did not find what the script needed to $doing."
-      next="${not_found_next:-Start the script again. If the same thing happens, ask for help and show the details below.}"
+      next="${not_found_next:-Wait a few minutes, then $again. If the same thing happens, ask for help and show the details below.}"
       ;;
     5[0-9][0-9])
       what="GitHub had a problem of its own, so the script could not $doing."
-      next="Wait a few minutes, then start the script again; https://www.githubstatus.com shows whether GitHub has a known problem."
+      next="Wait a few minutes, then $again; https://www.githubstatus.com shows whether GitHub has a known problem."
+      ;;
+    *)
+      what="Something unexpected happened, so the script could not $doing."
+      next="Wait a few minutes, then $again. If the same thing happens, ask for help and show the details below."
       ;;
   esac
   api_raw
