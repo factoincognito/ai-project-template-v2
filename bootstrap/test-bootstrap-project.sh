@@ -1762,6 +1762,7 @@ test_owner_is_a_github_account_name() {
   refuses --owner "my org" a/b -acme ac.me _acme
   accepts --owner Acme-Inc OWNER=Acme-Inc
   accepts --owner mona-cat_octo OWNER=mona-cat_octo
+  accepts --owner ac_me OWNER=ac_me
 }
 
 test_every_problem_is_listed_at_once() {
@@ -3308,7 +3309,9 @@ test_the_plan_is_shown_after_the_checks_and_a_dry_run_creates_nothing() {
   grep -n 'Here is the plan' "$d/out" | cut -d: -f1 >"$d/p"
   [ -s "$d/a" ] && [ "$(cat "$d/a")" -lt "$(cat "$d/p")" ] || { cat "$d/out" >&2; die "the plan came before the checks"; }
   expect_nothing_created "$d"
-  [ -z "$(grep -v '^    ' "$d/out" | awk '{print NR ": " $0}' | banned_hits)" ] || { cat "$d/out" >&2; die "banned word in the plan"; }
+  # Every line of the plan, the indented value lines too (#150 review,
+  # finding 7: none of the values given here has a banned word).
+  [ -z "$(sed -n '/^Here is the plan/,$p' "$d/out" | awk '{print NR ": " $0}' | banned_hits)" ] || { cat "$d/out" >&2; die "banned word in the plan"; }
   # A private project: the plan warns that protection needs a paid plan.
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --dry-run --private
@@ -3395,7 +3398,10 @@ test_create_waits_for_the_files_then_protects_main_with_the_exact_body() {
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
   expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL"
-  [ "$(cat "$d/protection-bodies")" = "$PROTECT_BODY" ] || { cat "$d/protection-bodies" >&2; die "protection body is not the spec's"; }
+  # Byte for byte: the body as sent, then the line break the stub adds
+  # (a here-string ends in one too, so two in all).
+  printf '%s\n\n' "$PROTECT_BODY" >"$d/want-body"
+  cmp -s "$d/want-body" "$d/protection-bodies" || { od -c "$d/protection-bodies" | tail -3 >&2; die "protection body is not the spec's"; }
   [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] || { cat "$d/gh.log" >&2; die "a gh call ran with prompts on"; }
   [ ! -s "$d/sleep.log" ] || die "it waited although the files were there"
   sed -n 1p "$d/err" | grep -qF "What happened: The project octo-user/my-app was created on GitHub and its main version is protected." \
@@ -3441,6 +3447,16 @@ test_the_files_are_waited_for_retrying_on_404_for_up_to_a_minute() {
   ! calls_from_create "$d" | grep -qF -- '-X PUT' || { cat "$d/gh.log" >&2; die "protection was touched"; }
   expect_err_shape "$d" "GitHub has not finished .* after a minute"
   expect_continue_command "$d" " --resume"
+  # #150 review, finding 3: the minute is shared by the two reads: 20
+  # waits for main leave 10 for CHANGELOG.md.
+  d="$(tmpdir)"
+  echo 20 >"$d/main-missing"
+  echo 9999 >"$d/changelog-missing"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  [ "$(grep -c . "$d/sleep.log")" -eq 30 ] || { cat "$d/sleep.log" >&2; die "not 30 waits in all"; }
+  [ "$(calls_from_create "$d" | grep -cxF "$FILES_CALL")" -eq 11 ] || { cat "$d/gh.log" >&2; die "not 11 reads of CHANGELOG.md"; }
+  expect_err_shape "$d" "GitHub has not finished .* after a minute"
   # Another answer while waiting: explained, nothing more.
   d="$(tmpdir)"
   export STUB_GH_BRANCH_FAIL=server
@@ -3489,6 +3505,15 @@ test_a_403_on_protection_stops_before_anything_else_with_its_guide() {
     esac
     unset STUB_GH_PROTECT_FAIL
   done
+  # #150 review, finding 3: a rate-limit 403 is not about the plan or the
+  # token: the rate-limit text, exit 1, no guide.
+  d="$(tmpdir)"
+  export STUB_GH_PROTECT_FAIL=rate-limit
+  setup_run "$d" --non-interactive --yes --private
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "GitHub has paused"
+  sed -n '/^==> Protecting/,$p' "$d/out" | grep -qF 'Why this is needed' && { cat "$d/out" >&2; die "rate limit: a guide was shown"; }
+  unset STUB_GH_PROTECT_FAIL
   # Interactive too: it stops at once, with no wait.
   d="$(tmpdir)"
   export STUB_GH_PROTECT_FAIL=plan
@@ -3614,6 +3639,49 @@ test_resume_stops_before_the_plan_until_it_is_built() {
   sed -n 1p "$d/err" | grep -qF -- '--resume' || { cat "$d/err" >&2; die "the stop does not name --resume"; }
   expect_no_out "$d" "Here is the plan"
   expect_nothing_created "$d"
+}
+
+test_an_unknown_answer_after_create_says_what_failed_and_how_to_continue() {
+  # #150 review, finding 1: a status api_fail has no arm for (the stub's
+  # 418) once the project exists printed only the "exists on GitHub" note,
+  # with "Run the script again" under the command to continue. The first
+  # line must say what failed; the next action must be the command to
+  # continue (finding 2: no "start the script again" after create).
+  local d mode want
+  for mode in "PROTECT protect the main version of the project" \
+    "BRANCH check that the project's files are there"; do
+    want="${mode#* }"; mode="${mode%% *}"
+    d="$(tmpdir)"
+    export "STUB_GH_${mode}_FAIL=teapot"
+    setup_run "$d" --non-interactive --yes
+    expect_rc 1 "$d"
+    expect_err_shape "$d" "Something unexpected happened, so the script could not $want\. The project octo-user/my-app exists on GitHub"
+    sed -n 2p "$d/err" | grep -qF 'continue the setup with the command shown above' || { cat "$d/err" >&2; die "$mode: next action is not to continue"; }
+    ! grep -qiE 'run the script again|start the script again' "$d/err" || { cat "$d/err" >&2; die "$mode: told to start again after create"; }
+    grep -qxF '    HTTP 418: Short and stout' "$d/err" || { cat "$d/err" >&2; die "$mode: raw text not below"; }
+    expect_continue_command "$d" " --resume"
+    unset "STUB_GH_${mode}_FAIL"
+  done
+  # Mapped answers after create continue too: a 503 and a 401 at the
+  # wait, a rate limit at the protection request.
+  for mode in "BRANCH server" "BRANCH expired" "PROTECT rate-limit"; do
+    want="${mode#* }"; mode="${mode%% *}"
+    d="$(tmpdir)"
+    export "STUB_GH_${mode}_FAIL=$want"
+    setup_run "$d" --non-interactive --yes
+    expect_rc 1 "$d"
+    expect_err_shape "$d" ".*octo-user/my-app exists on GitHub"
+    sed -n 2p "$d/err" | grep -qF 'continue the setup with the command shown above' || { cat "$d/err" >&2; die "$want: next action is not to continue"; }
+    ! grep -qiE 'run the script again|start the script again' "$d/err" || { cat "$d/err" >&2; die "$want: told to start again after create"; }
+    unset "STUB_GH_${mode}_FAIL"
+  done
+  # Before create the same answer still says to start again.
+  d="$(tmpdir)"
+  export STUB_GH_USER_FAIL=teapot
+  pre "$d" ni preflight_github_account
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "Something unexpected happened, so the script could not read your GitHub account\.\$"
+  sed -n 2p "$d/err" | grep -qF 'start the script again' || { cat "$d/err" >&2; die "before create: next action is not to start again"; }
 }
 
 test_the_lines_that_opt_out_of_the_literal_scan_are_pinned() {
