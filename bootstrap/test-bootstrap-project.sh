@@ -445,7 +445,7 @@ use_home() {
 # What reaches the terminal some other way is the job of bypass_lines;
 # what it cannot see is listed there.
 
-MSG_HELPERS='say|step_start|step_end|show_error|fail|ask|ask_terminal|prompt_for|answer|add_problem|guide_begin|guide_step|guide_end'
+MSG_HELPERS='say|step_start|step_end|show_error|fail|lp_fail|stop_with_error|ask|ask_terminal|prompt_for|answer|add_problem|guide_begin|guide_step|guide_end'
 
 # user_strings <file>: prints "<line number>: <text>" for each.
 user_strings() {

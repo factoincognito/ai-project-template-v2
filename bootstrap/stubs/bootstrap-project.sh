@@ -8,9 +8,11 @@
 # email, the target folder), the guided checks on GitHub (signed in, the
 # current version of this script, the permissions gh has, the project
 # name still free), the plan and its "Proceed?" question, creating the
-# project on GitHub and protecting its main version, and the layout-pack
-# subcommand. After protecting the project the script stops: the later
-# setup steps come in later parts.
+# project on GitHub and protecting its main version, the copy of the
+# project on this computer (with the git name and email, the line of work
+# bootstrap-setup, the language pack laid out and the tidy-up), and the
+# layout-pack subcommand. After the tidy-up the script stops: the later
+# setup steps (nothing is saved or sent yet) come in later parts.
 #
 # Usage:
 #   bash bootstrap-project.sh [options]
@@ -286,18 +288,25 @@ run_offered() {
 # The layout table: "<pack path> <project path>". A path ending in / is
 # a folder, copied with everything in it. The optional deploy files
 # (web: deploy.yml, wrangler.jsonc) and code-standards.md are not laid
-# out. Every other pack file must be in the table, so a new pack file
-# cannot be silently left out.
-cmd_layout_pack() {
-  [ "$#" -eq 2 ] || usage
-  local pack="$1" out="$2"
-  local here packs_dir common typescript table not_laid_out src
-  local from to f covered skip
-
-  # CDPATH is cleared: a user's CDPATH could send cd to another folder of
-  # the same name, or make it print the folder into $here.
-  here="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-  packs_dir="${PACKS_DIR:-$here/languages}"
+# out, except the deploy files with --with-deploy. Every other pack file
+# must be in the table, so a new pack file cannot be silently left out.
+#
+# layout_into <pack> <packs dir> <target> <strict|overlay> [yes]: lays
+# out the pack from <packs dir>/<pack> into <target>. LP_KEPT lists the
+# pack's files that were not laid out (the setup keeps them).
+#   strict: the layout-pack subcommand; the target must be empty or
+#     absent.
+#   overlay: the setup (spec step 6), over the copy of the project: the
+#     pack's ci.yml replaces the stub, the pack's gitignore lines are added
+#     to .gitignore when it lacks them, and any other target that is there
+#     already is an error, found before anything is written. A fifth
+#     argument "yes" (--with-deploy, web) lays out the deploy files too.
+LP_MODE=""
+LP_KEPT=""
+layout_into() {
+  local pack="$1" packs_dir="$2" out="$3" deploy="${5:-}"
+  local common typescript table not_laid_out src from to f covered skip
+  LP_MODE="$4"
 
   common="ci.yml .github/workflows/ci.yml
 gitignore .gitignore
@@ -323,6 +332,12 @@ playwright.config.ts playwright.config.ts
 starter/src/ src/
 starter/e2e/ e2e/"
       not_laid_out="code-standards.md deploy.yml wrangler.jsonc"
+      if [ "$deploy" = yes ]; then
+        table="$table
+deploy.yml .github/workflows/deploy.yml
+wrangler.jsonc wrangler.jsonc"
+        not_laid_out="code-standards.md"
+      fi
       ;;
     python)
       table="$common
@@ -344,21 +359,27 @@ starter/src/ src/"
       fail 2 "layout-pack: unknown pack: $pack (expected node, web, python or react-native)" "$LP_PACK_NEXT"
       ;;
   esac
+  LP_KEPT="$not_laid_out"
 
   src="$packs_dir/$pack"
-  [ -d "$src" ] || fail 1 "layout-pack: pack folder not found: $src" \
-    "Check that the languages folder is next to this script, or set PACKS_DIR to the folder that holds the packs."
+  if [ ! -d "$src" ]; then
+    if [ "$LP_MODE" = strict ]; then
+      lp_fail "pack folder not found: $src" \
+        "Check that the languages folder is next to this script, or set PACKS_DIR to the folder that holds the packs."
+    fi
+    lp_fail "pack folder not found: $src" "$LP_BROKEN_NEXT"
+  fi
 
-  if [ -e "$out" ] && [ -n "$(ls -A "$out")" ]; then
-    fail 1 "layout-pack: target dir is not empty: $out" "Choose a folder that is empty or does not exist yet."
+  if [ "$LP_MODE" = strict ] && [ -e "$out" ] && [ -n "$(ls -A "$out")" ]; then
+    lp_fail "target dir is not empty: $out" "Choose a folder that is empty or does not exist yet."
   fi
 
   # Every table source must exist.
   while read -r from _; do
     if [ "${from%/}" != "$from" ]; then
-      [ -d "$src/$from" ] || fail 1 "layout-pack: missing from the pack: $from" "$LP_BROKEN_NEXT"
+      [ -d "$src/$from" ] || lp_fail "missing from the pack: $from" "$LP_BROKEN_NEXT"
     else
-      [ -f "$src/$from" ] || fail 1 "layout-pack: missing from the pack: $from" "$LP_BROKEN_NEXT"
+      [ -f "$src/$from" ] || lp_fail "missing from the pack: $from" "$LP_BROKEN_NEXT"
     fi
   done <<<"$table"
 
@@ -372,21 +393,68 @@ starter/src/ src/"
       if [ "$f" = "$from" ]; then covered=1; fi
       case "$from" in */) case "$f" in "$from"*) covered=1 ;; esac ;; esac
     done <<<"$table"
-    [ -n "$covered" ] || fail 1 "layout-pack: not in the layout table: $f" "$LP_BROKEN_NEXT"
+    [ -n "$covered" ] || lp_fail "not in the layout table: $f" "$LP_BROKEN_NEXT"
   done < <(cd "$src" && find . -type f | sed 's|^\./||' | LC_ALL=C sort)
+
+  # Overlay: the targets other than ci.yml and .gitignore must not be
+  # there yet. All are checked before the first one is written.
+  if [ "$LP_MODE" = overlay ]; then
+    while read -r from to; do
+      case "$to" in .github/workflows/ci.yml | .gitignore) continue ;; esac
+      if [ -e "$out/$to" ] || [ -L "$out/$to" ]; then
+        lp_fail "The copy of the project on this computer already has $to, which the $pack pack would add." \
+          "This version of the bootstrapper cannot set up a $pack project, because its own files and the pack's overlap. Report it to the bootstrapper's maintainers and show them the details below." \
+          "Already there: $out/$to"
+      fi
+    done <<<"$table"
+  fi
 
   mkdir -p "$out"
   while read -r from to; do
     if [ "${from%/}" != "$from" ]; then
       mkdir -p "$out/$to"
       cp -R "$src/$from." "$out/$to"
+    elif [ "$LP_MODE" = overlay ] && [ "$to" = .gitignore ]; then
+      add_missing_lines "$src/$from" "$out/$to"
     else
       mkdir -p "$(dirname "$out/$to")"
       cp "$src/$from" "$out/$to"
     fi
   done <<<"$table"
+}
 
-  say "Laid out the $pack pack in $out"
+# lp_fail <what happened> <what to do next> [raw text]: a layout error.
+# The subcommand names itself and exits 1; in the setup the copy and the
+# project exist, so it shows the command to continue (stop_with_error).
+lp_fail() {
+  [ "$LP_MODE" != overlay ] || stop_with_error "$1" "$2" "${3:-}"
+  fail 1 "layout-pack: $1" "$2"
+}
+
+# add_missing_lines <from> <to>: adds to the file <to> each line of <from>
+# that <to> lacks, in order, skipping empty lines and lines already
+# added; <to>'s own lines stay as they are, and its last line is ended
+# first. Carriage returns do not count when lines are compared.
+add_missing_lines() {
+  local tmp
+  tmp="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  [ -f "$2" ] || : >"$2"
+  awk 'FILENAME == ARGV[1] { print; sub(/\r$/, ""); have[$0] = 1; next }
+    { sub(/\r$/, "") }
+    $0 != "" && !($0 in have) { have[$0] = 1; print }' "$2" "$1" >"$tmp"
+  cat "$tmp" >"$2"
+  rm -f "$tmp"
+}
+
+cmd_layout_pack() {
+  [ "$#" -eq 2 ] || usage
+  local here packs_dir
+  # CDPATH is cleared: a user's CDPATH could send cd to another folder of
+  # the same name, or make it print the folder into $here.
+  here="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  packs_dir="${PACKS_DIR:-$here/languages}"
+  layout_into "$1" "$packs_dir" "$2" strict
+  say "Laid out the $1 pack in $2"
 }
 
 # ---------- inputs ----------
@@ -1329,24 +1397,48 @@ preflight_npm() {
 
 # check_target_dir: IN_DIR does not exist, or is an empty folder; with
 # --resume a folder with files is allowed too (it may hold the copy of
-# the project from the run that stopped). DIR_PROBLEM: file or not-empty.
+# the project from the run that stopped; whether it is this project's
+# own copy is checked when --resume continues). The folder that holds
+# IN_DIR must exist; the script must be able to write in IN_DIR (when it
+# is there) or in that folder (when not); and that folder must not be
+# inside a git project, so the copy is never a project within another
+# (#148 review, finding 7). DIR_PROBLEM: file, not-empty, no-parent,
+# not-writable (DIR_UNWRITABLE: the folder) or in-git (DIR_OUTER: where
+# that project starts, when git says).
 DIR_PROBLEM=""
 DIR_DONE=""
+DIR_UNWRITABLE=""
+DIR_OUTER=""
 check_target_dir() {
-  local entries=""
+  local entries="" parent
   DIR_DONE="The folder is new or empty."
   if [ -d "$IN_DIR" ]; then
     entries="$(ls -A "$IN_DIR" 2>/dev/null)" || entries=unreadable
-    [ -n "$entries" ] || return 0
-    if [ -n "$OPT_RESUME" ]; then
+    if [ -n "$entries" ]; then
+      if [ -z "$OPT_RESUME" ]; then
+        DIR_PROBLEM=not-empty
+        return 1
+      fi
       DIR_DONE="The folder has files in it, which --resume allows."
-      return 0
     fi
-    DIR_PROBLEM=not-empty
+  elif [ -e "$IN_DIR" ] || [ -L "$IN_DIR" ]; then
+    DIR_PROBLEM=file
     return 1
   fi
-  if [ -e "$IN_DIR" ] || [ -L "$IN_DIR" ]; then
-    DIR_PROBLEM=file
+  parent="$(dirname -- "$IN_DIR")"
+  if [ ! -d "$parent" ]; then
+    DIR_PROBLEM=no-parent
+    return 1
+  fi
+  if [ -d "$IN_DIR" ]; then DIR_UNWRITABLE="$IN_DIR"; else DIR_UNWRITABLE="$parent"; fi
+  if [ ! -w "$DIR_UNWRITABLE" ]; then
+    DIR_PROBLEM=not-writable
+    return 1
+  fi
+  if git -C "$parent" rev-parse --git-dir >/dev/null 2>&1; then
+    DIR_OUTER="$(git -C "$parent" rev-parse --show-toplevel 2>/dev/null)" || DIR_OUTER=""
+    DIR_OUTER="${DIR_OUTER//$CR/}"
+    DIR_PROBLEM=in-git
     return 1
   fi
   return 0
@@ -1355,8 +1447,42 @@ check_target_dir() {
 guide_dir() {
   case "$DIR_PROBLEM" in
     file) guide_dir_is_file ;;
+    no-parent) guide_dir_no_parent ;;
+    not-writable) guide_dir_not_writable ;;
+    in-git) guide_dir_in_git ;;
     *) guide_dir_not_empty ;;
   esac
+}
+
+guide_dir_no_parent() {
+  local parent
+  parent="$(dirname -- "$IN_DIR")"
+  guide_begin "The folder $parent, which would hold the folder $IN_DIR, does not exist." \
+    "The script makes the folder for the copy of your project only inside a folder that is already there, so that a typing mistake in the path does not make folders in the wrong place."
+  guide_step "Check the path for a typing mistake. To use another folder, start the script again and give it with --dir, followed by the folder, such as --dir ./my-new-project."
+  guide_step "Or, if the path is right, make the folder $parent yourself (for example in your file manager); then come back to this window."
+  guide_end "the script says \"Done. The folder is new or empty.\"" \
+    "if you made the folder and the script still does not find it, check that its name and place match the path above letter for letter." \
+    "it looks whether the folder $parent is there."
+}
+
+guide_dir_not_writable() {
+  guide_begin "The script may not write in the folder $DIR_UNWRITABLE." \
+    "The copy of your project is written there, and this computer does not let your account add files to that folder."
+  guide_step "Choose a folder in your own home folder instead: start the script again and give it with --dir, such as --dir ~/my-new-project."
+  guide_step "Or ask the person who manages this computer to let your account write in $DIR_UNWRITABLE; then come back to this window."
+  guide_end "the script says \"Done. The folder is new or empty.\"" \
+    "try to make a new file in that folder yourself; if this computer refuses that too, choose another folder." \
+    "it asks this computer whether your account may write in that folder."
+}
+
+guide_dir_in_git() {
+  guide_begin "The folder $IN_DIR is inside another project that git keeps track of${DIR_OUTER:+ (the one in $DIR_OUTER)}." \
+    "The copy of your project keeps its own history with git. Inside another git project the two would get mixed up: the other project would see your project's files as its own."
+  guide_step "Choose a folder outside that project: start the script again and give it with --dir, such as --dir ~/my-new-project."
+  guide_end "the script says \"Done. The folder is new or empty.\"" \
+    "if you do not know where that other project starts, look for a hidden folder named .git in the folders above $IN_DIR; that project starts in the folder that holds it." \
+    "it asks git whether the folder that would hold $IN_DIR belongs to a git project."
 }
 
 guide_dir_not_empty() {
@@ -2143,8 +2269,168 @@ set_merge_settings() {
   step_end "Each proposed change will be added as one change, and the line of work it was made on is deleted afterwards."
 }
 
+# ---------- the copy on this computer ----------
+# Spec steps 4, 5, 6 and 9: the copy (gh repo clone) and its version
+# check, the git name and email in the copy's own settings, the line of
+# work bootstrap-setup, the pack laid out over the copy (layout_into
+# overlay, with the packs of the copy itself: the script the user runs
+# sits alone, not next to them), and the tidy-up. Nothing is saved
+# (committed) or sent (pushed) here; that is step 13.
+
+SETUP_BRANCH=bootstrap-setup
+TEMPLATE_URL=https://github.com/factoincognito/ai-project-template-v2
+PACKS="node web python react-native"
+
+# clone_project: spec step 4. gh repo clone gives no HTTP status, so a
+# failure is read from gh's exit code (4: not signed in); anything else
+# is told plainly with gh's and git's text below. Then origin/main must
+# hold CHANGELOG.md stamped with this script's version.
+clone_project() {
+  local out err rc=0 raw changelog
+  step_start "Making a copy of the project on this computer, in $IN_DIR"
+  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  run_gh repo clone "$IN_OWNER/$IN_NAME" "$IN_DIR" >"$out" 2>"$err" || rc=$?
+  raw="$(cat "$out" "$err" | tr -d '\r')"
+  rm -f "$out" "$err"
+  if [ "$rc" -ne 0 ]; then
+    [ -n "$raw" ] || raw="gh stopped with exit code $rc and no message."
+    if [ "$rc" -eq 4 ]; then
+      stop_with_error "gh (the GitHub command-line tool) is not signed in to your GitHub account, so the script could not make a copy of the project on this computer." \
+        "$SIGN_IN_CONTINUE_NEXT" "$raw"
+    fi
+    stop_with_error "The script could not make a copy of the project on this computer, in $IN_DIR." \
+      "Check that this computer is connected to the internet and that https://github.com/$IN_OWNER/$IN_NAME opens in your browser, then continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+      "$raw"
+  fi
+  CREATED_NOTE="The project $IN_OWNER/$IN_NAME exists on GitHub, with only the bootstrapper's files in it, and a copy of it is on this computer in $IN_DIR."
+
+  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  rc=0
+  changelog="$(git -C "$IN_DIR" show origin/main:CHANGELOG.md 2>"$err")" || rc=$?
+  raw="$(tr -d '\r' <"$err")"
+  rm -f "$err"
+  if [ "$rc" -ne 0 ] || ! read_published_version "$changelog"; then
+    [ -n "$raw" ] || raw="No line with \", built from\" in CHANGELOG.md. Its first lines:$NL$(sed -n 1,5p <<<"$changelog")"
+    stop_with_error "The copy of the project on this computer does not say which version of the bootstrapper it came from: its CHANGELOG.md file is missing or has no version in it." \
+      "Open https://github.com/$IN_OWNER/$IN_NAME in your browser and check that the project has a CHANGELOG.md file. If it has none, the project was not made from the bootstrapper: ask for help and show the details below." \
+      "$raw"
+  fi
+  if [ "$PUBLISHED_VERSION" != "$SCRIPT_VERSION" ]; then
+    stop_with_error "The copy of the project on this computer is from version $PUBLISHED_VERSION of the bootstrapper, but this script is version $SCRIPT_VERSION." \
+      "A new version of the bootstrapper came out while the script ran. Download the current script with the command from the README, then continue the setup with the command shown above." \
+      "CHANGELOG.md in the copy: $(grep -F ', built from' <<<"$changelog" | sed -n 1p)"
+  fi
+  step_end "The copy is in $IN_DIR, with the files of version $SCRIPT_VERSION of the bootstrapper."
+}
+
+# in_copy <what the script was doing> <git arguments...>: runs git in the
+# copy; a failure stops plainly, with git's text below.
+in_copy() {
+  local doing="$1" err rc=0 raw
+  shift
+  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  git -C "$IN_DIR" "$@" >/dev/null 2>"$err" || rc=$?
+  raw="$(tr -d '\r' <"$err")"
+  rm -f "$err"
+  [ "$rc" -ne 0 ] || return 0
+  [ -n "$raw" ] || raw="git stopped with exit code $rc and no message."
+  stop_with_error "git could not $doing in the copy of the project on this computer." \
+    "Continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+    "$raw"
+}
+
+# set_git_identity: right after the copy (spec, "Git identity"), the name
+# and email from the questions go into the copy's own settings, never
+# into the global ones.
+set_git_identity() {
+  step_start "Writing your name and email into the copy's own git settings"
+  in_copy "write your name" config user.name "$IN_GIT_NAME"
+  in_copy "write your email address" config user.email "$IN_GIT_EMAIL"
+  step_end "git writes $IN_GIT_NAME, $IN_GIT_EMAIL into each change saved in this copy, and only in this copy; your other git settings are unchanged."
+}
+
+# start_setup_branch: spec step 5, from origin/main, following nothing on
+# GitHub (the push in step 13 names where it goes).
+start_setup_branch() {
+  step_start "Starting a separate line of work for the setup, named $SETUP_BRANCH"
+  in_copy "start the line of work $SETUP_BRANCH" checkout -q --no-track -b "$SETUP_BRANCH" origin/main
+  step_end "The setup's changes go on the line of work $SETUP_BRANCH, not straight into the main version."
+}
+
+# lay_out_pack: spec step 6, with the packs of the copy itself.
+lay_out_pack() {
+  step_start "Adding the $IN_PACK language pack's files to the copy"
+  layout_into "$IN_PACK" "$IN_DIR/languages" "$IN_DIR" overlay "$IN_WITH_DEPLOY"
+  step_end "The $IN_PACK pack's files are in place, among them the file that runs the project's checks on GitHub."
+}
+
+# remove_setup_section <README.md>: deletes the section from its
+# "## After bootstrapping" heading up to the next "## " heading (or the
+# end of the file). Returns 1, changing nothing, when there is none.
+remove_setup_section() {
+  local tmp
+  grep -q '^## After bootstrapping' "$1" || return 1
+  tmp="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  awk '/^## After bootstrapping/ { skip = 1; next }
+    skip && /^## / { skip = 0 }
+    !skip' "$1" >"$tmp"
+  cat "$tmp" >"$1"
+  rm -f "$tmp"
+}
+
+# replace_text <file> <text> <new text>: replaces every <text> in the file
+# with <new text>, literally (awk index(), values passed through ENVIRON:
+# never read as a pattern, and no sed -i, which differs on macOS).
+replace_text() {
+  local tmp
+  tmp="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  RT_FROM="$2" RT_TO="$3" awk 'BEGIN { from = ENVIRON["RT_FROM"]; to = ENVIRON["RT_TO"] }
+    {
+      out = ""; line = $0
+      while ((i = index(line, from)) > 0) {
+        out = out substr(line, 1, i - 1) to
+        line = substr(line, i + length(from))
+      }
+      print out line
+    }' "$1" >"$tmp"
+  cat "$tmp" >"$1"
+  rm -f "$tmp"
+}
+
+# tidy_up: spec step 9. The README's setup section goes; languages/ keeps
+# only the chosen pack's files that were not laid out (LP_KEPT); the
+# links in docs/DEV_INFRASTRUCTURE.md to the other packs' code-standards.md
+# point to the template on GitHub; the script's own copy goes; licenses/
+# and everything else stay.
+tidy_up() {
+  local keep f p
+  step_start "Removing what only the setup needed from the copy"
+  if ! remove_setup_section "$IN_DIR/README.md"; then
+    stop_with_error "The file README.md in the copy of the project has no section that starts with \"## After bootstrapping\", which the setup removes." \
+      "$LP_BROKEN_NEXT" "No line starting with \"## After bootstrapping\" in $IN_DIR/README.md."
+  fi
+  keep="$(mktemp -d "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  for f in $LP_KEPT; do
+    mv "$IN_DIR/languages/$IN_PACK/$f" "$keep/$f"
+  done
+  rm -rf "$IN_DIR/languages"
+  mkdir -p "$IN_DIR/languages/$IN_PACK"
+  for f in $LP_KEPT; do
+    mv "$keep/$f" "$IN_DIR/languages/$IN_PACK/$f"
+  done
+  rmdir "$keep"
+  for p in $PACKS; do
+    [ "$p" != "$IN_PACK" ] || continue
+    replace_text "$IN_DIR/docs/DEV_INFRASTRUCTURE.md" "\`languages/$p/code-standards.md\`" \
+      "$TEMPLATE_URL/blob/main/languages/$p/code-standards.md"
+  done
+  rm -f "$IN_DIR/bootstrap-project.sh"
+  step_end "The setup section of README.md, the other language packs and the setup script itself are gone from the copy."
+}
+
 # cmd_setup <options...>: the setup. Built so far: the checks of this
-# computer and on GitHub, the inputs, the plan, and steps 2 and 3. The
+# computer and on GitHub, the inputs, the plan, and steps 2 to 6 and 9. The
 # options are checked first, then the checks that need no answer (the
 # tools, the GitHub sign-in and the current version), so that nothing is
 # asked in vain; the npm, folder, permission and name checks need
@@ -2185,8 +2471,15 @@ cmd_setup() {
   wait_for_files
   protect_main
   set_merge_settings
-  fail 1 "The project $IN_OWNER/$IN_NAME was created on GitHub and its main version is protected. This version of the script stops here: the next steps of the setup are not built yet." \
-    "Use a released version of the bootstrapper to set up a project. The project stays on GitHub; if you do not need it, delete it there, in its Settings."
+  clone_project
+  set_git_identity
+  start_setup_branch
+  lay_out_pack
+  tidy_up
+  say "$CONTINUE_INTRO"
+  say_command "bash $RESTART_CMD"
+  fail 1 "The project $IN_OWNER/$IN_NAME was created on GitHub and its main version is protected. Its copy on this computer, in $IN_DIR, has the $IN_PACK pack's files, ready for the next steps. This version of the script stops here: the next steps of the setup are not built yet." \
+    "Use a released version of the bootstrapper to set up a project. The project stays on GitHub and its copy stays in $IN_DIR: the command shown above continues the setup once a version of the script has the next steps. If you do not need them, delete the project on GitHub, in its Settings, and delete the folder $IN_DIR."
 }
 
 # ---------- main ----------
