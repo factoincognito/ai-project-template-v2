@@ -7,9 +7,10 @@
 # guided checks of this computer (bash, git, gh, npm, the git name and
 # email, the target folder), the guided checks on GitHub (signed in, the
 # current version of this script, the permissions gh has, the project
-# name still free), the plan and its "Proceed?" question, creating the
-# project on GitHub and protecting its main version, the copy of the
-# project on this computer (with the git name and email, the line of work
+# name still free, the licence name), the plan and its "Proceed?"
+# question, creating the project on GitHub and protecting its main
+# version, the check that GitHub Actions is turned on for it, the copy of
+# the project on this computer (with the git name and email, the line of work
 # bootstrap-setup, the language pack laid out, the tidy-up, the
 # placeholders filled in, the lockfile of the npm packs, the licence and
 # the CHANGELOG entry), the self-check, saving the setup's changes,
@@ -673,7 +674,7 @@ check_pack() {
 
 # check_license: lowercased. "none", a listed licence, or any key of
 # GitHub's licence list; whether that key exists is checked with GitHub
-# before anything is created, not here.
+# before anything is created (preflight_license), not here.
 check_license() {
   trim_into "$1"
   CHECKED="$(lower "$TRIMMED")"
@@ -960,17 +961,7 @@ collect_inputs() {
     IN_VISIBILITY="$CHECKED"
   fi
   if [ -z "$IN_LICENSE" ]; then
-    answer --license check_license_answer "" \
-      "The licence tells others what they may do with your code. $ASK_NO_DEFAULT" \
-      "Licence (type the number or the name)" \
-      "1) none: no licence, so nobody else may copy, change or share the code" \
-      "2) mit: anyone may use, change and share the code, also in paid products, if they keep your name in it" \
-      "3) apache-2.0: like mit, and it also gives users the rights to any patents in the code" \
-      "4) gpl-3.0: anyone may use and change the code, but what they share must be open under the same licence" \
-      "5) bsd-3-clause: like mit, and others may not use your name to promote their work" \
-      "6) polyform-noncommercial-1.0.0: anyone may use and change the code, but not to make money with it" \
-      "Or type the short name of another licence from choosealicense.com, such as agpl-3.0." || true
-    IN_LICENSE="$CHECKED"
+    ask_license
   fi
   if [ -z "$IN_COPYRIGHT_HOLDER" ]; then
     if [ "$IN_LICENSE" = none ]; then
@@ -1004,6 +995,23 @@ collect_inputs() {
   fi
   [ -n "$IN_CI_TIMEOUT" ] || IN_CI_TIMEOUT=20
   stop_if_problems
+}
+
+# ask_license: the licence question (or, with --non-interactive, the
+# missing option); also asked again when GitHub does not know the
+# answer (preflight_license).
+ask_license() {
+  answer --license check_license_answer "" \
+    "The licence tells others what they may do with your code. $ASK_NO_DEFAULT" \
+    "Licence (type the number or the name)" \
+    "1) none: no licence, so nobody else may copy, change or share the code" \
+    "2) mit: anyone may use, change and share the code, also in paid products, if they keep your name in it" \
+    "3) apache-2.0: like mit, and it also gives users the rights to any patents in the code" \
+    "4) gpl-3.0: anyone may use and change the code, but what they share must be open under the same licence" \
+    "5) bsd-3-clause: like mit, and others may not use your name to promote their work" \
+    "6) polyform-noncommercial-1.0.0: anyone may use and change the code, but not to make money with it" \
+    "Or type the short name of another licence from choosealicense.com, such as agpl-3.0." || true
+  IN_LICENSE="$CHECKED"
 }
 
 # read_git_identity: GIT_CFG_NAME and GIT_CFG_EMAIL, the name and email
@@ -1562,7 +1570,8 @@ preflight_target_dir() {
 # owner name, and the permissions gh has) and this is the current
 # published version of the script, both before the first question. After
 # the questions, which give the visibility, the owner and the name: gh
-# has the permissions the setup needs, and OWNER/NAME does not exist yet.
+# has the permissions the setup needs, OWNER/NAME does not exist yet, and
+# GitHub knows the licence chosen.
 #
 # Every GitHub call goes through api_call (gh api -i), so an error is read
 # from the HTTP status and the message in the answer's JSON body, not
@@ -2020,6 +2029,55 @@ preflight_project_absent() {
   step_end "$PROJECT_DONE"
 }
 
+# ---- the licence is one GitHub knows ----
+
+# check_license_known: GitHub has a licence with the short name
+# IN_LICENSE (gh api licenses/<key>: 200), so step 10 can add its text.
+# A 404 means it has none (LICENSE_PROBLEM=unknown); any other answer is
+# LICENSE_PROBLEM=api. GitHub's answer for an unknown key is from the
+# REST licences doc, not run here.
+LICENSE_PROBLEM=""
+check_license_known() {
+  LICENSE_PROBLEM=""
+  api_call "licenses/$IN_LICENSE" --jq .key
+  [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ] && return 0
+  if [ "$API_STATUS" = 404 ]; then LICENSE_PROBLEM=unknown; else LICENSE_PROBLEM=api; fi
+  return 1
+}
+
+# preflight_license: before anything is created, the licence chosen must
+# be one GitHub knows (#154 review, finding 1); none and PolyForm
+# Noncommercial (its text is in the bootstrapper's licenses/) need no
+# call. As for every other input (S6): a licence given as an option that
+# GitHub does not know stops with exit 2 and the options list, and one
+# typed at the question is explained and asked again. Step 10 (add_licence)
+# keeps its own handling of the 404 as a second line of defence.
+GIVEN_LICENSE=""
+preflight_license() {
+  local problem
+  case "$IN_LICENSE" in
+    none | "$POLYFORM_KEY") return 0 ;;
+  esac
+  step_start "Checking that GitHub knows the licence $IN_LICENSE"
+  while ! check_license_known; do
+    [ "$LICENSE_PROBLEM" = unknown ] || api_fail "check the licence $IN_LICENSE with GitHub"
+    problem="GitHub has no licence with the short name $IN_LICENSE. Use none, one of the listed licences, or the short name of a licence on https://choosealicense.com/licenses/ (each licence's page shows its short name, such as mit)."
+    if [ -n "$GIVEN_LICENSE" ] || [ -n "$OPT_NON_INTERACTIVE" ]; then
+      add_problem --license "$problem"
+      stop_if_problems
+    fi
+    say "$problem $ASK_RETRY"
+    ask_license
+    case "$IN_LICENSE" in
+      none | "$POLYFORM_KEY")
+        step_end "Nothing to check with GitHub for the licence $IN_LICENSE."
+        return 0
+        ;;
+    esac
+  done
+  step_end "GitHub knows the licence $IN_LICENSE."
+}
+
 # ---------- the plan, create and protect ----------
 # The end of spec step 1 (the plan, and "Proceed?" unless --yes; a
 # --dry-run stops after the plan), then step 2 (create the project from
@@ -2315,6 +2373,72 @@ set_merge_settings() {
       "$raw"
   fi
   step_end "Each proposed change will be added as one change, and the line of work it was made on is deleted afterwards."
+}
+
+# ---- GitHub Actions turned on ----
+# Right after step 3 (spec, post-create guides): GitHub Actions runs the
+# project's checks, and an organisation or the project itself can turn
+# it off. Then the setup's proposed change could never pass its checks,
+# and the later wait for them would only run out of time. So the script
+# asks GitHub first, before the copy on this computer and the push.
+# The answer relied on (gh api repos/OWNER/NAME/actions/permissions, from
+# the REST doc "Get GitHub Actions permissions for a repository"; not run
+# against GitHub here): 200 with a JSON object whose "enabled" is true or
+# false (--jq .enabled prints it). A 403 (the sign-in may not read the
+# setting) or 404 (the endpoint not as expected), or an answer that is
+# neither true nor false, does not stop the setup: the check only warns
+# early, and the project's checks on the proposed change are the real
+# test. Any other answer stops like every other call (api_fail).
+
+ACTIONS_PROBLEM=""
+ACTIONS_UNCHECKED=""
+check_actions_on() {
+  ACTIONS_PROBLEM=""
+  ACTIONS_UNCHECKED=""
+  api_call "repos/$IN_OWNER/$IN_NAME/actions/permissions" --jq .enabled
+  case "$API_STATUS" in
+    200)
+      trim_into "$API_BODY"
+      case "$TRIMMED" in
+        true) return 0 ;;
+        false) ACTIONS_PROBLEM=off; return 1 ;;
+      esac
+      ACTIONS_UNCHECKED="HTTP 200: enabled is ${TRIMMED:-empty}"
+      return 0
+      ;;
+    403 | 404)
+      api_raw
+      ACTIONS_UNCHECKED="$API_RAW"
+      return 0
+      ;;
+  esac
+  ACTIONS_PROBLEM=api
+  return 1
+}
+
+guide_actions_off() {
+  [ "$ACTIONS_PROBLEM" = off ] || api_fail "check whether GitHub Actions is turned on for the project"
+  guide_begin "GitHub Actions, the GitHub service that runs your project's checks, is turned off for the project $IN_OWNER/$IN_NAME." \
+    "Every change to the project is checked on GitHub before it is added, and GitHub Actions runs those checks. While it is off, the setup's own change can never pass them."
+  guide_step "Open https://github.com/$IN_OWNER/$IN_NAME/settings/actions in your browser: the project's Settings, then Actions, then General."
+  guide_step "Under \"Actions permissions\", choose \"Allow all actions and reusable workflows\", then click Save."
+  guide_step "If those choices cannot be changed, the organisation (or enterprise) that owns the project has turned GitHub Actions off for its projects: ask one of its owners to allow it, in the organisation's Settings, under Actions, then General."
+  guide_step "Then continue with the command shown below, or, if the script is waiting, come back to this window."
+  guide_end "the script says \"Done. GitHub Actions is turned on for the project\"." \
+    "if the page says that GitHub Actions is turned off by an organisation or an enterprise, ask one of its owners, and show them the page." \
+    "it asks GitHub whether GitHub Actions is turned on for the project."
+}
+
+check_actions() {
+  step_start "Checking that GitHub Actions, which runs the project's checks, is turned on for it"
+  guided_check check_actions_on guide_actions_off
+  if [ -n "$ACTIONS_UNCHECKED" ]; then
+    say "The script could not check whether GitHub Actions is turned on for the project: GitHub did not say (its answer is below). This check only warns early, so the setup goes on."
+    guide_details "$ACTIONS_UNCHECKED"
+    step_end "Carrying on without this check. If GitHub Actions is off, the project's checks will not run on the proposed change."
+    return 0
+  fi
+  step_end "GitHub Actions is turned on for the project, so its checks can run there."
 }
 
 # ---------- the copy on this computer ----------
@@ -3231,6 +3355,7 @@ cmd_setup() {
   parse_args "$@"
   GIVEN_NAME="$IN_NAME"
   GIVEN_OWNER="$IN_OWNER"
+  GIVEN_LICENSE="$IN_LICENSE"
   if [ -n "$SCRIPT_PIPED" ] && [ -z "$OPT_NON_INTERACTIVE" ]; then
     fail 2 "The script was piped into bash, so it cannot ask its questions: they would read the script itself." \
       "Run the command from the README, which saves the script to a file first and then runs that file."
@@ -3249,6 +3374,7 @@ cmd_setup() {
   preflight_target_dir
   preflight_github_permissions
   preflight_project_absent
+  preflight_license
   if [ -n "$OPT_RESUME" ]; then
     fail 1 "Continuing a setup that stopped part way (--resume) is not built yet in this version of the script. Nothing was changed." \
       "Use a released version of the bootstrapper to continue the setup."
@@ -3263,6 +3389,7 @@ cmd_setup() {
   wait_for_files
   protect_main
   set_merge_settings
+  check_actions
   clone_project
   set_git_identity
   start_setup_branch
