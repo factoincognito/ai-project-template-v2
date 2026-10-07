@@ -3049,7 +3049,8 @@ test_checks_on_this_computer_come_before_any_github_call_and_question() {
   expect_no_out "$d" "Project name"
   # All pass: the tool checks come first, then the account and the
   # published version (before the questions), then the permissions (a
-  # fresh read of the account) and the name. A dry run stops there.
+  # fresh read of the account), the name and the licence. A dry run
+  # stops there.
   d="$(tmpdir)"
   working_git "$d"
   fake_tool "$d" npm 10.0.0
@@ -3057,8 +3058,8 @@ test_checks_on_this_computer_come_before_any_github_call_and_question() {
   expect_rc 0 "$d"
   [ "$(awk -F'\t' '{ print $2 " " $NF }' "$d/gh.log")" = "$(printf '%s\n' '--version --version' 'repo --help' \
       'api .login, (.name // "")' 'api repos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md' \
-      'api .login, (.name // "")' 'api repos/octo-user/my-app')" ] \
-    || { cat "$d/gh.log" >&2; die "gh calls not in the order: tools, account, version, name"; }
+      'api .login, (.name // "")' 'api repos/octo-user/my-app' 'api .key')" ] \
+    || { cat "$d/gh.log" >&2; die "gh calls not in the order: tools, account, version, name, licence"; }
 }
 
 test_npm_and_folder_checks_come_after_the_questions() {
