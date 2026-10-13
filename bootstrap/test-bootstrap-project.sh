@@ -3097,8 +3097,8 @@ test_the_folder_must_be_in_a_folder_that_exists_and_is_outside_any_git_project()
   expect_rc 3 "$d"
   # A copy that is a git project of its own, in a plain folder, still
   # passes with --resume: only the folders above it count.
-  "$REAL_GIT" init -q "$d/plain/copy"; touch "$d/plain/copy/x"
-  pre "$d" ni resume with_dir "$d/plain/copy" preflight_target_dir
+  own_copy "$d/plain/copy" https://github.com/octo-user/my-app.git
+  pre "$d" ni resume with_project octo-user my-app with_dir "$d/plain/copy" preflight_target_dir
   expect_rc 0 "$d"
   # Not writable. Only where the test can make such a folder: as root, or
   # on Windows, every folder can be written, and the case is skipped.
@@ -5265,7 +5265,7 @@ test_the_awk_helpers_take_a_path_named_like_a_setting() {
   local d
   d="$(tmpdir)"
   mkdir -p "$d/a=b"
-  printf '%s\n' '# App' '## After bootstrapping' 'x' '## Setup' 'see languages/node/x' >"$d/a=b/README.md"
+  printf '%s\n' '# App' '## After bootstrapping (delete this section when done)' 'x' '## Setup' 'see languages/node/x' >"$d/a=b/README.md"
   printf '%s\n' 'dist/' >"$d/a=b/gitignore"
   printf '%s\n' 'node_modules/' >"$d/a=b/.gitignore"
   printf '%s\n' 'FROM-STDIN' >"$d/in"
@@ -6894,7 +6894,7 @@ calls_count() { if [ -f "$1/gh.log" ]; then grep -c . "$1/gh.log"; else echo 0; 
 # calls_since <dir> <n>: the gh calls after the first <n>, written as
 # calls_from_create writes them.
 calls_since() {
-  tail -n +"$(($2 + 1))" "$1/gh.log" | awk -F'\t' '{ out = $2; for (i = 3; i <= NF; i++) out = out " " ($(i - 1) == "--body-file" ? "<file>" : ($(i - 1) == "--match-head-commit" ? "<sha>" : $i)); print out }'
+  tail -n +"$(($2 + 1))" "$1/gh.log" | awk -F'\t' '$2 == "repo" && $3 == "create" && $4 == "--help" { next } { out = $2; for (i = 3; i <= NF; i++) out = out " " ($(i - 1) == "--body-file" ? "<file>" : ($(i - 1) == "--match-head-commit" ? "<sha>" : $i)); print out }'
 }
 
 # again <dir> [options...]: runs the script again, as the user would: the
@@ -6941,7 +6941,7 @@ expect_one_of_each() {
   bare="$(bare_of "$d")"
   c="$(copy_of "$d")"
   grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "it did not go through to the report"; }
-  [ "$(grep -c '^repo	create	octo-user' "$d/gh.log" || true)" -le 1 ] || die "the project was created twice"
+  [ "$(grep -c '	repo	create	octo-user' "$d/gh.log" || true)" -le 1 ] || die "the project was created twice"
   [ "$(grep -cx -- ----- "$d/pr-bodies")" -eq 1 ] || die "not exactly one proposed change"
   [ "$(in_git --git-dir="$bare" rev-list --count main)" -eq 2 ] || die "main does not have exactly one change after the template's"
   ! in_git --git-dir="$bare" rev-parse -q --verify refs/heads/bootstrap-setup >/dev/null || die "bootstrap-setup is still on GitHub"
@@ -7006,7 +7006,7 @@ test_resume_redoes_the_copys_steps_in_a_copy_with_nothing_saved_and_takes_anothe
   again "$d" --license mit
   expect_rc 0 "$d"
   expect_out "$d" "    Done. The project has only the bootstrapper's files, and its copy on this computer has none of the setup's changes: the setup continues by protecting its main version, then uses that copy."
-  [ "$(grep -c '^repo	clone	' "$d/gh.log")" -eq 1 ] || die "a second copy was made"
+  [ "$(grep -c '	repo	clone	' "$d/gh.log")" -eq 1 ] || die "a second copy was made"
   expect_one_of_each "$d"
   c="$(copy_of "$d")"
   grep -qF 'MIT License' "$c/LICENSE" || die "the licence given at the resume was not used"
@@ -7088,6 +7088,11 @@ test_ctrl_c_says_what_exists_and_the_resume_finishes_without_duplicates() {
   # build) completes with --resume, with no duplicate proposed change or
   # saved change.
   local d
+  # A shell started with Ctrl-C ignored (such as a background job) cannot
+  # take it: the case is skipped there.
+  case "$(trap -p INT)" in
+    *"''"*) echo "note: Ctrl-C is ignored in this shell; the Ctrl-C case was not run"; return 0 ;;
+  esac
   d="$(tmpdir)"
   printf '%s\n' '#!/usr/bin/env bash' 'kill -INT "$PPID"' >"$d/interrupt"
   chmod +x "$d/interrupt"
@@ -7175,7 +7180,7 @@ test_resume_refuses_a_project_from_another_version_or_not_from_the_bootstrapper(
     grep -qF 'a new project' "$d/out" || { cat "$d/out" >&2; die "$t: the next action is not a new project"; }
     grep -A1 -xF 'To start again, run this command:' "$d/out" | sed -n 2p >"$d/cmd"
     grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "$t: no command to start again without --resume"; }
-    ! grep -qE '	(-X	PUT|clone|edit|create)	' "$d/gh.log" || { cat "$d/gh.log" >&2; die "$t: something was changed"; }
+    ! grep -vF -- '--help' "$d/gh.log" | grep -qE '	(-X	PUT|clone|edit|create)	' || { cat "$d/gh.log" >&2; die "$t: something was changed"; }
     [ -z "$(ls -A "$d/cwd")" ] || die "$t: something was made on this computer"
   done
 }
@@ -7189,7 +7194,7 @@ test_resume_completes_a_project_made_with_use_this_template() {
   setup_run "$d" --non-interactive --yes --resume
   unset STUB_GH_EXISTING
   expect_rc 0 "$d"
-  ! grep -q '	repo	create	' "$d/gh.log" || die "a project was created"
+  ! grep -v -- '--help' "$d/gh.log" | grep -q '	repo	create	' || die "a project was created"
   expect_one_of_each "$d"
   in_git --git-dir="$(bare_of "$d")" show main:CHANGELOG.md | grep -qxF -- '- Set up by bootstrap-project.sh.' || die "the setup is not in main"
 }
@@ -7233,7 +7238,7 @@ test_resume_with_no_project_on_github_creates_nothing() {
 }
 
 test_resume_refuses_a_copy_without_the_line_of_work_github_has() {
-  local d c
+  local d c n
   d="$(tmpdir)"
   working_git "$d"
   export STUB_GH_PR_FAIL=broken
@@ -7243,11 +7248,12 @@ test_resume_refuses_a_copy_without_the_line_of_work_github_has() {
   c="$(copy_of "$d")"
   in_git -C "$c" checkout -q main
   in_git -C "$c" branch -q -D bootstrap-setup
+  n="$(calls_count "$d")"
   again "$d"
   expect_rc 3 "$d"
   expect_out "$d" "The copy of the project in ./my-app does not have the line of work bootstrap-setup that GitHub has."
-  ! grep -q '	pr	create	' <(tail -3 "$d/gh.log") || die "a change was proposed"
-  [ "$(grep -cx -- ----- "$d/pr-bodies" 2>/dev/null || true)" -eq 0 ] || die "a change was proposed"
+  ! calls_since "$d" "$n" | grep -q '^pr create ' || die "a change was proposed"
+  [ ! -s "$d/pr-bodies" ] || die "a change was proposed"
 }
 
 test_resume_dry_run_says_where_it_continues_and_changes_nothing() {

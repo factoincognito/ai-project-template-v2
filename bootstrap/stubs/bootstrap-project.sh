@@ -16,9 +16,12 @@
 # the CHANGELOG entry), the self-check, saving the setup's changes,
 # sending them to GitHub and proposing them there, waiting for the check
 # build, making it required, adding the change to main, updating the
-# copy, the report at the end, and the layout-pack subcommand. Not built
-# yet: continuing a setup that stopped part way (--resume) and
-# --allow-unprotected.
+# copy, the report at the end, and the layout-pack subcommand; continuing
+# a setup that stopped part way (--resume, which works out where to go on
+# from GitHub and the copy on this computer, never from a file of its own),
+# --allow-unprotected, the offer to make a private project public, the
+# answers carried in the command shown at a stop, and the stop that says
+# what exists when something unexpected happens or Ctrl-C is pressed.
 #
 # Usage:
 #   bash bootstrap-project.sh [options]
@@ -63,6 +66,12 @@ set -euo pipefail
 SCRIPT_VERSION='{{TEMPLATE_VERSION}}'
 SCRIPT_COMMIT='{{TEMPLATE_COMMIT}}'
 
+# State of the stop handling (see catch_stops): CLEAN is set by every
+# deliberate stop, CURRENT_STEP is the step being done.
+CLEAN=""
+CURRENT_STEP=""
+WORK_DIR=""
+
 # ---------- messages ----------
 # Everything the script shows the user goes through these helpers, and
 # nothing outside this block writes to the terminal by itself, so the
@@ -73,6 +82,7 @@ SCRIPT_COMMIT='{{TEMPLATE_COMMIT}}'
 usage() {
   printf '%s\n' "usage: bootstrap-project.sh layout-pack <node|web|python|react-native> <target-dir>" \
     "   or: bootstrap-project.sh [options]   (run it with --help to see them)" >&2
+  CLEAN=1
   exit 2
 }
 
@@ -111,6 +121,9 @@ show_help() {
     "  --yes                      do not ask \"Proceed?\" before creating anything" \
     "  --dry-run                  check everything and show the plan, create nothing" \
     "  --resume                   continue a setup that stopped part way" \
+    "  --allow-unprotected        with --resume: go on without protecting the main" \
+    "                             version, when a private project cannot be protected" \
+    "                             on the GitHub plan" \
     "  --help                     show this text" \
     "" \
     "An option takes its value after a space or after =, as in --name=my-app."
@@ -123,7 +136,7 @@ say() { printf '%s\n' "$*"; }
 say_command() { printf '    %s\n' "$*"; }
 
 # step_start <what>, step_end <result>: the first and last line of a step.
-step_start() { printf '==> %s\n' "$*"; }
+step_start() { CURRENT_STEP="$*"; printf '==> %s\n' "$*"; }
 step_end() { printf '    Done. %s\n' "$*"; }
 
 # show_error <what happened> <what to do next> [raw text]: an error in
@@ -156,6 +169,7 @@ fail() {
   local code="$1"
   shift
   show_error "$@"
+  CLEAN=1
   exit "$code"
 }
 
@@ -269,6 +283,23 @@ guide_details() {
 
 # ---------- test hooks ----------
 
+# make_temp [-d]: a new temporary file (or folder with -d). They are all
+# made inside one folder (WORK_DIR) that catch_stops removes when the
+# script ends, however it ends, so none is left behind.
+make_temp() {
+  mktemp ${1:+"$1"} "${WORK_DIR:-${TMPDIR:-/tmp}}/bootstrap-project.XXXXXX"
+}
+
+# STDERR_LOG: where awk_run keeps awk's own error text (set by
+# catch_stops), to show below the plain stop for support.
+STDERR_LOG=""
+
+# awk_run <awk arguments>: awk, with its own error text kept in STDERR_LOG
+# instead of shown at the terminal by itself.
+awk_run() {
+  awk "$@" 2>>"${STDERR_LOG:-/dev/null}"
+}
+
 # run_gh <args...>: runs gh, or $BOOTSTRAP_GH, with gh's own prompts
 # turned off. They misbehave in Git Bash's terminal, so the script asks
 # its own questions.
@@ -380,10 +411,6 @@ starter/src/ src/"
       ;;
   esac
   LP_KEPT="$not_laid_out"
-  # The project paths of the table, for the self-check before the commit
-  # (a folder ends in /).
-  LP_TARGETS=""
-  while read -r _ to; do LP_TARGETS="$LP_TARGETS $to"; done <<<"$table"
 
   src="$packs_dir/$pack"
   if [ ! -d "$src" ]; then
@@ -419,6 +446,27 @@ starter/src/ src/"
     done <<<"$table"
     [ -n "$covered" ] || lp_fail "not in the layout table: $f" "$broken" "In $src but not in the table: $f"
   done < <(cd "$src" && find . -type f | sed 's|^\./||' | LC_ALL=C sort)
+
+  # In the setup the files the pack keeps (not laid out) must be there too,
+  # because the tidy-up keeps them; found before anything is written.
+  if [ "$LP_MODE" = overlay ]; then
+    for f in $not_laid_out; do
+      [ -f "$src/$f" ] || lp_fail "missing from the pack: $f" "$broken" "Not in $src: $f"
+    done
+  fi
+
+  # The paths the layout writes, file by file (a folder of the table is
+  # replaced by the files in it), for the self-check before the commit.
+  LP_TARGETS=""
+  while read -r from to; do
+    if [ "${from%/}" != "$from" ]; then
+      while IFS= read -r f; do
+        LP_TARGETS="$LP_TARGETS $to$f"
+      done < <(cd "$src/$from" && find . -type f | sed 's|^\./||' | LC_ALL=C sort)
+    else
+      LP_TARGETS="$LP_TARGETS $to"
+    fi
+  done <<<"$table"
 
   # Overlay: the targets other than ci.yml and .gitignore must not be
   # there yet. All are checked before the first one is written.
@@ -472,11 +520,11 @@ lp_fail() {
 # first. Carriage returns do not count when lines are compared.
 add_missing_lines() {
   local tmp from to
-  tmp="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  tmp="$(make_temp)"
   [ -f "$2" ] || : >"$2"
   as_operand "$1"; from="$OPERAND"
   as_operand "$2"; to="$OPERAND"
-  awk 'FILENAME == ARGV[1] { print; sub(/\r$/, ""); have[$0] = 1; next }
+  awk_run 'FILENAME == ARGV[1] { print; sub(/\r$/, ""); have[$0] = 1; next }
     { sub(/\r$/, "") }
     $0 != "" && !($0 in have) { have[$0] = 1; print }' "$to" "$from" >"$tmp"
   cat "$tmp" >"$2"
@@ -505,7 +553,7 @@ cmd_layout_pack() {
 IN_NAME="" IN_OWNER="" IN_PROJECT_NAME="" IN_DESCRIPTION="" IN_PO_NAME=""
 IN_PACK="" IN_WITH_DEPLOY="" IN_VISIBILITY="" IN_LICENSE="" IN_COPYRIGHT_HOLDER=""
 IN_DIR="" IN_CI_TIMEOUT="" IN_SLUG="" IN_GIT_NAME="" IN_GIT_EMAIL=""
-OPT_NON_INTERACTIVE="" OPT_YES="" OPT_DRY_RUN="" OPT_RESUME=""
+OPT_NON_INTERACTIVE="" OPT_YES="" OPT_DRY_RUN="" OPT_RESUME="" OPT_ALLOW_UNPROTECTED=""
 SEEN_PUBLIC="" SEEN_PRIVATE=""
 PROBLEMS=""
 CR="$(printf '\r')"
@@ -566,7 +614,7 @@ parse_args() {
           --git-email) IN_GIT_EMAIL="$val" ;;
         esac
         ;;
-      --with-deploy | --public | --private | --non-interactive | --yes | --dry-run | --resume | --help)
+      --with-deploy | --public | --private | --non-interactive | --yes | --dry-run | --resume | --allow-unprotected | --help)
         [ -z "$has_val" ] || fail 2 "The option $arg does not take a value." \
           "Remove the = and what follows it, and run the script again. $OPTIONS_NEXT"
         case "$arg" in
@@ -577,6 +625,7 @@ parse_args() {
           --yes) OPT_YES=1 ;;
           --dry-run) OPT_DRY_RUN=1 ;;
           --resume) OPT_RESUME=1 ;;
+          --allow-unprotected) OPT_ALLOW_UNPROTECTED=1 ;;
           --help) show_help; exit 0 ;;
         esac
         ;;
@@ -835,6 +884,7 @@ answer() {
   local opt="$1" check="$2" default="$3" why="$4" question="$5"
   shift 5
   if [ -z "$OPT_NON_INTERACTIVE" ]; then
+    ANSWERED="$ANSWERED $opt "
     prompt_for "$check" "$why" "$question" "$default" "$@"
     return 0
   fi
@@ -856,6 +906,9 @@ answer() {
 # and a missing tool reports the option at once; collect_inputs runs it
 # when it has not run yet.
 OPTIONS_CHECKED=""
+# ANSWERED: the options whose value was typed at a question, not given;
+# the command shown at a stop carries them (carried_options).
+ANSWERED=""
 check_options() {
   [ -z "$OPTIONS_CHECKED" ] || return 0
   OPTIONS_CHECKED=1
@@ -875,6 +928,9 @@ check_options() {
     add_problem --private "Give either --public or --private, not both."
   fi
   check_deploy_pack
+  if [ -n "$OPT_ALLOW_UNPROTECTED" ] && [ -z "$OPT_RESUME" ]; then
+    add_problem --allow-unprotected "It goes with --resume: the script offers it, with the command to run, when a private project cannot be protected on the GitHub plan, and it applies to a project that exists already."
+  fi
   if [ -n "$OPT_NON_INTERACTIVE" ]; then
     # Missing required inputs are reported before GitHub is asked for
     # any default.
@@ -1119,17 +1175,90 @@ quote_word() {
 }
 
 # remember_command <options...>: RESTART_CMD is the command the user ran
-# (without its leading "bash"), to show when they stop at a guide.
+# (without its leading "bash"), to show when they stop at a guide. It
+# leaves out --resume and --allow-unprotected: shown_command adds them
+# where they belong.
 remember_command() {
   local script="${BASH_SOURCE[0]:-}" arg
   if [ -z "$script" ] || [ -n "$SCRIPT_PIPED" ]; then script=bootstrap-project.sh; fi
   RESTART_ARGS=""
   for arg in "$@"; do
+    case "$arg" in --resume | --allow-unprotected) continue ;; esac
     quote_word "$arg"
     RESTART_ARGS="$RESTART_ARGS $QUOTED"
   done
   quote_word "$script"
   RESTART_CMD="$QUOTED$RESTART_ARGS"
+}
+
+# carried_options: CARRIED_OPTS is each answer typed at a question as the
+# option that gives it, so that the command shown at a stop asks nothing
+# again. An answer not given yet (empty) is left out.
+CARRIED_OPTS=""
+carried_options() {
+  local opt value
+  CARRIED_OPTS=""
+  for opt in --owner --name --project-name --description --po-name --pack --with-deploy --public --license --copyright-holder --dir --git-name --git-email; do
+    case " $ANSWERED " in *" $opt "*) ;; *) continue ;; esac
+    case "$opt" in
+      --owner) value="$IN_OWNER" ;;
+      --name) value="$IN_NAME" ;;
+      --project-name) value="$IN_PROJECT_NAME" ;;
+      --description) value="$IN_DESCRIPTION" ;;
+      --po-name) value="$IN_PO_NAME" ;;
+      --pack) value="$IN_PACK" ;;
+      --with-deploy) value="$IN_WITH_DEPLOY" ;;
+      --public) value="$IN_VISIBILITY" ;;
+      --license) value="$IN_LICENSE" ;;
+      --copyright-holder) value="$IN_COPYRIGHT_HOLDER" ;;
+      --dir) value="$IN_DIR" ;;
+      --git-name) value="$IN_GIT_NAME" ;;
+      --git-email) value="$IN_GIT_EMAIL" ;;
+    esac
+    [ -n "$value" ] || continue
+    case "$opt" in
+      --with-deploy)
+        if [ "$value" = yes ]; then CARRIED_OPTS="$CARRIED_OPTS --with-deploy"; fi
+        ;;
+      --public) CARRIED_OPTS="$CARRIED_OPTS --$value" ;;
+      *)
+        quote_word "$value"
+        CARRIED_OPTS="$CARRIED_OPTS $opt $QUOTED"
+        ;;
+    esac
+  done
+  return 0
+}
+
+# FRESH_START: the stop is a refusal to continue a project (not made by
+# this version of the bootstrapper, or not there), so the command shown
+# starts a new project and has no --resume.
+FRESH_START=""
+
+# shown_command: SHOWN_CMD is the command to show at a stop: what the user
+# ran, --resume once the project exists (or the user gave it), the
+# answers typed at the questions, and --allow-unprotected when given.
+# shown_command_with_allow adds --allow-unprotected whether or not it was
+# given (the guide that offers it).
+SHOWN_CMD=""
+shown_command() {
+  [ -n "$RESTART_CMD" ] || remember_command
+  SHOWN_CMD="$RESTART_CMD"
+  if [ -z "$FRESH_START" ] && { [ -n "$CREATED_NOTE" ] || [ -n "$OPT_RESUME" ]; }; then
+    SHOWN_CMD="$SHOWN_CMD --resume"
+  fi
+  carried_options
+  SHOWN_CMD="$SHOWN_CMD$CARRIED_OPTS"
+  if [ -z "$FRESH_START" ] && [ -n "$OPT_ALLOW_UNPROTECTED" ]; then
+    SHOWN_CMD="$SHOWN_CMD --allow-unprotected"
+  fi
+}
+shown_command_with_allow() {
+  local was="$OPT_ALLOW_UNPROTECTED"
+  OPT_ALLOW_UNPROTECTED=""
+  shown_command
+  OPT_ALLOW_UNPROTECTED="$was"
+  SHOWN_CMD="$SHOWN_CMD --allow-unprotected"
 }
 
 # stop_at_guide: the user stopped at a guide, or --non-interactive (or a
@@ -1138,15 +1267,15 @@ remember_command() {
 # Once the project exists on GitHub (CREATED_NOTE set), the command shown
 # continues the setup with --resume, and the stop says what exists.
 stop_at_guide() {
-  [ -n "$RESTART_CMD" ] || remember_command
+  shown_command
   if [ -n "$CREATED_NOTE" ]; then
     say "$CONTINUE_INTRO"
-    say_command "bash $RESTART_CMD"
+    say_command "bash $SHOWN_CMD"
     fail 3 "$GUIDE_TITLE The script stopped here. $CREATED_NOTE" \
       "Follow the steps above, then run the command shown to continue the setup."
   fi
   say "$START_AGAIN_INTRO"
-  say_command "bash $RESTART_CMD"
+  say_command "bash $SHOWN_CMD"
   fail 3 "$GUIDE_TITLE The script stopped here, and nothing was created." \
     "Follow the steps above, then run the command shown to start again."
 }
@@ -1472,13 +1601,23 @@ check_target_dir() {
         DIR_PROBLEM=not-empty
         return 1
       fi
-      DIR_DONE="The folder has files in it, which --resume allows."
+      # With --resume a folder with files must be this project's own copy.
+      if ! dir_is_own_copy; then
+        DIR_PROBLEM=not-own-copy
+        return 1
+      fi
+      DIR_DONE="The folder is a copy of the project $IN_OWNER/$IN_NAME, which --resume continues."
     fi
   elif [ -e "$IN_DIR" ] || [ -L "$IN_DIR" ]; then
     DIR_PROBLEM=file
     return 1
   fi
   parent="$(dirname -- "$IN_DIR")"
+  # A copy already there is looked at from outside: its own folder (also
+  # when it is given as .) must not count as the folder that holds it.
+  if [ -n "$entries" ]; then
+    parent="$(dirname -- "$(CDPATH='' cd -- "$IN_DIR" && pwd -P)")"
+  fi
   if [ ! -d "$parent" ]; then
     DIR_PROBLEM=no-parent
     return 1
@@ -1497,12 +1636,32 @@ check_target_dir() {
   return 0
 }
 
+# dir_is_own_copy: the folder IN_DIR is the top folder of a git project
+# whose origin is OWNER/NAME of this run (any host, any spelling of the
+# address, capitals ignored): the copy of this project the setup made.
+dir_is_own_copy() {
+  local prefix url name rest
+  [ -e "$IN_DIR/.git" ] || return 1
+  prefix="$(git -C "$IN_DIR" rev-parse --show-prefix 2>/dev/null)" || return 1
+  [ -z "$prefix" ] || return 1
+  url="$(git -C "$IN_DIR" remote get-url origin 2>/dev/null)" || return 1
+  url="${url//$CR/}"
+  url="${url%/}"
+  url="${url%.git}"
+  url="${url//:/\/}"
+  name="${url##*/}"
+  rest="${url%/*}"
+  rest="${rest##*/}"
+  [ "$(lower "$rest/$name")" = "$(lower "$IN_OWNER/$IN_NAME")" ]
+}
+
 guide_dir() {
   case "$DIR_PROBLEM" in
     file) guide_dir_is_file ;;
     no-parent) guide_dir_no_parent ;;
     not-writable) guide_dir_not_writable ;;
     in-git) guide_dir_in_git ;;
+    not-own-copy) guide_dir_not_own_copy ;;
     *) guide_dir_not_empty ;;
   esac
 }
@@ -1547,6 +1706,16 @@ guide_dir_not_empty() {
   guide_end "the script says \"Done. The folder is new or empty.\"" \
     "if the folder looks empty but the script still says it has files, it holds hidden files (their names start with a dot); show hidden files to find them." \
     "it looks inside the folder and counts what is there, hidden files included."
+}
+
+guide_dir_not_own_copy() {
+  guide_begin "The folder $IN_DIR has files in it, but it is not a copy of the project $IN_OWNER/$IN_NAME." \
+    "With --resume the script goes on in the copy of the project that it made on this computer, and it never changes a folder that holds anything else."
+  guide_step "To go on in the copy of the project, give its folder as the top folder of the copy: start the script again and give it with --dir, followed by that folder, such as --dir ./$IN_NAME."
+  guide_step "Or choose a folder that is new or empty: the script then makes a new copy of the project there."
+  guide_end "the script says \"Done. The folder is a copy of the project $IN_OWNER/$IN_NAME\"." \
+    "if you are sure the folder is the copy, check that it is the folder that holds the hidden folder .git, and that git there names $IN_OWNER/$IN_NAME as the place it was copied from." \
+    "it asks git which GitHub project the folder was copied from."
 }
 
 guide_dir_is_file() {
@@ -1596,8 +1765,8 @@ API_RC=0 API_STATUS="" API_HEADERS="" API_BODY="" API_MESSAGE="" API_ERR="" API_
 # API_ERR (gh's own error text). Carriage returns are removed.
 api_call() {
   local out err line part=status
-  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  out="$(make_temp)"
+  err="$(make_temp)"
   API_RC=0
   run_gh api -i "$@" >"$out" 2>"$err" || API_RC=$?
   API_STATUS="" API_HEADERS="" API_BODY="" API_MESSAGE=""
@@ -1650,10 +1819,10 @@ api_raw() {
 # check or step that cannot go on: the command to start again (or, once
 # the project exists, to continue the setup), then the error (exit 1).
 stop_with_error() {
-  [ -n "$RESTART_CMD" ] || remember_command
+  shown_command
   if [ -n "$CREATED_NOTE" ]; then say "$CONTINUE_INTRO"; else say "$START_AGAIN_INTRO"; fi
-  say_command "bash $RESTART_CMD"
-  fail 1 "${1:-Something unexpected happened.}${CREATED_NOTE:+ $CREATED_NOTE}" "$2" "$3"
+  say_command "bash $SHOWN_CMD"
+  fail "${STOP_CODE:-1}" "${1:-Something unexpected happened.}${CREATED_NOTE:+ $CREATED_NOTE}" "$2" "$3"
 }
 
 # api_fail <what the script was doing, as "read your GitHub account">
@@ -1981,8 +2150,9 @@ preflight_github_permissions() {
 # ---- the project name is free ----
 
 # check_project_absent: GitHub has no project OWNER/NAME (404). With
-# --resume one that exists passes too (only the allowance: continuing it
-# comes in a later part). PROJECT_PROBLEM: exists, or api.
+# --resume it is the other way round: the project must be there (200) and
+# a 404 is PROJECT_PROBLEM=missing. PROJECT_PROBLEM: exists, missing, or
+# api.
 PROJECT_PROBLEM=""
 PROJECT_DONE=""
 check_project_absent() {
@@ -1990,12 +2160,17 @@ check_project_absent() {
   api_call "repos/$IN_OWNER/$IN_NAME"
   case "$API_STATUS" in
     404)
+      if [ -n "$OPT_RESUME" ]; then
+        PROJECT_PROBLEM=missing
+        return 1
+      fi
       PROJECT_DONE="No project named $IN_OWNER/$IN_NAME exists on GitHub yet."
       return 0
       ;;
     200)
       if [ -n "$OPT_RESUME" ]; then
         PROJECT_DONE="The project $IN_OWNER/$IN_NAME exists on GitHub, which --resume allows."
+        CREATED_NOTE="The project $IN_OWNER/$IN_NAME exists on GitHub."
         return 0
       fi
       PROJECT_PROBLEM=exists
@@ -2008,6 +2183,7 @@ check_project_absent() {
 guide_project() {
   case "$PROJECT_PROBLEM" in
     exists) guide_project_exists ;;
+    missing) guide_project_missing ;;
     *) api_fail "check whether the name $IN_OWNER/$IN_NAME is free on GitHub" ;;
   esac
 }
@@ -2024,8 +2200,25 @@ guide_project_exists() {
     "it asks GitHub for a project at that address, and GitHub answers that there is none."
 }
 
+# guide_project_missing: --resume, but GitHub has no such project. Nothing
+# is created: the command shown starts the setup without --resume.
+guide_project_missing() {
+  FRESH_START=1
+  guide_begin "There is no project named $IN_OWNER/$IN_NAME on GitHub to continue." \
+    "--resume continues a setup of a project that exists on GitHub, and the script never creates a project when it is asked to continue one."
+  guide_step "Check the name and the owner for a typing mistake: they are the values after --name and --owner in the command shown below."
+  guide_step "To set up a new project with this name, start the script again with the command shown below, which has no --resume."
+  guide_end "the script says \"Done. The project $IN_OWNER/$IN_NAME exists on GitHub, which --resume allows.\" or, without --resume, creates the project." \
+    "if the project is private, check that gh is signed in to the account that can see it." \
+    "it asks GitHub for a project at that address, and GitHub answers that there is none."
+}
+
 preflight_project_absent() {
-  step_start "Checking that the name $IN_OWNER/$IN_NAME is free on GitHub"
+  if [ -n "$OPT_RESUME" ]; then
+    step_start "Checking that the project $IN_OWNER/$IN_NAME is on GitHub"
+  else
+    step_start "Checking that the name $IN_OWNER/$IN_NAME is free on GitHub"
+  fi
   guided_check check_project_absent guide_project
   step_end "$PROJECT_DONE"
 }
@@ -2094,8 +2287,6 @@ PROTECT_BODY='{"required_status_checks":null,"enforce_admins":true,"required_pul
 # seconds (60 s in all), retrying only on 404.
 POLL_TRIES=30
 POLL_DELAY=2
-GIVEN_NAME=""
-GIVEN_OWNER=""
 CREATED_NOTE=""
 CREATE_ERR=""
 PROTECT_PROBLEM=""
@@ -2153,6 +2344,14 @@ show_plan() {
 # gets here: cmd_setup refuses it with the other option problems.
 confirm_plan() {
   [ -z "$OPT_YES" ] || return 0
+  if [ -n "$OPT_RESUME" ]; then
+    prompt_for check_yes_no \
+      "If you answer yes, the script continues the setup as described above; if you answer no, it stops and changes nothing." \
+      "Proceed? (yes or no)" no
+    [ "$CHECKED" != yes ] || return 0
+    fail 1 "You answered no, so the script stopped, and nothing was changed." \
+      "To continue the setup, run the script again and answer yes."
+  fi
   prompt_for check_yes_no \
     "If you answer yes, the script creates the project on GitHub and carries out the plan above; if you answer no, it stops and creates nothing." \
     "Proceed? (yes or no)" no
@@ -2162,22 +2361,9 @@ confirm_plan() {
 }
 
 # continue_after_create: the project exists now. From here on, the
-# command shown at a stop continues the setup: the command the user ran
-# with --resume, and --owner and --name when they were answered rather
-# than given as options. --resume itself is built in a later part.
+# command shown at a stop continues the setup (shown_command adds
+# --resume), and the stop says what exists.
 continue_after_create() {
-  local extra=""
-  [ -n "$RESTART_CMD" ] || remember_command
-  [ -n "$OPT_RESUME" ] || extra=" --resume"
-  if [ -z "$GIVEN_OWNER" ]; then
-    quote_word "$IN_OWNER"
-    extra="$extra --owner $QUOTED"
-  fi
-  if [ -z "$GIVEN_NAME" ]; then
-    quote_word "$IN_NAME"
-    extra="$extra --name $QUOTED"
-  fi
-  RESTART_CMD="$RESTART_CMD$extra"
   CREATED_NOTE="The project $IN_OWNER/$IN_NAME exists on GitHub, with only the bootstrapper's files in it."
 }
 
@@ -2189,8 +2375,8 @@ continue_after_create() {
 create_project() {
   local out err rc=0
   step_start "Creating the project $IN_OWNER/$IN_NAME on GitHub"
-  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  out="$(make_temp)"
+  err="$(make_temp)"
   run_gh repo create "$IN_OWNER/$IN_NAME" --template "$BOOTSTRAPPER" "--$IN_VISIBILITY" --description "$IN_DESCRIPTION" >"$out" 2>"$err" || rc=$?
   CREATE_ERR="$(tr -d '\r' <"$err")"
   rm -f "$out" "$err"
@@ -2208,6 +2394,12 @@ create_project() {
     *"already exists"*)
       guide_create_taken
       stop_at_guide
+      ;;
+    *"rate limit"* | *"http 429"*)
+      # GitHub's rate limit says to wait; it does not mean the account may
+      # not create projects, and nothing was created.
+      stop_with_error "GitHub has paused answering your account for a while, because it was asked too often, so the script could not create the project. Nothing was created." \
+        "Wait an hour, then start the script again with the command shown above." "$CREATE_ERR"
       ;;
     *"not accessible"* | *permission* | *forbidden* | *"http 403"*)
       guide_create_refused
@@ -2292,6 +2484,17 @@ wait_for_files() {
 # plan (a private project on a plan without protection) or the key's
 # permission; one that fits neither gets both explanations. Each stops at
 # once with its guide, before anything else changes.
+# classify_protect_403: PROTECT_PROBLEM for GitHub's 403 on the protection
+# (empty for a rate limit, which is told apart at once).
+classify_protect_403() {
+  case "$(lower "$API_MESSAGE")" in
+    *"rate limit"*) PROTECT_PROBLEM="" ;;
+    *upgrade* | *"github pro"*) PROTECT_PROBLEM=plan ;;
+    *"not accessible"* | *"access token"* | *integration*) PROTECT_PROBLEM=token ;;
+    *) PROTECT_PROBLEM=unknown ;;
+  esac
+}
+
 protect_main() {
   step_start "Protecting the main version of the project"
   api_call -X PUT "repos/$IN_OWNER/$IN_NAME/branches/main/protection" --input - <<<"$PROTECT_BODY"
@@ -2300,14 +2503,22 @@ protect_main() {
     return 0
   fi
   if [ "$API_STATUS" = 403 ]; then
-    case "$(lower "$API_MESSAGE")" in
-      *"rate limit"*) PROTECT_PROBLEM="" ;;
-      *upgrade* | *"github pro"*) PROTECT_PROBLEM=plan ;;
-      *"not accessible"* | *"access token"* | *integration*) PROTECT_PROBLEM=token ;;
-      *) PROTECT_PROBLEM=unknown ;;
-    esac
+    classify_protect_403
     if [ -n "$PROTECT_PROBLEM" ]; then
+      # --allow-unprotected is for a plan that cannot protect a private
+      # project; a key without the permission is another problem, and
+      # still stops.
+      if [ -n "$OPT_ALLOW_UNPROTECTED" ] && [ "$PROTECT_PROBLEM" != token ]; then
+        UNPROTECTED=1
+        api_raw
+        say "GitHub does not protect the main version of this project on its plan; its answer is below."
+        guide_details "$API_RAW"
+        say "You chose to go on without protection with --allow-unprotected, so the script goes on, and writes that decision into the project's memory/decisions.md."
+        step_end "Carrying on without protection: changes could go straight into the main version."
+        return 0
+      fi
       guide_protect
+      offer_public
       stop_at_guide
     fi
   fi
@@ -2315,11 +2526,45 @@ protect_main() {
     "Open https://github.com/$IN_OWNER/$IN_NAME in your browser and check that the project has its files and that your account is one of its admins (who may change its settings); then continue the setup with the command shown above."
 }
 
+# UNPROTECTED: the setup goes on without protection (--allow-unprotected
+# on a plan that cannot protect the project), and says so in the project.
+UNPROTECTED=""
+
+# offer_public: after the guide of a plan that cannot protect a private
+# project, at a terminal only: the script offers to make the project
+# public (the second way on). It runs only after its own yes typed at the
+# terminal; --yes does not cover it and --non-interactive never asks.
+offer_public() {
+  local out err rc=0 raw
+  [ "$PROTECT_PROBLEM" != token ] || return 0
+  [ "$IN_VISIBILITY" = private ] || return 0
+  [ -z "$OPT_NON_INTERACTIVE" ] || return 0
+  say "The script can make the project public for you, with the command shown above that starts with gh."
+  ask_terminal "Making the project public lets anyone see it and its code, and it cannot be taken back by this script. It runs only if you type yes here; --yes does not cover it." \
+    "Make the project public now? (yes or no)" || {
+    say "Not made public."
+    return 0
+  }
+  out="$(make_temp)"
+  err="$(make_temp)"
+  run_gh repo edit "$IN_OWNER/$IN_NAME" --visibility public --accept-visibility-change-consequences >"$out" 2>"$err" || rc=$?
+  raw="$(cat "$out" "$err" | tr -d '\r')"
+  rm -f "$out" "$err"
+  if [ "$rc" -eq 0 ]; then
+    IN_VISIBILITY=public
+    say "The project $IN_OWNER/$IN_NAME is public now. Continue the setup with the command shown below."
+    return 0
+  fi
+  [ -n "$raw" ] || raw="gh stopped with exit code $rc and no message."
+  say "GitHub did not make the project public; its answer is below. Check on https://github.com/$IN_OWNER/$IN_NAME/settings that your account is one of the project's admins (who may change its settings), or run the command shown above that starts with gh yourself."
+  guide_details "$raw"
+}
+
 # guide_protect: the 403 at step 3, by PROTECT_PROBLEM (plan, token or
 # unknown). It cannot be fixed in this run, so it stops (spec: a
 # post-create guide that does not retry); the three ways on for a plan
-# without protection are those of the spec, and --resume and
-# --allow-unprotected are only shown here: they are built in a later part.
+# without protection are those of the spec: upgrade the plan, make the
+# project public (offer_public), or --resume --allow-unprotected.
 guide_protect() {
   local title why
   case "$PROTECT_PROBLEM" in
@@ -2345,7 +2590,8 @@ guide_protect() {
     guide_step "Or make the project public, which needs no paid plan: anyone can then see the project and its code. This command does it; then continue the setup with the command shown below:"
     say_command "gh repo edit $IN_OWNER/$IN_NAME --visibility public --accept-visibility-change-consequences"
     guide_step "Or carry on without protection: changes could then go straight into the main version, and the setup writes that decision into the project. Continue with this command:"
-    say_command "bash $RESTART_CMD --allow-unprotected"
+    shown_command_with_allow
+    say_command "bash $SHOWN_CMD"
   fi
   if [ "$PROTECT_PROBLEM" != plan ]; then
     guide_step "If gh signs in with a fine-grained token: open https://github.com/settings/personal-access-tokens in your browser, edit that token, and set Administration, Contents, Workflows and Pull requests to \"Read and write\"; for an organisation's project, one of its owners may have to approve the change. Then continue the setup with the command shown below."
@@ -2362,8 +2608,8 @@ guide_protect() {
 set_merge_settings() {
   local out err rc=0 raw
   step_start "Setting how proposed changes are added to the project"
-  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  out="$(make_temp)"
+  err="$(make_temp)"
   run_gh repo edit "$IN_OWNER/$IN_NAME" --delete-branch-on-merge --enable-squash-merge >"$out" 2>"$err" || rc=$?
   raw="$(tr -d '\r' <"$err")"
   rm -f "$out" "$err"
@@ -2491,10 +2737,14 @@ clone_project() {
   local err rc=0 raw changelog
   step_start "Making a copy of the project on this computer, in $IN_DIR"
   SIGN_IN_FOR="make the copy of the project on this computer"
+  # A folder the script makes for the copy is removed if the copy fails
+  # (also by the stop handling); one that was there already stays.
+  if [ -e "$IN_DIR" ] || [ -L "$IN_DIR" ]; then MADE_DIR=""; else MADE_DIR="$IN_DIR"; fi
   guided_check try_clone guide_git_sign_in
+  MADE_DIR=""
   CREATED_NOTE="The project $IN_OWNER/$IN_NAME exists on GitHub, with only the bootstrapper's files in it, and a copy of it is on this computer in $IN_DIR."
 
-  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  err="$(make_temp)"
   rc=0
   changelog="$(git -C "$IN_DIR" show origin/main:CHANGELOG.md 2>"$err")" || rc=$?
   raw="$(tr -d '\r' <"$err")"
@@ -2518,8 +2768,10 @@ clone_project() {
 # text); stops on any other failure.
 try_clone() {
   local out err rc=0 raw
-  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  # What an earlier try left in the folder the script made goes first.
+  if [ -n "$MADE_DIR" ] && [ -e "$MADE_DIR" ]; then rm -rf -- "$MADE_DIR"; fi
+  out="$(make_temp)"
+  err="$(make_temp)"
   GIT_TERMINAL_PROMPT=0 run_gh repo clone "$IN_OWNER/$IN_NAME" "$IN_DIR" >"$out" 2>"$err" || rc=$?
   raw="$(cat "$out" "$err" | tr -d '\r')"
   rm -f "$out" "$err"
@@ -2543,7 +2795,7 @@ try_clone() {
 in_copy() {
   local doing="$1" err rc=0 raw
   shift
-  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  err="$(make_temp)"
   git -C "$IN_DIR" "$@" >/dev/null 2>"$err" || rc=$?
   raw="$(tr -d '\r' <"$err")"
   rm -f "$err"
@@ -2579,14 +2831,18 @@ lay_out_pack() {
   step_end "The $IN_PACK pack's files are in place, among them the file that runs the project's checks on GitHub."
 }
 
+# The heading of the README section the setup removes: the whole line.
+SETUP_HEADING="## After bootstrapping (delete this section when done)"
+
 # remove_setup_section <README.md>: deletes the section from its
-# "## After bootstrapping" heading up to the next "## " heading (or the
-# end of the file). Returns 1, changing nothing, when there is none.
+# heading line (SETUP_HEADING, the whole line and nothing else) up to the
+# next "## " heading (or the end of the file). Returns 1, changing
+# nothing, when there is none.
 remove_setup_section() {
   local tmp
-  grep -q '^## After bootstrapping' <"$1" || return 1
-  tmp="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  awk '/^## After bootstrapping/ { skip = 1; next }
+  grep -qxF -- "$SETUP_HEADING" <"$1" || return 1
+  tmp="$(make_temp)"
+  SECTION_HEADING="$SETUP_HEADING" awk_run '$0 == ENVIRON["SECTION_HEADING"] { skip = 1; next }
     skip && /^## / { skip = 0 }
     !skip' <"$1" >"$tmp"
   cat "$tmp" >"$1"
@@ -2598,8 +2854,8 @@ remove_setup_section() {
 # never read as a pattern, and no sed -i, which differs on macOS).
 replace_text() {
   local tmp
-  tmp="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  RT_FROM="$2" RT_TO="$3" awk 'BEGIN { from = ENVIRON["RT_FROM"]; to = ENVIRON["RT_TO"] }
+  tmp="$(make_temp)"
+  RT_FROM="$2" RT_TO="$3" awk_run 'BEGIN { from = ENVIRON["RT_FROM"]; to = ENVIRON["RT_TO"] }
     {
       out = ""; line = $0
       while ((i = index(line, from)) > 0) {
@@ -2612,6 +2868,44 @@ replace_text() {
   rm -f "$tmp"
 }
 
+# check_setup_section: README.md has the section the setup removes, found
+# by its whole heading line.
+check_setup_section() {
+  if ! grep -qxF -- "$SETUP_HEADING" "$IN_DIR/README.md" 2>/dev/null; then
+    stop_with_error "The file README.md in the copy of the project has no section \"$SETUP_HEADING\", which the setup removes." \
+      "$SETUP_BROKEN_NEXT" "No line \"$SETUP_HEADING\" in $IN_DIR/README.md."
+  fi
+}
+
+# check_decisions_file: memory/decisions.md has the table the setup writes
+# its decision into (only needed without protection).
+check_decisions_file() {
+  if ! grep -q '^|---' "$IN_DIR/memory/decisions.md" 2>/dev/null; then
+    stop_with_error "The file memory/decisions.md in the copy of the project has no table of decisions, where the setup writes that the main version is not protected." \
+      "$SETUP_BROKEN_NEXT" "No table in $IN_DIR/memory/decisions.md."
+  fi
+}
+
+# check_copy_fits: everything the setup changes is in the copy, checked
+# before the first change (a stop later leaves the copy as it was, so
+# --resume goes on in the same copy): the README section, the CHANGELOG
+# section, the files of the fill table, the licence text, and the file for
+# the decision when the main version stays unprotected. The pack's own
+# files are checked by the layout before it writes.
+check_copy_fits() {
+  step_start "Checking that the copy has everything the setup changes, before it changes anything"
+  check_setup_section
+  check_changelog_section
+  check_fill_files early
+  case "$IN_LICENSE" in
+    none) ;;
+    "$POLYFORM_KEY") check_polyform_text ;;
+    *) fetch_licence_text ;;
+  esac
+  [ -z "$UNPROTECTED" ] || check_decisions_file
+  step_end "The files the setup changes are all in the copy, so the setup does not stop half way through changing it."
+}
+
 # tidy_up: spec step 9. The README's setup section goes; languages/ keeps
 # only the chosen pack's files that were not laid out (LP_KEPT); the
 # links in docs/DEV_INFRASTRUCTURE.md to the other packs' code-standards.md
@@ -2620,11 +2914,9 @@ replace_text() {
 tidy_up() {
   local keep f p
   step_start "Removing what only the setup needed from the copy"
-  if ! remove_setup_section "$IN_DIR/README.md"; then
-    stop_with_error "The file README.md in the copy of the project has no section that starts with \"## After bootstrapping\", which the setup removes." \
-      "$SETUP_BROKEN_NEXT" "No line starting with \"## After bootstrapping\" in $IN_DIR/README.md."
-  fi
-  keep="$(mktemp -d "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  check_setup_section
+  remove_setup_section "$IN_DIR/README.md"
+  keep="$(make_temp -d)"
   for f in $LP_KEPT; do
     mv "$IN_DIR/languages/$IN_PACK/$f" "$keep/$f"
   done
@@ -2742,7 +3034,7 @@ fill_file() {
   local file="$1" tmp n=0 key ends_nl=""
   shift
   [ -n "$(tail -c 1 <"$file")" ] || ends_nl=yes
-  tmp="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  tmp="$(make_temp)"
   (
     for key in "$@"; do
       n=$((n + 1))
@@ -2751,7 +3043,7 @@ fill_file() {
       export "FILL_FROM_$n=$FILL_TEXT" "FILL_TO_$n=$FILL_VALUE"
     done
     export FILL_N="$n" FILL_NL="$ends_nl"
-    LC_ALL=C awk 'BEGIN {
+    LC_ALL=C awk_run 'BEGIN {
         n = ENVIRON["FILL_N"] + 0
         for (k = 1; k <= n; k++) { from[k] = ENVIRON["FILL_FROM_" k]; to[k] = ENVIRON["FILL_TO_" k] }
       }
@@ -2772,30 +3064,48 @@ fill_file() {
         print out s
         if (NR > 0 && ENVIRON["FILL_NL"] == "yes") print "\n"
       }' <"$file" >"$tmp"
-  )
+  ) || {
+    # bash 3.2 does not stop for a failing ( ) by itself.
+    ERR_HINT="awk, filling in the names in $file"
+    false
+  }
   cat "$tmp" >"$file"
   rm -f "$tmp"
+}
+
+# check_fill_files [early]: every file of the fill table is in the copy
+# (FILL_ROWS is the table); a missing one means the project GitHub made does not fit
+# this script. Nothing is changed.
+check_fill_files() {
+  local file key files="" missing=""
+  fill_rows "$IN_PACK" "$IN_WITH_DEPLOY"
+  while read -r file key; do
+    case " $files " in *" $file "*) continue ;; esac
+    files="$files $file"
+    # Before the pack is laid out, a file the pack brings (package.json,
+    # app.json, index.html, wrangler.jsonc) is in the pack's folder.
+    if [ "${1:-}" = early ] && [ -f "$IN_DIR/languages/$IN_PACK/$file" ]; then continue; fi
+    [ -f "$IN_DIR/$file" ] || missing="$missing $file"
+  done <<<"$FILL_ROWS"
+  [ -n "$missing" ] || return 0
+  missing="${missing# }"
+  stop_with_error "The copy of the project on this computer has no ${missing// /, }, in which the setup fills in the project's name and other details." \
+    "$SETUP_BROKEN_NEXT" "Missing in $IN_DIR: $missing"
 }
 
 # fill_placeholders: spec step 8 over the copy. Every file of the table
 # must be there before the first one is changed; a missing one means the
 # project GitHub made does not fit this script.
 fill_placeholders() {
-  local rows file f key keys files="" missing=""
+  local rows file f key keys files=""
   step_start "Filling in the project's name, description and product owner in its files"
   FILL_DATE="$(date +%Y-%m-%d)"
-  fill_rows "$IN_PACK" "$IN_WITH_DEPLOY"
+  check_fill_files
   rows="$FILL_ROWS"
   while read -r file key; do
     case " $files " in *" $file "*) continue ;; esac
     files="$files $file"
-    [ -f "$IN_DIR/$file" ] || missing="$missing $file"
   done <<<"$rows"
-  if [ -n "$missing" ]; then
-    missing="${missing# }"
-    stop_with_error "The copy of the project on this computer has no ${missing// /, }, in which the setup fills in the project's name and other details." \
-      "$SETUP_BROKEN_NEXT" "Missing in $IN_DIR: $missing"
-  fi
   for file in $files; do
     keys="$(while read -r f key; do [ "$f" != "$file" ] || printf '%s ' "$key"; done <<<"$rows")"
     # shellcheck disable=SC2086 # the keys are single words
@@ -2821,7 +3131,7 @@ make_lockfile() {
     *) return 0 ;;
   esac
   step_start "Recording the exact versions of the $IN_PACK pack's tools in package-lock.json"
-  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  out="$(make_temp)"
   # IN_DIR never starts with - (check_dir puts ./ before a relative one).
   (CDPATH='' cd "$IN_DIR" && run_npm install --package-lock-only --no-audit --no-fund) </dev/null >"$out" 2>&1 || rc=$?
   raw="$(tr -d '\r' <"$out")"
@@ -2840,6 +3150,42 @@ make_lockfile() {
   step_end "package-lock.json lists the exact version of every tool the project uses, so its checks on GitHub install the same ones."
 }
 
+# check_polyform_text: the PolyForm text is in the copy.
+check_polyform_text() {
+  if [ ! -f "$IN_DIR/$POLYFORM_TEXT" ]; then
+    stop_with_error "The copy of the project on this computer has no $POLYFORM_TEXT, the text of the PolyForm Noncommercial licence." \
+      "$SETUP_BROKEN_NEXT" "Missing in $IN_DIR: $POLYFORM_TEXT"
+  fi
+}
+
+# fetch_licence_text: LICENCE_TEXT is the text of a GitHub licence, read
+# from GitHub (once; also read before the copy is changed, so a licence
+# GitHub cannot give stops the setup before anything is written and
+# --resume can go on in the same copy with another --license).
+LICENCE_TEXT=""
+LICENCE_TEXT_OF=""
+fetch_licence_text() {
+  local body
+  [ "$LICENCE_TEXT_OF" != "$IN_LICENSE" ] || return 0
+  api_call "licenses/$IN_LICENSE" --jq .body
+  if [ "$API_STATUS" = 404 ]; then
+    api_raw
+    stop_with_error "GitHub has no licence with the short name $IN_LICENSE, so the script could not add it." \
+      "Find the licence on https://choosealicense.com/licenses/ (its page shows the short name, such as mit), then continue the setup with the command shown above, with --license and that name in place of --license $IN_LICENSE." \
+      "$API_RAW"
+  fi
+  [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ] || api_fail "read the text of the licence $IN_LICENSE"
+  body="$API_BODY"
+  while [ "${body%"$NL"}" != "$body" ]; do body="${body%"$NL"}"; done
+  if [ -z "$body" ]; then
+    stop_with_error "GitHub sent an empty text for the licence $IN_LICENSE, so the script could not add it." \
+      "Wait a few minutes, then continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+      "HTTP 200 with an empty body for licenses/$IN_LICENSE"
+  fi
+  LICENCE_TEXT="$body"
+  LICENCE_TEXT_OF="$IN_LICENSE"
+}
+
 # add_licence: spec step 10. A GitHub licence: its text from GitHub, with
 # [year] and [fullname] filled in by the fill of step 8 (literally);
 # PolyForm Noncommercial: the text from licenses/, and a NOTICE at the
@@ -2848,7 +3194,6 @@ make_lockfile() {
 POLYFORM_KEY=polyform-noncommercial-1.0.0
 POLYFORM_TEXT=licenses/PolyForm-Noncommercial-1.0.0.md
 add_licence() {
-  local body
   step_start "Adding the project's licence"
   case "$IN_LICENSE" in
     none)
@@ -2858,36 +3203,28 @@ add_licence() {
       step_end "No licence file was added, because you chose none."
       ;;
     "$POLYFORM_KEY")
-      if [ ! -f "$IN_DIR/$POLYFORM_TEXT" ]; then
-        stop_with_error "The copy of the project on this computer has no $POLYFORM_TEXT, the text of the PolyForm Noncommercial licence." \
-          "$SETUP_BROKEN_NEXT" "Missing in $IN_DIR: $POLYFORM_TEXT"
-      fi
+      check_polyform_text
       tr -d '\r' <"$IN_DIR/$POLYFORM_TEXT" >"$IN_DIR/LICENSE"
       cat <<<"Required Notice: Copyright $IN_COPYRIGHT_HOLDER" >"$IN_DIR/NOTICE"
       step_end "LICENSE holds the PolyForm Noncommercial licence, and NOTICE names $IN_COPYRIGHT_HOLDER as the copyright holder."
       ;;
     *)
-      api_call "licenses/$IN_LICENSE" --jq .body
-      if [ "$API_STATUS" = 404 ]; then
-        api_raw
-        stop_with_error "GitHub has no licence with the short name $IN_LICENSE, so the script could not add it." \
-          "Find the licence on https://choosealicense.com/licenses/ (its page shows the short name, such as mit), then continue the setup with the command shown above, with --license and that name in place of --license $IN_LICENSE." \
-          "$API_RAW"
-      fi
-      [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ] || api_fail "read the text of the licence $IN_LICENSE"
-      body="$API_BODY"
-      while [ "${body%"$NL"}" != "$body" ]; do body="${body%"$NL"}"; done
-      if [ -z "$body" ]; then
-        stop_with_error "GitHub sent an empty text for the licence $IN_LICENSE, so the script could not add it." \
-          "Wait a few minutes, then continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
-          "HTTP 200 with an empty body for licenses/$IN_LICENSE"
-      fi
-      cat <<<"$body" >"$IN_DIR/LICENSE"
+      fetch_licence_text
+      cat <<<"$LICENCE_TEXT" >"$IN_DIR/LICENSE"
       [ -n "$FILL_DATE" ] || FILL_DATE="$(date +%Y-%m-%d)"
       fill_file "$IN_DIR/LICENSE" year fullname
       step_end "LICENSE holds the licence $IN_LICENSE, in the name of $IN_COPYRIGHT_HOLDER."
       ;;
   esac
+}
+
+# check_changelog_section: CHANGELOG.md has the section the setup adds to.
+check_changelog_section() {
+  local file="$IN_DIR/CHANGELOG.md"
+  if ! grep -qx '## Project created' <"$file" 2>/dev/null; then
+    stop_with_error "The file CHANGELOG.md in the copy of the project has no section \"## Project created\", where the setup notes how the project was set up." \
+      "$SETUP_BROKEN_NEXT" "No line \"## Project created\" in $file."
+  fi
 }
 
 # note_setup_in_changelog: spec step 11. The pack, the licence and "set up
@@ -2898,14 +3235,11 @@ add_licence() {
 note_setup_in_changelog() {
   local file="$IN_DIR/CHANGELOG.md" tmp pack_line
   step_start "Noting the setup in CHANGELOG.md, the project's list of changes"
-  if ! grep -qx '## Project created' <"$file"; then
-    stop_with_error "The file CHANGELOG.md in the copy of the project has no section \"## Project created\", where the setup notes how the project was set up." \
-      "$SETUP_BROKEN_NEXT" "No line \"## Project created\" in $file."
-  fi
+  check_changelog_section
   pack_line="- Language pack: $IN_PACK."
   [ "$IN_WITH_DEPLOY" != yes ] || pack_line="- Language pack: $IN_PACK, with the files that publish the website."
-  tmp="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  CL_ADD="$pack_line$NL- Licence: $IN_LICENSE.$NL- Set up by bootstrap-project.sh." LC_ALL=C awk '
+  tmp="$(make_temp)"
+  CL_ADD="$pack_line$NL- Licence: $IN_LICENSE.$NL- Set up by bootstrap-project.sh." LC_ALL=C awk_run '
     BEGIN { add = ENVIRON["CL_ADD"] }
     function flush_add() { if (on) { print add; on = 0; done = 1 } }
     function flush_blanks() { while (blanks > 0) { print ""; blanks-- } }
@@ -2918,6 +3252,24 @@ note_setup_in_changelog() {
   cat "$tmp" >"$file"
   rm -f "$tmp"
   step_end "CHANGELOG.md says which pack and which licence the project was set up with."
+}
+
+# note_unprotected_decision: without protection (--allow-unprotected),
+# one row at the end of the table in memory/decisions.md says that the
+# main version is not protected, and why (spec, open decision 5).
+note_unprotected_decision() {
+  local file="$IN_DIR/memory/decisions.md" tmp row
+  [ -n "$UNPROTECTED" ] || return 0
+  step_start "Writing into memory/decisions.md that the main version is not protected"
+  check_decisions_file
+  [ -n "$FILL_DATE" ] || FILL_DATE="$(date +%Y-%m-%d)"
+  row="| $FILL_DATE | The main version (main) is not protected | The project is private and its GitHub plan cannot protect a private project, so the setup went on without protection because of --allow-unprotected. Any change can go straight into the main version. To protect it, move to a paid GitHub plan (Pro, Team or Enterprise) or make the project public, then turn protection on in the project's settings; docs/DEV_INFRASTRUCTURE.md says how. |"
+  tmp="$(make_temp)"
+  UD_ROW="$row" LC_ALL=C awk_run '{ line[NR] = $0; if ($0 ~ /^\|/) last = NR }
+    END { for (i = 1; i <= NR; i++) { print line[i]; if (i == last) print ENVIRON["UD_ROW"] } }' <"$file" >"$tmp"
+  cat "$tmp" >"$file"
+  rm -f "$tmp"
+  step_end "memory/decisions.md says that the main version is not protected, because you chose to go on without protection."
 }
 
 # ---------- the self-check, saving, sending and proposing the change ----------
@@ -3041,7 +3393,7 @@ expected_change() {
       case " $LP_TARGETS " in
         *" $path "*) case "$path" in .github/workflows/ci.yml | .gitignore) ;; *) return 1 ;; esac ;;
       esac
-      case " README.md CHANGELOG.md .gitignore .github/workflows/ci.yml docs/DEV_INFRASTRUCTURE.md $FILL_FILES " in
+      case " README.md CHANGELOG.md .gitignore .github/workflows/ci.yml docs/DEV_INFRASTRUCTURE.md ${UNPROTECTED:+memory/decisions.md }$FILL_FILES " in
         *" $path "*) return 0 ;;
       esac
       ;;
@@ -3072,8 +3424,8 @@ check_changed_paths() {
   local status err rc=0 raw entry code path f unexpected="" lines="" ignored="" ignored_lines=""
   fill_rows "$IN_PACK" "$IN_WITH_DEPLOY"
   FILL_FILES="$(while read -r f _; do printf '%s ' "$f"; done <<<"$FILL_ROWS")"
-  status="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  status="$(make_temp)"
+  err="$(make_temp)"
   git -C "$IN_DIR" status --porcelain -z --no-renames --untracked-files=all --ignored=traditional >"$status" 2>"$err" || rc=$?
   raw="$(tr -d '\r' <"$err")"
   if [ "$rc" -ne 0 ]; then
@@ -3117,8 +3469,8 @@ check_changed_paths() {
 check_no_key() {
   local out err rc=0 raw files
   [ "${#CHANGED[@]}" -gt 0 ] || return 0
-  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  out="$(make_temp)"
+  err="$(make_temp)"
   git --literal-pathspecs -C "$IN_DIR" grep --cached -l -E -e "$KEY_PATTERN_CLASSIC" -e "$KEY_PATTERN_FINE" -- "${CHANGED[@]}" \
     >"$out" 2>"$err" || rc=$?
   files="$(tr -d '\r' <"$out")"
@@ -3138,14 +3490,17 @@ check_no_key() {
     "$raw"
 }
 
-# check_line_endings: every text file in the copy has LF line endings,
-# with no carriage return (git grep -I leaves out files git takes for
-# binary).
+# check_line_endings: every text file has LF line endings, with no
+# carriage return, as the change will be saved: the check reads git's
+# index (after git add), not the files on disk. The project's
+# .gitattributes (eol=lf) makes git save a file with CR LF line endings
+# with LF, so such a file is fine; a carriage return git keeps stops the
+# setup. git grep -I leaves out files git takes for binary.
 check_line_endings() {
   local out err rc=0 raw files
-  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  git -C "$IN_DIR" grep -I -l -e "$CR" >"$out" 2>"$err" || rc=$?
+  out="$(make_temp)"
+  err="$(make_temp)"
+  git -C "$IN_DIR" grep --cached -I -l -e "$CR" >"$out" 2>"$err" || rc=$?
   files="$(tr -d '\r' <"$out")"
   raw="$(tr -d '\r' <"$err")"
   rm -f "$out" "$err"
@@ -3200,7 +3555,7 @@ check_git_identity() {
   git_ident_form "$IN_GIT_EMAIL"
   want="$want$IDENT_FORM>"
   for which in AUTHOR COMMITTER; do
-    err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+    err="$(make_temp)"
     rc=0
     ident="$(git -C "$IN_DIR" var "GIT_${which}_IDENT" 2>"$err")" || rc=$?
     raw="$(tr -d '\r' <"$err")"
@@ -3217,7 +3572,7 @@ check_git_identity() {
     ident="${ident% *}"
     if [ "$ident" != "$want" ]; then
       stop_with_error "git would save the setup's changes under $ident, not under the name and email you gave, $want." \
-      "A setting of this terminal overrides the copy's own git settings: GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME or GIT_COMMITTER_EMAIL. Open a new terminal window without them, or give the same name and email to the script, then continue the setup with the command shown above." \
+      "A setting of this terminal overrides the copy's own git settings: GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME or GIT_COMMITTER_EMAIL; so do the settings author.name, author.email, committer.name or committer.email in your global git settings. Open a new terminal window without the first, remove the others from your global git settings, or give the same name and email to the script, then continue the setup with the command shown above." \
         "git var GIT_${which}_IDENT: $ident"
     fi
   done
@@ -3252,8 +3607,8 @@ with_gh_sign_in() {
 # git's text); stops on any other failure.
 try_push() {
   local out err rc=0 raw
-  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  out="$(make_temp)"
+  err="$(make_temp)"
   SEND_TRIES=$((SEND_TRIES + 1))
   if [ "$SEND_TRIES" -eq 1 ]; then
     with_gh_sign_in "$out" "$err" -C "$IN_DIR" push origin "$SETUP_BRANCH" || rc=$?
@@ -3322,9 +3677,9 @@ propose_change() {
   local body out err rc=0 raw
   step_start "Proposing the setup's changes on GitHub, where the project's checks run on them"
   pr_body
-  body="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  body="$(make_temp)"
+  out="$(make_temp)"
+  err="$(make_temp)"
   cat <<<"$PR_BODY" >"$body"
   run_gh pr create --repo "$IN_OWNER/$IN_NAME" --base main --head "$SETUP_BRANCH" --title "Set up $IN_NAME" \
     --body-file "$body" >"$out" 2>"$err" || rc=$?
@@ -3398,6 +3753,9 @@ BUILD_STATE=""
 BUILD_SEEN=""
 READ_BACK=""
 MERGED_SHA=""
+# CHANGE_ADDED: --resume found the setup's changes in the main version
+# already.
+CHANGE_ADDED=""
 
 # look_at_build: one look at build on the proposed change. BUILD_STATE is
 # pass, fail or pending (running, or not reported yet); BUILD_SEEN is
@@ -3407,8 +3765,8 @@ MERGED_SHA=""
 # differs with --json); only what it printed is read.
 look_at_build() {
   local out err rc=0 lines raw line runs="" pr_runs="" b
-  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  out="$(make_temp)"
+  err="$(make_temp)"
   run_gh pr checks "$PR_NUMBER" --repo "$IN_OWNER/$IN_NAME" --json name,bucket,event --jq "$BUILD_JQ" >"$out" 2>"$err" || rc=$?
   lines="$(tr -d '\r' <"$out")"
   raw="$(tr -d '\r' <"$err")"
@@ -3498,6 +3856,11 @@ wait_for_build() {
 read_back_protection() {
   local pair field want got line found diffs=""
   api_call "repos/$IN_OWNER/$IN_NAME/branches/main/protection" --jq "$READBACK_JQ"
+  # No protection at all, and the user chose to go on without it.
+  if [ -n "$OPT_ALLOW_UNPROTECTED" ] && [ "$API_STATUS" = 404 ]; then
+    UNPROTECTED=1
+    return 0
+  fi
   { [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ]; } || api_fail "read back the protection of the main version"
   READ_BACK="$API_BODY"
   for pair in $REQUIRE_READBACK; do
@@ -3515,6 +3878,11 @@ read_back_protection() {
     fi
   done
   [ -n "$diffs" ] || return 0
+  if [ -n "$CHANGE_ADDED" ]; then
+    stop_with_error "GitHub does not report the protection of the main version as the script set it. The setup's changes are in the main version already." \
+      "Open https://github.com/$IN_OWNER/$IN_NAME/settings in your browser and look at the rule that protects the main version; the details below show what differs. Fix the rule there, then continue the setup with the command shown above. If you did not change that rule, ask for help and show the details below." \
+      "${diffs%"$NL"}"
+  fi
   stop_with_error "GitHub does not report the protection of the main version as the script set it, so the script did not add the setup's change to the main version. The proposed change stays open on GitHub." \
     "Open https://github.com/$IN_OWNER/$IN_NAME/settings in your browser and look at the rule that protects the main version; the details below show what differs. Then continue the setup with the command shown above. If you did not change that rule, ask for help and show the details below." \
     "${diffs%"$NL"}"
@@ -3534,7 +3902,19 @@ read_back_value() {
 # require_build: spec step 16, after build has passed.
 require_build() {
   step_start "Making the check build required, so that from now on a change is added to the main version only after build passes"
+  if [ -n "$UNPROTECTED" ]; then
+    step_end "Not done: the main version is not protected, as you chose with --allow-unprotected, so no check can be made required."
+    return 0
+  fi
   api_call -X PUT "repos/$IN_OWNER/$IN_NAME/branches/main/protection" --input - <<<"$REQUIRE_BODY"
+  if [ "$API_STATUS" = 403 ] && [ -n "$OPT_ALLOW_UNPROTECTED" ]; then
+    classify_protect_403
+    if [ -n "$PROTECT_PROBLEM" ] && [ "$PROTECT_PROBLEM" != token ]; then
+      UNPROTECTED=1
+      step_end "Not done: GitHub cannot protect the main version on this plan, and you chose to go on without protection with --allow-unprotected."
+      return 0
+    fi
+  fi
   { [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ]; } || api_fail "make the check build required for the main version" \
     "Open https://github.com/$IN_OWNER/$IN_NAME in your browser and check that your account is one of its admins (who may change its settings); then continue the setup with the command shown above."
   read_back_protection
@@ -3554,8 +3934,8 @@ merge_change() {
       "Continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
       "git rev-parse --verify refs/heads/$SETUP_BRANCH found nothing in $IN_DIR"
   fi
-  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  out="$(make_temp)"
+  err="$(make_temp)"
   # Run inside the copy, so gh can switch it to main (step 18 checks);
   # git, which gh runs there, may not ask at the terminal.
   (CDPATH='' cd -- "$IN_DIR" && GIT_TERMINAL_PROMPT=0 run_gh pr merge "$PR_NUMBER" --squash --delete-branch --match-head-commit "$sent") >"$out" 2>"$err" || rc=$?
@@ -3572,6 +3952,8 @@ merge_change() {
   # "true <id of the new main>" once added; anything else is not added.
   MERGED_SHA=""
   case "$state" in "true "*) MERGED_SHA="${state#true }" ;; esac
+  # Once GitHub says the change is added, what exists is that.
+  [ -z "$MERGED_SHA" ] || CREATED_NOTE="The project $IN_OWNER/$IN_NAME exists on GitHub, and the setup's changes are in its main version there: $PR_URL"
   case "$MERGED_SHA" in
     *[!0-9a-f]*)
       stop_with_error "GitHub says the proposed change was added to the main version, but it did not give the id of the new main version, so the script cannot check the copy on this computer against it." \
@@ -3599,8 +3981,8 @@ finish_copy() {
   step_start "Updating the copy on this computer to the new main version"
   current="$(git -C "$IN_DIR" symbolic-ref -q --short HEAD 2>/dev/null)" || current=""
   [ "$current" = main ] || in_copy "switch to the main version" checkout -q main
-  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  out="$(make_temp)"
+  err="$(make_temp)"
   with_gh_sign_in "$out" "$err" -C "$IN_DIR" pull -q --ff-only --prune || rc=$?
   raw="$(cat "$out" "$err" | tr -d '\r')"
   rm -f "$out" "$err"
@@ -3628,6 +4010,10 @@ finish_copy() {
   step_end "The copy in $IN_DIR is on the main version, with the setup's changes, and nothing is left unsaved."
 }
 
+# HAVE_COPY: the copy of the project is on this computer (--resume found
+# the setup already added and no copy, and does not make one).
+HAVE_COPY=1
+
 # report: spec step 19, in plain words, at the end.
 report() {
   local deploy="" licence approvals checks
@@ -3645,31 +4031,422 @@ report() {
   # unless each one is what the script set.
   say "The setup is finished."
   say "    The project on GitHub: https://github.com/$IN_OWNER/$IN_NAME"
-  say "    Its copy on this computer: $IN_DIR"
-  say "    The proposed change with the setup: $PR_URL"
+  [ -z "$HAVE_COPY" ] || say "    Its copy on this computer: $IN_DIR"
+  [ -z "$PR_URL" ] || say "    The proposed change with the setup: $PR_URL"
   say "    Language pack: $IN_PACK$deploy"
   say "    Licence: $licence"
-  say "The protection of the main version, as GitHub reports it:"
-  say "    - every change comes as a proposed change; approvals needed before one is added: $approvals"
-  say "    - a change is added only after these checks pass: ${checks//,/, }"
-  say "    - these rules apply to the project's admins too"
-  say "    - nobody may overwrite the history of the main version or delete it"
+  if [ -n "$UNPROTECTED" ]; then
+    say "The main version is not protected:"
+    say "    - the main version is not protected: you chose to go on without protection (--allow-unprotected), and memory/decisions.md in the project says so"
+    say "    - to protect it, move to a paid GitHub plan or make the project public, then turn protection on in the project's settings"
+  else
+    say "The protection of the main version, as GitHub reports it:"
+    say "    - every change comes as a proposed change; approvals needed before one is added: $approvals"
+    say "    - a change is added only after these checks pass: ${checks//,/, }"
+    say "    - these rules apply to the project's admins too"
+    say "    - nobody may overwrite the history of the main version or delete it"
+  fi
   say_left_for_clead
   say "What to do next: open the Claude app, give it the new project, https://github.com/$IN_OWNER/$IN_NAME, and start a chat. The file CLAUDE.md in the project tells Claude the rest."
 }
 
-# cmd_setup <options...>: the setup. Built so far: the checks of this
-# computer and on GitHub, the inputs, the plan, and steps 2 to 6, 9, 8, 7,
-# and 10 to 19 (in that order: see "filling in the placeholders" and
-# make_lockfile). The
-# options are checked first, then the checks that need no answer (the
-# tools, the GitHub sign-in and the current version), so that nothing is
-# asked in vain; the npm, folder, permission and name checks need
-# answers, so they follow the questions.
+# ---------- stops nobody planned for ----------
+# catch_stops: from here on, a command that fails where the script has no
+# message of its own, and Ctrl-C, end with a plain stop: what happened,
+# what exists (the project, the line of work, the proposed change, the
+# folder), the command to continue, and the command that failed below
+# for support. A folder the script made for the copy is removed if it is
+# not complete, and the temporary files go in every case. A deliberate
+# stop (fail) sets CLEAN, so nothing is added to it.
+MADE_DIR=""
+ERR_HINT=""
+UNEXPECTED_LOG=""
+INTERRUPTED=""
+ERR_CMD=""
+ERR_RC=""
+ERR_LINE=""
+catch_stops() {
+  set -E
+  WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  STDERR_LOG="$WORK_DIR/stderr.log"
+  trap 'ERR_RC=$?; ERR_CMD=${ERR_HINT:-$BASH_COMMAND}; ERR_HINT=""; ERR_LINE=$LINENO' ERR
+  trap 'INTERRUPTED=1; exit 130' INT
+  trap 'leave_script' EXIT
+}
+
+# leave_script: the EXIT handler of catch_stops.
+leave_script() {
+  local rc=$? work="$WORK_DIR"
+  trap - EXIT INT ERR
+  UNEXPECTED_LOG=""
+  [ -z "$STDERR_LOG" ] || [ ! -s "$STDERR_LOG" ] || UNEXPECTED_LOG="$(tail -5 "$STDERR_LOG" | tr -d '\r')"
+  WORK_DIR=""
+  if [ -n "$MADE_DIR" ] && [ -d "$MADE_DIR" ]; then rm -rf -- "$MADE_DIR"; fi
+  MADE_DIR=""
+  if [ -n "$work" ]; then rm -rf -- "$work"; fi
+  [ "$rc" -ne 0 ] || return 0
+  [ -z "$CLEAN" ] || return 0
+  unexpected_stop
+}
+
+# unexpected_stop: the plain stop for a failure the script did not plan
+# for, or for Ctrl-C (exit 130).
+unexpected_stop() {
+  local what next raw
+  if [ -n "$INTERRUPTED" ]; then
+    STOP_CODE=130
+    what="The script was stopped before it finished."
+    raw="The script was stopped with Ctrl-C (or by a request to stop) while: ${CURRENT_STEP:-starting up}"
+  else
+    what="Something unexpected happened, so the script stopped while: ${CURRENT_STEP:-starting up}."
+    raw="The command that failed: ${ERR_CMD:-not known} (exit code ${ERR_RC:-not known}, line ${ERR_LINE:-not known} of the script)"
+    [ -z "$UNEXPECTED_LOG" ] || raw="$raw${NL}Its own message:$NL$UNEXPECTED_LOG"
+  fi
+  if [ -n "$CREATED_NOTE" ]; then
+    next="Continue the setup with the command shown above. If the same thing happens, ask for help and show the details below."
+  else
+    what="$what Nothing was created."
+    next="Start the script again with the command shown above. If the same thing happens, ask for help and show the details below."
+  fi
+  stop_with_error "$what" "$next" "$raw"
+}
+
+# ---------- continuing a setup that stopped part way (--resume) ----------
+# The state is worked out from GitHub and from the copy on this computer,
+# never from a file of the script's own (spec, "Existing repo"):
+#   not from this version of the bootstrapper   refused
+#   the setup's changes are in main already     added: re-check the protection, report
+#   an open proposed change from bootstrap-setup proposed: continue at the wait for build
+#   bootstrap-setup on GitHub, no proposed change sent: continue at proposing
+#   a saved change in the copy, not on GitHub   saved: continue at sending
+#   the copy has none of the setup's changes    fresh: continue at step 3, in that copy
+#   the template's files only                   template: continue at step 3
+# A copy with changes not saved is refused: the script never discards work.
+
+PULLS_JQ='.[] | "\(.state) \(.merged_at // "-") \(.html_url)"'
+SETUP_MARK="- Set up by bootstrap-project.sh."
+RESUME_STATE=""
+GH_STAMP_BODY=""
+GH_ADDED_MARK=""
+GH_OPEN_URL=""
+GH_MERGED_URL=""
+GH_BRANCH_SHA=""
+GH_MAIN_SHA=""
+COPY_PRESENT=""
+COPY_UNSAVED=""
+COPY_SETUP_SHA=""
+COPY_AHEAD=0
+COPY_ORIGIN_MAIN=""
+
+# github_main_sha: GH_MAIN_SHA is the id of the last change of main.
+github_main_sha() {
+  api_call "repos/$IN_OWNER/$IN_NAME/branches/main" --jq .commit.sha
+  { [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ]; } || api_fail "read the main version of the project"
+  trim_into "$API_BODY"
+  GH_MAIN_SHA="$TRIMMED"
+}
+
+# set_state_note <state>: CREATED_NOTE says what exists in this state.
+set_state_note() {
+  local project="The project $IN_OWNER/$IN_NAME exists on GitHub"
+  case "$1" in
+    template) CREATED_NOTE="$project, with only the bootstrapper's files in it." ;;
+    fresh) CREATED_NOTE="$project, with only the bootstrapper's files in it, and a copy of it is on this computer in $IN_DIR." ;;
+    saved) CREATED_NOTE="$project, and the setup's changes are saved in its copy on this computer, in $IN_DIR, but not sent to GitHub yet." ;;
+    sent) CREATED_NOTE="$project, and the setup's changes are saved in its copy on this computer, in $IN_DIR, and sent to GitHub on the line of work $SETUP_BRANCH." ;;
+    proposed) CREATED_NOTE="$project, and the setup's changes are proposed there: $PR_URL" ;;
+    added) CREATED_NOTE="$project, and the setup's changes are in its main version there${PR_URL:+: $PR_URL}" ;;
+  esac
+}
+
+# refuse_to_continue <title> <why> <step> <if you see something else> <how checked>: a project
+# the script will not continue; the command shown starts a new project.
+refuse_project() {
+  FRESH_START=1
+  CREATED_NOTE=""
+  guide_begin "$1" "$2"
+  guide_step "Set up a new project instead, with a name that is not taken: run the command shown below with the name after --name changed, such as --name $IN_NAME-2. The script never changes or deletes the project that is there."
+  guide_step "Or, to finish this project yourself, open https://github.com/$IN_OWNER/$IN_NAME in your browser and do the steps that are still open; the README of the bootstrapper lists them."
+  guide_end "the script says \"Done.\" after the last step and shows the report." \
+    "if you do not want the project that is there, rename or delete it on GitHub yourself (in its Settings); the script does not delete a project." \
+    "it reads the file CHANGELOG.md of the project on GitHub, which says which version of the bootstrapper made the project."
+  stop_at_guide
+}
+
+# refuse_copy <title> <why>: the copy on this computer does not fit what
+# GitHub has; nothing in it is touched.
+refuse_copy() {
+  guide_begin "$1" "$2"
+  guide_step "Either move the folder $IN_DIR somewhere else yourself (for example in your file manager); nothing in it is deleted. Then continue the setup with the command shown below: the script makes a new copy from what GitHub has."
+  guide_step "If you want to keep working in the folder, look at what it holds with git yourself, make it match GitHub, and then continue the setup with the command shown below."
+  guide_end "the script says \"Done. The folder is new or empty\" and carries on." \
+    "if you moved the folder and the script still finds it, check that nothing is left at $IN_DIR, hidden files included." \
+    "it asks git for the changes not saved in the folder, and compares its line of work $SETUP_BRANCH with the one GitHub has."
+  stop_at_guide
+}
+
+# resume_read_github: what GitHub has: whether the project is private, the
+# bootstrapper's version in its CHANGELOG.md, its proposed changes from
+# bootstrap-setup, and bootstrap-setup itself.
+resume_read_github() {
+  local line state merged url body
+  api_call "repos/$IN_OWNER/$IN_NAME" --jq .private
+  { [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ]; } || api_fail "read whether the project $IN_OWNER/$IN_NAME is private"
+  trim_into "$API_BODY"
+  case "$TRIMMED" in
+    true) IN_VISIBILITY=private ;;
+    false) IN_VISIBILITY=public ;;
+  esac
+
+  api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/CHANGELOG.md"
+  if [ "$API_STATUS" = 404 ]; then
+    # GitHub may still be copying the files into a project that was just
+    # made; one with a main version but no CHANGELOG.md is not ours.
+    api_call "repos/$IN_OWNER/$IN_NAME/branches/main"
+    if [ "$API_STATUS" = 404 ]; then
+      wait_for_files
+      CURRENT_STEP="$RESUME_STEP"
+    fi
+    api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/CHANGELOG.md"
+  fi
+  body=""
+  case "$API_STATUS" in
+    200) body="$API_BODY" ;;
+    404) ;;
+    *) api_fail "read the file CHANGELOG.md of the project" ;;
+  esac
+  if [ -z "$body" ] || ! read_published_version "$body"; then
+    refuse_project "The project $IN_OWNER/$IN_NAME on GitHub was not made from the bootstrapper: the file CHANGELOG.md that the bootstrapper puts in each project is missing, or does not say which version made it." \
+      "--resume continues a setup of a project made by this version of the bootstrapper, and it cannot tell what this project is."
+  fi
+  if [ "$PUBLISHED_VERSION" != "$SCRIPT_VERSION" ]; then
+    refuse_project "The project $IN_OWNER/$IN_NAME was made with version $PUBLISHED_VERSION of the bootstrapper, and this script is version $SCRIPT_VERSION." \
+      "Each version of the bootstrapper sets up a project in its own way, so this script finishes only projects made by the same version."
+  fi
+  GH_ADDED_MARK=""
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ "${line//$CR/}" != "$SETUP_MARK" ] || GH_ADDED_MARK=1
+  done <<<"$body"
+
+  GH_OPEN_URL=""
+  GH_MERGED_URL=""
+  api_call "repos/$IN_OWNER/$IN_NAME/pulls?state=all&head=$IN_OWNER:$SETUP_BRANCH" --jq "$PULLS_JQ"
+  { [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ]; } || api_fail "look for the proposed change of the setup"
+  while IFS=' ' read -r state merged url; do
+    [ -n "$url" ] || continue
+    if [ "$state" = open ] && [ -z "$GH_OPEN_URL" ]; then GH_OPEN_URL="$url"; fi
+    if [ "$merged" != "-" ] && [ -z "$GH_MERGED_URL" ]; then GH_MERGED_URL="$url"; fi
+  done <<<"$API_BODY"
+
+  GH_BRANCH_SHA=""
+  api_call "repos/$IN_OWNER/$IN_NAME/branches/$SETUP_BRANCH" --jq .commit.sha
+  case "$API_STATUS" in
+    200) trim_into "$API_BODY"; GH_BRANCH_SHA="$TRIMMED" ;;
+    404) ;;
+    *) api_fail "look for the line of work $SETUP_BRANCH of the project" ;;
+  esac
+}
+
+# resume_read_copy: what the copy on this computer has (check_target_dir
+# has seen that a folder with files is this project's own copy).
+resume_read_copy() {
+  local err rc=0 raw
+  COPY_PRESENT=""
+  COPY_UNSAVED=""
+  COPY_SETUP_SHA=""
+  COPY_AHEAD=0
+  COPY_ORIGIN_MAIN=""
+  [ -d "$IN_DIR" ] && [ -n "$(ls -A "$IN_DIR" 2>/dev/null)" ] || return 0
+  COPY_PRESENT=1
+  err="$(make_temp)"
+  COPY_UNSAVED="$(git -C "$IN_DIR" status --porcelain --untracked-files=all 2>"$err")" || rc=$?
+  raw="$(tr -d '\r' <"$err")"
+  rm -f "$err"
+  if [ "$rc" -ne 0 ]; then
+    [ -n "$raw" ] || raw="git stopped with exit code $rc and no message."
+    stop_with_error "git could not look at the copy of the project on this computer, in $IN_DIR." \
+      "Continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+      "$raw"
+  fi
+  COPY_UNSAVED="${COPY_UNSAVED//$CR/}"
+  COPY_SETUP_SHA="$(git -C "$IN_DIR" rev-parse -q --verify "refs/heads/$SETUP_BRANCH" 2>/dev/null)" || COPY_SETUP_SHA=""
+  COPY_ORIGIN_MAIN="$(git -C "$IN_DIR" rev-parse -q --verify refs/remotes/origin/main 2>/dev/null)" || COPY_ORIGIN_MAIN=""
+  if [ -n "$COPY_SETUP_SHA" ] && [ -n "$COPY_ORIGIN_MAIN" ]; then
+    COPY_AHEAD="$(git -C "$IN_DIR" rev-list --count "$COPY_ORIGIN_MAIN..$COPY_SETUP_SHA" 2>/dev/null)" || COPY_AHEAD=0
+  fi
+}
+
+# resume_decide: RESUME_STATE, from what GitHub and the copy have. A copy
+# that does not fit what GitHub has is refused before anything changes.
+resume_decide() {
+  if [ -n "$COPY_PRESENT" ] && [ -n "$COPY_UNSAVED" ]; then
+    refuse_copy "The copy of the project in $IN_DIR has changes that are not saved." \
+      "The script never discards your work, so it does not go on in a copy that holds changes it cannot tell from its own."
+  fi
+  PR_URL=""
+  if [ -n "$GH_ADDED_MARK" ] || [ -n "$GH_MERGED_URL" ]; then
+    RESUME_STATE=added
+    PR_URL="$GH_MERGED_URL"
+  elif [ -n "$GH_OPEN_URL" ]; then
+    RESUME_STATE=proposed
+    PR_URL="$GH_OPEN_URL"
+  elif [ -n "$GH_BRANCH_SHA" ]; then
+    RESUME_STATE=sent
+  elif [ -n "$COPY_PRESENT" ] && [ "$COPY_AHEAD" -gt 0 ]; then
+    RESUME_STATE=saved
+  elif [ -n "$COPY_PRESENT" ]; then
+    RESUME_STATE=fresh
+  else
+    RESUME_STATE=template
+  fi
+  [ -n "$COPY_PRESENT" ] || return 0
+  case "$RESUME_STATE" in
+    sent | proposed)
+      if [ -z "$COPY_SETUP_SHA" ]; then
+        refuse_copy "The copy of the project in $IN_DIR does not have the line of work $SETUP_BRANCH that GitHub has." \
+          "The setup's changes are on GitHub on that line of work, and the script goes on from the copy only when the copy has the same changes."
+      fi
+      if [ -n "$GH_BRANCH_SHA" ] && [ "$COPY_SETUP_SHA" != "$GH_BRANCH_SHA" ]; then
+        refuse_copy "The line of work $SETUP_BRANCH in the copy of the project in $IN_DIR is not the same as the one GitHub has." \
+          "The script goes on from the copy only when it has the same changes as GitHub, and it never changes either one to match the other."
+      fi
+      ;;
+    saved | fresh)
+      github_main_sha
+      if [ "$COPY_ORIGIN_MAIN" != "$GH_MAIN_SHA" ]; then
+        refuse_copy "The copy of the project in $IN_DIR is not at the main version that GitHub has now." \
+          "The script goes on from the copy only when it starts from the same main version as GitHub."
+      fi
+      ;;
+  esac
+}
+
+RESUME_STEP=""
+# resume_plan: the step that works the state out and says where the setup
+# goes on.
+resume_plan() {
+  RESUME_STEP="Working out where the setup stopped, from GitHub and from the copy on this computer"
+  step_start "$RESUME_STEP"
+  resume_read_github
+  resume_read_copy
+  resume_decide
+  set_state_note "$RESUME_STATE"
+  case "$RESUME_STATE" in
+    template) step_end "The project has only the bootstrapper's files, and there is no copy of it on this computer yet: the setup continues by protecting its main version." ;;
+    fresh) step_end "The project has only the bootstrapper's files, and its copy on this computer has none of the setup's changes: the setup continues by protecting its main version, then uses that copy." ;;
+    saved) step_end "The setup's changes are saved in the copy on this computer but not sent to GitHub: the setup continues by sending them." ;;
+    sent) step_end "The setup's changes are on GitHub, on the line of work $SETUP_BRANCH, but not proposed: the setup continues by proposing them." ;;
+    proposed) step_end "The setup's changes are proposed on GitHub, at $PR_URL: the setup continues by waiting for the check build." ;;
+    added) step_end "The setup's changes are in the main version of the project already: the script only checks its protection, brings the copy on this computer up to date if there is one, and shows the report." ;;
+  esac
+}
+
+# use_setup_branch: a copy with none of the setup's changes goes on in its
+# line of work bootstrap-setup if it has one, else starts it.
+use_setup_branch() {
+  if [ -z "$COPY_SETUP_SHA" ]; then
+    start_setup_branch
+    return 0
+  fi
+  step_start "Going on in the line of work $SETUP_BRANCH of the copy"
+  in_copy "switch to the line of work $SETUP_BRANCH" checkout -q "$SETUP_BRANCH"
+  step_end "The setup's changes go on the line of work $SETUP_BRANCH, not straight into the main version."
+}
+
+# resume_copy: the later steps need the copy; make it if it is not there,
+# on the line of work GitHub has.
+resume_copy() {
+  if [ -z "$COPY_PRESENT" ]; then
+    clone_project
+    set_git_identity
+    step_start "Switching the copy to the line of work $SETUP_BRANCH, as GitHub has it"
+    in_copy "switch to the line of work $SETUP_BRANCH" checkout -q --no-track -b "$SETUP_BRANCH" "origin/$SETUP_BRANCH"
+    step_end "The copy is on the line of work $SETUP_BRANCH, with the setup's changes."
+    COPY_PRESENT=1
+  fi
+  set_state_note "$RESUME_STATE"
+}
+
+# resume_added: the setup's changes are in main already: the protection is
+# read back, the copy (if there is one) is brought up to date, and the
+# report follows.
+resume_added() {
+  CHANGE_ADDED=1
+  step_start "Checking the protection of the main version"
+  read_back_protection
+  step_end "$([ -n "$UNPROTECTED" ] && echo "The main version is not protected, as you chose with --allow-unprotected." || echo "GitHub reports the protection of the main version as the script sets it, with build required.")"
+  if [ -n "$COPY_PRESENT" ]; then
+    github_main_sha
+    MERGED_SHA="$GH_MAIN_SHA"
+    finish_copy
+  else
+    HAVE_COPY=""
+  fi
+}
+
+# run_steps <state>: the steps of the setup from where the state says.
+run_steps() {
+  case "$1" in
+    template | fresh)
+      protect_main
+      set_merge_settings
+      check_actions
+      if [ "$1" = template ]; then
+        clone_project
+        set_git_identity
+        start_setup_branch
+      else
+        set_git_identity
+        use_setup_branch
+        set_state_note fresh
+      fi
+      check_copy_fits
+      lay_out_pack
+      tidy_up
+      fill_placeholders
+      make_lockfile
+      add_licence
+      note_setup_in_changelog
+      note_unprotected_decision
+      self_check
+      save_change
+      send_change
+      propose_change
+      ;;
+    saved)
+      send_change
+      propose_change
+      ;;
+    sent)
+      resume_copy
+      propose_change
+      ;;
+    proposed)
+      resume_copy
+      ;;
+    added)
+      resume_added
+      report
+      return 0
+      ;;
+  esac
+  wait_for_build
+  require_build
+  merge_change
+  finish_copy
+  report
+}
+
+# cmd_setup <options...>: the setup. The options are checked first, then
+# the checks that need no answer (the tools, the GitHub sign-in and the
+# current version), so that nothing is asked in vain; the npm, folder,
+# permission and name checks need answers, so they follow the questions.
+# Then a new setup shows its plan, asks "Proceed?" and creates the
+# project; --resume works out where the setup stopped and goes on from
+# there (resume_plan, run_steps).
 cmd_setup() {
+  catch_stops
   parse_args "$@"
-  GIVEN_NAME="$IN_NAME"
-  GIVEN_OWNER="$IN_OWNER"
   GIVEN_LICENSE="$IN_LICENSE"
   if [ -n "$SCRIPT_PIPED" ] && [ -z "$OPT_NON_INTERACTIVE" ]; then
     fail 2 "The script was piped into bash, so it cannot ask its questions: they would read the script itself." \
@@ -3691,8 +4468,14 @@ cmd_setup() {
   preflight_project_absent
   preflight_license
   if [ -n "$OPT_RESUME" ]; then
-    fail 1 "Continuing a setup that stopped part way (--resume) is not built yet in this version of the script. Nothing was changed." \
-      "Use a released version of the bootstrapper to continue the setup."
+    resume_plan
+    if [ -n "$OPT_DRY_RUN" ]; then
+      say "This was a dry run (--dry-run): the checks passed, and nothing was changed."
+      exit 0
+    fi
+    confirm_plan
+    run_steps "$RESUME_STATE"
+    return 0
   fi
   show_plan
   if [ -n "$OPT_DRY_RUN" ]; then
@@ -3702,27 +4485,7 @@ cmd_setup() {
   confirm_plan
   create_project
   wait_for_files
-  protect_main
-  set_merge_settings
-  check_actions
-  clone_project
-  set_git_identity
-  start_setup_branch
-  lay_out_pack
-  tidy_up
-  fill_placeholders
-  make_lockfile
-  add_licence
-  note_setup_in_changelog
-  self_check
-  save_change
-  send_change
-  propose_change
-  wait_for_build
-  require_build
-  merge_change
-  finish_copy
-  report
+  run_steps template
 }
 
 # ---------- main ----------
