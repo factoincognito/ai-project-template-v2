@@ -271,6 +271,8 @@ case "${1:-}" in
     #     the body read from stdin is appended, with a line break, to the
     #     file protection-bodies next to the log; 200, or <mode> with
     #     STUB_GH_PROTECT_FAIL (plan, token, mystery, not-found, ...).
+    #     STUB_GH_REQUIRE_FAIL fails only a body that requires build (the
+    #     PUT of step 16).
     # And the licence text (step 10):
     #   - api -i licenses/<key> --jq .body: the file <key> in the folder
     #     STUB_GH_LICENSES (the harness writes mit and apache-2.0 from
@@ -291,6 +293,22 @@ case "${1:-}" in
     #     the user turned it on); STUB_GH_ACTIONS_ANSWER replaces the
     #     value printed (an answer of another shape);
     #     STUB_GH_ACTIONS_FAIL fails it as <mode>.
+    # And the steps after the proposed change (15 to 17):
+    #   - which actions GitHub Actions allows, api -i
+    #     repos/OWNER/NAME/actions/permissions --jq .allowed_actions:
+    #     STUB_GH_ALLOWED_ACTIONS (default all); STUB_GH_ALLOWED_FAIL
+    #     fails it as <mode>.
+    #   - the protection read back, api -i
+    #     repos/OWNER/NAME/branches/main/protection --jq <the script's
+    #     expression>: one "field=value" line per field, as that
+    #     expression prints them for what the last PUT body set (so a
+    #     wrong body shows as a difference). STUB_GH_READBACK replaces the
+    #     lines (separated by ";"); STUB_GH_READBACK_FAIL fails it.
+    #   - the proposed change, api -i repos/OWNER/NAME/pulls/N --jq
+    #     <the script's expression>: "true <id>" once pr merge has added it
+    #     (the id from merge-sha, or STUB_GH_MERGED_SHA), else "false"
+    #     and an id (GitHub's test change, which is not in main).
+    #     STUB_GH_PULL_FAIL fails it as <mode>.
     if [ "$*" = 'api -i user --jq .login, (.name // "")' ]; then
       if [ -n "${STUB_GH_USER_FAIL:-}" ] && should_fail user-fails; then emit_failure "$STUB_GH_USER_FAIL"; fi
       scopes="${STUB_GH_SCOPES-repo, read:org, gist, workflow}"
@@ -321,6 +339,9 @@ case "${1:-}" in
       cat >>"${STUB_GH_LOG%/*}/protection-bodies"
       printf '\n' >>"${STUB_GH_LOG%/*}/protection-bodies"
       if [ -n "${STUB_GH_PROTECT_FAIL:-}" ]; then emit_failure "$STUB_GH_PROTECT_FAIL"; fi
+      if [ -n "${STUB_GH_REQUIRE_FAIL:-}" ] && grep . "${STUB_GH_LOG%/*}/protection-bodies" | tail -1 | grep -qF '"contexts":["build"]'; then
+        emit_failure "$STUB_GH_REQUIRE_FAIL"
+      fi
       respond 200 OK 'application/json; charset=utf-8'
       printf '{"url":"https://api.github.com/%s"}\n' "$5"
     elif [ "$#" -eq 5 ] && [ "$2" = -i ] && [ "${3%/actions/permissions}" != "$3" ] && [ "$4 $5" = "--jq .enabled" ]; then
@@ -357,6 +378,35 @@ case "${1:-}" in
           ;;
       esac
       emit_failure not-found
+    elif [ "$#" -eq 5 ] && [ "$2" = -i ] && [ "${3%/branches/main/protection}" != "$3" ] && [ "$4" = --jq ] \
+      && [ "$5" = '"contexts=\(.required_status_checks.contexts // [] | join(","))", "strict=\(.required_status_checks.strict)", "enforce_admins=\(.enforce_admins.enabled)", "approvals=\(.required_pull_request_reviews.required_approving_review_count)", "restrictions=\(.restrictions)", "allow_force_pushes=\(.allow_force_pushes.enabled)", "allow_deletions=\(.allow_deletions.enabled)"' ]; then
+      if [ -n "${STUB_GH_READBACK_FAIL:-}" ]; then emit_failure "$STUB_GH_READBACK_FAIL"; fi
+      respond 200 OK 'application/json; charset=utf-8'
+      if [ -n "${STUB_GH_READBACK:-}" ]; then
+        printf '%s\n' "$STUB_GH_READBACK" | tr ';' '\n'
+        exit 0
+      fi
+      last="$(grep . "${STUB_GH_LOG%/*}/protection-bodies" | tail -1)"
+      field() { case "$last" in *"$2"*) printf '%s=%s\n' "$1" "$3" ;; *) printf '%s=%s\n' "$1" "$4" ;; esac; }
+      field contexts '"contexts":["build"]' build ""
+      case "$last" in *'"strict":false'*) echo strict=false ;; *'"strict":true'*) echo strict=true ;; *) echo strict=null ;; esac
+      field enforce_admins '"enforce_admins":true' true false
+      field approvals '"required_approving_review_count":0' 0 null
+      field restrictions '"restrictions":null' null '{}'
+      field allow_force_pushes '"allow_force_pushes":false' false true
+      field allow_deletions '"allow_deletions":false' false true
+    elif [ "$#" -eq 5 ] && [ "$2" = -i ] && [ "${3%/pulls/[0-9]*}" != "$3" ] && [ "$4 $5" = '--jq "\(.merged) \(.merge_commit_sha)"' ]; then
+      if [ -n "${STUB_GH_PULL_FAIL:-}" ]; then emit_failure "$STUB_GH_PULL_FAIL"; fi
+      respond 200 OK 'application/json; charset=utf-8'
+      if [ -f "${STUB_GH_LOG%/*}/merge-sha" ]; then
+        printf 'true %s\n' "${STUB_GH_MERGED_SHA:-$(cat "${STUB_GH_LOG%/*}/merge-sha")}"
+      else
+        printf 'false 1111111111111111111111111111111111111111\n'
+      fi
+    elif [ "$#" -eq 5 ] && [ "$2" = -i ] && [ "${3%/actions/permissions}" != "$3" ] && [ "$4 $5" = "--jq .allowed_actions" ]; then
+      if [ -n "${STUB_GH_ALLOWED_FAIL:-}" ]; then emit_failure "$STUB_GH_ALLOWED_FAIL"; fi
+      respond 200 OK 'application/json; charset=utf-8'
+      printf '%s\n' "${STUB_GH_ALLOWED_ACTIONS:-all}"
     elif [ "$#" -eq 5 ] && [ "$2" = -i ] && [ "${3#licenses/}" != "$3" ] && [ "$4 $5" = "--jq .body" ]; then
       if [ "${STUB_GH_LICENSE_FAIL:-}" = empty ]; then
         respond 200 OK 'application/json; charset=utf-8'
@@ -383,6 +433,84 @@ case "${1:-}" in
     # STUB_GH_PR_FAIL makes it fail as signed-out (gh's exit 4), exists
     # (gh's text when the branch has one already), broken (an error with
     # no known cause) or no-link (exit 0 with nothing printed).
+    #
+    # gh pr checks N --repo OWNER/NAME --json name,bucket,event --jq
+    # <the script's expression>: what --jq prints for the checks named
+    # build, "<event> <bucket>" per line (gh prints a string as is). The
+    # lines are STUB_GH_BUILD, separated by ";" (default: a push run and a
+    # pull_request run, both passed; empty: no build reported, only other
+    # checks). While the counter file build-pending is above 0 both runs
+    # are pending, and gh exits 8 (its code for pending checks); while
+    # checks-none is above 0, no check has reported at all (gh's text,
+    # exit 1). STUB_GH_CHECKS_FAIL fails it as signed-out or broken.
+    #
+    # gh pr merge N --squash --delete-branch --match-head-commit SHA, run
+    # in the copy: gh finds the project from the copy's origin (the bare
+    # repo). The head of bootstrap-setup there is written to merged-head
+    # and the folder gh ran in to merge-cwd. When SHA is that head, the
+    # change is squashed onto main as one new change (its id in
+    # merge-sha) and bootstrap-setup is deleted there; then, as gh does in
+    # a copy on that line of work, the copy is switched to main, brought
+    # up to date and its bootstrap-setup deleted (not with
+    # STUB_GH_MERGE_LOCAL=no). Another SHA: GitHub's refusal, nothing
+    # changes. STUB_GH_MERGE_FAIL: signed-out, refused (GitHub's text when
+    # the protection does not allow it; nothing changes), or
+    # broken-but-merged (added, then gh fails as if the connection broke).
+    if [ "${2:-}" = checks ]; then
+      if [ "$#" -ne 9 ] || [ "$4 $6 $7 $8" != "--repo --json name,bucket,event --jq" ] \
+        || [ "$9" != '.[] | select(.name == "build") | "\(.event) \(.bucket)"' ]; then
+        echo "stub gh: no emulation for: $*" >&2; exit 64
+      fi
+      case "${STUB_GH_CHECKS_FAIL:-}" in
+        "") ;;
+        signed-out) emit_failure signed-out ;;
+        broken) echo "stub gh: the connection broke off" >&2; exit 1 ;;
+        *) echo "stub gh: unknown failure mode: $STUB_GH_CHECKS_FAIL" >&2; exit 64 ;;
+      esac
+      if fails_left checks-none; then echo "no checks reported on the 'bootstrap-setup' branch" >&2; exit 1; fi
+      if fails_left build-pending; then printf '%s\n' 'push pending' 'pull_request pending'; exit 8; fi
+      printf '%s\n' "${STUB_GH_BUILD-push pass;pull_request pass}" | tr ';' '\n'
+      exit 0
+    fi
+    if [ "${2:-}" = merge ]; then
+      if [ "$#" -ne 7 ] || [ "$4 $5 $6" != "--squash --delete-branch --match-head-commit" ]; then
+        echo "stub gh: no emulation for: $*" >&2; exit 64
+      fi
+      g="${STUB_GIT:-git}"
+      printf '%s\n' "$PWD" >>"${STUB_GH_LOG%/*}/merge-cwd"
+      bare="$("$g" remote get-url origin)"
+      head="$("$g" --git-dir="$bare" rev-parse -q --verify refs/heads/bootstrap-setup)" \
+        || { echo "GraphQL: Could not resolve to a PullRequest with the number of $3. (repository.pullRequest)" >&2; exit 1; }
+      printf '%s\n' "$head" >"${STUB_GH_LOG%/*}/merged-head"
+      case "${STUB_GH_MERGE_FAIL:-}" in
+        "" | broken-but-merged) ;;
+        signed-out) emit_failure signed-out ;;
+        refused) echo "GraphQL: Required status check \"build\" is expected. (mergePullRequest)" >&2; exit 1 ;;
+        *) echo "stub gh: unknown failure mode: $STUB_GH_MERGE_FAIL" >&2; exit 64 ;;
+      esac
+      if [ "$7" != "$head" ]; then
+        echo "GraphQL: Head branch was modified. Review and try the merge again. (mergePullRequest)" >&2
+        exit 1
+      fi
+      tree="$("$g" --git-dir="$bare" rev-parse "$head^{tree}")"
+      # GitHub's squash change keeps the author of the proposed change.
+      an="$("$g" --git-dir="$bare" log -1 --format=%an "$head")"
+      ae="$("$g" --git-dir="$bare" log -1 --format=%ae "$head")"
+      new="$(GIT_AUTHOR_NAME="$an" GIT_AUTHOR_EMAIL="$ae" GIT_COMMITTER_NAME=GitHub GIT_COMMITTER_EMAIL=noreply@github.com \
+        "$g" --git-dir="$bare" commit-tree "$tree" -p refs/heads/main -m "Set up my-app (#$3)")"
+      "$g" --git-dir="$bare" update-ref refs/heads/main "$new"
+      "$g" --git-dir="$bare" update-ref -d refs/heads/bootstrap-setup
+      printf '%s\n' "$new" >"${STUB_GH_LOG%/*}/merge-sha"
+      if [ "${STUB_GH_MERGE_FAIL:-}" = broken-but-merged ]; then echo "stub gh: the connection broke off" >&2; exit 1; fi
+      echo "Squashed and merged pull request #$3 (Set up my-app)" >&2
+      if [ "${STUB_GH_MERGE_LOCAL:-yes}" = yes ]; then
+        "$g" checkout -q main
+        "$g" pull -q --ff-only
+        "$g" branch -q -D bootstrap-setup
+        echo "Deleted local branch bootstrap-setup and switched to branch main" >&2
+      fi
+      exit 0
+    fi
     if [ "${2:-}" != create ] || [ "$#" -ne 12 ] || [ "$3 $5 $7 $9 ${11}" != "--repo --base --head --title --body-file" ]; then
       echo "stub gh: no emulation for: $*" >&2; exit 64
     fi
@@ -1319,7 +1447,8 @@ test_user_facing_strings_are_collected() {
     'Why this is needed: ' 'When it has worked: ' 'If you see something else: ' \
     'How the script checks it: ' 'To start again, run this command' 'git is not installed' \
     'Your name for git' 'Your email address for git' 'Proceed? (yes or no)' 'Here is the plan' \
-    'needs a paid GitHub plan' 'the next steps of the setup are not built yet' \
+    'needs a paid GitHub plan' 'The setup is finished' 'open the Claude app' \
+    "Waiting for the project's check build" 'Making the check build required' \
     'To continue the setup, run this command' 'Making a copy of the project on this computer' \
     'line of work' 'already has' 'is inside another project that git keeps track of' \
     'The script may not write in the folder' 'does not exist' \
@@ -1880,8 +2009,8 @@ test_non_interactive_never_reads_stdin() {
 
 test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
   # The whole script, as a user gets it (the built copy) and runs it, with
-  # --yes (needed with --non-interactive). The steps after the proposed
-  # change are not built yet: it stops there, with exit 1.
+  # --yes (needed with --non-interactive). It goes through to the report,
+  # with exit 0.
   local d rc
   d="$(tmpdir)"
   make_stub_gh "$d/gh"
@@ -1894,23 +2023,25 @@ test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
   ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
       STUB_NPM_LOG="$d/npm.log" BOOTSTRAP_NPM="$d/npm"
     bash "$RUN_SCRIPT" --non-interactive --yes "${REQUIRED_OPTS[@]}" ) </dev/null >"$d/out" 2>"$d/err" || rc=$?
-  [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "exit $rc, want 1"; }
-  grep -qF 'the next steps of the setup are not built yet' "$d/err" || { cat "$d/err" >&2; die "no stop message"; }
-  rm -rf "$d/created" "$d/remotes" "$d/cwd/my-app"
+  [ "$rc" -eq 0 ] || { cat "$d/err" >&2; die "exit $rc, want 0"; }
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "no report"; }
+  rm -rf "$d/created" "$d/remotes" "$d/cwd/my-app" "$d/merge-sha" "$d/pr-bodies"
   rc=0
   ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
       STUB_NPM_LOG="$d/npm.log" BOOTSTRAP_NPM="$d/npm"
     bash "$RUN_SCRIPT" --non-interactive --yes "${REQUIRED_OPTS[@]}" ) <&- >"$d/out" 2>"$d/err" || rc=$?
-  [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "stdin closed: exit $rc, want 1"; }
-  grep -qF 'the next steps of the setup are not built yet' "$d/err" || { cat "$d/err" >&2; die "stdin closed: no stop message"; }
+  [ "$rc" -eq 0 ] || { cat "$d/err" >&2; die "stdin closed: exit $rc, want 0"; }
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "stdin closed: no report"; }
   # gh: the two checks on this computer, the GitHub checks (the account,
   # the published version, the name, the licence), then creating and
   # protecting the project, checking that Actions is on, making the copy
-  # on this computer, reading the licence and
+  # on this computer, reading the licence,
   # proposing the change (its body in a temporary file, written <file>),
+  # waiting for build, requiring it and reading the protection back, and
+  # adding the change (the id of the change sent, written <sha>),
   # every one with gh's own prompts off; the copy is the only thing made
   # on this computer.
-  [ "$(cut -f2- "$d/gh.log" | awk -F'\t' -v OFS='\t' '{ for (i = 2; i <= NF; i++) if ($(i - 1) == "--body-file") $i = "<file>"; print }' | LC_ALL=C sort -u)" = "$(printf '%s\n' '--version' "$(printf 'repo\tcreate\t--help')" \
+  [ "$(cut -f2- "$d/gh.log" | awk -F'\t' -v OFS='\t' '{ for (i = 2; i <= NF; i++) { if ($(i - 1) == "--body-file") $i = "<file>"; if ($(i - 1) == "--match-head-commit") $i = "<sha>" } print }' | LC_ALL=C sort -u)" = "$(printf '%s\n' '--version' "$(printf 'repo\tcreate\t--help')" \
       "$(printf 'api\t-i\tuser\t--jq\t.login, (.name // "")')" \
       "$(printf 'api\t-i\t-H\tAccept: application/vnd.github.raw+json\trepos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md')" \
       "$(printf 'api\t-i\trepos/octo-user/my-app')" \
@@ -1923,7 +2054,11 @@ test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
       "$(printf 'api\t-i\trepos/octo-user/my-app/actions/permissions\t--jq\t.enabled')" \
       "$(printf 'repo\tclone\tocto-user/my-app\t./my-app')" \
       "$(printf 'api\t-i\tlicenses/mit\t--jq\t.body')" \
-      "$(printf 'pr\tcreate\t--repo\tocto-user/my-app\t--base\tmain\t--head\tbootstrap-setup\t--title\tSet up my-app\t--body-file\t<file>')" | LC_ALL=C sort)" ] \
+      "$(printf 'pr\tcreate\t--repo\tocto-user/my-app\t--base\tmain\t--head\tbootstrap-setup\t--title\tSet up my-app\t--body-file\t<file>')" \
+      "$(printf 'pr\tchecks\t1\t--repo\tocto-user/my-app\t--json\tname,bucket,event\t--jq\t%s' "$BUILD_JQ")" \
+      "$(printf 'api\t-i\trepos/octo-user/my-app/branches/main/protection\t--jq\t%s' "$READBACK_JQ")" \
+      "$(printf 'pr\tmerge\t1\t--squash\t--delete-branch\t--match-head-commit\t<sha>')" \
+      "$(printf 'api\t-i\trepos/octo-user/my-app/pulls/1\t--jq\t%s' "$MERGED_JQ")" | LC_ALL=C sort)" ] \
     || { cat "$d/gh.log" >&2; die "gh was used for more than its checks and the steps built so far"; }
   [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] \
     || { cat "$d/gh.log" >&2; die "a gh call ran with gh's prompts on"; }
@@ -3091,7 +3226,13 @@ guide_cases() {
     guide_dir_is_file guide_bash_old gg_signed_out gg_expired gg_offline gg_permissions \
     gg_permissions_repo gg_permissions_token gg_old_script gg_project_exists \
     gg_create_taken gg_create_refused gg_protect_plan gg_protect_token gg_protect_unknown \
-    guide_dir_no_parent gg_dir_not_writable gg_dir_in_git gg_dir_in_git_unknown
+    guide_dir_no_parent gg_dir_not_writable gg_dir_in_git gg_dir_in_git_unknown \
+    gg_actions_off gg_actions_local_only
+}
+gg_actions_off() { IN_OWNER=acme; IN_NAME=my-app; ACTIONS_PROBLEM=off; guide_actions_off; }
+gg_actions_local_only() {
+  IN_OWNER=acme; IN_NAME=my-app; PR_URL=https://github.com/acme/my-app/pull/1
+  ACTIONS_PROBLEM=local-only; guide_actions_off
 }
 gg_dir_not_writable() { DIR_UNWRITABLE=/srv/shared; guide_dir_not_writable; }
 gg_dir_in_git() { DIR_OUTER=/home/me/work; guide_dir_in_git; }
@@ -3662,7 +3803,9 @@ test_the_name_and_permissions_are_checked_after_the_questions() {
 # else. After the project exists, every stop shows the command to
 # continue with --resume. Then the copy on this computer (see "the copy
 # on this computer" below) and the later steps up to the proposed change,
-# after which the script stops: the next steps are not built yet (exit 1).
+# then the wait for build, the required check, adding the change, the
+# finish and the report (see "wait, require, add, finish and report"
+# below); a run that goes through ends with exit 0.
 
 # Every answer given as an option, so a run without --non-interactive asks
 # only "Proceed?". The visibility is added by setup_run.
@@ -3685,7 +3828,26 @@ LICENSE_CALL='api -i licenses/mit --jq .body'
 PR_CALL='pr create --repo octo-user/my-app --base main --head bootstrap-setup --title Set up my-app --body-file <file>'
 # The spec's body for step 3, field for field.
 PROTECT_BODY='{"required_status_checks":null,"enforce_admins":true,"required_pull_request_reviews":{"required_approving_review_count":0},"restrictions":null,"allow_force_pushes":false,"allow_deletions":false}'
-NOT_BUILT='the next steps of the setup are not built yet'
+# Step 16: the step 3 body with build required, written out from the spec
+# (a PUT replaces the whole protection, so every field is there again).
+REQUIRE_BODY='{"required_status_checks":{"strict":false,"contexts":["build"]},"enforce_admins":true,"required_pull_request_reviews":{"required_approving_review_count":0},"restrictions":null,"allow_force_pushes":false,"allow_deletions":false}'
+# Steps 15 to 17: the --jq expressions of the script, written out here as
+# the stub gh checks them (what they read from GitHub's answers is tested
+# with jq in test_the_jq_expressions_read_githubs_documented_answers).
+BUILD_JQ='.[] | select(.name == "build") | "\(.event) \(.bucket)"'
+READBACK_JQ='"contexts=\(.required_status_checks.contexts // [] | join(","))", "strict=\(.required_status_checks.strict)", "enforce_admins=\(.enforce_admins.enabled)", "approvals=\(.required_pull_request_reviews.required_approving_review_count)", "restrictions=\(.restrictions)", "allow_force_pushes=\(.allow_force_pushes.enabled)", "allow_deletions=\(.allow_deletions.enabled)"'
+MERGED_JQ='"\(.merged) \(.merge_commit_sha)"'
+CHECKS_CALL="pr checks 1 --repo octo-user/my-app --json name,bucket,event --jq $BUILD_JQ"
+READBACK_CALL="api -i repos/octo-user/my-app/branches/main/protection --jq $READBACK_JQ"
+MERGE_CALL='pr merge 1 --squash --delete-branch --match-head-commit <sha>'
+MERGED_CALL="api -i repos/octo-user/my-app/pulls/1 --jq $MERGED_JQ"
+ALLOWED_CALL='api -i repos/octo-user/my-app/actions/permissions --jq .allowed_actions'
+# The calls after the proposed change, in a run that goes through: build
+# looked at once, the required check set and read back, the change added
+# and checked on GitHub.
+END_CALLS=("$CHECKS_CALL" "$PROTECT_CALL" "$READBACK_CALL" "$MERGE_CALL" "$MERGED_CALL")
+# The first line of the report at the end: the run went through.
+FINISHED='The setup is finished.'
 
 # built_bootstrapper: BUILT is a bootstrapper made by bootstrap/build.sh
 # from this template, stamped BUILT_VERSION; built once per harness run.
@@ -3733,10 +3895,12 @@ setup_run() {
 
 # calls_from_create <dir>: the gh calls from creating the project on, one
 # per line, the arguments joined by spaces (the prompt column left out).
-# The temporary file after --body-file is written <file>.
+# The temporary file after --body-file is written <file>, the change id
+# after --match-head-commit <sha> (test_the_change_is_added_with_the_head_that_was_sent
+# checks that id).
 calls_from_create() {
   awk -F'\t' '$2 == "repo" && $3 == "create" && $4 != "--help" { on = 1 }
-    on { out = $2; for (i = 3; i <= NF; i++) out = out " " ($(i - 1) == "--body-file" ? "<file>" : $i); print out }' "$1/gh.log"
+    on { out = $2; for (i = 3; i <= NF; i++) out = out " " ($(i - 1) == "--body-file" ? "<file>" : ($(i - 1) == "--match-head-commit" ? "<sha>" : $i)); print out }' "$1/gh.log"
 }
 
 # expect_calls <dir> <call...>: exactly these calls, in this order, from
@@ -3800,7 +3964,7 @@ test_proceed_is_asked_with_no_as_its_default() {
   d="$(tmpdir)"
   printf 'yes\n' >"$d/in"
   setup_run "$d"
-  expect_rc 1 "$d"
+  expect_rc 0 "$d"
   n="$(grep -c -xF 'Proceed? (yes or no) [no]: ' "$d/out" || true)"
   [ "$n" -eq 1 ] || { cat "$d/out" >&2; die "Proceed? asked $n times"; }
   why="$(grep -B1 -xF 'Proceed? (yes or no) [no]: ' "$d/out" | sed -n 1p)"
@@ -3833,7 +3997,7 @@ test_yes_skips_proceed_and_non_interactive_needs_yes_or_dry_run() {
   local d
   d="$(tmpdir)"
   setup_run "$d" --yes
-  expect_rc 1 "$d"
+  expect_rc 0 "$d"
   expect_no_out "$d" "Proceed?"
   [ "$(calls_from_create "$d" | sed -n 1p)" = "$CREATE_CALL" ] || { cat "$d/gh.log" >&2; die "not created with --yes"; }
   # --non-interactive alone cannot ask: refused with the other option
@@ -3870,17 +4034,17 @@ test_create_waits_for_the_files_then_protects_main_with_the_exact_body() {
   local d n_start n_done
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
-  expect_rc 1 "$d"
-  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL"
+  expect_rc 0 "$d"
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL" "${END_CALLS[@]}"
   # Byte for byte: the body as sent, then the line break the stub adds
-  # (a here-string ends in one too, so two in all).
+  # (a here-string ends in one too, so two in all). The second body, of
+  # step 16, is checked in test_build_is_required_after_it_passed_with_the_exact_body_and_read_back.
   printf '%s\n\n' "$PROTECT_BODY" >"$d/want-body"
-  cmp -s "$d/want-body" "$d/protection-bodies" || { od -c "$d/protection-bodies" | tail -3 >&2; die "protection body is not the spec's"; }
+  head -2 "$d/protection-bodies" | cmp -s "$d/want-body" - || { od -c "$d/protection-bodies" | head -5 >&2; die "protection body is not the spec's"; }
   [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] || { cat "$d/gh.log" >&2; die "a gh call ran with prompts on"; }
   [ ! -s "$d/sleep.log" ] || die "it waited although the files were there"
-  sed -n 1p "$d/err" | grep -qF "What happened: The project octo-user/my-app was created on GitHub and its main version is protected." \
-    || { cat "$d/err" >&2; die "no plain stop after step 3"; }
-  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/err" >&2; die "the stop does not say the next steps are not built"; }
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not go through to the report"; }
+  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "a run that went through wrote to stderr"; }
   for t in "==> Creating the project octo-user/my-app on GitHub" "==> Waiting for GitHub to put the bootstrapper's files into the project" \
     "==> Protecting the main version of the project" "==> Setting how proposed changes are added to the project"; do
     expect_out "$d" "$t"
@@ -3892,7 +4056,7 @@ test_create_waits_for_the_files_then_protects_main_with_the_exact_body() {
   # Private: the flag, and the plan warned before creating.
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes --private
-  expect_rc 1 "$d"
+  expect_rc 0 "$d"
   [ "$(calls_from_create "$d" | sed -n 1p)" = "${CREATE_CALL/--public/--private}" ] || { cat "$d/gh.log" >&2; die "not created private"; }
   grep -n 'needs a paid GitHub plan' "$d/out" | head -1 | cut -d: -f1 >"$d/w"
   grep -n '==> Creating the project' "$d/out" | cut -d: -f1 >"$d/c"
@@ -3905,11 +4069,11 @@ test_the_files_are_waited_for_retrying_on_404_for_up_to_a_minute() {
   echo 3 >"$d/main-missing"
   echo 2 >"$d/changelog-missing"
   setup_run "$d" --non-interactive --yes
-  expect_rc 1 "$d"
+  expect_rc 0 "$d"
   expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$BRANCH_CALL" "$BRANCH_CALL" "$BRANCH_CALL" \
-    "$FILES_CALL" "$FILES_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL"
+    "$FILES_CALL" "$FILES_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL" "${END_CALLS[@]}"
   [ "$(cat "$d/sleep.log")" = "$(printf '2\n2\n2\n2\n2')" ] || { cat "$d/sleep.log" >&2; die "not 5 waits of 2 seconds"; }
-  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/err" >&2; die "did not reach the end of step 3"; }
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/err" >&2; die "did not reach the end of step 3"; }
   # Never there: 30 waits of 2 seconds (60 s), then a plain stop with the
   # command to continue; protection is not touched.
   d="$(tmpdir)"
@@ -3954,7 +4118,7 @@ test_a_403_on_protection_stops_before_anything_else_with_its_guide() {
     expect_continue_command "$d" " --resume"
     expect_no_out "$d" "Press Enter"
     sed -n 1p "$d/err" | grep -q '^What happened: .*octo-user/my-app exists on GitHub' || { cat "$d/err" >&2; die "$mode: the stop does not say the project exists"; }
-    expect_no_out "$d" "$NOT_BUILT"
+    expect_no_out "$d" "$FINISHED"
     [ -z "$(ls -A "$d/cwd")" ] || die "$mode: something was made on this computer"
     case "$mode" in
       plan | mystery)
@@ -4046,8 +4210,8 @@ test_the_licence_is_checked_with_github_before_anything_is_created() {
   local d
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
-  expect_rc 1 "$d"
-  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
   [ "$(grep -F "$(printf '\t--jq\t.key')" "$d/gh.log")" = "$(printf 'GH_PROMPT_DISABLED=1\tapi\t-i\tlicenses/mit\t--jq\t.key')" ] \
     || { cat "$d/gh.log" >&2; die "the licence was not checked once, with gh's prompts off"; }
   grep -n "$(printf '\tlicenses/mit\t--jq\t.key')" "$d/gh.log" | cut -d: -f1 >"$d/k"
@@ -4111,9 +4275,11 @@ test_an_unknown_licence_given_as_an_option_stops_before_anything_is_created() {
 
 test_an_unknown_licence_typed_at_the_question_is_asked_again() {
   # S6's rule for an answer that cannot be used: explained, then the
-  # question again. The new answer is checked too; none needs no check.
-  local d again want
-  for again in mit 1; do
+  # question again. The new answer is checked too; none (1) and PolyForm
+  # Noncommercial (6) need no check, and the step ends with its own done
+  # line straight after the question (#156 review).
+  local d again want lic
+  for again in mit 1 6; do
     d="$(tmpdir)"
     working_git "$d"
     # name, display name, description, owner, product owner, pack,
@@ -4132,7 +4298,16 @@ test_an_unknown_licence_typed_at_the_question_is_asked_again() {
       expect_out "$d" "    Done. GitHub knows the licence mit."
     else
       want="$(printf 'api\t-i\tlicenses/mti\t--jq\t.key')"
-      expect_out "$d" "    Licence: none (no licence file"
+      if [ "$again" = 1 ]; then
+        lic=none
+        expect_out "$d" "    Licence: none (no licence file"
+      else
+        lic=polyform-noncommercial-1.0.0
+        expect_out "$d" "    Licence: polyform-noncommercial-1.0.0, in the name of"
+      fi
+      grep -A1 -F 'Licence (type the number or the name): ' "$d/out" | tail -1 >"$d/done"
+      [ "$(cat "$d/done")" = "    Done. Nothing to check with GitHub for the licence $lic." ] \
+        || { cat "$d/out" >&2; die "[$again] the step does not end with its done line after the question"; }
     fi
     [ "$(grep -F "$(printf '\tlicenses/')" "$d/gh.log" | cut -f2-)" = "$want" ] || { cat "$d/gh.log" >&2; die "[$again] the licence checks were not as expected"; }
     [ "$(grep -c '^==> Checking that GitHub knows the licence' "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "[$again] the step did not start once"; }
@@ -4144,10 +4319,10 @@ test_actions_turned_on_are_checked_right_after_protection() {
   local d
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
-  expect_rc 1 "$d"
-  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
   # After the settings of step 3, before the copy (expect_calls is exact).
-  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL"
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL" "${END_CALLS[@]}"
   grep -A1 -xF "==> Checking that GitHub Actions, which runs the project's checks, is turned on for it" "$d/out" | sed -n 2p >"$d/done"
   [ "$(cat "$d/done")" = "    Done. GitHub Actions is turned on for the project, so its checks can run there." ] \
     || { cat "$d/out" >&2; die "no step lines for the Actions check"; }
@@ -4172,17 +4347,17 @@ test_actions_turned_off_stop_before_the_copy_with_their_guide() {
   sed -n 1p "$d/err" | grep -qF "What happened: GitHub Actions, the GitHub service that runs your project's checks, is turned off for the project octo-user/my-app. The script stopped here. The project octo-user/my-app exists on GitHub" \
     || { cat "$d/err" >&2; die "the stop does not say what is off and what exists"; }
   [ -z "$(ls -A "$d/cwd")" ] || { ls -A "$d/cwd" >&2; die "something was made on this computer"; }
-  ! grep -qF "$NOT_BUILT" "$d/err" || die "it went on with Actions off"
+  ! grep -qxF "$FINISHED" "$d/out" || die "it went on with Actions off"
   # Interactive: turned on while the script waits; Enter checks again and
   # the setup goes on.
   d="$(tmpdir)"
   echo 1 >"$d/actions-off"
   printf 'yes\n\n' >"$d/in"
   setup_run "$d"
-  expect_rc 1 "$d"
+  expect_rc 0 "$d"
   expect_out "$d" "Press Enter to check again"
-  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL"
-  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "did not go on after Actions was turned on"; }
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL" "${END_CALLS[@]}"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not go on after Actions was turned on"; }
   # Interactive, stopped at the guide (q): the command to continue, and
   # nothing on this computer.
   d="$(tmpdir)"
@@ -4210,9 +4385,9 @@ test_an_actions_check_github_does_not_answer_carries_on_with_a_note() {
     esac
     setup_run "$d" --non-interactive --yes
     unset STUB_GH_ACTIONS_ANSWER STUB_GH_ACTIONS_FAIL
-    expect_rc 1 "$d"
-    grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "$mode: did not go on"; }
-    expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL"
+    expect_rc 0 "$d"
+    grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "$mode: did not go on"; }
+    expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL" "${END_CALLS[@]}"
     sed -n "/^==> Checking that GitHub Actions/,/^    Done\. /p" "$d/out" >"$d/step"
     grep -qF "The script could not check whether GitHub Actions is turned on for the project" "$d/step" || { cat "$d/out" >&2; die "$mode: no note"; }
     grep -qxF 'Details for support (you can ignore these):' "$d/step" || { cat "$d/out" >&2; die "$mode: the answer is not introduced"; }
@@ -4228,7 +4403,7 @@ test_an_actions_check_github_does_not_answer_carries_on_with_a_note() {
   setup_run "$d" --non-interactive --yes
   unset STUB_GH_ACTIONS_FAIL
   expect_rc 1 "$d"
-  expect_err_shape "$d" "GitHub had a problem of its own, so the script could not check whether GitHub Actions is turned on for the project\. "
+  expect_err_shape "$d" "GitHub had a problem of its own, so the script could not check whether GitHub Actions is turned on for the project\. The project octo-user/my-app exists on GitHub"
   expect_continue_command "$d" " --resume"
   expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL"
   [ -z "$(ls -A "$d/cwd")" ] || { ls -A "$d/cwd" >&2; die "server: something was made on this computer"; }
@@ -4307,7 +4482,7 @@ test_a_failed_settings_change_is_explained_with_the_continue_command() {
   expect_err_shape "$d" ".{10,}"
   grep -qF 'Must have admin rights' "$d/err" || { cat "$d/err" >&2; die "gh's text not below"; }
   expect_continue_command "$d" " --resume"
-  expect_no_out "$d" "$NOT_BUILT"
+  expect_no_out "$d" "$FINISHED"
 }
 
 test_resume_stops_before_the_plan_until_it_is_built() {
@@ -4405,8 +4580,8 @@ test_a_404_or_429_gets_the_next_action_of_its_own_call() {
 # any other target already there an error; --with-deploy adds the web
 # deploy files); then the tidy-up. The later steps save (commit), send
 # (push) and propose the change (see "self-check, save, send and
-# propose" below); then the script stops: the next steps are not built
-# yet (exit 1). These runs use the built, stamped script (use_built), and the
+# propose" below), and steps 15 to 19 follow (see "wait, require, add,
+# finish and report"). These runs use the built, stamped script (use_built), and the
 # stub gh makes each project from a real build.sh output.
 
 copy_of() { printf '%s\n' "$1/cwd/my-app"; }
@@ -4432,29 +4607,32 @@ STEPS_AFTER_SETTINGS='==> Checking that GitHub Actions, which runs the project'"
 ==> Checking the setup'"'"'s changes before saving them
 ==> Saving the setup'"'"'s changes in the copy as one change, "Set up my-app"
 ==> Sending the setup'"'"'s changes to GitHub, on the line of work bootstrap-setup
-==> Proposing the setup'"'"'s changes on GitHub, where the project'"'"'s checks run on them'
+==> Proposing the setup'"'"'s changes on GitHub, where the project'"'"'s checks run on them
+==> Waiting for the project'"'"'s check build to pass on the proposed change, for up to 20 minutes
+==> Making the check build required, so that from now on a change is added to the main version only after build passes
+==> Adding the proposed change to the main version of the project
+==> Updating the copy on this computer to the new main version'
 
 test_the_copy_is_made_by_gh_and_checked_against_the_script_version() {
   local d c
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
-  expect_rc 1 "$d"
-  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL"
+  expect_rc 0 "$d"
+  expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL" "${END_CALLS[@]}"
   [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] || { cat "$d/gh.log" >&2; die "a gh call ran with prompts on"; }
   c="$(copy_of "$d")"
   [ "$(in_git -C "$c" rev-parse origin/main)" = "$(in_git --git-dir="$(bare_of "$d")" rev-parse main)" ] \
     || die "the copy is not of the project that was made"
   # The new steps, in order, each with a start and a done line.
   [ "$(grep '^==> ' "$d/out" | sed -n '/^==> Setting how proposed/,$p' | sed 1d)" = "$STEPS_AFTER_SETTINGS" ] \
-    || { cat "$d/out" >&2; die "the steps after the settings are not the Actions check, the copy, name, line of work, pack, tidy-up, fill, licence, CHANGELOG, self-check, save, send, propose"; }
+    || { cat "$d/out" >&2; die "the steps after the settings are not the Actions check, the copy, name, line of work, pack, tidy-up, fill, licence, CHANGELOG, self-check, save, send, propose, wait, require, add, update"; }
   [ "$(grep -c '^==> ' "$d/out")" -eq "$(grep -c '^    Done\. ' "$d/out")" ] || { cat "$d/out" >&2; die "a step has no done line"; }
   expect_out "$d" "    Done. The copy is in ./my-app, with the files of version $BUILT_VERSION of the bootstrapper."
-  # The stop: what exists, that the next steps are not built, and the
-  # command to continue.
-  sed -n 1p "$d/err" | grep -qF "What happened: The project octo-user/my-app was created on GitHub and its main version is protected. The setup's changes were saved in its copy on this computer, in ./my-app, sent to GitHub and proposed there: https://github.com/octo-user/my-app/pull/1. This version of the script stops here: the next steps of the setup are not built yet." \
-    || { cat "$d/err" >&2; die "the stop does not say what exists"; }
-  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/err" >&2; die "the stop does not say the next steps are not built"; }
-  expect_continue_command "$d" " --resume"
+  # It goes through to the report, with nothing on stderr and no command
+  # to continue.
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not go through to the report"; }
+  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "a run that went through wrote to stderr"; }
+  expect_no_out "$d" "To continue the setup, run this command:"
 }
 
 test_the_git_name_and_email_are_written_into_the_copy_only() {
@@ -4463,7 +4641,7 @@ test_the_git_name_and_email_are_written_into_the_copy_only() {
   prepare "$d"
   cp "$d/home/.gitconfig" "$d/global-before"
   setup_run "$d" --non-interactive --yes --git-name "Ada Lovelace" --git-email ada@example.com
-  expect_rc 1 "$d"
+  expect_rc 0 "$d"
   c="$(copy_of "$d")"
   [ "$(in_git -C "$c" config --local --get user.name)" = "Ada Lovelace" ] || die "the name is not in the copy's settings"
   [ "$(in_git -C "$c" config --local --get user.email)" = ada@example.com ] || die "the email is not in the copy's settings"
@@ -4482,10 +4660,14 @@ test_the_setup_is_saved_as_one_change_sent_on_its_line_of_work_and_proposed() {
   # one change "Set up <name>" under the git name and email of the
   # questions, sent to GitHub on that line of work (main is not touched),
   # and proposed there with gh pr create, its title and body given, so gh
-  # asks nothing. Afterwards the copy has nothing left unsaved.
+  # asks nothing. Afterwards the copy has nothing left unsaved. The check
+  # build fails here, so the run stops right after the proposed change
+  # (step 15) and the state of step 14 can be seen.
   local d c bare body
   d="$(tmpdir)"
+  export STUB_GH_BUILD="pull_request fail"
   setup_run "$d" --non-interactive --yes
+  unset STUB_GH_BUILD
   expect_rc 1 "$d"
   c="$(copy_of "$d")"
   bare="$(bare_of "$d")"
@@ -4501,9 +4683,10 @@ test_the_setup_is_saved_as_one_change_sent_on_its_line_of_work_and_proposed() {
   [ "$(in_git --git-dir="$bare" rev-parse main)" = "$(in_git -C "$c" rev-parse origin/main)" ] || die "main on GitHub was changed"
   [ "$(in_git --git-dir="$bare" for-each-ref --format='%(refname)' | LC_ALL=C sort)" = "$(printf '%s\n' refs/heads/bootstrap-setup refs/heads/main)" ] \
     || die "something else was sent to GitHub"
-  # gh after the copy: the licence, then the proposed change; its body file
-  # is a temporary file outside the copy, gone afterwards.
-  [ "$(calls_from_create "$d" | tail -3)" = "$CLONE_CALL"$'\n'"$LICENSE_CALL"$'\n'"$PR_CALL" ] || { cat "$d/gh.log" >&2; die "gh was not used for the licence and then the proposed change"; }
+  # gh after the copy: the licence, then the proposed change (then the
+  # look at build and, as it failed, at the actions allowed); its body
+  # file is a temporary file outside the copy, gone afterwards.
+  [ "$(calls_from_create "$d" | sed -n '/^repo clone /,$p')" = "$CLONE_CALL"$'\n'"$LICENSE_CALL"$'\n'"$PR_CALL"$'\n'"$CHECKS_CALL"$'\n'"$ALLOWED_CALL" ] || { cat "$d/gh.log" >&2; die "gh was not used for the licence and then the proposed change"; }
   body="$(awk -F'\t' '$2 == "pr" { for (i = 3; i <= NF; i++) if ($(i - 1) == "--body-file") print $i }' "$d/gh.log")"
   case "$body" in "$c"/*) die "the body file was in the copy: $body" ;; esac
   [ ! -e "$body" ] || die "the body file was left behind: $body"
@@ -4754,8 +4937,8 @@ test_every_pack_leaves_exactly_the_expected_tree() {
     d="$(tmpdir)"
     fake_tool "$d" npm 10.0.0
     setup_run "$d" --non-interactive --yes --pack "$p" $deploy
-    expect_rc 1 "$d"
-    grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/err" >&2; die "$p$deploy: did not reach the end"; }
+    expect_rc 0 "$d"
+    grep -qxF "$FINISHED" "$d/out" || { cat "$d/err" >&2; die "$p$deploy: did not reach the end"; }
     expect_setup_tree "$d" "$(copy_of "$d")" "$p" "$deploy"
   done
 }
@@ -4853,7 +5036,7 @@ test_a_copy_that_does_not_fit_the_setup_stops_with_the_continue_command() {
     || { cat "$d/err" >&2; die "the stop does not name the file and what exists"; }
   sed -n 2p "$d/err" | grep -qE '^What to do next: .{10,}' || { cat "$d/err" >&2; die "no next action"; }
   expect_continue_command "$d" " --resume"
-  ! grep -qF "$NOT_BUILT" "$d/err" || die "it went on after the error"
+  ! grep -qxF "$FINISHED" "$d/out" || die "it went on after the error"
   c="$(copy_of "$d")"
   [ ! -e "$c/pyproject.toml" ] && [ -d "$c/languages/node" ] && [ -f "$c/bootstrap-project.sh" ] || die "something was laid out or removed"
   # A README.md without its setup section: a plain stop.
@@ -4866,7 +5049,7 @@ test_a_copy_that_does_not_fit_the_setup_stops_with_the_continue_command() {
   sed -n 1p "$d/err" | grep -qF "What happened: The file README.md in the copy of the project has no section that starts with \"## After bootstrapping\", which the setup removes." \
     || { cat "$d/err" >&2; die "the missing section is not explained"; }
   expect_continue_command "$d" " --resume"
-  ! grep -qF "$NOT_BUILT" "$d/err" || die "it went on after the error"
+  ! grep -qxF "$FINISHED" "$d/out" || die "it went on after the error"
   # #152 review, finding 2: these files come from the project GitHub made
   # from the current bootstrapper, so downloading the script again cannot
   # help: the next action is to report it.
@@ -4934,8 +5117,8 @@ test_a_folder_named_like_a_setting_or_an_option_gets_the_whole_tree_and_stdin_is
       IFS= read -r line || line="(nothing: stdin was read to its end)"
       printf '%s\n' "$line" >"$d/first"
     ) <"$d/in" >"$d/out" 2>"$d/err"
-    [ "$(cat "$d/rc")" -eq 1 ] || { cat "$d/out" "$d/err" >&2; die "$dir: exit $(cat "$d/rc"), want 1"; }
-    grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/err" >&2; die "$dir: did not reach the end"; }
+    [ "$(cat "$d/rc")" -eq 0 ] || { cat "$d/out" "$d/err" >&2; die "$dir: exit $(cat "$d/rc"), want 0"; }
+    grep -qxF "$FINISHED" "$d/out" || { cat "$d/err" >&2; die "$dir: did not reach the end"; }
     [ "$(cat "$d/first")" = first-line ] || die "$dir: stdin was read; the next line is: $(cat "$d/first")"
     [ "$(calls_from_create "$d" | grep '^repo clone ')" = "repo clone octo-user/my-app ./$dir" ] || { cat "$d/gh.log" >&2; die "$dir: not copied into ./$dir"; }
     [ "$(ls -A "$d/cwd")" = "$dir" ] || { ls -A "$d/cwd" >&2; die "$dir: the copy is not in the folder named"; }
@@ -4958,7 +5141,7 @@ test_a_failed_copy_is_explained_with_the_continue_command() {
   expect_continue_command "$d" " --resume"
   [ "$(calls_from_create "$d" | tail -1)" = "$CLONE_CALL" ] || { cat "$d/gh.log" >&2; die "gh was used after the failed copy"; }
   [ -z "$(ls -A "$d/cwd")" ] || { ls -A "$d/cwd" >&2; die "something was left on this computer"; }
-  ! grep -qF "$NOT_BUILT" "$d/err" || die "it went on after the error"
+  ! grep -qxF "$FINISHED" "$d/out" || die "it went on after the error"
   # gh signed out in between: the sign-in next action, to continue.
   d="$(tmpdir)"
   export STUB_GH_CLONE_FAIL=signed-out
@@ -5035,8 +5218,8 @@ test_values_with_special_characters_are_copied_literally() {
   W_SLUG=tool-shed
   setup_run "$d" --non-interactive --yes --pack react-native --name Tool.Shed \
     --project-name "$W_DISPLAY" --po-name "$W_PO" --description "$W_DESCRIPTION"
-  expect_rc 1 "$d"
-  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
   expect_setup_tree "$d" "$(copy_of "$d")" react-native
   # The values as typed, where a reader looks for them.
   grep -qxF "# $W_DISPLAY" "$(copy_of "$d")/README.md" || die "README.md: the display name is not the heading"
@@ -5096,7 +5279,7 @@ test_a_file_to_fill_that_is_missing_stops_before_any_file_is_filled() {
     || { cat "$d/err" >&2; die "the missing file is not named with what exists"; }
   sed -n 2p "$d/err" | grep -qF "Report it to the bootstrapper's maintainers" || { cat "$d/err" >&2; die "the next action is not to report it"; }
   expect_continue_command "$d" " --resume"
-  ! grep -qF "$NOT_BUILT" "$d/err" || die "it went on after the error"
+  ! grep -qxF "$FINISHED" "$d/out" || die "it went on after the error"
   c="$(copy_of "$d")"
   [ "$(sed -n 1p "$c/README.md")" = '# [PROJECT NAME]' ] || die "README.md was filled in before the stop"
   grep -qF '[PROJECT NAME]' "$c/memory/project.md" || die "memory/project.md was filled in before the stop"
@@ -5141,8 +5324,8 @@ test_the_npm_packs_get_a_lockfile_made_by_npm_after_the_fill() {
     # npm reads a line when it can; #154 review, finding 3).
     printf '%s\n' 'an-answer-for-the-script' >"$d/in"
     setup_run "$d" --non-interactive --yes --pack "$p"
-    expect_rc 1 "$d"
-    grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "$p: did not reach the end"; }
+    expect_rc 0 "$d"
+    grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "$p: did not reach the end"; }
     [ ! -e "$d/npm-stdin" ] || { cat "$d/npm-stdin" >&2; die "$p: npm read the script's stdin"; }
     c="$(copy_of "$d")"
     # One call, in the copy, with the spec's command (the same as packs.yml).
@@ -5165,15 +5348,15 @@ test_the_npm_packs_get_a_lockfile_made_by_npm_after_the_fill() {
   d="$(tmpdir)"
   fake_tool "$d" npm 10.0.0
   setup_run "$d" --non-interactive --yes --pack node --dir=-app
-  expect_rc 1 "$d"
-  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "-app: did not reach the end"; }
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "-app: did not reach the end"; }
   printf '%s\tinstall\t--package-lock-only\t--no-audit\t--no-fund\n' "$(cd "$d/cwd/-app" && pwd)" >"$d/want-npm"
   expect_same "-app: the npm calls" "$d/want-npm" "$d/npm.log"
   [ -f "$d/cwd/-app/package-lock.json" ] || die "-app: no lockfile"
   # python: no npm call, no lockfile.
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
-  expect_rc 1 "$d"
+  expect_rc 0 "$d"
   [ ! -s "$d/npm.log" ] || { cat "$d/npm.log" >&2; die "python: npm ran"; }
   [ ! -e "$(copy_of "$d")/package-lock.json" ] || die "python: a lockfile was made"
 }
@@ -5205,7 +5388,7 @@ test_a_failed_npm_is_explained_with_its_text_for_support() {
     grep -qxF "    npm error code $( [ "$mode" = offline ] && echo ENOTFOUND || echo ETARGET)" "$d/err" \
       || { cat "$d/err" >&2; die "$mode: npm's own text is not below for support"; }
     expect_continue_command "$d" " --resume"
-    ! grep -qF "$NOT_BUILT" "$d/err" || die "$mode: it went on after npm failed"
+    ! grep -qxF "$FINISHED" "$d/out" || die "$mode: it went on after npm failed"
     c="$(copy_of "$d")"
     [ ! -e "$c/package-lock.json" ] && [ ! -e "$c/LICENSE" ] || die "$mode: it went on after npm failed"
     ! grep -qF 'Set up by bootstrap-project.sh' "$c/CHANGELOG.md" || die "$mode: CHANGELOG.md was changed"
@@ -5224,8 +5407,8 @@ test_a_github_licence_gets_the_year_and_the_holder_filled_in() {
   export STUB_GH_CR=$'\r'
   setup_run "$d" --non-interactive --yes --copyright-holder "$W_HOLDER"
   unset STUB_GH_CR
-  expect_rc 1 "$d"
-  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
   # The preflight's check of the name, then the text read once at step
   # 10, both with gh's prompts off.
   [ "$(grep -F "$(printf '\tlicenses/')" "$d/gh.log")" = "$(printf 'GH_PROMPT_DISABLED=1\tapi\t-i\tlicenses/mit\t--jq\t.key\nGH_PROMPT_DISABLED=1\tapi\t-i\tlicenses/mit\t--jq\t.body')" ] \
@@ -5237,7 +5420,7 @@ test_a_github_licence_gets_the_year_and_the_holder_filled_in() {
   d="$(tmpdir)"
   W_LICENSE=apache-2.0 W_HOLDER="Ada L"
   setup_run "$d" --non-interactive --yes --license apache-2.0
-  expect_rc 1 "$d"
+  expect_rc 0 "$d"
   expect_setup_tree "$d" "$(copy_of "$d")" python
   grep -qF 'Copyright [yyyy] [name of copyright owner]' "$(copy_of "$d")/LICENSE" || die "apache-2.0: its own placeholders changed"
 }
@@ -5250,8 +5433,8 @@ test_polyform_noncommercial_is_copied_from_licenses_with_a_notice() {
   d="$(tmpdir)"
   W_LICENSE=polyform-noncommercial-1.0.0
   setup_run "$d" --non-interactive --yes --license polyform-noncommercial-1.0.0
-  expect_rc 1 "$d"
-  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
   ! grep -qF 'licenses/' "$d/gh.log" || { cat "$d/gh.log" >&2; die "GitHub was asked for the PolyForm text"; }
   c="$(copy_of "$d")"
   expect_setup_tree "$d" "$c" python
@@ -5267,8 +5450,8 @@ test_no_licence_adds_no_file_and_warns_only_for_a_public_project() {
   for vis in --public --private; do
     d="$(tmpdir)"
     setup_run "$d" --non-interactive --yes --license none $vis
-    expect_rc 1 "$d"
-    grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "$vis: did not reach the end"; }
+    expect_rc 0 "$d"
+    grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "$vis: did not reach the end"; }
     expect_setup_tree "$d" "$(copy_of "$d")" python
     ! grep -qF 'licenses/' "$d/gh.log" || die "$vis: GitHub was asked for a licence"
     expect_out "$d" "    Done. No licence file was added, because you chose none."
@@ -5301,7 +5484,7 @@ test_a_licence_github_does_not_know_is_explained_with_the_next_action() {
   sed -n 2p "$d/err" | grep -qF "https://choosealicense.com/licenses/" || { cat "$d/err" >&2; die "the next action does not say where to find the name"; }
   grep -qxF '    HTTP 404: Not Found' "$d/err" || { cat "$d/err" >&2; die "GitHub's answer is not below for support"; }
   expect_continue_command "$d" " --resume"
-  ! grep -qF "$NOT_BUILT" "$d/err" || die "it went on after the 404"
+  ! grep -qxF "$FINISHED" "$d/out" || die "it went on after the 404"
   c="$(copy_of "$d")"
   [ ! -e "$c/LICENSE" ] || die "a LICENSE was written"
   ! grep -qF 'Set up by bootstrap-project.sh' "$c/CHANGELOG.md" || die "CHANGELOG.md was changed"
@@ -5390,7 +5573,7 @@ test_an_empty_licence_text_or_a_missing_polyform_text_stops_with_the_continue_co
   expect_err_shape "$d" "GitHub sent an empty text for the licence mit, so the script could not add it\. The project octo-user/my-app exists on GitHub"
   grep -qxF '    HTTP 200 with an empty body for licenses/mit' "$d/err" || { cat "$d/err" >&2; die "empty: what GitHub sent is not below"; }
   expect_continue_command "$d" " --resume"
-  ! grep -qF "$NOT_BUILT" "$d/err" || die "empty: it went on"
+  ! grep -qxF "$FINISHED" "$d/out" || die "empty: it went on"
   c="$(copy_of "$d")"
   [ ! -e "$c/LICENSE" ] || die "empty: a LICENSE was written"
   ! grep -qF 'Set up by bootstrap-project.sh' "$c/CHANGELOG.md" || die "empty: CHANGELOG.md was changed"
@@ -5422,7 +5605,7 @@ test_an_empty_licence_text_or_a_missing_polyform_text_stops_with_the_continue_co
 # guide offers gh auth setup-git, which changes the global git settings,
 # so it runs only after a yes typed at the terminal. The copy is made the
 # same way. Then step 14: gh pr create, with its title and body given.
-# Then the script stops: the next steps are not built yet (exit 1).
+# Steps 15 to 19 follow (see "wait, require, add, finish and report").
 
 test_git_borrows_the_gh_sign_in_for_one_command_and_no_settings_change() {
   # The two -c settings are those gh auth setup-git writes into the
@@ -5437,8 +5620,8 @@ test_git_borrows_the_gh_sign_in_for_one_command_and_no_settings_change() {
   prepare "$d"
   cp "$d/home/.gitconfig" "$d/global-before"
   setup_run "$d" --non-interactive --yes
-  expect_rc 1 "$d"
-  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/err" >&2; die "did not reach the end"; }
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/err" >&2; die "did not reach the end"; }
   c="$(copy_of "$d")"
   want="git -c credential.https://github.com.helper= -c credential.https://github.com.helper=!'$d/gh' auth git-credential -C ./my-app push origin bootstrap-setup"
   [ "$(grep -F ' push ' "$d/tools.log")" = "$want" ] || { grep -F ' push ' "$d/tools.log" >&2 || true; die "the push is not: $want"; }
@@ -5495,14 +5678,14 @@ test_a_push_git_cannot_sign_in_for_offers_gh_auth_setup_git_after_saying_what_it
   failing_push "$d" auth 1
   printf 'yes\n' >"$d/tty"
   setup_run "$d" --yes
-  expect_rc 1 "$d"
-  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "yes: did not reach the end"; }
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "yes: did not reach the end"; }
   [ "$(cat "$d/run.log")" = "gh auth setup-git" ] || { cat "$d/run.log" >&2; die "yes: gh auth setup-git did not run"; }
   [ "$(grep -F ' push ' "$d/tools.log" | sed -n 2p)" = "git -C ./my-app push origin bootstrap-setup" ] \
     || { grep -F ' push ' "$d/tools.log" >&2 || true; die "yes: the second push is not a plain one"; }
   grep -qF 'changes your global git settings' "$d/out" || die "yes: the guide does not say what the command changes"
   [ "$(cat "$d/push-prompt")" = "$(printf '0\n0')" ] || { cat "$d/push-prompt" >&2; die "yes: a push was allowed to ask at the terminal"; }
-  [ "$(calls_from_create "$d" | tail -1)" = "$PR_CALL" ] || { cat "$d/gh.log" >&2; die "yes: no proposed change"; }
+  calls_from_create "$d" | grep -qxF "$PR_CALL" || { cat "$d/gh.log" >&2; die "yes: no proposed change"; }
   # --yes and no answer at the terminal: nothing runs; Enter on stdin
   # checks again, and the user's own fix works.
   d="$(tmpdir)"
@@ -5510,8 +5693,8 @@ test_a_push_git_cannot_sign_in_for_offers_gh_auth_setup_git_after_saying_what_it
   failing_push "$d" auth 1
   printf '\n' >"$d/in"
   setup_run "$d" --yes
-  expect_rc 1 "$d"
-  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "Enter: did not reach the end"; }
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "Enter: did not reach the end"; }
   expect_nothing_ran "$d"
   expect_out "$d" "Not run. Follow the steps above yourself."
 }
@@ -5572,8 +5755,8 @@ test_a_copy_git_cannot_sign_in_for_gets_the_same_guide() {
   printf 'yes\n' >"$d/tty"
   setup_run "$d" --yes
   unset STUB_GH_CLONE_FAIL
-  expect_rc 1 "$d"
-  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "yes: did not reach the end"; }
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "yes: did not reach the end"; }
   [ "$(cat "$d/run.log")" = "gh auth setup-git" ] || { cat "$d/run.log" >&2; die "yes: gh auth setup-git did not run"; }
   [ "$(calls_from_create "$d" | grep -c '^repo clone ')" -eq 2 ] || { cat "$d/gh.log" >&2; die "yes: the copy was not made again"; }
 }
@@ -5598,8 +5781,8 @@ test_the_git_name_and_email_are_checked_before_the_change_is_saved() {
   # check knows that, so such a name passes and is saved as git has it.
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes --git-name "O'Neil, Ada:"
-  expect_rc 1 "$d"
-  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "a name ending in : did not pass"; }
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "a name ending in : did not pass"; }
   [ "$(in_git -C "$(copy_of "$d")" log -1 --format=%an)" = "O'Neil, Ada" ] || die "the name was not saved as git has it"
 }
 
@@ -5642,8 +5825,8 @@ test_values_holding_texts_of_the_fill_table_get_through_the_whole_setup() {
   fake_tool "$d" npm 10.0.0
   setup_run "$d" --non-interactive --yes --pack node --project-name "[PO NAME] App" --po-name "[PROJECT NAME] Ltd" \
     --description "Shows [project-name] and [OWNER/REPO] tags."
-  expect_rc 1 "$d"
-  grep -qF "$NOT_BUILT" "$d/err" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
   c="$(copy_of "$d")"
   grep -qxF '# [PO NAME] App' "$c/README.md" || die "README.md: the display name is not the heading"
   grep -qF '"description": "Shows [project-name] and [OWNER/REPO] tags."' "$c/package.json" || die "package.json: the description is not there"
@@ -5844,7 +6027,7 @@ test_a_file_with_windows_line_endings_stops_before_anything_is_saved() {
 
 test_a_key_in_the_environment_never_appears_in_output_or_files() {
   # Spec, "No secrets": with keys in GH_TOKEN and GITHUB_TOKEN, a whole
-  # run up to the proposed change shows neither and writes neither into
+  # run through to the report shows neither and writes neither into
   # any file: the output, the logs of gh and git (so no command line holds
   # them), the copy and its git settings, the settings and refs of the
   # project on "GitHub", the home folder, the body of the proposed change;
@@ -5856,8 +6039,8 @@ test_a_key_in_the_environment_never_appears_in_output_or_files() {
   export GH_TOKEN="$t1" GITHUB_TOKEN="$t2"
   setup_run "$d" --non-interactive --yes
   unset GH_TOKEN GITHUB_TOKEN
-  expect_rc 1 "$d"
-  [ "$(calls_from_create "$d" | tail -1)" = "$PR_CALL" ] || { cat "$d/out" "$d/err" >&2; die "did not reach the proposed change"; }
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" && [ "$(calls_from_create "$d" | tail -1)" = "$MERGED_CALL" ] || { cat "$d/out" "$d/err" >&2; die "did not go through to the report"; }
   ! grep -rlF -e "$t1" -e "$t2" "$d" >"$d/hits" 2>/dev/null || { cat "$d/hits" >&2; die "a key from the environment was written"; }
   # git keeps the saved change compressed, where grep -r cannot see it
   # (#155 review, finding 8): every change, with its message and full
@@ -5897,8 +6080,472 @@ test_failures_to_propose_the_change_are_explained_with_the_continue_command() {
     esac
     grep -qF "sent to GitHub on the line of work bootstrap-setup" "$d/err" || { cat "$d/err" >&2; die "$mode: the stop does not say the changes were sent"; }
     expect_continue_command "$d" " --resume"
-    ! grep -qF "$NOT_BUILT" "$d/err" || die "$mode: it went on"
+    ! grep -qxF "$FINISHED" "$d/out" || die "$mode: it went on"
   done
+}
+
+# ---------- wait, require, add, finish and report (spec steps 15 to 19) ----------
+# After the proposed change: step 15 looks at the check named build with
+# gh pr checks every 15 seconds, for up to --ci-timeout minutes, taking
+# the run of the pull_request event, else any run of build; a failure
+# stops with the proposed change left open and its link (naming GitHub
+# Actions' "only the project's own actions" setting when that is the
+# cause). Step 16 PUTs the whole protection again with build required and
+# reads it back, field by field; step 17 adds the change with gh pr merge
+# --match-head-commit, run in the copy; step 18 brings the copy to the new
+# main, each action only when still needed; step 19 reports.
+
+# calls_after_proposing <dir>: the gh calls from the proposed change on.
+calls_after_proposing() { calls_from_create "$1" | sed -n '/^pr create /,$p'; }
+
+# expect_after_proposing <dir> <call...>: exactly these, in this order.
+expect_after_proposing() {
+  local d="$1" got want
+  shift
+  got="$(calls_after_proposing "$d")"
+  want="$(printf '%s\n' "$PR_CALL" "$@")"
+  [ "$got" = "$want" ] || { printf 'want:\n%s\ngot:\n%s\n' "$want" "$got" >&2; die "gh calls after the proposed change differ"; }
+}
+
+# expect_left_open <dir>: the run stopped before the change was added:
+# main on "GitHub" is still the template's one change, bootstrap-setup is
+# still there, the link of the proposed change is in the stop, and the
+# command to continue is shown.
+expect_left_open() {
+  local d="$1" bare
+  bare="$(bare_of "$d")"
+  [ "$(in_git --git-dir="$bare" rev-list --count main)" -eq 1 ] || die "the change was added to main"
+  in_git --git-dir="$bare" rev-parse -q --verify refs/heads/bootstrap-setup >/dev/null || die "bootstrap-setup is gone on GitHub"
+  [ ! -e "$d/merge-sha" ] || die "the stub merged"
+  grep -qF 'https://github.com/octo-user/my-app/pull/1' "$d/err" || { cat "$d/err" >&2; die "the link of the proposed change is not in the stop"; }
+  expect_continue_command "$d" " --resume"
+  ! grep -qxF "$FINISHED" "$d/out" || die "it went on to the report"
+}
+
+test_build_still_running_is_looked_at_again_every_15_seconds_until_it_passes() {
+  local d
+  # Pending three times (gh's exit 8), then passed: four looks, three
+  # waits of 15 seconds, one note that it is still running, then the rest.
+  d="$(tmpdir)"
+  echo 3 >"$d/build-pending"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 0 "$d"
+  expect_after_proposing "$d" "$CHECKS_CALL" "$CHECKS_CALL" "$CHECKS_CALL" "${END_CALLS[@]}"
+  [ "$(cat "$d/sleep.log")" = "$(printf '15\n15\n15')" ] || { cat "$d/sleep.log" >&2; die "not 3 waits of 15 seconds"; }
+  [ "$(grep -cxF 'The check build has not finished yet; the script looks again every 15 seconds.' "$d/out")" -eq 1 ] \
+    || { cat "$d/out" >&2; die "the note that build is still running is not shown once"; }
+  grep -A2 -xF "==> Waiting for the project's check build to pass on the proposed change, for up to 20 minutes" "$d/out" | tail -1 >"$d/done"
+  [ "$(cat "$d/done")" = "    Done. The check build passed on the proposed change." ] || { cat "$d/out" >&2; die "no done line for the wait"; }
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not go through"; }
+  # No check reported yet (gh's "no checks reported", exit 1) is waited
+  # for too, then the pending runs, then build passes.
+  d="$(tmpdir)"
+  echo 2 >"$d/checks-none"
+  echo 1 >"$d/build-pending"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 0 "$d"
+  expect_after_proposing "$d" "$CHECKS_CALL" "$CHECKS_CALL" "$CHECKS_CALL" "${END_CALLS[@]}"
+  [ "$(grep -c . "$d/sleep.log")" -eq 3 ] || { cat "$d/sleep.log" >&2; die "not 3 waits"; }
+  # Only other checks reported, no build yet: waited for as well.
+  d="$(tmpdir)"
+  export STUB_GH_BUILD=""
+  setup_run "$d" --non-interactive --yes --ci-timeout 1
+  unset STUB_GH_BUILD
+  expect_rc 1 "$d"
+  [ "$(grep -c . "$d/sleep.log")" -eq 4 ] || { cat "$d/sleep.log" >&2; die "no build: not waited for"; }
+  grep -qxF '    build: not reported yet' "$d/err" || { cat "$d/err" >&2; die "no build: not said below"; }
+}
+
+test_the_pull_request_run_of_build_counts_and_else_any_run_of_it() {
+  # ci.yml runs build on push and on pull_request, so the change has two
+  # runs of build: the pull_request one counts, whatever the push one
+  # says; without one, any run of build counts (spec step 15).
+  local d build want
+  for build in "push fail;pull_request pass|0" "pull_request pass;push fail|0" "push pass|0" \
+    "push pass;pull_request fail|1" "pull_request fail;push pass|1" "push fail|1"; do
+    want="${build#*|}"
+    d="$(tmpdir)"
+    export STUB_GH_BUILD="${build%|*}"
+    setup_run "$d" --non-interactive --yes
+    unset STUB_GH_BUILD
+    expect_rc "$want" "$d"
+    if [ "$want" = 0 ]; then
+      grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "[${build%|*}] did not go through"; }
+    else
+      expect_err_shape "$d" "The project's check build failed on the proposed change"
+    fi
+  done
+}
+
+test_a_failed_build_stops_and_leaves_the_proposed_change_open_with_its_link() {
+  local d bucket
+  for bucket in fail cancel skipping; do
+    d="$(tmpdir)"
+    export STUB_GH_BUILD="push pass;pull_request $bucket"
+    setup_run "$d" --non-interactive --yes
+    unset STUB_GH_BUILD
+    expect_rc 1 "$d"
+    expect_err_shape "$d" "The project's check build failed on the proposed change, so the script did not add the change to the main version\. The proposed change stays open on GitHub\. The project octo-user/my-app exists on GitHub, and the setup's changes are proposed there: https://github.com/octo-user/my-app/pull/1\$"
+    sed -n 2p "$d/err" | grep -qF 'Open https://github.com/octo-user/my-app/pull/1 in your browser, click Checks, then build' \
+      || { cat "$d/err" >&2; die "$bucket: the next action does not say where to look"; }
+    grep -qxF "    build: pull_request $bucket" "$d/err" || { cat "$d/err" >&2; die "$bucket: what gh said is not below"; }
+    # Only the actions allowed are asked for: no second protection, no merge.
+    expect_after_proposing "$d" "$CHECKS_CALL" "$ALLOWED_CALL"
+    [ "$(grep -c . "$d/protection-bodies")" -eq 1 ] || die "$bucket: the protection was changed again"
+    expect_left_open "$d"
+    expect_no_out "$d" "Why this is needed"
+  done
+  # GitHub does not say which actions are allowed: the plain stop stands.
+  d="$(tmpdir)"
+  export STUB_GH_BUILD="pull_request fail" STUB_GH_ALLOWED_FAIL=forbidden
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_BUILD STUB_GH_ALLOWED_FAIL
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "The project's check build failed on the proposed change"
+  expect_left_open "$d"
+}
+
+test_a_build_failed_with_only_the_projects_own_actions_allowed_gets_the_actions_guide() {
+  # #156 review: with allowed_actions local_only, the check of Actions
+  # after step 3 passes (enabled is true), and build fails at its first
+  # action made by GitHub. The stop says so, with the steps of the guide
+  # for Actions turned off, plus running the check again; exit 3.
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_BUILD="pull_request fail" STUB_GH_ALLOWED_ACTIONS=local_only
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_BUILD STUB_GH_ALLOWED_ACTIONS
+  expect_rc 3 "$d"
+  expect_out "$d" "GitHub Actions, the GitHub service that runs your project's checks, allows only actions from inside the project octo-user/my-app, so the check build failed: it uses actions made by GitHub."
+  expect_out "$d" "Why this is needed: "
+  # The same steps as for Actions turned off.
+  expect_out "$d" "  1. Open https://github.com/octo-user/my-app/settings/actions in your browser: the project's Settings, then Actions, then General."
+  expect_out "$d" "  2. Under \"Actions permissions\", choose \"Allow all actions and reusable workflows\", then click Save."
+  expect_out "$d" "  3. If those choices cannot be changed, the organisation (or enterprise) that owns the project has turned GitHub Actions off for its projects"
+  expect_out "$d" "  4. Then run the check again: open https://github.com/octo-user/my-app/pull/1 in your browser, click Checks, then \"Re-run all jobs\""
+  expect_out "$d" "How the script checks it: "
+  grep -qxF '    allowed_actions: local_only' "$d/out" || { cat "$d/out" >&2; die "GitHub's answer is not below the guide"; }
+  sed -n 1p "$d/err" | grep -qF "What happened: GitHub Actions, the GitHub service that runs your project's checks, allows only actions from inside the project octo-user/my-app, so the check build failed: it uses actions made by GitHub. The script stopped here. The project octo-user/my-app exists on GitHub, and the setup's changes are proposed there: https://github.com/octo-user/my-app/pull/1" \
+    || { cat "$d/err" >&2; die "the stop does not say what is limited and where the proposed change is"; }
+  expect_after_proposing "$d" "$CHECKS_CALL" "$ALLOWED_CALL"
+  expect_left_open "$d"
+  # Interactive too: it stops (the check has to run again on GitHub
+  # first), with no wait.
+  d="$(tmpdir)"
+  export STUB_GH_BUILD="pull_request fail" STUB_GH_ALLOWED_ACTIONS=local_only
+  printf 'yes\n\n\n' >"$d/in"
+  setup_run "$d"
+  unset STUB_GH_BUILD STUB_GH_ALLOWED_ACTIONS
+  expect_rc 3 "$d"
+  expect_no_out "$d" "Press Enter"
+  # Other settings (all, selected) leave the plain stop.
+  d="$(tmpdir)"
+  export STUB_GH_BUILD="pull_request fail" STUB_GH_ALLOWED_ACTIONS=selected
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_BUILD STUB_GH_ALLOWED_ACTIONS
+  expect_rc 1 "$d"
+  expect_no_out "$d" "allows only actions"
+}
+
+test_the_wait_for_build_ends_after_the_ci_timeout_with_the_proposed_change_open() {
+  local d m
+  for m in 1 2; do
+    d="$(tmpdir)"
+    echo 9999 >"$d/build-pending"
+    : >"$d/sleep.log"
+    setup_run "$d" --non-interactive --yes --ci-timeout "$m"
+    expect_rc 1 "$d"
+    # 60 / 15 = 4 waits a minute, and a look before each and after the last.
+    [ "$(grep -c . "$d/sleep.log")" -eq $((m * 4)) ] && [ "$(sort -u "$d/sleep.log")" = 15 ] || { cat "$d/sleep.log" >&2; die "$m: not $((m * 4)) waits of 15 seconds"; }
+    [ "$(calls_after_proposing "$d" | grep -cxF "$CHECKS_CALL")" -eq $((m * 4 + 1)) ] || { cat "$d/gh.log" >&2; die "$m: not $((m * 4 + 1)) looks"; }
+    if [ "$m" = 1 ]; then
+      expect_err_shape "$d" "The project's check build had not passed on the proposed change after 1 minute, so the script did not add the change to the main version\. The proposed change stays open on GitHub\. "
+      expect_out "$d" "for up to 1 minute"
+    else
+      expect_err_shape "$d" "The project's check build had not passed on the proposed change after 2 minutes, "
+    fi
+    sed -n 2p "$d/err" | grep -qF -- '--ci-timeout' || { cat "$d/err" >&2; die "$m: the next action does not say how to wait longer"; }
+    grep -qxF '    build: pull_request pending' "$d/err" || { cat "$d/err" >&2; die "$m: what gh said is not below"; }
+    [ "$(grep -c . "$d/protection-bodies")" -eq 1 ] || die "$m: the protection was changed again"
+    expect_left_open "$d"
+  done
+}
+
+test_gh_failing_to_show_the_checks_is_explained_with_the_proposed_change_open() {
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_CHECKS_FAIL=signed-out
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "gh \(the GitHub command-line tool\) is not signed in to your GitHub account, so the script could not look at the project's checks on the proposed change\. "
+  sed -n 2p "$d/err" | grep -qF 'gh auth login' || { cat "$d/err" >&2; die "signed out: the sign-in command is not given"; }
+  expect_left_open "$d"
+  d="$(tmpdir)"
+  export STUB_GH_CHECKS_FAIL=broken
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_CHECKS_FAIL
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "gh \(the GitHub command-line tool\) could not look at the project's checks on the proposed change\. "
+  grep -qxF '    stub gh: the connection broke off' "$d/err" || { cat "$d/err" >&2; die "broken: gh's text not below"; }
+  expect_after_proposing "$d" "$CHECKS_CALL"
+  expect_left_open "$d"
+}
+
+test_build_is_required_after_it_passed_with_the_exact_body_and_read_back() {
+  # Spec step 16: after build has passed and before the change is added,
+  # the whole protection is PUT again, byte for byte the step 3 body with
+  # build required, then read back.
+  local d
+  d="$(tmpdir)"
+  echo 1 >"$d/build-pending"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 0 "$d"
+  printf '%s\n\n%s\n\n' "$PROTECT_BODY" "$REQUIRE_BODY" >"$d/want-bodies"
+  cmp -s "$d/want-bodies" "$d/protection-bodies" || { od -c "$d/protection-bodies" | tail -5 >&2; die "the protection bodies are not the spec's"; }
+  # In order: build looked at until it passed, the PUT, the read-back,
+  # then the change added (expect_after_proposing is exact).
+  expect_after_proposing "$d" "$CHECKS_CALL" "$CHECKS_CALL" "$PROTECT_CALL" "$READBACK_CALL" "$MERGE_CALL" "$MERGED_CALL"
+  grep -A1 -xF '==> Making the check build required, so that from now on a change is added to the main version only after build passes' "$d/out" | sed -n 2p >"$d/done"
+  [ "$(cat "$d/done")" = "    Done. GitHub reports the protection of the main version as the script set it, with build required." ] \
+    || { cat "$d/out" >&2; die "no step lines for the required check"; }
+  [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] || { cat "$d/gh.log" >&2; die "a gh call ran with prompts on"; }
+}
+
+test_a_protection_read_back_that_differs_stops_before_the_change_is_added() {
+  local d
+  # One field differs and one is missing: each named below, nothing added.
+  d="$(tmpdir)"
+  export STUB_GH_READBACK="contexts=build;strict=false;enforce_admins=false;approvals=0;restrictions=null;allow_force_pushes=false"
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_READBACK
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "GitHub does not report the protection of the main version as the script set it, so the script did not add the setup's change to the main version\. The proposed change stays open on GitHub\. "
+  sed -n 2p "$d/err" | grep -qF 'https://github.com/octo-user/my-app/settings' || { cat "$d/err" >&2; die "the next action does not say where to look"; }
+  [ "$(sed -n '4,$p' "$d/err")" = "$(printf '%s\n' '    enforce_admins: the script set true, GitHub reports false' '    allow_deletions: the script set false, GitHub reports nothing')" ] \
+    || { cat "$d/err" >&2; die "the differences are not listed field by field"; }
+  expect_after_proposing "$d" "$CHECKS_CALL" "$PROTECT_CALL" "$READBACK_CALL"
+  expect_left_open "$d"
+  # A wrong required check (as when GitHub kept only the old one).
+  d="$(tmpdir)"
+  export STUB_GH_READBACK="contexts=;strict=null;enforce_admins=true;approvals=0;restrictions=null;allow_force_pushes=false;allow_deletions=false"
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_READBACK
+  expect_rc 1 "$d"
+  grep -qxF '    contexts: the script set build, GitHub reports ' "$d/err" && grep -qxF '    strict: the script set false, GitHub reports null' "$d/err" \
+    || { cat "$d/err" >&2; die "the required check difference is not listed"; }
+  expect_left_open "$d"
+  # GitHub does not answer the read-back or refuses the PUT: the plain
+  # message of that call, the command to continue, nothing added.
+  d="$(tmpdir)"
+  export STUB_GH_READBACK_FAIL=server
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_READBACK_FAIL
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "GitHub had a problem of its own, so the script could not read back the protection of the main version\. The project octo-user/my-app exists on GitHub"
+  expect_left_open "$d"
+  d="$(tmpdir)"
+  export STUB_GH_REQUIRE_FAIL=not-found
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_REQUIRE_FAIL
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "GitHub did not find what the script needed to make the check build required for the main version\. "
+  sed -n 2p "$d/err" | grep -qF 'admins' || { cat "$d/err" >&2; die "the 404 next action is not its own"; }
+  expect_after_proposing "$d" "$CHECKS_CALL" "$PROTECT_CALL"
+  expect_left_open "$d"
+}
+
+test_the_change_is_added_with_the_head_that_was_sent_from_inside_the_copy() {
+  # Spec step 17: gh pr merge <n> --squash --delete-branch
+  # --match-head-commit <the change sent>, run in the copy; GitHub's new
+  # main holds exactly the files of that change.
+  local d c bare sent
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 0 "$d"
+  c="$(copy_of "$d")"
+  bare="$(bare_of "$d")"
+  sent="$(awk -F'\t' '$2 == "pr" && $3 == "merge" { print $NF }' "$d/gh.log")"
+  [ -n "$sent" ] && [ "$sent" = "$(cat "$d/merged-head")" ] || { cat "$d/gh.log" >&2; die "the id given is not the head of bootstrap-setup on GitHub"; }
+  [ "$(in_git -C "$c" log -1 --format=%s "$sent")" = "Set up my-app" ] || die "the id given is not the setup's change"
+  [ "$(awk -F'\t' '$2 == "pr" && $3 == "merge" { print $4, $5, $6, $7 }' "$d/gh.log")" = "1 --squash --delete-branch --match-head-commit" ] \
+    || { cat "$d/gh.log" >&2; die "not merged with --squash --delete-branch --match-head-commit"; }
+  [ "$(cat "$d/merge-cwd")" = "$c" ] || { cat "$d/merge-cwd" >&2; die "gh pr merge did not run in the copy"; }
+  [ "$(in_git --git-dir="$bare" rev-parse main)" = "$(cat "$d/merge-sha")" ] || die "main on GitHub is not the added change"
+  [ "$(in_git --git-dir="$bare" rev-parse 'main^{tree}')" = "$(in_git --git-dir="$bare" rev-parse "$sent^{tree}")" ] || die "main does not hold the files sent"
+  grep -A1 -xF '==> Adding the proposed change to the main version of the project' "$d/out" | sed -n 2p >"$d/done"
+  [ "$(cat "$d/done")" = "    Done. The setup's changes are in the main version of the project on GitHub." ] || { cat "$d/out" >&2; die "no step lines for adding the change"; }
+}
+
+test_a_change_github_did_not_add_stops_with_the_proposed_change_open() {
+  local d
+  # GitHub refuses: gh's text below, nothing added.
+  d="$(tmpdir)"
+  export STUB_GH_MERGE_FAIL=refused
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_MERGE_FAIL
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "GitHub did not add the proposed change to the main version\. The proposed change stays open on GitHub\. "
+  sed -n 2p "$d/err" | grep -qF 'Open https://github.com/octo-user/my-app/pull/1 in your browser' || { cat "$d/err" >&2; die "refused: the next action does not give the link"; }
+  grep -qF '    GraphQL: Required status check "build" is expected.' "$d/err" || { cat "$d/err" >&2; die "refused: gh's text not below"; }
+  expect_after_proposing "$d" "$CHECKS_CALL" "$PROTECT_CALL" "$READBACK_CALL" "$MERGE_CALL" "$MERGED_CALL"
+  expect_left_open "$d"
+  # Not signed in any more.
+  d="$(tmpdir)"
+  export STUB_GH_MERGE_FAIL=signed-out
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_MERGE_FAIL
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "gh \(the GitHub command-line tool\) is not signed in to your GitHub account, so the script could not add the proposed change to the main version\. "
+  expect_left_open "$d"
+  # gh fails after GitHub added the change: GitHub says it was added, so
+  # the setup goes on.
+  d="$(tmpdir)"
+  export STUB_GH_MERGE_FAIL=broken-but-merged
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_MERGE_FAIL
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "broken but added: did not go on"; }
+  # GitHub does not say whether it was added: its plain message.
+  d="$(tmpdir)"
+  export STUB_GH_PULL_FAIL=server
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_PULL_FAIL
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "GitHub had a problem of its own, so the script could not check whether the proposed change was added to the main version\. "
+  expect_continue_command "$d" " --resume"
+}
+
+test_the_finish_works_whether_or_not_gh_already_switched_the_copy_to_main() {
+  # Spec step 18: gh pr merge --delete-branch may already have switched
+  # the copy to main, brought it up to date and deleted bootstrap-setup
+  # (the stub does, as gh does in a copy on that line of work), or not
+  # (STUB_GH_MERGE_LOCAL=no). Either way the copy ends on main, at the
+  # change GitHub made, with no bootstrap-setup left, here or as a
+  # leftover of GitHub's, and nothing unsaved; the script does only what
+  # is still needed.
+  local d c local_done
+  for local_done in yes no; do
+    d="$(tmpdir)"
+    export STUB_GH_MERGE_LOCAL="$local_done"
+    setup_run "$d" --non-interactive --yes
+    unset STUB_GH_MERGE_LOCAL
+    expect_rc 0 "$d"
+    c="$(copy_of "$d")"
+    [ "$(in_git -C "$c" symbolic-ref --short HEAD)" = main ] || die "$local_done: the copy is not on main"
+    [ "$(in_git -C "$c" rev-parse HEAD)" = "$(cat "$d/merge-sha")" ] || die "$local_done: the copy is not at the added change"
+    [ "$(in_git -C "$c" for-each-ref --format='%(refname)' refs/heads refs/remotes | grep -v '/HEAD$' | LC_ALL=C sort)" = "$(printf '%s\n' refs/heads/main refs/remotes/origin/main)" ] \
+      || { in_git -C "$c" for-each-ref >&2; die "$local_done: a line of work other than main is left in the copy"; }
+    [ -z "$(in_git -C "$c" status --porcelain --untracked-files=all)" ] || { in_git -C "$c" status >&2; die "$local_done: something is left unsaved"; }
+    if [ "$local_done" = yes ]; then
+      ! grep -qE ' checkout -q main$| branch -q -D bootstrap-setup$' "$d/tools.log" || { cat "$d/tools.log" >&2; die "yes: the script did again what gh had done"; }
+    else
+      grep -qE ' checkout -q main$' "$d/tools.log" && grep -qE ' branch -q -D bootstrap-setup$' "$d/tools.log" \
+        || { cat "$d/tools.log" >&2; die "no: the script did not switch to main and delete bootstrap-setup"; }
+    fi
+    grep -qE " -C \./my-app pull -q --ff-only --prune$" "$d/tools.log" || { cat "$d/tools.log" >&2; die "$local_done: main was not brought up to date"; }
+    grep -A1 -xF '==> Updating the copy on this computer to the new main version' "$d/out" | sed -n 2p >"$d/done"
+    [ "$(cat "$d/done")" = "    Done. The copy in ./my-app is on the main version, with the setup's changes, and nothing is left unsaved." ] \
+      || { cat "$d/out" >&2; die "$local_done: no step lines for the finish"; }
+  done
+}
+
+test_a_copy_not_at_the_new_main_version_stops_with_both_versions_below() {
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_MERGED_SHA=2222222222222222222222222222222222222222
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_MERGED_SHA
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "The copy of the project on this computer, in \./my-app, is not at the main version that GitHub has now\. The project octo-user/my-app exists on GitHub, and the setup's changes are in its main version there: https://github.com/octo-user/my-app/pull/1\$"
+  grep -qxF "    the copy: $(cat "$d/merge-sha")" "$d/err" && grep -qxF '    main on GitHub: 2222222222222222222222222222222222222222' "$d/err" \
+    || { cat "$d/err" >&2; die "both versions are not below"; }
+  expect_continue_command "$d" " --resume"
+  ! grep -qxF "$FINISHED" "$d/out" || die "it went on to the report"
+}
+
+test_the_report_says_what_was_made_and_the_one_thing_to_do_next() {
+  # Spec step 19: the project's page, the copy, the proposed change, the
+  # pack and the licence; the protection as GitHub read it back; the
+  # parts left for Clead; the next step. In plain words, at the end.
+  local d
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 0 "$d"
+  sed -n "/^$FINISHED\$/,\$p" "$d/out" >"$d/report"
+  cat >"$d/want" <<'TEXT'
+The setup is finished.
+    The project on GitHub: https://github.com/octo-user/my-app
+    Its copy on this computer: ./my-app
+    The proposed change with the setup: https://github.com/octo-user/my-app/pull/1
+    Language pack: python
+    Licence: mit, in the name of Ada L
+The protection of the main version, as GitHub reports it:
+    - every change comes as a proposed change; approvals needed before one is added: 0
+    - a change is added only after these checks pass: build
+    - these rules apply to the project's admins too
+    - nobody may overwrite the history of the main version or delete it
+These parts of the project are left for your first session with Clead (Claude, the project's Tech Owner), who writes them with you:
+  - the name of the first phase, [PHASE NAME], in docs/BACKLOG.md;
+  - the goals, [Goal], and the rest of memory/project.md;
+  - the questions in square brackets in the sections of docs/SPEC.md;
+  - memory/context.md.
+What to do next: open the Claude app, give it the new project, https://github.com/octo-user/my-app, and start a chat. The file CLAUDE.md in the project tells Claude the rest.
+TEXT
+  expect_same "the report" "$d/want" "$d/report"
+  [ -z "$(awk '{print NR ": " $0}' "$d/report" | banned_hits)" ] || { cat "$d/report" >&2; die "banned word in the report"; }
+  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "a run that went through wrote to stderr"; }
+  # No licence, and the web pack with its deploy files.
+  d="$(tmpdir)"
+  fake_tool "$d" npm 10.0.0
+  setup_run "$d" --non-interactive --yes --license none --pack web --with-deploy
+  expect_rc 0 "$d"
+  grep -qxF '    Licence: none, so no licence file' "$d/out" || { cat "$d/out" >&2; die "none: the licence line"; }
+  grep -qxF '    Language pack: web, with the files that publish the website' "$d/out" || { cat "$d/out" >&2; die "web: the pack line"; }
+}
+
+test_the_jq_expressions_read_githubs_documented_answers() {
+  # The stub gh prints what the script's --jq expressions would print, so
+  # here the expressions themselves run on answers shaped as GitHub's REST
+  # docs show them, with jq (gh's --jq is gojq; the features used, \( ),
+  # //, join and select, are the same in both). Skipped where jq is not
+  # installed. Also: the script's expressions and step 16 body are the
+  # ones this file names.
+  local d
+  # This file defines the same names, so they are unset first: only the
+  # script's own values can make the comparison pass.
+  ( t1="$BUILD_JQ" t2="$READBACK_JQ" t3="$MERGED_JQ" t4="$REQUIRE_BODY"
+    unset BUILD_JQ READBACK_JQ MERGED_JQ REQUIRE_BODY
+    load_script
+    [ "${BUILD_JQ-}" = "$t1" ] && [ "${READBACK_JQ-}" = "$t2" ] && [ "${MERGED_JQ-}" = "$t3" ] && [ "${REQUIRE_BODY-}" = "$t4" ] ) \
+    || die "the script's expressions or step 16 body are not the ones the tests name"
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "jq is not installed: the expressions were not run"
+    return 0
+  fi
+  d="$(tmpdir)"
+  # gh pr checks --json name,bucket,event: an array of checks; another
+  # workflow's check (review) is left out.
+  printf '%s\n' '[{"name":"build","bucket":"pass","event":"push"},{"name":"review","bucket":"fail","event":"pull_request"},{"name":"build","bucket":"pending","event":"pull_request"}]' >"$d/checks.json"
+  [ "$(jq -r "$BUILD_JQ" "$d/checks.json")" = "$(printf '%s\n' 'push pass' 'pull_request pending')" ] || { jq -r "$BUILD_JQ" "$d/checks.json" >&2; die "the checks expression"; }
+  # GET .../branches/main/protection, as the REST doc's example has it
+  # (restrictions left out, as for a project of a personal account).
+  cat >"$d/protection.json" <<'JSON'
+{"url":"https://api.github.com/repos/octo-user/my-app/branches/main/protection",
+ "required_status_checks":{"url":"https://api.github.com/repos/octo-user/my-app/branches/main/protection/required_status_checks","strict":false,"contexts":["build"],"contexts_url":"https://api.github.com/repos/octo-user/my-app/branches/main/protection/required_status_checks/contexts","checks":[{"context":"build","app_id":15368}]},
+ "required_pull_request_reviews":{"url":"https://api.github.com/repos/octo-user/my-app/branches/main/protection/required_pull_request_reviews","dismiss_stale_reviews":false,"require_code_owner_reviews":false,"require_last_push_approval":false,"required_approving_review_count":0},
+ "required_signatures":{"url":"https://api.github.com/repos/octo-user/my-app/branches/main/protection/required_signatures","enabled":false},
+ "enforce_admins":{"url":"https://api.github.com/repos/octo-user/my-app/branches/main/protection/enforce_admins","enabled":true},
+ "required_linear_history":{"enabled":false},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false},
+ "block_creations":{"enabled":false},"required_conversation_resolution":{"enabled":false},"lock_branch":{"enabled":false},"allow_fork_syncing":{"enabled":false}}
+JSON
+  [ "$(jq -r "$READBACK_JQ" "$d/protection.json")" = "$(printf '%s\n' contexts=build strict=false enforce_admins=true approvals=0 restrictions=null allow_force_pushes=false allow_deletions=false)" ] \
+    || { jq -r "$READBACK_JQ" "$d/protection.json" >&2; die "the read-back expression on the documented answer"; }
+  # Step 3's protection, before build is required: no check, and no error.
+  printf '%s\n' '{"enforce_admins":{"enabled":true},"required_pull_request_reviews":{"required_approving_review_count":0},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false}}' >"$d/step3.json"
+  [ "$(jq -r "$READBACK_JQ" "$d/step3.json" | sed -n 1,2p)" = "$(printf '%s\n' contexts= strict=null)" ] || { jq -r "$READBACK_JQ" "$d/step3.json" >&2; die "the read-back expression with no required check"; }
+  # GET .../pulls/N after the merge.
+  printf '%s\n' '{"number":1,"state":"closed","merged":true,"merge_commit_sha":"6dcb09b5b57875f334f61aebed695e2e4193db5e"}' >"$d/pull.json"
+  [ "$(jq -r "$MERGED_JQ" "$d/pull.json")" = 'true 6dcb09b5b57875f334f61aebed695e2e4193db5e' ] || die "the merged expression"
 }
 
 # ---------- run ----------
