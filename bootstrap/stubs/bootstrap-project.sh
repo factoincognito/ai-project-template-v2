@@ -3556,8 +3556,9 @@ merge_change() {
   fi
   out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
   err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
-  # Run inside the copy, so gh can switch it to main (step 18 checks).
-  (CDPATH='' cd -- "$IN_DIR" && run_gh pr merge "$PR_NUMBER" --squash --delete-branch --match-head-commit "$sent") >"$out" 2>"$err" || rc=$?
+  # Run inside the copy, so gh can switch it to main (step 18 checks);
+  # git, which gh runs there, may not ask at the terminal.
+  (CDPATH='' cd -- "$IN_DIR" && GIT_TERMINAL_PROMPT=0 run_gh pr merge "$PR_NUMBER" --squash --delete-branch --match-head-commit "$sent") >"$out" 2>"$err" || rc=$?
   raw="$(cat "$out" "$err" | tr -d '\r')"
   rm -f "$out" "$err"
   if [ "$rc" -eq 4 ]; then
@@ -3571,7 +3572,13 @@ merge_change() {
   # "true <id of the new main>" once added; anything else is not added.
   MERGED_SHA=""
   case "$state" in "true "*) MERGED_SHA="${state#true }" ;; esac
-  case "$MERGED_SHA" in *[!0-9a-f]*) MERGED_SHA="" ;; esac
+  case "$MERGED_SHA" in
+    *[!0-9a-f]*)
+      stop_with_error "GitHub says the proposed change was added to the main version, but it did not give the id of the new main version, so the script cannot check the copy on this computer against it." \
+        "Open $PR_URL in your browser to see that the change was added, then continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+        "GitHub reports for the proposed change: $state"
+      ;;
+  esac
   if [ -z "$MERGED_SHA" ]; then
     [ -n "$raw" ] || raw="gh stopped with exit code $rc and no message."
     stop_with_error "GitHub did not add the proposed change to the main version. The proposed change stays open on GitHub." \
