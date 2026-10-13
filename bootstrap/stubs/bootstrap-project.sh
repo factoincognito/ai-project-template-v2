@@ -2495,6 +2495,38 @@ classify_protect_403() {
   esac
 }
 
+# VISIBILITY_FROM_GITHUB: IN_VISIBILITY was read from GitHub in this run
+# (--resume reads it first; the first run reads it when it needs it).
+VISIBILITY_FROM_GITHUB=""
+
+# private_on_github: GitHub says the project is private (read once; the
+# answer of the call before it, API_*, stays as it was). A call that fails
+# counts as not private: the options below are offered only on a fact.
+private_on_github() {
+  local rc status headers body message err
+  if [ -z "$VISIBILITY_FROM_GITHUB" ]; then
+    rc="$API_RC" status="$API_STATUS" headers="$API_HEADERS" body="$API_BODY" message="$API_MESSAGE" err="$API_ERR"
+    api_call "repos/$IN_OWNER/$IN_NAME" --jq .private
+    if [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ]; then
+      trim_into "$API_BODY"
+      case "$TRIMMED" in
+        true) IN_VISIBILITY=private; VISIBILITY_FROM_GITHUB=1 ;;
+        false) IN_VISIBILITY=public; VISIBILITY_FROM_GITHUB=1 ;;
+      esac
+    fi
+    API_RC="$rc" API_STATUS="$status" API_HEADERS="$headers" API_BODY="$body" API_MESSAGE="$message" API_ERR="$err"
+  fi
+  [ -n "$VISIBILITY_FROM_GITHUB" ] && [ "$IN_VISIBILITY" = private ]
+}
+
+# plan_limit_on_private: PROTECT_PROBLEM is the plan and GitHub says the
+# project is private: the one refusal that --allow-unprotected, and
+# making the project public, answer. A message that does not say why, or
+# a public project, is the key's permission as far as anyone can tell.
+plan_limit_on_private() {
+  [ "$PROTECT_PROBLEM" = plan ] && private_on_github
+}
+
 protect_main() {
   step_start "Protecting the main version of the project"
   api_call -X PUT "repos/$IN_OWNER/$IN_NAME/branches/main/protection" --input - <<<"$PROTECT_BODY"
@@ -2505,10 +2537,13 @@ protect_main() {
   if [ "$API_STATUS" = 403 ]; then
     classify_protect_403
     if [ -n "$PROTECT_PROBLEM" ]; then
+      # A plan message on a project that is not private says nothing
+      # about the plan.
+      if [ "$PROTECT_PROBLEM" = plan ] && ! private_on_github; then PROTECT_PROBLEM=unknown; fi
       # --allow-unprotected is for a plan that cannot protect a private
-      # project; a key without the permission is another problem, and
-      # still stops.
-      if [ -n "$OPT_ALLOW_UNPROTECTED" ] && [ "$PROTECT_PROBLEM" != token ]; then
+      # project; a key without the permission, or a refusal that does not
+      # say why, is another problem, and still stops.
+      if [ -n "$OPT_ALLOW_UNPROTECTED" ] && [ "$PROTECT_PROBLEM" = plan ]; then
         UNPROTECTED=1
         api_raw
         say "GitHub does not protect the main version of this project on its plan; its answer is below."
@@ -2536,7 +2571,7 @@ UNPROTECTED=""
 # terminal; --yes does not cover it and --non-interactive never asks.
 offer_public() {
   local out err rc=0 raw
-  [ "$PROTECT_PROBLEM" != token ] || return 0
+  [ "$PROTECT_PROBLEM" = plan ] || return 0
   [ "$IN_VISIBILITY" = private ] || return 0
   [ -z "$OPT_NON_INTERACTIVE" ] || return 0
   say "The script can make the project public for you, with the command shown above that starts with gh."
@@ -2578,14 +2613,11 @@ guide_protect() {
       ;;
     *)
       title="GitHub refused to protect the main version of $IN_OWNER/$IN_NAME, and its message does not say why."
-      why="Protection makes every change come as a proposed change. GitHub refuses it for one of two reasons, and the steps cover both: a private project on a plan without protection, or a key without the Administration permission."
+      why="Protection makes every change come as a proposed change. The most likely cause is the key that gh signs in with: turning on protection needs its Administration permission set to \"Read and write\"."
       ;;
   esac
   guide_begin "$title" "$why"
-  if [ "$PROTECT_PROBLEM" = unknown ]; then
-    guide_step "If the project is private: protection for a private project needs a paid GitHub plan, so choose one of the next three steps."
-  fi
-  if [ "$PROTECT_PROBLEM" != token ]; then
+  if [ "$PROTECT_PROBLEM" = plan ]; then
     guide_step "Upgrade your GitHub plan to Pro (or Team, for an organisation): open https://github.com/settings/billing, or the organisation's Settings and then Billing and plans. Then continue the setup with the command shown below."
     guide_step "Or make the project public, which needs no paid plan: anyone can then see the project and its code. This command does it; then continue the setup with the command shown below:"
     say_command "gh repo edit $IN_OWNER/$IN_NAME --visibility public --accept-visibility-change-consequences"
@@ -3254,6 +3286,12 @@ note_setup_in_changelog() {
   step_end "CHANGELOG.md says which pack and which licence the project was set up with."
 }
 
+# The start of the decision row, after the date: how the script tells the
+# row is in memory/decisions.md.
+UNPROTECTED_ROW_KEY="| The main version (main) is not protected |"
+# DECISION_NOTED: memory/decisions.md of the project has that row.
+DECISION_NOTED=""
+
 # note_unprotected_decision: without protection (--allow-unprotected),
 # one row at the end of the table in memory/decisions.md says that the
 # main version is not protected, and why (spec, open decision 5).
@@ -3263,7 +3301,7 @@ note_unprotected_decision() {
   step_start "Writing into memory/decisions.md that the main version is not protected"
   check_decisions_file
   [ -n "$FILL_DATE" ] || FILL_DATE="$(date +%Y-%m-%d)"
-  row="| $FILL_DATE | The main version (main) is not protected | The project is private and its GitHub plan cannot protect a private project, so the setup went on without protection because of --allow-unprotected. Any change can go straight into the main version. To protect it, move to a paid GitHub plan (Pro, Team or Enterprise) or make the project public, then turn protection on in the project's settings; docs/DEV_INFRASTRUCTURE.md says how. |"
+  row="| $FILL_DATE $UNPROTECTED_ROW_KEY The project is private and its GitHub plan cannot protect a private project, so the setup went on without protection because of --allow-unprotected. Any change can go straight into the main version. To protect it, move to a paid GitHub plan (Pro, Team or Enterprise) or make the project public, then turn protection on in the project's settings; docs/DEV_INFRASTRUCTURE.md says how. |"
   tmp="$(make_temp)"
   UD_ROW="$row" LC_ALL=C awk_run '{ line[NR] = $0; if ($0 ~ /^\|/) last = NR }
     END { for (i = 1; i <= NR; i++) { print line[i]; if (i == last) print ENVIRON["UD_ROW"] } }' <"$file" >"$tmp"
@@ -3856,10 +3894,18 @@ wait_for_build() {
 read_back_protection() {
   local pair field want got line found diffs=""
   api_call "repos/$IN_OWNER/$IN_NAME/branches/main/protection" --jq "$READBACK_JQ"
-  # No protection at all, and the user chose to go on without it.
-  if [ -n "$OPT_ALLOW_UNPROTECTED" ] && [ "$API_STATUS" = 404 ]; then
+  # No protection at all, and the user chose to go on without it: only
+  # for a private project (the plan's limit), as GitHub says.
+  if [ -n "$OPT_ALLOW_UNPROTECTED" ] && [ "$API_STATUS" = 404 ] && private_on_github; then
     UNPROTECTED=1
     return 0
+  fi
+  # A project set up already and not protected: said, and left as it is.
+  if [ -n "$CHANGE_ADDED" ] && [ "$API_STATUS" = 404 ]; then
+    api_raw
+    stop_with_error "GitHub says the main version of the project has no protection, so nothing stops a change from going straight into it. The script changed nothing." \
+      "Turn protection on for the main version: open https://github.com/$IN_OWNER/$IN_NAME/settings in your browser (docs/DEV_INFRASTRUCTURE.md in the project says how), then continue with the command shown above. Protection for a private project needs a paid GitHub plan, or the project made public." \
+      "$API_RAW"
   fi
   { [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ]; } || api_fail "read back the protection of the main version"
   READ_BACK="$API_BODY"
@@ -3909,7 +3955,7 @@ require_build() {
   api_call -X PUT "repos/$IN_OWNER/$IN_NAME/branches/main/protection" --input - <<<"$REQUIRE_BODY"
   if [ "$API_STATUS" = 403 ] && [ -n "$OPT_ALLOW_UNPROTECTED" ]; then
     classify_protect_403
-    if [ -n "$PROTECT_PROBLEM" ] && [ "$PROTECT_PROBLEM" != token ]; then
+    if plan_limit_on_private; then
       UNPROTECTED=1
       step_end "Not done: GitHub cannot protect the main version on this plan, and you chose to go on without protection with --allow-unprotected."
       return 0
@@ -3919,6 +3965,23 @@ require_build() {
     "Open https://github.com/$IN_OWNER/$IN_NAME in your browser and check that your account is one of its admins (who may change its settings); then continue the setup with the command shown above."
   read_back_protection
   step_end "GitHub reports the protection of the main version as the script set it, with build required."
+}
+
+# ensure_decision_in_change: without protection, the change is added to the
+# main version only when memory/decisions.md in it says so (the row is
+# written when the change is made; a resume that learns of the missing
+# protection later finds the change without it).
+ensure_decision_in_change() {
+  local text
+  [ -n "$UNPROTECTED" ] || return 0
+  text="$(git -C "$IN_DIR" show "refs/heads/$SETUP_BRANCH:memory/decisions.md" 2>/dev/null)" || text=""
+  case "$text" in
+    *"$UNPROTECTED_ROW_KEY"*) DECISION_NOTED=1; return 0 ;;
+  esac
+  OPT_ALLOW_UNPROTECTED=""
+  stop_with_error "The setup's change, proposed at $PR_URL, does not say in memory/decisions.md that the main version is not protected, and the script does not add a change to a main version without protection unless it says so. The proposed change stays open on GitHub." \
+    "Protect the main version: move to a paid GitHub plan (Pro, Team or Enterprise) or make the project public, then continue the setup with the command shown above." \
+    "memory/decisions.md on the line of work $SETUP_BRANCH has no row that starts with: $UNPROTECTED_ROW_KEY"
 }
 
 # merge_change: spec step 17. The id given is the change that was sent,
@@ -3976,6 +4039,7 @@ merge_change() {
 # so each action runs only when still needed; the update of main always
 # runs, with --prune so GitHub's deleted line of work goes from the copy
 # too. Then the copy must be at GitHub's new main with nothing unsaved.
+KEPT_LINE_OF_WORK=""
 finish_copy() {
   local out err rc=0 raw current head status
   step_start "Updating the copy on this computer to the new main version"
@@ -3992,8 +4056,16 @@ finish_copy() {
       "Check that this computer is connected to the internet, then continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
       "$raw"
   fi
+  # The line of work goes only when its files are those of the main
+  # version (gh already deletes it after adding the change); one that holds
+  # something else may be work of the user's, and stays.
+  KEPT_LINE_OF_WORK=""
   if git -C "$IN_DIR" rev-parse -q --verify "refs/heads/$SETUP_BRANCH" >/dev/null 2>&1; then
-    in_copy "delete the line of work $SETUP_BRANCH" branch -q -D "$SETUP_BRANCH"
+    if [ "$(git -C "$IN_DIR" rev-parse -q --verify "refs/heads/$SETUP_BRANCH^{tree}" 2>/dev/null)" = "$(git -C "$IN_DIR" rev-parse -q --verify "HEAD^{tree}" 2>/dev/null)" ]; then
+      in_copy "delete the line of work $SETUP_BRANCH" branch -q -D "$SETUP_BRANCH"
+    else
+      KEPT_LINE_OF_WORK=1
+    fi
   fi
   head="$(git -C "$IN_DIR" rev-parse -q --verify HEAD 2>/dev/null)" || head=""
   if [ "$head" != "$MERGED_SHA" ]; then
@@ -4007,7 +4079,7 @@ finish_copy() {
       "Look at the files named below in $IN_DIR. If you did not change them, ask for help and show the details below." \
       "$status"
   fi
-  step_end "The copy in $IN_DIR is on the main version, with the setup's changes, and nothing is left unsaved."
+  step_end "The copy in $IN_DIR is on the main version, with the setup's changes, and nothing is left unsaved.${KEPT_LINE_OF_WORK:+ Its line of work $SETUP_BRANCH was kept: it holds changes that are not in the main version.}"
 }
 
 # HAVE_COPY: the copy of the project is on this computer (--resume found
@@ -4020,8 +4092,10 @@ report() {
   [ "$IN_WITH_DEPLOY" != yes ] || deploy=", with the files that publish the website"
   if [ "$IN_LICENSE" = none ]; then
     licence="none, so no licence file"
-  else
+  elif [ -n "$IN_COPYRIGHT_HOLDER" ]; then
     licence="$IN_LICENSE, in the name of $IN_COPYRIGHT_HOLDER"
+  else
+    licence="$IN_LICENSE"
   fi
   read_back_value approvals
   approvals="$READ_BACK_VALUE"
@@ -4033,11 +4107,15 @@ report() {
   say "    The project on GitHub: https://github.com/$IN_OWNER/$IN_NAME"
   [ -z "$HAVE_COPY" ] || say "    Its copy on this computer: $IN_DIR"
   [ -z "$PR_URL" ] || say "    The proposed change with the setup: $PR_URL"
-  say "    Language pack: $IN_PACK$deploy"
-  say "    Licence: $licence"
+  [ -z "$IN_PACK" ] || say "    Language pack: $IN_PACK$deploy"
+  [ -z "$IN_LICENSE" ] || say "    Licence: $licence"
   if [ -n "$UNPROTECTED" ]; then
     say "The main version is not protected:"
-    say "    - the main version is not protected: you chose to go on without protection (--allow-unprotected), and memory/decisions.md in the project says so"
+    if [ -n "$DECISION_NOTED" ]; then
+      say "    - the main version is not protected: you chose to go on without protection (--allow-unprotected), and memory/decisions.md in the project says so"
+    else
+      say "    - the main version is not protected: you chose to go on without protection (--allow-unprotected), but memory/decisions.md in the project does not say so; add a row for it to the table there"
+    fi
     say "    - to protect it, move to a paid GitHub plan or make the project public, then turn protection on in the project's settings"
   else
     say "The protection of the main version, as GitHub reports it:"
@@ -4188,14 +4266,15 @@ refuse_copy() {
 # resume_read_github: what GitHub has: whether the project is private, the
 # bootstrapper's version in its CHANGELOG.md, its proposed changes from
 # bootstrap-setup, and bootstrap-setup itself.
+GH_TIDY="" GH_PACK="" GH_DEPLOY="" GH_LICENCE=""
 resume_read_github() {
-  local line state merged url body
+  local line state merged url body has_section
   api_call "repos/$IN_OWNER/$IN_NAME" --jq .private
   { [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ]; } || api_fail "read whether the project $IN_OWNER/$IN_NAME is private"
   trim_into "$API_BODY"
   case "$TRIMMED" in
-    true) IN_VISIBILITY=private ;;
-    false) IN_VISIBILITY=public ;;
+    true) IN_VISIBILITY=private; VISIBILITY_FROM_GITHUB=1 ;;
+    false) IN_VISIBILITY=public; VISIBILITY_FROM_GITHUB=1 ;;
   esac
 
   api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/CHANGELOG.md"
@@ -4224,9 +4303,46 @@ resume_read_github() {
       "Each version of the bootstrapper sets up a project in its own way, so this script finishes only projects made by the same version."
   fi
   GH_ADDED_MARK=""
+  GH_PACK="" GH_DEPLOY="" GH_LICENCE=""
   while IFS= read -r line || [ -n "$line" ]; do
-    [ "${line//$CR/}" != "$SETUP_MARK" ] || GH_ADDED_MARK=1
+    line="${line//$CR/}"
+    [ "$line" != "$SETUP_MARK" ] || GH_ADDED_MARK=1
+    case "$line" in
+      "- Language pack: "*)
+        line="${line#- Language pack: }"
+        line="${line%.}"
+        case "$line" in
+          *", with the files that publish the website") GH_DEPLOY=yes; line="${line%, with the files that publish the website}" ;;
+        esac
+        GH_PACK="$line"
+        ;;
+      "- Licence: "*)
+        line="${line#- Licence: }"
+        GH_LICENCE="${line%.}"
+        ;;
+    esac
   done <<<"$body"
+
+  # A project with no setup section in its README and no bootstrap-project.sh
+  # was tidied up already: set up by this script or by hand.
+  GH_TIDY=""
+  api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/README.md"
+  case "$API_STATUS" in
+    200 | 404) ;;
+    *) api_fail "read the file README.md of the project" ;;
+  esac
+  has_section=""
+  if [ "$API_STATUS" = 200 ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      [ "${line//$CR/}" != "$SETUP_HEADING" ] || has_section=1
+    done <<<"$API_BODY"
+  fi
+  api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/bootstrap-project.sh"
+  case "$API_STATUS" in
+    200 | 404) ;;
+    *) api_fail "look for the file bootstrap-project.sh in the project" ;;
+  esac
+  if [ -z "$has_section" ] && [ "$API_STATUS" = 404 ]; then GH_TIDY=1; fi
 
   GH_OPEN_URL=""
   GH_MERGED_URL=""
@@ -4279,12 +4395,13 @@ resume_read_copy() {
 # resume_decide: RESUME_STATE, from what GitHub and the copy have. A copy
 # that does not fit what GitHub has is refused before anything changes.
 resume_decide() {
+  local subject
   if [ -n "$COPY_PRESENT" ] && [ -n "$COPY_UNSAVED" ]; then
     refuse_copy "The copy of the project in $IN_DIR has changes that are not saved." \
       "The script never discards your work, so it does not go on in a copy that holds changes it cannot tell from its own."
   fi
   PR_URL=""
-  if [ -n "$GH_ADDED_MARK" ] || [ -n "$GH_MERGED_URL" ]; then
+  if [ -n "$GH_ADDED_MARK" ] || [ -n "$GH_MERGED_URL" ] || [ -n "$GH_TIDY" ]; then
     RESUME_STATE=added
     PR_URL="$GH_MERGED_URL"
   elif [ -n "$GH_OPEN_URL" ]; then
@@ -4316,6 +4433,16 @@ resume_decide() {
       if [ "$COPY_ORIGIN_MAIN" != "$GH_MAIN_SHA" ]; then
         refuse_copy "The copy of the project in $IN_DIR is not at the main version that GitHub has now." \
           "The script goes on from the copy only when it starts from the same main version as GitHub."
+      fi
+      ;;
+  esac
+  # What is sent is the one change "Set up NAME" the script saved.
+  case "$RESUME_STATE" in
+    saved | sent | proposed)
+      subject="$(git -C "$IN_DIR" log -1 --format=%s "refs/heads/$SETUP_BRANCH" 2>/dev/null)" || subject=""
+      if [ "$COPY_AHEAD" -ne 1 ] || [ "$subject" != "Set up $IN_NAME" ]; then
+        refuse_copy "The line of work $SETUP_BRANCH in the copy of the project in $IN_DIR is not the single change \"Set up $IN_NAME\" that the script saves." \
+          "The script sends only the one change it saved itself, and it never changes the copy to make it so."
       fi
       ;;
   esac
@@ -4375,6 +4502,18 @@ resume_added() {
   step_start "Checking the protection of the main version"
   read_back_protection
   step_end "$([ -n "$UNPROTECTED" ] && echo "The main version is not protected, as you chose with --allow-unprotected." || echo "GitHub reports the protection of the main version as the script sets it, with build required.")"
+  if [ -n "$UNPROTECTED" ]; then
+    # The report says the decision is written down only if main has it.
+    api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/memory/decisions.md"
+    if [ "$API_STATUS" = 200 ]; then
+      case "$API_BODY" in *"$UNPROTECTED_ROW_KEY"*) DECISION_NOTED=1 ;; esac
+    fi
+  fi
+  # The pack and the licence are what the project says, not this run's answers.
+  IN_PACK="$GH_PACK"
+  IN_WITH_DEPLOY="${GH_DEPLOY:-no}"
+  IN_LICENSE="$GH_LICENCE"
+  IN_COPYRIGHT_HOLDER=""
   if [ -n "$COPY_PRESENT" ]; then
     github_main_sha
     MERGED_SHA="$GH_MAIN_SHA"
@@ -4432,6 +4571,7 @@ run_steps() {
   esac
   wait_for_build
   require_build
+  ensure_decision_in_change
   merge_change
   finish_copy
   report

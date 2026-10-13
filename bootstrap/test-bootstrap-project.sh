@@ -7118,9 +7118,10 @@ test_ctrl_c_says_what_exists_and_the_resume_finishes_without_duplicates() {
   local d
   # A shell started with Ctrl-C ignored (such as a background job) cannot
   # take it: the case is skipped there.
-  case "$(trap -p INT)" in
-    *"''"*) echo "note: Ctrl-C is ignored in this shell; the Ctrl-C case was not run"; return 0 ;;
-  esac
+  # (Asked of a shell started here, as bash 3.2 does not list an ignored
+  # signal in trap -p.)
+  [ "$("$BASH" -c 'trap "echo caught" INT; kill -INT $$; sleep 1' 2>/dev/null)" = caught ] \
+    || { echo "note: Ctrl-C is ignored in this shell; the Ctrl-C case was not run"; return 0; }
   d="$(tmpdir)"
   printf '%s\n' '#!/usr/bin/env bash' 'kill -INT "$PPID"' >"$d/interrupt"
   chmod +x "$d/interrupt"
