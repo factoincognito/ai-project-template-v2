@@ -1,6 +1,6 @@
 # [PROJECT NAME] — Next Session Planning
 
-**Last Updated:** 2026-10-06
+**Last Updated:** 2026-10-13
 **Author:** Clead (Tech Owner)
 **Purpose:** Staging area for reasoning, revised assumptions, and plan-adaptation thoughts that aren't yet mature enough to be a PBI, a decision, a strategy update, or a vision-doc change. Complements `docs/BACKLOG.md` — it does not replace it. Discrete, scoped, actionable work belongs in the backlog as a PBI, not here.
 
@@ -24,7 +24,7 @@ Written 2026-10-02 so the order does not have to be re-derived. "Clead" is the n
 
 | Step | Who | Blocked by |
 |---|---|---|
-| Rest of PBI-1.14 (S10 next), S15 last | Clead (Opus Crog implementer, Opus review) | Nothing; S1 to S4 and S6 to S9 merged (item 8). Each slice follows the PR loop |
+| Rest of PBI-1.14 (S14 next), S15 last | Clead (Opus Crog implementer, Opus review) | Nothing; S1 to S4 and S6 to S13a merged (item 8). Each slice follows the PR loop |
 | Release prep PR for the next release (put the version heading over Unreleased, as #76 and #126 did) | Clead | S15 merged; written just before the tag so it is complete |
 | Next release tag `v*` | Adam, from the Releases page | Release prep merged (decision of 2026-10-02: no tag until S15 merges) |
 | Release verified | Clead, through the API: the tag run's checks passed, bootstrapper `main` has the new commit, the tag exists on both repos | The tag |
@@ -43,7 +43,7 @@ publish token and the tag path of `packs.yml`. The four language packs are
 tested on GitHub's runners on every PR; reviews and merges are delegated
 (CLAUDE.md, "Change execution model"). The test-first rule is in force at
 every level. PBI-1.14 (the turn-key bootstrap script) is being built in 17
-slices; S1 to S4 and S6 to S9 are merged as of 2026-10-06 (item 8). Adam's order: PBI-1.14, with no tag until
+slices; S1 to S4 and S6 to S13a are merged as of 2026-10-07 (item 8). Adam's order: PBI-1.14, with no tag until
 S15 merges, then the end-to-end runs, then acuteping. The parallel
 sessions of 2026-10-01 and 2026-10-02 were consolidated into one session
 on 2026-10-02.
@@ -122,12 +122,12 @@ graduate (see the rule above).
 - S3 `packs.yml` uses the script's lockfile command (independent; touches `packs.yml` and `tools/test-layout-pack.sh`). **Done: #130, 2026-10-02.**
 - S4 test harness `bootstrap/test-bootstrap-project.sh`, test hooks, message helpers, wired into `bootstrapper-test`. **Done: #136, 2026-10-02.**
 - S5 `bootstrapper-test` becomes one aggregate check over an OS matrix (ubuntu, macOS, Windows).
-- S6 inputs and validation. **Done: #146, 2026-10-02.** S7 guided preflight, local checks. **Done: #148, 2026-10-06.** S8 guided preflight, GitHub checks. **Done: #149, 2026-10-06.** S9 create and protect. **Done: #150, 2026-10-06** (it also prints the plan and asks "Proceed?"; `--non-interactive` needs `--yes` or `--dry-run`). S10 local tree. S11 fill placeholders. S12 lockfile, licence, CHANGELOG. S13 self-check, commit, push, PR. S14 wait, require `build`, merge, finish, report. S15 resume, failures, private repos.
+- S6 inputs and validation. **Done: #146, 2026-10-02.** S7 guided preflight, local checks. **Done: #148, 2026-10-06.** S8 guided preflight, GitHub checks. **Done: #149, 2026-10-06.** S9 create and protect. **Done: #150, 2026-10-06** (it also prints the plan and asks "Proceed?"; `--non-interactive` needs `--yes` or `--dry-run`). S10 local tree. **Done: #152, 2026-10-06.** S11 fill placeholders. **Done: #153, 2026-10-06.** S12 lockfile, licence, CHANGELOG. **Done: #154, 2026-10-06.** S13 self-check, commit, push, PR. **Done: #155, 2026-10-06.** S13a (unplanned: unknown licence key checked in the preflight, Actions checked after protect). **Done: #156, 2026-10-07.** S14 wait, require `build`, merge, finish, report. S15 resume, failures, private repos.
 - S16 `bootstrap/e2e-check.sh` (read-only checker for Adam's end-to-end runs). S17 docs and process, last.
 **Critical path:** S1, S2, S4, S6 to S15, S17. S3 can start now; S5 after S4; S16 after S5.
 **Cannot be verified in CI (Adam's end-to-end runs only):** GitHub timing and error texts after create, the protection PUT shape, private-repo clone and push, Git Bash prompts, `winget`, a lockfile made on Windows or macOS under `npm ci` on Linux, the unaided README run, and the red-then-`Test-exempt` PR in a real project.
 **Spec meets changed repo (to fix in the slice named):** the placement-table tests in `bootstrap/test.sh` pin both READMEs (S17); `test_workflow_bootstrapper_test_runs_the_require_test_change_tests` conflicts with the aggregate design (S5); the setup PR's tree must keep `.github/scripts/require-test-change.sh` (S10); stamps from releases before the org move name the old owner, so older repos cannot be resumed (S15).
-**Next slice:** S10 (critical path), or S5.
+**Next slice:** S14 (critical path), or S5.
 **Questions for Adam (neither blocks S1):**
 1. Answered by Adam, 2026-10-02 (`memory/decisions.md`): `--resume` refuses a repo stamped by an older bootstrapper version and tells the user to create a fresh repo; a repo stamped by the current version, including one made with "Use this template" from the current release, still resumes. The spec text is corrected in S15.
 2. Answered by Adam, 2026-10-02: v2.3.0 is released before S1 (nothing of PBI-1.14 ships in it), then no tag until S15 merges. acuteping waits for PBI-1.14 and the end-to-end runs either way (decision of 2026-10-01).
@@ -147,6 +147,12 @@ graduate (see the rule above).
   - S15: answers given to the questions are lost on any stop after them, because the start-again command repeats only the command-line options (#148, #149: name taken, token permission; an interactive run could ask for the name again). The continue commands: `--allow-unprotected`, `--private` carried after making the project public, the other answers (#150). A rate limit on create is read as "not allowed" (#150, or S17). The make-public command is shown to copy, not run; S15 may run it from inside the local copy (#150).
   - S15 or S17: a renamed project's old name reads as taken, because gh follows the redirect (#149).
   - S17 and Adam's end-to-end runs: on Windows, `winget` does not refresh the open Git Bash's PATH, so the re-check after an install fails; on macOS, `xcode-select --install` returns as soon as its dialog opens, and the `git` shim may open that dialog itself (#148). "Could not reach GitHub" also catches local gh failures (#149). Each offered command is printed twice (#148). `--help` does not say that `--non-interactive` needs `--yes` or `--dry-run` (#150).
+  - **Notes from the S10 to S13a reviews (#152 to #156), by slice.** Rounds: S10 and S13 needed a second review round (S10: `=` or `-` in a folder name corrupted awk and option parsing; S13: untested branches of the `git status` check); S11, S12 and S13a passed in one. Other blocking findings are fixed in the PRs.
+    - S14: the `build` failure message can name the Actions policy. `enabled: true` is not enough: with `allowed_actions: local_only` the check passes and `build` fails at the first GitHub-owned action; reading `allowed_actions` closes it (#156, also S17 and the e2e list). The re-ask path that ends in `none` or PolyForm has no test for its done line; one `grep -A` like the mit branch (#156). One coverage row ("exists on GitHub") overstates its test (#156). Print `say_left_for_clead` (#153).
+    - S15: `remove_setup_section` and its grep match the prefix `^## After bootstrapping`; a filled description such as `## After bootstrapping: …` looks like the setup section to a resume or a second tidy-up; match the full heading (#153). An awk failure in `fill_file` exits silently and leaves the temp file; needs the ERR trap (#153). A missing `CHANGELOG.md` gives bash's own error before the message (#154). Choose whether the CR check reads the index, not the working files, since `eol=lf` makes the saved change LF (#155). The path rules for `src/` and `e2e/` are wide in both directions; compare with the files the layout copied (#155). The self-check relies on `LP_TARGETS` and `LP_KEPT` from `layout_into`; a resume from step 12 or 13 must set them (#155). Any answer other than 200, 403, 404 from the Actions check stops after the project exists; decide with `--resume` whether a warning is enough (#156). The 404 next action ("continue with `--license <right name>`") needs `--resume` to accept a changed `--license` (#154). Also from #152: the checks after the first write, `mv` without framing, `--resume` past step 4, `--dir .` from inside the copy.
+    - S17: a global `author.*` or `committer.*` setting overrides the copy's `user.email`, and the identity stop's next action does not name them; either S10 writes them into the copy or the text names them (#155; S15 or S17). The spec lists step 8 before step 9; the code runs 9 then 8 (#153). The spec text also needs: the licence key is checked in the preflight, and the Actions re-check in the same run when interactive (#156); the `none` warning for a public project should also be in the plan's step 4 (#154). Push failures with no mapping: a token without Contents write, an SSH remote (#155). Rare Windows forms (`C:`, `c:foo`, `\\srv\share`) get `./` and are "not supported" (#152). Optional: fold `replace_text` onto `fill_file`'s engine (#153).
+    - End-to-end list (Adam's runs): global `commit.gpgsign=true` or `core.hooksPath` during the commit; the helper string and `gh.exe` paths on Windows; gh's real `pr create` texts and a private repo's fallback; real `licenses/<key>` and `actions/permissions` answers (a fine-grained token without Administration read; an org-level disabled state); npm on Windows or macOS writing LF; a user's `.npmrc` mirror ending in the lockfile's `resolved` URLs.
+    - Left open with no slice (cosmetic or optional): the messages now show the folder with `./` (#152); `check_license_known` accepts any 200 without comparing `.key` (#156); `filled_as` in the harness puts `$v` unquoted, so an `&` in a value would break under bash 5.2 (#153).
   - Decisions Clead took in S9 (#150, reviewed): step 2 keeps the spec's `gh repo create` and recognises gh's error text for "name taken" and "not allowed"; the REST `generate` call would give a status code instead, if that text proves unreliable in the end-to-end runs.
 
 
