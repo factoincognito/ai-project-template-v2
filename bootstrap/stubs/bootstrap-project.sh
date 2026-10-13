@@ -14,10 +14,11 @@
 # bootstrap-setup, the language pack laid out, the tidy-up, the
 # placeholders filled in, the lockfile of the npm packs, the licence and
 # the CHANGELOG entry), the self-check, saving the setup's changes,
-# sending them to GitHub and proposing them there, and the layout-pack
-# subcommand. After the proposed change the script stops: the later
-# setup steps (waiting for the checks, adding the change to main) come
-# in later parts.
+# sending them to GitHub and proposing them there, waiting for the check
+# build, making it required, adding the change to main, updating the
+# copy, the report at the end, and the layout-pack subcommand. Not built
+# yet: continuing a setup that stopped part way (--resume) and
+# --allow-unprotected.
 #
 # Usage:
 #   bash bootstrap-project.sh [options]
@@ -2392,6 +2393,8 @@ set_merge_settings() {
 
 ACTIONS_PROBLEM=""
 ACTIONS_UNCHECKED=""
+# ACTIONS_RAW: GitHub's answer, for support, below the local-only guide.
+ACTIONS_RAW=""
 check_actions_on() {
   ACTIONS_PROBLEM=""
   ACTIONS_UNCHECKED=""
@@ -2416,13 +2419,35 @@ check_actions_on() {
   return 1
 }
 
+# guide_actions_off: by ACTIONS_PROBLEM, GitHub Actions turned off (off,
+# found right after step 3), or allowing only the project's own actions
+# (local-only, found when build failed at step 15: the check after step 3
+# passes then, because Actions is on; #156 review). Both are fixed on the
+# same settings page; local-only also needs build run again on GitHub.
 guide_actions_off() {
-  [ "$ACTIONS_PROBLEM" = off ] || api_fail "check whether GitHub Actions is turned on for the project"
-  guide_begin "GitHub Actions, the GitHub service that runs your project's checks, is turned off for the project $IN_OWNER/$IN_NAME." \
-    "Every change to the project is checked on GitHub before it is added, and GitHub Actions runs those checks. While it is off, the setup's own change can never pass them."
+  case "$ACTIONS_PROBLEM" in
+    off)
+      guide_begin "GitHub Actions, the GitHub service that runs your project's checks, is turned off for the project $IN_OWNER/$IN_NAME." \
+        "Every change to the project is checked on GitHub before it is added, and GitHub Actions runs those checks. While it is off, the setup's own change can never pass them."
+      ;;
+    local-only)
+      guide_begin "GitHub Actions, the GitHub service that runs your project's checks, allows only actions from inside the project $IN_OWNER/$IN_NAME, so the check build failed: it uses actions made by GitHub." \
+        "Every change to the project is checked on GitHub before it is added, and the check build uses actions (ready-made steps) that GitHub publishes. While only the project's own actions are allowed, the setup's own change can never pass it."
+      ;;
+    *) api_fail "check whether GitHub Actions is turned on for the project" ;;
+  esac
   guide_step "Open https://github.com/$IN_OWNER/$IN_NAME/settings/actions in your browser: the project's Settings, then Actions, then General."
   guide_step "Under \"Actions permissions\", choose \"Allow all actions and reusable workflows\", then click Save."
   guide_step "If those choices cannot be changed, the organisation (or enterprise) that owns the project has turned GitHub Actions off for its projects: ask one of its owners to allow it, in the organisation's Settings, under Actions, then General."
+  if [ "$ACTIONS_PROBLEM" = local-only ]; then
+    guide_step "Then run the check again: open $PR_URL in your browser, click Checks, then \"Re-run all jobs\", and wait until build shows a green tick."
+    guide_step "Then continue the setup with the command shown below."
+    guide_end "the page of the proposed change shows build with a green tick, and the script says \"Done. The check build passed\" when you continue the setup." \
+      "if build fails again, click it on that page to see which step failed, and ask for help with what it shows." \
+      "it asks GitHub which actions the project may use, and looks at the check build again when you continue the setup. The check has to run again on GitHub first, so the script stops here."
+    guide_details "$ACTIONS_RAW"
+    return 0
+  fi
   guide_step "Then continue with the command shown below, or, if the script is waiting, come back to this window."
   guide_end "the script says \"Done. GitHub Actions is turned on for the project\"." \
     "if the page says that GitHub Actions is turned off by an organisation or an enterprise, ask one of its owners, and show them the page." \
@@ -3343,9 +3368,299 @@ say_left_for_clead() {
   say "  - memory/context.md."
 }
 
+# ---------- wait, require, add, finish and report ----------
+# Spec steps 15 to 19, after the proposed change. Step 15 looks at the
+# check named build (gh pr checks, every CHECKS_DELAY seconds, for up to
+# --ci-timeout minutes); a failure stops with the proposed change left
+# open. Step 16 PUTs the whole protection again with build required (a
+# PUT replaces all of it) and reads it back field by field. Step 17 adds
+# the change with gh pr merge --match-head-commit, run inside the copy so
+# gh can also bring the copy to main; GitHub is then asked whether the
+# change was added, which also gives the id of the new main. Step 18 does
+# what gh did not already do, then checks the copy. Step 19 reports.
+# What was relied on and not run against GitHub here: gh pr checks --json
+# with the fields name, bucket and event (gh manual), GitHub's answers to
+# GET .../branches/main/protection and GET .../pulls/N (REST docs); the
+# test file runs these --jq expressions with jq on the documented shapes.
+
+# The --jq expressions, and the step 16 body: the step 3 body with build
+# required. The tests check that these are the ones they name.
+BUILD_JQ='.[] | select(.name == "build") | "\(.event) \(.bucket)"'
+READBACK_JQ='"contexts=\(.required_status_checks.contexts // [] | join(","))", "strict=\(.required_status_checks.strict)", "enforce_admins=\(.enforce_admins.enabled)", "approvals=\(.required_pull_request_reviews.required_approving_review_count)", "restrictions=\(.restrictions)", "allow_force_pushes=\(.allow_force_pushes.enabled)", "allow_deletions=\(.allow_deletions.enabled)"'
+MERGED_JQ='"\(.merged) \(.merge_commit_sha)"'
+REQUIRE_BODY='{"required_status_checks":{"strict":false,"contexts":["build"]},"enforce_admins":true,"required_pull_request_reviews":{"required_approving_review_count":0},"restrictions":null,"allow_force_pushes":false,"allow_deletions":false}'
+# What READBACK_JQ must print for REQUIRE_BODY, field by field.
+REQUIRE_READBACK="contexts=build strict=false enforce_admins=true approvals=0 restrictions=null allow_force_pushes=false allow_deletions=false"
+CHECKS_DELAY=15
+
+PR_NUMBER=""
+BUILD_STATE=""
+BUILD_SEEN=""
+READ_BACK=""
+MERGED_SHA=""
+
+# look_at_build: one look at build on the proposed change. BUILD_STATE is
+# pass, fail or pending (running, or not reported yet); BUILD_SEEN is
+# what gh printed, one "build: <event> <bucket>" per line, for support.
+# The pull_request run counts; without one, any run of build (spec step
+# 15). gh's exit code is not relied on for pending or failed checks (it
+# differs with --json); only what it printed is read.
+look_at_build() {
+  local out err rc=0 lines raw line runs="" pr_runs="" b
+  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  run_gh pr checks "$PR_NUMBER" --repo "$IN_OWNER/$IN_NAME" --json name,bucket,event --jq "$BUILD_JQ" >"$out" 2>"$err" || rc=$?
+  lines="$(tr -d '\r' <"$out")"
+  raw="$(tr -d '\r' <"$err")"
+  rm -f "$out" "$err"
+  if [ -z "$lines" ]; then
+    if [ "$rc" -eq 4 ]; then
+      stop_with_error "gh (the GitHub command-line tool) is not signed in to your GitHub account, so the script could not look at the project's checks on the proposed change." \
+        "$SIGN_IN_CONTINUE_NEXT" "$raw"
+    fi
+    case "$rc $raw" in
+      "0 "* | *"no checks reported"*)
+        BUILD_STATE=pending
+        BUILD_SEEN="build: not reported yet"
+        return 0
+        ;;
+    esac
+    [ -n "$raw" ] || raw="gh stopped with exit code $rc and no message."
+    stop_with_error "gh (the GitHub command-line tool) could not look at the project's checks on the proposed change." \
+      "Check that this computer is connected to the internet, then continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+      "$raw"
+  fi
+  BUILD_SEEN=""
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    BUILD_SEEN="${BUILD_SEEN:+$BUILD_SEEN$NL}build: $line"
+    runs="$runs ${line#* }"
+    case "$line" in "pull_request "*) pr_runs="$pr_runs ${line#* }" ;; esac
+  done <<<"$lines"
+  [ -z "$pr_runs" ] || runs="$pr_runs"
+  BUILD_STATE=pass
+  for b in $runs; do
+    case "$b" in
+      pass) ;;
+      pending) BUILD_STATE=pending; return 0 ;;
+      *) BUILD_STATE=fail ;;
+    esac
+  done
+}
+
+# build_failed: build failed. When GitHub Actions allows only the
+# project's own actions, that is the cause (#156 review): its guide, and
+# a stop (build has to run again on GitHub first). Otherwise a plain stop.
+# Either way the proposed change stays open.
+build_failed() {
+  local seen="$BUILD_SEEN"
+  api_call "repos/$IN_OWNER/$IN_NAME/actions/permissions" --jq .allowed_actions
+  if [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ]; then
+    trim_into "$API_BODY"
+    if [ "$TRIMMED" = local_only ]; then
+      ACTIONS_PROBLEM=local-only
+      ACTIONS_RAW="allowed_actions: $TRIMMED"
+      guide_actions_off
+      stop_at_guide
+    fi
+  fi
+  stop_with_error "The project's check build failed on the proposed change, so the script did not add the change to the main version. The proposed change stays open on GitHub." \
+    "Open $PR_URL in your browser, click Checks, then build, to see which step failed. If you can fix it, click \"Re-run all jobs\" there once it is fixed, then continue the setup with the command shown above; otherwise ask for help and show the details below." \
+    "$seen"
+}
+
+# wait_for_build: spec step 15.
+wait_for_build() {
+  local tries=0 max unit=minutes
+  [ "$IN_CI_TIMEOUT" -ne 1 ] || unit=minute
+  PR_NUMBER="${PR_URL##*/}"
+  step_start "Waiting for the project's check build to pass on the proposed change, for up to $IN_CI_TIMEOUT $unit"
+  max=$((IN_CI_TIMEOUT * 60 / CHECKS_DELAY))
+  while :; do
+    look_at_build
+    [ "$BUILD_STATE" != pass ] || break
+    [ "$BUILD_STATE" != fail ] || build_failed
+    if [ "$tries" -ge "$max" ]; then
+      stop_with_error "The project's check build had not passed on the proposed change after $IN_CI_TIMEOUT $unit, so the script did not add the change to the main version. The proposed change stays open on GitHub." \
+        "Open $PR_URL in your browser and click Checks to see whether build is still running. Then continue the setup with the command shown above; to wait longer, add --ci-timeout and a number of minutes to it, such as --ci-timeout 40." \
+        "$BUILD_SEEN"
+    fi
+    [ "$tries" -gt 0 ] || say "The check build has not finished yet; the script looks again every $CHECKS_DELAY seconds."
+    tries=$((tries + 1))
+    pause_for "$CHECKS_DELAY"
+  done
+  step_end "The check build passed on the proposed change."
+}
+
+# read_back_protection: GitHub's protection of main, field by field
+# (READ_BACK, one "field=value" per line), must be what REQUIRE_BODY
+# set; each difference is listed below the stop.
+read_back_protection() {
+  local pair field want got line found diffs=""
+  api_call "repos/$IN_OWNER/$IN_NAME/branches/main/protection" --jq "$READBACK_JQ"
+  { [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ]; } || api_fail "read back the protection of the main version"
+  READ_BACK="$API_BODY"
+  for pair in $REQUIRE_READBACK; do
+    field="${pair%%=*}"
+    want="${pair#*=}"
+    found=""
+    got=""
+    while IFS= read -r line; do
+      case "$line" in "$field="*) found=1; got="${line#*=}" ;; esac
+    done <<<"$READ_BACK"
+    if [ -z "$found" ]; then
+      diffs="$diffs$field: the script set $want, GitHub reports nothing$NL"
+    elif [ "$got" != "$want" ]; then
+      diffs="$diffs$field: the script set $want, GitHub reports $got$NL"
+    fi
+  done
+  [ -n "$diffs" ] || return 0
+  stop_with_error "GitHub does not report the protection of the main version as the script set it, so the script did not add the setup's change to the main version. The proposed change stays open on GitHub." \
+    "Open https://github.com/$IN_OWNER/$IN_NAME/settings in your browser and look at the rule that protects the main version; the details below show what differs. Then continue the setup with the command shown above. If you did not change that rule, ask for help and show the details below." \
+    "${diffs%"$NL"}"
+}
+
+# read_back_value <field>: READ_BACK_VALUE is the value READ_BACK has
+# for it (empty when it has none).
+READ_BACK_VALUE=""
+read_back_value() {
+  local line
+  READ_BACK_VALUE=""
+  while IFS= read -r line; do
+    case "$line" in "$1="*) READ_BACK_VALUE="${line#*=}" ;; esac
+  done <<<"$READ_BACK"
+}
+
+# require_build: spec step 16, after build has passed.
+require_build() {
+  step_start "Making the check build required, so that from now on a change is added to the main version only after build passes"
+  api_call -X PUT "repos/$IN_OWNER/$IN_NAME/branches/main/protection" --input - <<<"$REQUIRE_BODY"
+  { [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ]; } || api_fail "make the check build required for the main version" \
+    "Open https://github.com/$IN_OWNER/$IN_NAME in your browser and check that your account is one of its admins (who may change its settings); then continue the setup with the command shown above."
+  read_back_protection
+  step_end "GitHub reports the protection of the main version as the script set it, with build required."
+}
+
+# merge_change: spec step 17. The id given is the change that was sent,
+# so GitHub adds nothing else. Whatever gh says, GitHub is then asked
+# whether the change was added (gh can fail after GitHub has added it).
+merge_change() {
+  local out err rc=0 raw sent state
+  step_start "Adding the proposed change to the main version of the project"
+  PR_NUMBER="${PR_URL##*/}"
+  sent="$(git -C "$IN_DIR" rev-parse -q --verify "refs/heads/$SETUP_BRANCH" 2>/dev/null)" || sent=""
+  if [ -z "$sent" ]; then
+    stop_with_error "git could not tell which change the script sent to GitHub: the line of work $SETUP_BRANCH is missing from the copy of the project on this computer, in $IN_DIR. The proposed change stays open on GitHub." \
+      "Continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+      "git rev-parse --verify refs/heads/$SETUP_BRANCH found nothing in $IN_DIR"
+  fi
+  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  # Run inside the copy, so gh can switch it to main (step 18 checks);
+  # git, which gh runs there, may not ask at the terminal.
+  (CDPATH='' cd -- "$IN_DIR" && GIT_TERMINAL_PROMPT=0 run_gh pr merge "$PR_NUMBER" --squash --delete-branch --match-head-commit "$sent") >"$out" 2>"$err" || rc=$?
+  raw="$(cat "$out" "$err" | tr -d '\r')"
+  rm -f "$out" "$err"
+  if [ "$rc" -eq 4 ]; then
+    stop_with_error "gh (the GitHub command-line tool) is not signed in to your GitHub account, so the script could not add the proposed change to the main version. The proposed change stays open on GitHub." \
+      "$SIGN_IN_CONTINUE_NEXT" "$raw"
+  fi
+  api_call "repos/$IN_OWNER/$IN_NAME/pulls/$PR_NUMBER" --jq "$MERGED_JQ"
+  { [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ]; } || api_fail "check whether the proposed change was added to the main version"
+  trim_into "$API_BODY"
+  state="$TRIMMED"
+  # "true <id of the new main>" once added; anything else is not added.
+  MERGED_SHA=""
+  case "$state" in "true "*) MERGED_SHA="${state#true }" ;; esac
+  case "$MERGED_SHA" in
+    *[!0-9a-f]*)
+      stop_with_error "GitHub says the proposed change was added to the main version, but it did not give the id of the new main version, so the script cannot check the copy on this computer against it." \
+        "Open $PR_URL in your browser to see that the change was added, then continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+        "GitHub reports for the proposed change: $state"
+      ;;
+  esac
+  if [ -z "$MERGED_SHA" ]; then
+    [ -n "$raw" ] || raw="gh stopped with exit code $rc and no message."
+    stop_with_error "GitHub did not add the proposed change to the main version. The proposed change stays open on GitHub." \
+      "Open $PR_URL in your browser: at the bottom of the page GitHub says what stops the change from being added. Then continue the setup with the command shown above. If it is not clear, ask for help and show the details below." \
+      "$raw${NL}GitHub reports for the proposed change: $state"
+  fi
+  CREATED_NOTE="The project $IN_OWNER/$IN_NAME exists on GitHub, and the setup's changes are in its main version there: $PR_URL"
+  step_end "The setup's changes are in the main version of the project on GitHub."
+}
+
+# finish_copy: spec step 18. gh pr merge may already have switched the
+# copy to main, brought it up to date and deleted bootstrap-setup in it,
+# so each action runs only when still needed; the update of main always
+# runs, with --prune so GitHub's deleted line of work goes from the copy
+# too. Then the copy must be at GitHub's new main with nothing unsaved.
+finish_copy() {
+  local out err rc=0 raw current head status
+  step_start "Updating the copy on this computer to the new main version"
+  current="$(git -C "$IN_DIR" symbolic-ref -q --short HEAD 2>/dev/null)" || current=""
+  [ "$current" = main ] || in_copy "switch to the main version" checkout -q main
+  out="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  err="$(mktemp "${TMPDIR:-/tmp}/bootstrap-project.XXXXXX")"
+  with_gh_sign_in "$out" "$err" -C "$IN_DIR" pull -q --ff-only --prune || rc=$?
+  raw="$(cat "$out" "$err" | tr -d '\r')"
+  rm -f "$out" "$err"
+  if [ "$rc" -ne 0 ]; then
+    [ -n "$raw" ] || raw="git stopped with exit code $rc and no message."
+    stop_with_error "git could not bring the copy of the project on this computer, in $IN_DIR, up to date with the main version on GitHub." \
+      "Check that this computer is connected to the internet, then continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+      "$raw"
+  fi
+  if git -C "$IN_DIR" rev-parse -q --verify "refs/heads/$SETUP_BRANCH" >/dev/null 2>&1; then
+    in_copy "delete the line of work $SETUP_BRANCH" branch -q -D "$SETUP_BRANCH"
+  fi
+  head="$(git -C "$IN_DIR" rev-parse -q --verify HEAD 2>/dev/null)" || head=""
+  if [ "$head" != "$MERGED_SHA" ]; then
+    stop_with_error "The copy of the project on this computer, in $IN_DIR, is not at the main version that GitHub has now." \
+      "Continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." \
+      "the copy: ${head:-none}${NL}main on GitHub: $MERGED_SHA"
+  fi
+  status="$(git -C "$IN_DIR" status --porcelain --untracked-files=all 2>&1)" || status="git status failed: $status"
+  if [ -n "$status" ]; then
+    stop_with_error "The copy of the project on this computer, in $IN_DIR, has changes that are not saved after the update." \
+      "Look at the files named below in $IN_DIR. If you did not change them, ask for help and show the details below." \
+      "$status"
+  fi
+  step_end "The copy in $IN_DIR is on the main version, with the setup's changes, and nothing is left unsaved."
+}
+
+# report: spec step 19, in plain words, at the end.
+report() {
+  local deploy="" licence approvals checks
+  [ "$IN_WITH_DEPLOY" != yes ] || deploy=", with the files that publish the website"
+  if [ "$IN_LICENSE" = none ]; then
+    licence="none, so no licence file"
+  else
+    licence="$IN_LICENSE, in the name of $IN_COPYRIGHT_HOLDER"
+  fi
+  read_back_value approvals
+  approvals="$READ_BACK_VALUE"
+  read_back_value contexts
+  checks="$READ_BACK_VALUE"
+  # The other fields read back are fixed: read_back_protection stopped
+  # unless each one is what the script set.
+  say "The setup is finished."
+  say "    The project on GitHub: https://github.com/$IN_OWNER/$IN_NAME"
+  say "    Its copy on this computer: $IN_DIR"
+  say "    The proposed change with the setup: $PR_URL"
+  say "    Language pack: $IN_PACK$deploy"
+  say "    Licence: $licence"
+  say "The protection of the main version, as GitHub reports it:"
+  say "    - every change comes as a proposed change; approvals needed before one is added: $approvals"
+  say "    - a change is added only after these checks pass: ${checks//,/, }"
+  say "    - these rules apply to the project's admins too"
+  say "    - nobody may overwrite the history of the main version or delete it"
+  say_left_for_clead
+  say "What to do next: open the Claude app, give it the new project, https://github.com/$IN_OWNER/$IN_NAME, and start a chat. The file CLAUDE.md in the project tells Claude the rest."
+}
+
 # cmd_setup <options...>: the setup. Built so far: the checks of this
 # computer and on GitHub, the inputs, the plan, and steps 2 to 6, 9, 8, 7,
-# and 10 to 14 (in that order: see "filling in the placeholders" and
+# and 10 to 19 (in that order: see "filling in the placeholders" and
 # make_lockfile). The
 # options are checked first, then the checks that need no answer (the
 # tools, the GitHub sign-in and the current version), so that nothing is
@@ -3403,10 +3718,11 @@ cmd_setup() {
   save_change
   send_change
   propose_change
-  say "$CONTINUE_INTRO"
-  say_command "bash $RESTART_CMD"
-  fail 1 "The project $IN_OWNER/$IN_NAME was created on GitHub and its main version is protected. The setup's changes were saved in its copy on this computer, in $IN_DIR, sent to GitHub and proposed there: $PR_URL. This version of the script stops here: the next steps of the setup are not built yet." \
-    "Use a released version of the bootstrapper to set up a project. The project and its proposed change stay on GitHub and its copy stays in $IN_DIR: the command shown above continues the setup once a version of the script has the next steps (waiting for the project's checks, then adding the change to the main version). If you do not need them, delete the project on GitHub, in its Settings, and delete the folder $IN_DIR."
+  wait_for_build
+  require_build
+  merge_change
+  finish_copy
+  report
 }
 
 # ---------- main ----------
