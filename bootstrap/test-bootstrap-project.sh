@@ -447,7 +447,8 @@ case "${1:-}" in
     # gh pr merge N --squash --delete-branch --match-head-commit SHA, run
     # in the copy: gh finds the project from the copy's origin (the bare
     # repo). The head of bootstrap-setup there is written to merged-head
-    # and the folder gh ran in to merge-cwd. When SHA is that head, the
+    # and the folder gh ran in to merge-cwd (GIT_TERMINAL_PROMPT, as gh
+    # got it, to merge-prompt). When SHA is that head, the
     # change is squashed onto main as one new change (its id in
     # merge-sha) and bootstrap-setup is deleted there; then, as gh does in
     # a copy on that line of work, the copy is switched to main, brought
@@ -469,6 +470,9 @@ case "${1:-}" in
       esac
       if fails_left checks-none; then echo "no checks reported on the 'bootstrap-setup' branch" >&2; exit 1; fi
       if fails_left build-pending; then printf '%s\n' 'push pending' 'pull_request pending'; exit 8; fi
+      # build-mixed: a new pull_request run still pending listed before an
+      # old one that failed (as after a re-run); the pending one decides.
+      if fails_left build-mixed; then printf '%s\n' 'pull_request pending' 'pull_request fail'; exit 8; fi
       printf '%s\n' "${STUB_GH_BUILD-push pass;pull_request pass}" | tr ';' '\n'
       exit 0
     fi
@@ -478,6 +482,7 @@ case "${1:-}" in
       fi
       g="${STUB_GIT:-git}"
       printf '%s\n' "$PWD" >>"${STUB_GH_LOG%/*}/merge-cwd"
+      printf '%s\n' "${GIT_TERMINAL_PROMPT-<unset>}" >>"${STUB_GH_LOG%/*}/merge-prompt"
       bare="$("$g" remote get-url origin)"
       head="$("$g" --git-dir="$bare" rev-parse -q --verify refs/heads/bootstrap-setup)" \
         || { echo "GraphQL: Could not resolve to a PullRequest with the number of $3. (repository.pullRequest)" >&2; exit 1; }
@@ -6225,6 +6230,13 @@ test_a_build_failed_with_only_the_projects_own_actions_allowed_gets_the_actions_
   expect_out "$d" "  4. Then run the check again: open https://github.com/octo-user/my-app/pull/1 in your browser, click Checks, then \"Re-run all jobs\""
   expect_out "$d" "How the script checks it: "
   grep -qxF '    allowed_actions: local_only' "$d/out" || { cat "$d/out" >&2; die "GitHub's answer is not below the guide"; }
+  # The guide ends with its own steps (#158 review): its last step is to
+  # continue, with one result block, and none of the Actions-off ending.
+  [ "$(grep -E '^  [0-9]+\. ' "$d/out" | tail -1)" = "  5. Then continue the setup with the command shown below." ] \
+    || { cat "$d/out" >&2; die "the guide does not end with its step 5"; }
+  [ "$(grep -c '^When it has worked: ' "$d/out")" -eq 1 ] && [ "$(grep -c '^How the script checks it: ' "$d/out")" -eq 1 ] \
+    || { cat "$d/out" >&2; die "the guide has more than one result block"; }
+  expect_no_out "$d" "if the script is waiting, come back to this window"
   sed -n 1p "$d/err" | grep -qF "What happened: GitHub Actions, the GitHub service that runs your project's checks, allows only actions from inside the project octo-user/my-app, so the check build failed: it uses actions made by GitHub. The script stopped here. The project octo-user/my-app exists on GitHub, and the setup's changes are proposed there: https://github.com/octo-user/my-app/pull/1" \
     || { cat "$d/err" >&2; die "the stop does not say what is limited and where the proposed change is"; }
   expect_after_proposing "$d" "$CHECKS_CALL" "$ALLOWED_CALL"
@@ -6461,6 +6473,95 @@ test_a_copy_not_at_the_new_main_version_stops_with_both_versions_below() {
     || { cat "$d/err" >&2; die "both versions are not below"; }
   expect_continue_command "$d" " --resume"
   ! grep -qxF "$FINISHED" "$d/out" || die "it went on to the report"
+}
+
+# finish_hook <dir> <mode>: the fake git of <dir> runs this before each
+# call: on the update of main (a call with the word pull) it fails as git
+# does when GitHub cannot be reached (offline), or it leaves a new file
+# in the copy and lets the update run (stray).
+finish_hook() {
+  cat >"$1/push-hook" <<HOOK
+#!/usr/bin/env bash
+case " \$* " in *" pull "*) ;; *) exit 0 ;; esac
+case "$2" in
+  offline) echo "fatal: unable to access 'https://github.com/octo-user/my-app.git/': Could not resolve host: github.com" >&2; exit 128 ;;
+  stray) echo "left here" >"$1/cwd/my-app/stray.txt" ;;
+esac
+HOOK
+  chmod +x "$1/push-hook"
+}
+
+test_a_failed_update_of_the_copy_stops_with_gits_text_below() {
+  # #158 review, finding 1: step 18's update of main fails (gh did not
+  # switch the copy, so the script's own update is the only one).
+  local d
+  d="$(tmpdir)"
+  working_git "$d"
+  finish_hook "$d" offline
+  export STUB_GH_MERGE_LOCAL=no
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_MERGE_LOCAL
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "git could not bring the copy of the project on this computer, in \./my-app, up to date with the main version on GitHub\. The project octo-user/my-app exists on GitHub, and the setup's changes are in its main version there: https://github.com/octo-user/my-app/pull/1\$"
+  sed -n 2p "$d/err" | grep -qF 'connected to the internet' || { cat "$d/err" >&2; die "the next action is not to check the connection"; }
+  grep -qxF "    fatal: unable to access 'https://github.com/octo-user/my-app.git/': Could not resolve host: github.com" "$d/err" \
+    || { cat "$d/err" >&2; die "git's text is not below"; }
+  expect_continue_command "$d" " --resume"
+  ! grep -qxF "$FINISHED" "$d/out" || die "it went on to the report"
+}
+
+test_a_copy_with_changes_not_saved_after_the_update_stops() {
+  # #158 review, finding 1: after the update the copy must have nothing
+  # unsaved (spec step 18); a file left in it is named below the stop.
+  local d
+  d="$(tmpdir)"
+  working_git "$d"
+  finish_hook "$d" stray
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "The copy of the project on this computer, in \./my-app, has changes that are not saved after the update\. The project octo-user/my-app exists on GitHub"
+  grep -qxF '    ?? stray.txt' "$d/err" || { cat "$d/err" >&2; die "the file is not named below"; }
+  expect_continue_command "$d" " --resume"
+  ! grep -qxF "$FINISHED" "$d/out" || die "it went on to the report"
+}
+
+test_gh_pr_merge_may_not_ask_at_the_terminal() {
+  # #158 review, note 2: gh pr merge runs git in the copy; git may not ask
+  # for a name and password at the terminal there.
+  local d
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 0 "$d"
+  [ "$(cat "$d/merge-prompt")" = 0 ] || { cat "$d/merge-prompt" >&2; die "gh pr merge ran with GIT_TERMINAL_PROMPT not 0"; }
+}
+
+test_an_id_of_the_new_main_that_is_not_one_stops_before_the_finish() {
+  # #158 review, note 4: GitHub says the change was added but gives no
+  # usable id of the new main: the script stops, and does not update the
+  # copy against it.
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_MERGED_SHA="not-an-id"
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_MERGED_SHA
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "GitHub says the proposed change was added to the main version, but it did not give the id of the new main version, so the script cannot check the copy on this computer against it\. "
+  grep -qxF '    GitHub reports for the proposed change: true not-an-id' "$d/err" || { cat "$d/err" >&2; die "GitHub's answer is not below"; }
+  expect_continue_command "$d" " --resume"
+  expect_no_out "$d" "==> Updating the copy on this computer"
+}
+
+test_a_pending_run_of_build_is_waited_for_even_next_to_a_failed_one() {
+  # #158 review, note 4: two pull_request runs of build, a new one still
+  # pending listed before an old one that failed (as after a re-run): the
+  # script waits, and goes on once build passes.
+  local d
+  d="$(tmpdir)"
+  echo 1 >"$d/build-mixed"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 0 "$d"
+  [ "$(cat "$d/sleep.log")" = 15 ] || { cat "$d/sleep.log" >&2; die "not one wait of 15 seconds"; }
+  expect_after_proposing "$d" "$CHECKS_CALL" "${END_CALLS[@]}"
 }
 
 test_the_report_says_what_was_made_and_the_one_thing_to_do_next() {
