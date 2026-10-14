@@ -1628,21 +1628,21 @@ check_target_dir() {
     return 1
   fi
   if git -C "$parent" rev-parse --git-dir >/dev/null 2>&1; then
-    DIR_OUTER="$(top_folder_as_given "$parent")"
+    set_dir_outer "$parent"
     DIR_PROBLEM=in-git
     return 1
   fi
   return 0
 }
 
-# top_folder_as_given <folder>: the top folder of the git project that
-# holds <folder>, written the way <folder> was written. git gives its own
+# set_dir_outer <folder>: DIR_OUTER is the top folder of the git project
+# that holds <folder>, written the way <folder> was written. git gives its own
 # path, with symbolic links resolved (on macOS /var is /private/var) and,
 # in Git for Windows, as C:/...; in a message next to the folder the
 # user gave, that reads as another place. So the path given is cut by
 # the part git says lies below the top folder. Where the two do not line
 # up (a symbolic link inside the project), git's own path is used.
-top_folder_as_given() {
+set_dir_outer() {
   local f="$1" below top
   below="$(git -C "$f" rev-parse --show-prefix 2>/dev/null)" || below=""
   below="${below//$CR/}"
@@ -1665,7 +1665,7 @@ top_folder_as_given() {
     top="$(git -C "$f" rev-parse --show-toplevel 2>/dev/null)" || top=""
     top="${top//$CR/}"
   fi
-  printf '%s\n' "$top"
+  DIR_OUTER="$top"
 }
 
 # dir_is_own_copy: the folder IN_DIR is the top folder of a git project
