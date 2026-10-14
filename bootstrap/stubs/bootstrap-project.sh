@@ -2498,6 +2498,9 @@ classify_protect_403() {
 # VISIBILITY_FROM_GITHUB: IN_VISIBILITY was read from GitHub in this run
 # (--resume reads it first; the first run reads it when it needs it).
 VISIBILITY_FROM_GITHUB=""
+# PROTECT_PRIVATE: the refusal does not say why, and GitHub says the project
+# is private.
+PROTECT_PRIVATE=""
 
 # private_on_github: GitHub says the project is private (read once; the
 # answer of the call before it, API_*, stays as it was). A call that fails
@@ -2540,6 +2543,10 @@ protect_main() {
       # A plan message on a project that is not private says nothing
       # about the plan.
       if [ "$PROTECT_PROBLEM" = plan ] && ! private_on_github; then PROTECT_PROBLEM=unknown; fi
+      # A refusal that does not say why, on a private project, gets both
+      # explanations (still not the option).
+      PROTECT_PRIVATE=""
+      if [ "$PROTECT_PROBLEM" = unknown ] && private_on_github; then PROTECT_PRIVATE=1; fi
       # --allow-unprotected is for a plan that cannot protect a private
       # project; a key without the permission, or a refusal that does not
       # say why, is another problem, and still stops.
@@ -2613,17 +2620,23 @@ guide_protect() {
       ;;
     *)
       title="GitHub refused to protect the main version of $IN_OWNER/$IN_NAME, and its message does not say why."
-      why="Protection makes every change come as a proposed change. The most likely cause is the key that gh signs in with: turning on protection needs its Administration permission set to \"Read and write\"."
+      if [ -n "$PROTECT_PRIVATE" ]; then
+        why="Protection makes every change come as a proposed change. For a private project GitHub refuses it for one of two reasons, and the steps cover both: a plan without protection (it needs the Pro, Team or Enterprise plan), or a key that gh signs in with that lacks the Administration permission."
+      else
+        why="Protection makes every change come as a proposed change. The most likely cause is the key that gh signs in with: turning on protection needs its Administration permission set to \"Read and write\"."
+      fi
       ;;
   esac
   guide_begin "$title" "$why"
-  if [ "$PROTECT_PROBLEM" = plan ]; then
+  if [ "$PROTECT_PROBLEM" = plan ] || [ -n "$PROTECT_PRIVATE" ]; then
     guide_step "Upgrade your GitHub plan to Pro (or Team, for an organisation): open https://github.com/settings/billing, or the organisation's Settings and then Billing and plans. Then continue the setup with the command shown below."
     guide_step "Or make the project public, which needs no paid plan: anyone can then see the project and its code. This command does it; then continue the setup with the command shown below:"
     say_command "gh repo edit $IN_OWNER/$IN_NAME --visibility public --accept-visibility-change-consequences"
-    guide_step "Or carry on without protection: changes could then go straight into the main version, and the setup writes that decision into the project. Continue with this command:"
-    shown_command_with_allow
-    say_command "bash $SHOWN_CMD"
+    if [ "$PROTECT_PROBLEM" = plan ]; then
+      guide_step "Or carry on without protection: changes could then go straight into the main version, and the setup writes that decision into the project. Continue with this command:"
+      shown_command_with_allow
+      say_command "bash $SHOWN_CMD"
+    fi
   fi
   if [ "$PROTECT_PROBLEM" != plan ]; then
     guide_step "If gh signs in with a fine-grained token: open https://github.com/settings/personal-access-tokens in your browser, edit that token, and set Administration, Contents, Workflows and Pull requests to \"Read and write\"; for an organisation's project, one of its owners may have to approve the change. Then continue the setup with the command shown below."
@@ -3918,14 +3931,14 @@ read_back_protection() {
       case "$line" in "$field="*) found=1; got="${line#*=}" ;; esac
     done <<<"$READ_BACK"
     if [ -z "$found" ]; then
-      diffs="$diffs$field: the script set $want, GitHub reports nothing$NL"
+      if [ -n "$CHANGE_ADDED" ]; then diffs="$diffs$field: expected $want, GitHub reports nothing$NL"; else diffs="$diffs$field: the script set $want, GitHub reports nothing$NL"; fi
     elif [ "$got" != "$want" ]; then
-      diffs="$diffs$field: the script set $want, GitHub reports $got$NL"
+      if [ -n "$CHANGE_ADDED" ]; then diffs="$diffs$field: expected $want, GitHub reports $got$NL"; else diffs="$diffs$field: the script set $want, GitHub reports $got$NL"; fi
     fi
   done
   [ -n "$diffs" ] || return 0
   if [ -n "$CHANGE_ADDED" ]; then
-    stop_with_error "GitHub does not report the protection of the main version as the script set it. The setup's changes are in the main version already." \
+    stop_with_error "GitHub does not report the protection of the main version with the rules the setup gives it. The project is set up already, so the script changed nothing." \
       "Open https://github.com/$IN_OWNER/$IN_NAME/settings in your browser and look at the rule that protects the main version; the details below show what differs. Fix the rule there, then continue the setup with the command shown above. If you did not change that rule, ask for help and show the details below." \
       "${diffs%"$NL"}"
   fi
@@ -4124,8 +4137,12 @@ report() {
     say "    - these rules apply to the project's admins too"
     say "    - nobody may overwrite the history of the main version or delete it"
   fi
-  say_left_for_clead
-  say "What to do next: open the Claude app, give it the new project, https://github.com/$IN_OWNER/$IN_NAME, and start a chat. The file CLAUDE.md in the project tells Claude the rest."
+  if [ -n "$CHANGE_ADDED" ]; then
+    say "What to do next: open the Claude app, give it the project, https://github.com/$IN_OWNER/$IN_NAME, and start a chat. The file CLAUDE.md in the project tells Claude the rest."
+  else
+    say_left_for_clead
+    say "What to do next: open the Claude app, give it the new project, https://github.com/$IN_OWNER/$IN_NAME, and start a chat. The file CLAUDE.md in the project tells Claude the rest."
+  fi
 }
 
 # ---------- stops nobody planned for ----------
@@ -4233,7 +4250,7 @@ set_state_note() {
     saved) CREATED_NOTE="$project, and the setup's changes are saved in its copy on this computer, in $IN_DIR, but not sent to GitHub yet." ;;
     sent) CREATED_NOTE="$project, and the setup's changes are saved in its copy on this computer, in $IN_DIR, and sent to GitHub on the line of work $SETUP_BRANCH." ;;
     proposed) CREATED_NOTE="$project, and the setup's changes are proposed there: $PR_URL" ;;
-    added) CREATED_NOTE="$project, and the setup's changes are in its main version there${PR_URL:+: $PR_URL}" ;;
+    added) CREATED_NOTE="$project, and it is set up already${PR_URL:+: $PR_URL}" ;;
   esac
 }
 
@@ -4266,9 +4283,9 @@ refuse_copy() {
 # resume_read_github: what GitHub has: whether the project is private, the
 # bootstrapper's version in its CHANGELOG.md, its proposed changes from
 # bootstrap-setup, and bootstrap-setup itself.
-GH_TIDY="" GH_PACK="" GH_DEPLOY="" GH_LICENCE=""
+GH_TIDY="" GH_PACK="" GH_DEPLOY="" GH_LICENCE="" GH_HAS_SECTION=""
 resume_read_github() {
-  local line state merged url body has_section
+  local line state merged url body
   api_call "repos/$IN_OWNER/$IN_NAME" --jq .private
   { [ "$API_RC" -eq 0 ] && [ "$API_STATUS" = 200 ]; } || api_fail "read whether the project $IN_OWNER/$IN_NAME is private"
   trim_into "$API_BODY"
@@ -4331,10 +4348,10 @@ resume_read_github() {
     200 | 404) ;;
     *) api_fail "read the file README.md of the project" ;;
   esac
-  has_section=""
+  GH_HAS_SECTION=""
   if [ "$API_STATUS" = 200 ]; then
     while IFS= read -r line || [ -n "$line" ]; do
-      [ "${line//$CR/}" != "$SETUP_HEADING" ] || has_section=1
+      [ "${line//$CR/}" != "$SETUP_HEADING" ] || GH_HAS_SECTION=1
     done <<<"$API_BODY"
   fi
   api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/bootstrap-project.sh"
@@ -4342,7 +4359,7 @@ resume_read_github() {
     200 | 404) ;;
     *) api_fail "look for the file bootstrap-project.sh in the project" ;;
   esac
-  if [ -z "$has_section" ] && [ "$API_STATUS" = 404 ]; then GH_TIDY=1; fi
+  if [ -z "$GH_HAS_SECTION" ] && [ "$API_STATUS" = 404 ]; then GH_TIDY=1; fi
 
   GH_OPEN_URL=""
   GH_MERGED_URL=""
@@ -4416,6 +4433,13 @@ resume_decide() {
   else
     RESUME_STATE=template
   fi
+  # Not set up (the script is there) and not waiting for its setup (the
+  # README has lost the setup section): it cannot be placed, so nothing is
+  # written to it.
+  if [ "$RESUME_STATE" != added ] && [ -z "$GH_HAS_SECTION" ]; then
+    refuse_project "The project $IN_OWNER/$IN_NAME still has the bootstrapper's script, bootstrap-project.sh, but its README.md no longer has the setup section \"$SETUP_HEADING\"." \
+      "--resume continues a project that is waiting for its setup, or one that is set up already, and this one is neither; the script changes nothing in a project it cannot place."
+  fi
   [ -n "$COPY_PRESENT" ] || return 0
   case "$RESUME_STATE" in
     sent | proposed)
@@ -4464,7 +4488,7 @@ resume_plan() {
     saved) step_end "The setup's changes are saved in the copy on this computer but not sent to GitHub: the setup continues by sending them." ;;
     sent) step_end "The setup's changes are on GitHub, on the line of work $SETUP_BRANCH, but not proposed: the setup continues by proposing them." ;;
     proposed) step_end "The setup's changes are proposed on GitHub, at $PR_URL: the setup continues by waiting for the check build." ;;
-    added) step_end "The setup's changes are in the main version of the project already: the script only checks its protection, brings the copy on this computer up to date if there is one, and shows the report." ;;
+    added) step_end "The project is set up already: the script only checks its protection, brings the copy on this computer up to date if there is one, and shows the report." ;;
   esac
 }
 
@@ -4501,7 +4525,7 @@ resume_added() {
   CHANGE_ADDED=1
   step_start "Checking the protection of the main version"
   read_back_protection
-  step_end "$([ -n "$UNPROTECTED" ] && echo "The main version is not protected, as you chose with --allow-unprotected." || echo "GitHub reports the protection of the main version as the script sets it, with build required.")"
+  step_end "$([ -n "$UNPROTECTED" ] && echo "The main version is not protected, as you chose with --allow-unprotected." || echo "GitHub reports the protection of the main version with build required.")"
   if [ -n "$UNPROTECTED" ]; then
     # The report says the decision is written down only if main has it.
     api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/memory/decisions.md"
