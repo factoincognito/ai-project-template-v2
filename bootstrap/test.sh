@@ -622,28 +622,193 @@ test_workflow_publish_needs_the_pack_chain_test() {
   grep -qE '^  workflow_call:' "$REPO/.github/workflows/packs.yml" || die "packs.yml is not callable"
 }
 
-test_workflow_bootstrapper_test_runs_the_require_test_change_tests() {
-  # The check's own tests must run in a required check from the first PR
-  # that adds them: the template-only bootstrapper-test job.
-  local wf="$REPO/.github/workflows/bootstrapper.yml"
-  awk '/^  bootstrapper-test:/ { inj = 1; next }
-       /^  [a-z][a-z-]*:/ { inj = 0 }
-       inj && /^ *run: bash tools\/test-require-test-change\.sh *$/ { found = 1 }
-       END { exit !found }' "$wf" \
-    || die "bootstrapper-test does not run tools/test-require-test-change.sh"
+# ---------- bootstrapper.yml: one required check over an OS matrix ----------
+# Branch protection requires a check named bootstrapper-test. A matrix
+# renames its checks ("job (ubuntu-latest)", ...), so the tests run in
+# other jobs and bootstrapper-test is a single aggregate job that needs
+# them, always runs, and fails unless every one of them succeeded: a job
+# skipped because a need failed reports as success, which would turn
+# the required check green on failing tests.
+
+BWF="$REPO/.github/workflows/bootstrapper.yml"
+
+# wf_job <id>: the lines of one job under jobs:, from "  <id>:" up to the
+# next job or top-level key. Empty if there is no such job.
+wf_job() {
+  awk -v id="$1" '
+    /^[^ #]/ { injobs = ($0 ~ /^jobs:/); inj = 0; next }
+    injobs && /^  [A-Za-z0-9_-]+:/ { inj = ($0 ~ ("^  " id ":[[:space:]]*$")) }
+    inj { print }' "$BWF"
 }
 
-test_workflow_bootstrapper_test_runs_the_bootstrap_project_tests() {
-  # The bootstrap script's own tests run in the required
-  # bootstrapper-test job from the PR that adds them (ubuntu only until
-  # the OS matrix lands).
-  local wf="$REPO/.github/workflows/bootstrapper.yml"
+# wf_job_ids: every job id under jobs:, one per line.
+wf_job_ids() {
+  awk '/^[^ #]/ { injobs = ($0 ~ /^jobs:/); next }
+       injobs && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ { sub(/^  /, ""); sub(/:.*/, ""); print }' "$BWF"
+}
+
+# wf_needs <id>: the job's needs, one per line. Only the inline form
+# "needs: [a, b]" is read; any other form fails the test.
+wf_needs() {
+  local line
+  line="$(wf_job "$1" | grep -E '^    needs:' || true)"
+  [ -n "$line" ] || return 0
+  printf '%s\n' "$line" | grep -qE '^    needs: \[[A-Za-z0-9_, -]+\][[:space:]]*$' \
+    || die "needs of $1 is not in the form needs: [a, b]: $line"
+  printf '%s\n' "$line" | sed -E 's/^    needs: \[//; s/\][[:space:]]*$//' | tr ',' '\n' | sed -E 's/^ +//; s/ +$//'
+}
+
+# wf_jobs_running <script>: ids of the jobs with a step line that runs
+# the script with bash or /bin/bash and no arguments.
+wf_jobs_running() {
+  local id re
+  re="^ *(run: )?(/bin/)?bash $(printf '%s' "$1" | sed 's/[./]/\\&/g') *$"
+  for id in $(wf_job_ids); do
+    if wf_job "$id" | grep -qE "$re"; then echo "$id"; fi
+  done
+}
+
+# wf_step <id> <regex>: the lines of the steps of a job that have a line
+# matching the regex. Steps start at "      - ".
+wf_step() {
+  wf_job "$1" | awk -v re="$2" '
+    /^      - / { if (hit) printf "%s", buf; buf = ""; hit = 0; instep = 1 }
+    /^    [A-Za-z]/ { if (hit) printf "%s", buf; buf = ""; hit = 0; instep = 0 }
+    instep { buf = buf $0 "\n"; if ($0 ~ re) hit = 1 }
+    END { if (hit) printf "%s", buf }'
+}
+
+# wf_run_block: reads one step on stdin and prints its "run: |" script,
+# dedented.
+wf_run_block() {
+  awk 'inrun && /[^[:space:]]/ { match($0, /^ */); if (RLENGTH <= ind) inrun = 0 }
+       inrun { print substr($0, ind + 3); next }
+       /^ *run: \|[[:space:]]*$/ { match($0, /^ */); ind = RLENGTH; inrun = 1 }'
+}
+
+# assert_gated <script>: the script runs in exactly one job, that job is
+# not bootstrapper-test itself, and bootstrapper-test needs it.
+assert_gated() {
+  local jobs n
+  jobs="$(wf_jobs_running "$1")"
+  n="$(printf '%s' "$jobs" | grep -c . || true)"
+  [ "$n" -eq 1 ] || die "$1 runs in $n jobs, expected 1: $jobs"
+  [ "$jobs" != bootstrapper-test ] || die "$1 runs in bootstrapper-test itself, not in a job it needs"
+  wf_needs bootstrapper-test | grep -qxF "$jobs" || die "bootstrapper-test does not need $jobs, which runs $1"
+}
+
+# The job that runs the bootstrap script's tests (the OS matrix).
+matrix_job() {
+  local jobs
+  jobs="$(wf_jobs_running bootstrap/test-bootstrap-project.sh)"
+  [ -n "$jobs" ] || die "no job runs bootstrap/test-bootstrap-project.sh"
+  [ "$(printf '%s\n' "$jobs" | sort -u | wc -l | tr -d ' ')" = 1 ] || die "several jobs run it: $jobs"
+  printf '%s\n' "$jobs" | head -n 1
+}
+
+test_workflow_bootstrapper_runs_on_every_push_and_pull_request() {
+  # The triggers are unchanged by the matrix: every branch push, v* tags,
+  # and pull requests to main.
+  local on
+  on="$(awk '/^on:/ { p = 1; next } /^[^ #]/ { p = 0 } p' "$BWF")"
+  printf '%s\n' "$on" | grep -qxF '    branches: ["**"]' || die "push is not on every branch"
+  printf '%s\n' "$on" | grep -qxF '    tags: ["v*"]' || die "push is not on v* tags"
+  printf '%s\n' "$on" | grep -qxF '  pull_request:' || die "no pull_request trigger"
+  printf '%s\n' "$on" | grep -qxF '    branches: [main]' || die "pull_request is not on main"
+}
+
+test_workflow_bootstrapper_test_is_one_job_that_always_runs() {
+  local job
+  job="$(wf_job bootstrapper-test)"
+  [ -n "$job" ] || die "no bootstrapper-test job"
+  # A matrix or a job name would rename the required check.
+  ! printf '%s\n' "$job" | grep -qE '^    (strategy|name):' || die "bootstrapper-test has a matrix or a name; the check would be renamed"
+  ! printf '%s\n' "$job" | grep -qF 'matrix' || die "bootstrapper-test uses a matrix"
+  printf '%s\n' "$job" | grep -qxE '    runs-on: ubuntu-latest' || die "bootstrapper-test does not run on ubuntu-latest"
+  # Without always(), a failed or cancelled need skips it, and a skipped
+  # required check counts as passed.
+  printf '%s\n' "$job" | grep -qxE '    if: always\(\)' || die "bootstrapper-test lacks if: always()"
+  [ -n "$(wf_needs bootstrapper-test)" ] || die "bootstrapper-test needs nothing"
+}
+
+test_workflow_bootstrapper_test_fails_unless_every_need_succeeded() {
+  # Runs the aggregate job's script with the results GitHub would pass.
+  local step script r
+  step="$(wf_step bootstrapper-test '^ *run: [|]')"
+  [ -n "$step" ] || die "bootstrapper-test has no run: | step"
+  [ "$(printf '%s\n' "$step" | grep -cE '^ *run:')" = 1 ] || die "expected one run step in bootstrapper-test"
+  # Every need's result, by construction: a need added later is covered.
+  printf '%s\n' "$step" | grep -qxF "          RESULTS: \${{ join(needs.*.result, ' ') }}" \
+    || die "the step does not get every need's result in RESULTS"
+  script="$WORK/gate.$RANDOM.sh"
+  printf '%s\n' "$step" | wf_run_block >"$script"
+  [ -s "$script" ] || die "empty run script"
+  for r in "success" "success success" "success success success"; do
+    RESULTS="$r" bash "$script" >/dev/null 2>&1 || die "failed on results: $r"
+  done
+  for r in "" "failure" "success failure" "failure success" "skipped success" \
+           "success skipped" "success cancelled" "cancelled" "success  success failure"; do
+    ! RESULTS="$r" bash "$script" >/dev/null 2>&1 || die "passed on results: '$r'"
+  done
+}
+
+test_workflow_bootstrapper_test_gates_the_build_and_publish_tests() {
+  # bootstrap/test.sh stays on ubuntu only (spec): build.sh and
+  # publish.sh run only in the ubuntu release job.
+  local job
+  assert_gated bootstrap/test.sh
+  job="$(wf_jobs_running bootstrap/test.sh)"
+  wf_job "$job" | grep -qxE '    runs-on: ubuntu-latest' || die "$job does not run on ubuntu-latest only"
+}
+
+test_workflow_bootstrapper_test_gates_the_require_test_change_tests() {
+  # The check's own tests run in a job the required bootstrapper-test
+  # check needs, from the first PR that adds them.
+  assert_gated tools/test-require-test-change.sh
+}
+
+test_workflow_bootstrapper_test_gates_the_bootstrap_project_tests() {
   [ -f "$HERE/test-bootstrap-project.sh" ] || die "no bootstrap/test-bootstrap-project.sh"
-  awk '/^  bootstrapper-test:/ { inj = 1; next }
-       /^  [a-z][a-z-]*:/ { inj = 0 }
-       inj && /^ *run: bash bootstrap\/test-bootstrap-project\.sh *$/ { found = 1 }
-       END { exit !found }' "$wf" \
-    || die "bootstrapper-test does not run bootstrap/test-bootstrap-project.sh"
+  assert_gated bootstrap/test-bootstrap-project.sh
+}
+
+test_workflow_bootstrap_project_tests_run_on_ubuntu_macos_and_windows() {
+  local j job oses
+  j="$(matrix_job)"; job="$(wf_job "$j")"
+  printf '%s\n' "$job" | grep -qxF '    runs-on: ${{ matrix.os }}' || die "$j does not run on matrix.os"
+  oses="$(printf '%s\n' "$job" | grep -E '^        os: \[' | sed -E 's/^        os: \[//; s/\][[:space:]]*$//' \
+    | tr ',' '\n' | sed -E 's/^ +//; s/ +$//' | LC_ALL=C sort | tr '\n' ' ')"
+  [ "$oses" = "macos-latest ubuntu-latest windows-latest " ] || die "matrix os is '$oses'"
+  # All three results show, even when one leg fails first.
+  printf '%s\n' "$job" | grep -qxF '      fail-fast: false' || die "$j does not set fail-fast: false"
+}
+
+test_workflow_windows_leg_runs_the_tests_in_git_bash() {
+  # shell: bash on a Windows runner is Git for Windows' bash.
+  local j
+  j="$(matrix_job)"
+  wf_job "$j" | awk '/^    defaults:$/ { d = 1; next } d && /^      run:$/ { r = 1; next }
+                     d && r && /^        shell: bash$/ { ok = 1 } /^    [A-Za-z]/ { d = 0; r = 0 }
+                     END { exit !ok }' || die "$j does not default to shell: bash"
+}
+
+test_workflow_macos_leg_runs_the_tests_with_bin_bash_3_2() {
+  # Apple's /bin/bash is 3.2. Anything the tests start with plain bash
+  # (the script, build.sh) must be that bash too, not a newer one the
+  # runner image may put first on PATH, and the step proves it is 3.2.
+  local j mac other
+  j="$(matrix_job)"
+  mac="$(wf_step "$j" "^        if: runner[.]os == 'macOS'\$")"
+  [ -n "$mac" ] || die "no step with if: runner.os == 'macOS' in $j"
+  printf '%s\n' "$mac" | grep -qE '^ +/bin/bash bootstrap/test-bootstrap-project\.sh *$' \
+    || die "the macOS step does not run the tests with /bin/bash"
+  printf '%s\n' "$mac" | grep -qE 'ln -sf? /bin/bash ' || die "the macOS step does not link bash to /bin/bash"
+  printf '%s\n' "$mac" | grep -qE 'PATH=' || die "the macOS step does not put that link first on PATH"
+  printf '%s\n' "$mac" | grep -qF 'BASH_VERSINFO' && printf '%s\n' "$mac" | grep -qF '3.2' \
+    || die "the macOS step does not check that bash is 3.2"
+  other="$(wf_step "$j" "^        if: runner[.]os != 'macOS'\$")"
+  printf '%s\n' "$other" | grep -qE '^ +run: bash bootstrap/test-bootstrap-project\.sh *$' \
+    || die "no step runs the tests with bash on the other legs"
 }
 
 test_real_build_does_not_ship_the_bootstrap_project_tests() {
