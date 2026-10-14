@@ -74,6 +74,10 @@ mkdir -p "$HOME_DIR"
 : >"$HOME_DIR/.gitconfig"
 export HOME="$HOME_DIR"
 unset XDG_CONFIG_HOME GIT_CONFIG_GLOBAL GH_TOKEN GITHUB_TOKEN GIT_DIR GIT_WORK_TREE
+# Settings passed in the environment (GIT_CONFIG_COUNT and its keys, as
+# some sandboxes set url.*.insteadOf with them) would change what git
+# reports, such as the copy's remote.
+unset GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
 G() { "$REAL_GIT" -c user.name=Tester -c user.email=tester@example.invalid -c init.defaultBranch=main "$@"; }
 
 # The real bootstrapper, built once (build.sh is tested in bootstrap/test.sh).
@@ -625,6 +629,7 @@ test_extra_commit_on_main_fails() {
   G -C "$(COPY "$d")" fetch -q "$bare" "+refs/heads/main:refs/remotes/origin/main"
   sync_github "$d"
   run_check "$d"; expect_only_fail "$d" history
+  reason_of "$d" history | grep -qF '3 or more changes' || { cat "$d/out" >&2; die "the reason does not count the changes"; }
 }
 
 test_merge_with_two_parents_fails() {
@@ -641,6 +646,11 @@ test_merge_with_two_parents_fails() {
   run_check "$d"
   expect_rc "$d" 1
   expect_result "$d" history FAIL
+  # Two changes on main, the last with two parents (the other one a
+  # second root, which no setup makes): only the parent count can tell.
+  d="$(tmpdir)"; finished "$d" node mit
+  gh_jq "$d" "$(COMMITS_EP)" '.[0].parents += [{"sha":"dddddddddddddddddddddddddddddddddddddddd"}]'
+  run_check "$d"; expect_only_fail "$d" history
 }
 
 test_setup_branch_left_fails() {
@@ -722,6 +732,7 @@ test_copy_not_on_main_fails() {
   d="$(tmpdir)"; finished "$d" node mit
   G -C "$(COPY "$d")" checkout -q --detach
   run_check "$d"; expect_only_fail "$d" copy
+  reason_of "$d" copy | grep -qF 'on no line of work' || { cat "$d/out" >&2; die "the reason does not say the copy is detached"; }
 }
 
 test_copy_behind_github_fails() {
@@ -900,6 +911,7 @@ test_licence_not_as_chosen_fails() {
   d="$(tmpdir)"; finished "$d" node mit
   change_setup "$d" 'git rm -q LICENSE'
   run_check "$d"; expect_only_fail "$d" licence
+  reason_of "$d" licence | grep -qF 'no LICENSE file' || { cat "$d/out" >&2; die "the reason does not say LICENSE is missing"; }
   d="$(tmpdir)"; finished "$d" node mit
   change_setup "$d" 'printf "%s\n" "Some other text." >LICENSE'
   run_check "$d"; expect_only_fail "$d" licence
@@ -997,7 +1009,7 @@ load_script() { set --; . "$SCRIPT"; }
 test_checker_can_be_sourced_without_running() {
   local out
   # && not ;: errexit does not reach into $( ) on bash before 4.4.
-  out="$(load_check && echo loaded)" || die "sourcing failed"
+  out="$(load_check 2>&1 && echo loaded)" || die "sourcing failed"
   [ "$out" = loaded ] || die "sourcing printed: $out"
 }
 
