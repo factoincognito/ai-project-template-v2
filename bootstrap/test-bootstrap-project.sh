@@ -4243,7 +4243,7 @@ test_a_403_on_protection_stops_before_anything_else_with_its_guide() {
     # The plan is told from the token by GitHub's message, and the
     # project's visibility is read from GitHub before the way on is
     # offered (round 2, B1).
-    if [ "$mode" = plan ]; then
+    if [ "$mode" != token ]; then
       expect_calls "$d" "${CREATE_CALL/--public/--private}" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$PRIVATE_CALL"
     else
       expect_calls "$d" "${CREATE_CALL/--public/--private}" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL"
@@ -4263,14 +4263,13 @@ test_a_403_on_protection_stops_before_anything_else_with_its_guide() {
         grep -qE '^    bash .* --resume( .*)? --allow-unprotected$' "$d/out" || { cat "$d/out" >&2; die "$mode: --allow-unprotected not shown"; }
         ;;
       mystery)
-        # Round 2, B1: a message that does not say why is not read as the
-        # plan: the key is named as the likely cause, and neither the
-        # public command nor --allow-unprotected is offered.
+        # Round 3, N2: a message that does not say why, on a project
+        # GitHub says is private, gets both explanations (the plan steps and
+        # the token steps), and still no --allow-unprotected.
         sed -n '/^==> Protecting/,$p' "$d/out" >"$d/guide"
-        grep -qF 'most likely' "$d/guide" || { cat "$d/guide" >&2; die "mystery: the key is not named as the likely cause"; }
+        grep -qF 'https://github.com/settings/billing' "$d/guide" || { cat "$d/guide" >&2; die "mystery: the plan steps are not shown"; }
+        grep -qxF '    gh repo edit octo-user/my-app --visibility public --accept-visibility-change-consequences' "$d/guide" || { cat "$d/guide" >&2; die "mystery: the command to make it public is not shown"; }
         ! grep -qF -- '--allow-unprotected' "$d/guide" || { cat "$d/guide" >&2; die "mystery: --allow-unprotected is offered"; }
-        ! grep -qF 'gh repo edit' "$d/guide" || { cat "$d/guide" >&2; die "mystery: the command to make it public is offered"; }
-        ! grep -qF 'needs a paid GitHub plan' "$d/guide" || { cat "$d/guide" >&2; die "mystery: the plan steps are shown"; }
         ;;
     esac
     case "$mode" in
@@ -7147,7 +7146,7 @@ test_resume_of_a_finished_setup_only_checks_the_protection_and_reports() {
   n="$(calls_count "$d")"
   setup_run "$d" --non-interactive --yes --resume
   expect_rc 0 "$d"
-  expect_out "$d" "    Done. The setup's changes are in the main version of the project already: the script only checks its protection, brings the copy on this computer up to date if there is one, and shows the report."
+  expect_out "$d" "    Done. The project is set up already: the script only checks its protection, brings the copy on this computer up to date if there is one, and shows the report."
   ! calls_since "$d" "$n" | grep -qE '^(repo create|repo clone|repo edit|pr create|pr merge) |-X PUT' || { calls_since "$d" "$n" >&2; die "something was changed"; }
   calls_since "$d" "$n" | grep -qxF "$READBACK_CALL" || die "the protection was not read back"
   grep -qxF '    The proposed change with the setup: https://github.com/octo-user/my-app/pull/1' "$d/out" || { cat "$d/out" >&2; die "the report lacks the proposed change"; }
@@ -7158,8 +7157,8 @@ test_resume_of_a_finished_setup_only_checks_the_protection_and_reports() {
   setup_run "$d" --non-interactive --yes --resume
   unset STUB_GH_READBACK
   expect_rc 1 "$d"
-  expect_err_shape "$d" "GitHub does not report the protection of the main version as the script set it\."
-  grep -qxF '    contexts: the script set build, GitHub reports ' "$d/err" || { cat "$d/err" >&2; die "the difference is not below"; }
+  expect_err_shape "$d" "GitHub does not report the protection of the main version with the rules the setup gives it\."
+  grep -qxF '    contexts: expected build, GitHub reports ' "$d/err" || { cat "$d/err" >&2; die "the difference is not below"; }
   ! grep -qF 'did not add' "$d/err" || { cat "$d/err" >&2; die "the stop speaks of a change not added"; }
 }
 
@@ -7530,7 +7529,7 @@ UNPROTECTED_MISSING='    - the main version is not protected: you chose to go on
 # nothing_changed_on_github <dir>: after a run that only looked, no call
 # that changes GitHub or this computer was made.
 nothing_changed_on_github() {
-  ! grep -v -- '--help' "$1/gh.log" | grep -qE '	(-X	PUT|clone|edit|create|merge)	' || { cat "$1/gh.log" >&2; die "something was changed"; }
+  ! grep -v -- '--help' "$1/gh.log" | grep -qE '	(-X	(PUT|PATCH|POST|DELETE)|clone|edit|create|merge)	' || { cat "$1/gh.log" >&2; die "something was changed"; }
   [ ! -s "$1/protection-bodies" ] || die "the protection was set"
   [ ! -s "$1/pr-bodies" ] || die "a change was proposed"
   [ -z "$(ls -A "$1/cwd")" ] || { ls -A "$1/cwd" >&2; die "something was made on this computer"; }
@@ -7541,15 +7540,20 @@ nothing_changed_on_github() {
 # the README and no bootstrap-project.sh, and the protection with build
 # required, kept in the file protected (a copy of it in protected.before).
 hand_made_project() {
-  local d="$1"
+  local d="$1" script="${2:-gone}" heading="${3:-gone}"
   built_bootstrapper
   mkdir -p "$d/files"
   cp -R "$BUILT/." "$d/files/"
-  rm -f "$d/files/bootstrap-project.sh"
-  grep -vxF '## After bootstrapping (delete this section when done)' "$d/files/README.md" >"$d/files/README.new"
-  mv "$d/files/README.new" "$d/files/README.md"
-  ! cmp -s "$BUILT/README.md" "$d/files/README.md" || die "the README was not changed (test is stale)"
-  [ ! -e "$d/files/bootstrap-project.sh" ] || die "the script is still there (test is stale)"
+  [ "$script" = kept ] || rm -f "$d/files/bootstrap-project.sh"
+  case "$heading" in
+    gone | lookalike)
+      grep -vxF '## After bootstrapping (delete this section when done)' "$d/files/README.md" >"$d/files/README.new"
+      mv "$d/files/README.new" "$d/files/README.md"
+      [ "$heading" != lookalike ] || printf '%s\n' '## After bootstrapping: lends tools' >>"$d/files/README.md"
+      ! cmp -s "$BUILT/README.md" "$d/files/README.md" || die "the README was not changed (test is stale)"
+      ;;
+  esac
+  if [ "$script" = kept ]; then [ -e "$d/files/bootstrap-project.sh" ] || die "the script is not there (test is stale)"; else [ ! -e "$d/files/bootstrap-project.sh" ] || die "the script is still there (test is stale)"; fi
   seed_existing "$d" octo-user/my-app "$d/files"
   printf '%s\n' "$REQUIRED_PROTECTION" >"$d/protected"
   cp "$d/protected" "$d/protected.before"
@@ -7570,9 +7574,15 @@ test_allow_unprotected_is_offered_and_accepted_only_for_a_plan_limit_on_a_privat
       expect_rc 3 "$d"
       sed -n '/^==> Protecting/,$p' "$d/out" >"$d/guide"
       ! grep -qF -- '--allow-unprotected' "$d/guide" || { cat "$d/guide" >&2; die "$vis $mode: --allow-unprotected is offered"; }
-      ! grep -qF 'gh repo edit' "$d/guide" || { cat "$d/guide" >&2; die "$vis $mode: making it public is offered"; }
       grep -qF 'Administration' "$d/guide" || { cat "$d/guide" >&2; die "$vis $mode: the token steps are not given"; }
-      grep -qF 'most likely' "$d/guide" || { cat "$d/guide" >&2; die "$vis $mode: the key is not named as the likely cause"; }
+      if [ "$vis" = public ]; then
+        # Round 3, N2: a public project gets the token steps only.
+        ! grep -qF 'gh repo edit' "$d/guide" || { cat "$d/guide" >&2; die "$vis $mode: making it public is offered"; }
+        ! grep -qF 'https://github.com/settings/billing' "$d/guide" || { cat "$d/guide" >&2; die "$vis $mode: the plan steps are shown"; }
+        grep -qF 'most likely' "$d/guide" || { cat "$d/guide" >&2; die "$vis $mode: the key is not named as the likely cause"; }
+      else
+        grep -qF 'https://github.com/settings/billing' "$d/guide" || { cat "$d/guide" >&2; die "$vis $mode: the plan steps are not shown"; }
+      fi
       # Given anyway, at the resume: still a stop, nothing set, proposed or added.
       again "$d" --allow-unprotected
       expect_rc 3 "$d"
@@ -7703,7 +7713,7 @@ test_a_hand_made_project_that_is_set_up_already_is_only_checked_and_changes_noth
   setup_run "$d" --non-interactive --yes --resume
   unset STUB_GH_EXISTING
   expect_rc 0 "$d"
-  expect_out "$d" "    Done. The setup's changes are in the main version of the project already:"
+  expect_out "$d" "    Done. The project is set up already:"
   grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "no report"; }
   cmp -s "$d/protected" "$d/protected.before" || die "the protection changed"
   nothing_changed_on_github "$d"
@@ -7716,8 +7726,8 @@ test_a_hand_made_project_that_is_set_up_already_is_only_checked_and_changes_noth
   setup_run "$d" --non-interactive --yes --resume
   unset STUB_GH_EXISTING STUB_GH_READBACK
   expect_rc 1 "$d"
-  expect_err_shape "$d" "GitHub does not report the protection of the main version as the script set it\."
-  grep -qxF '    contexts: the script set build, GitHub reports ' "$d/err" || { cat "$d/err" >&2; die "the difference is not below"; }
+  expect_err_shape "$d" "GitHub does not report the protection of the main version with the rules the setup gives it\."
+  grep -qxF '    contexts: expected build, GitHub reports ' "$d/err" || { cat "$d/err" >&2; die "the difference is not below"; }
   nothing_changed_on_github "$d"
   cmp -s "$d/protected" "$d/protected.before" || die "the protection changed"
   # No protection at all: said plainly, with where to turn it on, nothing set.
@@ -7756,7 +7766,7 @@ test_a_project_is_read_as_added_from_each_signal_alone() {
     setup_run "$d" --non-interactive --yes --resume
     unset STUB_GH_EXISTING
     expect_rc 0 "$d"
-    expect_out "$d" "    Done. The setup's changes are in the main version of the project already:"
+    expect_out "$d" "    Done. The project is set up already:"
     nothing_changed_on_github "$d"
   done
 }
@@ -7871,7 +7881,7 @@ test_resume_sends_only_the_single_change_the_script_saved() {
   # Review of #159, N3: the change to send is one "Set up NAME" on top of
   # main; more than one change, or another title, is not the script's.
   local d how c
-  for how in more title; do
+  for how in more title twin; do
     d="$(tmpdir)"
     working_git "$d"
     failing_push "$d" other
@@ -7882,6 +7892,7 @@ test_resume_sends_only_the_single_change_the_script_saved() {
     case "$how" in
       more) in_git -C "$c" -c user.name=T -c user.email=t@example.com commit -q --allow-empty -m "one more" ;;
       title) in_git -C "$c" -c user.name=T -c user.email=t@example.com commit -q --amend -m "Something else" ;;
+      twin) in_git -C "$c" -c user.name=T -c user.email=t@example.com commit -q --allow-empty -m "Set up my-app" ;;
     esac
     again "$d"
     expect_rc 3 "$d"
@@ -7916,6 +7927,131 @@ test_the_report_of_a_resumed_setup_names_the_pack_and_licence_main_has() {
   expect_rc 0 "$d"
   expect_no_out "$d" "Language pack:"
   expect_no_out "$d" "    Licence:"
+}
+
+# ---------- round 3 of the S15 review (PR #159) ----------
+
+test_a_project_with_its_setup_heading_gone_but_its_script_kept_is_refused_before_anything_is_written() {
+  # Review of #159, B4: not set up (the script is there) and not waiting
+  # for its setup (the heading is gone): nothing can be placed, so nothing
+  # is written to GitHub or to this computer, and its protection stays.
+  local d
+  d="$(tmpdir)"
+  hand_made_project "$d" kept gone
+  export STUB_GH_EXISTING=octo-user/my-app
+  setup_run "$d" --non-interactive --yes --resume
+  unset STUB_GH_EXISTING
+  expect_rc 3 "$d"
+  expect_out "$d" "no longer has the setup section"
+  expect_no_out "$d" "$FINISHED"
+  nothing_changed_on_github "$d"
+  cmp -s "$d/protected" "$d/protected.before" || die "the protection changed"
+  grep -A1 -xF 'To start again, run this command:' "$d/out" | sed -n 2p >"$d/cmd"
+  grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "no command to start again without --resume"; }
+  # With the heading kept and the script gone, the setup goes through and
+  # the protection ends with build required.
+  d="$(tmpdir)"
+  hand_made_project "$d" gone kept
+  export STUB_GH_EXISTING=octo-user/my-app
+  setup_run "$d" --non-interactive --yes --resume
+  unset STUB_GH_EXISTING
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "no report"; }
+  [ "$(grep . "$d/protection-bodies" | tail -1)" = "$REQUIRED_PROTECTION" ] || die "build is not required at the end"
+}
+
+test_a_readme_with_only_a_lookalike_heading_and_no_script_is_set_up_already() {
+  # Review of #159, N1: the heading on GitHub is matched whole.
+  local d
+  d="$(tmpdir)"
+  hand_made_project "$d" gone lookalike
+  export STUB_GH_EXISTING=octo-user/my-app
+  setup_run "$d" --non-interactive --yes --resume
+  unset STUB_GH_EXISTING
+  expect_rc 0 "$d"
+  expect_out "$d" "    Done. The project is set up already:"
+  nothing_changed_on_github "$d"
+  cmp -s "$d/protected" "$d/protected.before" || die "the protection changed"
+}
+
+test_the_step_16_refusal_holds_with_the_decision_row_in_the_change() {
+  # Review of #159, N1: the row is in the change (the option was given at
+  # step 3), and at step 16 GitHub's refusal is not the plan's on a
+  # private project: an unknown message, or the plan's message after the
+  # project was made public. The change is not added.
+  local d how n
+  for how in unknown made-public; do
+    d="$(tmpdir)"
+    export STUB_GH_PROTECT_FAIL=plan
+    setup_run "$d" --non-interactive --yes --private
+    expect_rc 3 "$d"
+    export STUB_GH_BUILD="pull_request fail"
+    again "$d" --allow-unprotected
+    unset STUB_GH_BUILD
+    expect_rc 1 "$d"
+    in_git --git-dir="$(bare_of "$d")" show bootstrap-setup:memory/decisions.md | grep -qF "$DECISION_ROW_KEY" || die "$how: the row is not in the change (test is stale)"
+    case "$how" in
+      unknown) export STUB_GH_PROTECT_FAIL=mystery ;;
+      made-public) grep -vxF octo-user/my-app "$d/private" >"$d/private.new" || true; mv "$d/private.new" "$d/private" ;;
+    esac
+    n="$(calls_count "$d")"
+    again "$d"
+    unset STUB_GH_PROTECT_FAIL
+    expect_rc 1 "$d"
+    ! calls_since "$d" "$n" | grep -q '^pr merge ' || die "$how: the change was added"
+    expect_no_out "$d" "$FINISHED"
+    [ "$(in_git --git-dir="$(bare_of "$d")" rev-list --count main)" -eq 1 ] || die "$how: main has a new change"
+  done
+}
+
+test_a_failed_visibility_read_does_not_count_as_private() {
+  # Review of #159, N1: GitHub's answer on the visibility is not there:
+  # the project is not taken as private, so no option and no public command.
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_PROTECT_FAIL=plan STUB_GH_PRIVATE_FAIL=server
+  setup_run "$d" --non-interactive --yes --private
+  unset STUB_GH_PROTECT_FAIL STUB_GH_PRIVATE_FAIL
+  expect_rc 3 "$d"
+  sed -n '/^==> Protecting/,$p' "$d/out" >"$d/guide"
+  ! grep -qF -- '--allow-unprotected' "$d/guide" || { cat "$d/guide" >&2; die "the option is offered"; }
+  ! grep -qF 'gh repo edit' "$d/guide" || { cat "$d/guide" >&2; die "making it public is offered"; }
+}
+
+test_the_words_for_a_project_set_up_already_are_not_those_for_one_the_script_just_set_up() {
+  # Review of #159, N3: the report and the stops of the added state,
+  # hand-made or not, do not say "left for your first session with Clead",
+  # "give it the new project" or "as the script set it".
+  local d p
+  d="$(tmpdir)"
+  hand_made_project "$d"
+  export STUB_GH_EXISTING=octo-user/my-app
+  setup_run "$d" --non-interactive --yes --resume
+  unset STUB_GH_EXISTING
+  expect_rc 0 "$d"
+  for p in 'left for your first session with Clead' 'give it the new project' 'as the script set' "the setup's changes"; do
+    expect_no_out "$d" "$p"
+  done
+  expect_out "$d" "give it the project, https://github.com/octo-user/my-app, and start a chat."
+  # A project the script set up, resumed.
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 0 "$d"
+  setup_run "$d" --non-interactive --yes --resume
+  expect_rc 0 "$d"
+  for p in 'left for your first session with Clead' 'give it the new project' 'as the script set'; do
+    expect_no_out "$d" "$p"
+  done
+  # The stop for protection that differs.
+  d="$(tmpdir)"
+  hand_made_project "$d"
+  export STUB_GH_EXISTING=octo-user/my-app STUB_GH_READBACK="contexts=;strict=null;enforce_admins=true;approvals=0;restrictions=null;allow_force_pushes=false;allow_deletions=false"
+  setup_run "$d" --non-interactive --yes --resume
+  unset STUB_GH_EXISTING STUB_GH_READBACK
+  expect_rc 1 "$d"
+  for p in 'as the script set' 'the script set ' "the setup's changes"; do
+    ! grep -qF "$p" "$d/err" || { cat "$d/err" >&2; die "the stop says: $p"; }
+  done
 }
 
 # ---------- run ----------
