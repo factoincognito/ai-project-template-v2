@@ -1628,12 +1628,44 @@ check_target_dir() {
     return 1
   fi
   if git -C "$parent" rev-parse --git-dir >/dev/null 2>&1; then
-    DIR_OUTER="$(git -C "$parent" rev-parse --show-toplevel 2>/dev/null)" || DIR_OUTER=""
-    DIR_OUTER="${DIR_OUTER//$CR/}"
+    DIR_OUTER="$(top_folder_as_given "$parent")"
     DIR_PROBLEM=in-git
     return 1
   fi
   return 0
+}
+
+# top_folder_as_given <folder>: the top folder of the git project that
+# holds <folder>, written the way <folder> was written. git gives its own
+# path, with symbolic links resolved (on macOS /var is /private/var) and,
+# in Git for Windows, as C:/...; in a message next to the folder the
+# user gave, that reads as another place. So the path given is cut by
+# the part git says lies below the top folder. Where the two do not line
+# up (a symbolic link inside the project), git's own path is used.
+top_folder_as_given() {
+  local f="$1" below top
+  below="$(git -C "$f" rev-parse --show-prefix 2>/dev/null)" || below=""
+  below="${below//$CR/}"
+  below="${below%/}"
+  top=""
+  if [ -z "$below" ]; then
+    top="$f"
+  else
+    case "$f" in
+      */"$below") top="${f:0:$((${#f} - ${#below} - 1))}" ;;
+    esac
+  fi
+  # A relative path (such as .) is shown from the folder the script runs
+  # in, as the shell writes it.
+  case "$top" in
+    "" | /* | [A-Za-z]:*) ;;
+    *) top="$(CDPATH='' cd -- "$top" 2>/dev/null && pwd)" || top="" ;;
+  esac
+  if [ -z "$top" ]; then
+    top="$(git -C "$f" rev-parse --show-toplevel 2>/dev/null)" || top=""
+    top="${top//$CR/}"
+  fi
+  printf '%s\n' "$top"
 }
 
 # dir_is_own_copy: the folder IN_DIR is the top folder of a git project
@@ -3072,12 +3104,21 @@ fill_value() {
 # ENVIRON (never read as a pattern; no sed -i, which differs on macOS),
 # bytes compared as bytes (LC_ALL=C). The file is read from stdin, never
 # as an awk operand (a path such as a=b/x would be read as a setting).
-# Line endings stay as they are (a CR is part of its line), a file
-# without a newline at the end stays without, and the file keeps its
-# mode (it is rewritten in place).
+# Line endings stay as they are, a file without a newline at the end
+# stays without, and the file keeps its mode (it is rewritten in place).
+# awk never sees a CR: some awks drop the CR of a CR LF line as they read
+# it (Git for Windows' did), so each CR goes through awk as the byte 036
+# (a control byte text files do not hold) and is turned back after. A
+# file that holds that byte already is refused, as it would come back
+# with a CR in its place.
 fill_file() {
   local file="$1" tmp n=0 key ends_nl=""
   shift
+  if LC_ALL=C grep -q "$(printf '\036')" "$file"; then
+    ERR_HINT="fill_file, filling in the names in $file: it holds the control byte 036 (record separator), which the fill uses for CR"
+    false
+    return 1
+  fi
   [ -n "$(tail -c 1 <"$file")" ] || ends_nl=yes
   tmp="$(make_temp)"
   (
@@ -3088,7 +3129,7 @@ fill_file() {
       export "FILL_FROM_$n=$FILL_TEXT" "FILL_TO_$n=$FILL_VALUE"
     done
     export FILL_N="$n" FILL_NL="$ends_nl"
-    LC_ALL=C awk_run 'BEGIN {
+    LC_ALL=C tr '\r' '\036' <"$file" | LC_ALL=C awk_run 'BEGIN {
         n = ENVIRON["FILL_N"] + 0
         for (k = 1; k <= n; k++) { from[k] = ENVIRON["FILL_FROM_" k]; to[k] = ENVIRON["FILL_TO_" k] }
       }
@@ -3108,7 +3149,7 @@ fill_file() {
         ORS = ""
         print out s
         if (NR > 0 && ENVIRON["FILL_NL"] == "yes") print "\n"
-      }' <"$file" >"$tmp"
+      }' | LC_ALL=C tr '\036' '\r' >"$tmp"
   ) || {
     # bash 3.2 does not stop for a failing ( ) by itself.
     ERR_HINT="awk, filling in the names in $file"
