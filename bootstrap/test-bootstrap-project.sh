@@ -849,6 +849,11 @@ unset GIT_TERMINAL_PROMPT GIT_ASKPASS
 # brew or winget to behave otherwise puts a fake one first on PATH.
 
 REAL_GIT="$(command -v git)"
+# git's own folder goes last on a run's cut-down PATH (in_env): on Linux
+# and macOS git is in /usr/bin, but Git for Windows keeps git and the
+# helpers it starts to copy from and send to a project in a folder
+# (git-upload-pack, git-receive-pack) in /mingw64/bin.
+REAL_GIT_DIR="$(dirname "$REAL_GIT")"
 REAL_DATE="$(command -v date)"
 # The stub gh seeds and copies projects with the real git.
 export STUB_GIT="$REAL_GIT"
@@ -2563,9 +2568,9 @@ test_pack_and_licence_questions_explain_each_choice() {
 # stdin and never because of --yes.
 #
 # `pre <dir> <command...>` runs a function of the loaded script after
-# detect_os, with PATH="<dir>/bin:/usr/bin:/bin" (so only the fake tools a
-# test makes, plus the system's own, are found: no brew or winget unless
-# faked), a stub gh, a stub runner and a stub npm (BOOTSTRAP_NPM, the
+# detect_os, with PATH="<dir>/bin:/usr/bin:/bin:<git's folder>" (so only
+# the fake tools a test makes, plus the system's own and git, are found:
+# no brew or winget unless faked), a stub gh, a stub runner and a stub npm (BOOTSTRAP_NPM, the
 # npm the lockfile step runs; the check that npm is installed uses a fake
 # npm on PATH), stdin from <dir>/in, the terminal from <dir>/tty and the
 # Linux release file from <dir>/os-release when they exist, in <dir>/cwd
@@ -2591,7 +2596,7 @@ in_env() {
   local d="$1"
   cd "$d/cwd"
   use_home "$d/home"
-  export PATH="$d/bin:/usr/bin:/bin" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
+  export PATH="$d/bin:/usr/bin:/bin:$REAL_GIT_DIR" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
     STUB_RUN_LOG="$d/run.log" BOOTSTRAP_RUN="$d/run" STUB_SLEEP_LOG="$d/sleep.log" \
     STUB_NPM_LOG="$d/npm.log" BOOTSTRAP_NPM="$d/npm"
   # git never looks above the harness's own temp folder for a project,
@@ -5561,7 +5566,15 @@ test_the_fill_is_literal_in_one_pass_and_keeps_line_endings_and_the_mode() {
   expect_same "the LF file" "$d/want" "$d/a=b/lf.md"
   printf '%s' "# $v$cr$nl**Owner:** $p$cr${nl}last $v" >"$d/want"
   cmp -s "$d/want" "$d/a=b/crlf.sh" || { od -c "$d/a=b/crlf.sh" >&2; die "the CR LF file without a newline at the end changed otherwise"; }
-  [ -x "$d/a=b/crlf.sh" ] || die "the executable bit was lost"
+  # Where chmod cannot make a file without #! runnable (Git for Windows,
+  # whose bash decides that from the file's start, not a mode bit), the
+  # mode cannot be seen, and this part is skipped.
+  printf 'x\n' >"$d/probe"; chmod 755 "$d/probe"
+  if [ -x "$d/probe" ]; then
+    [ -x "$d/a=b/crlf.sh" ] || die "the executable bit was lost"
+  else
+    echo "chmod does not set the mode of a file here; the executable bit was not checked"
+  fi
   [ ! -s "$d/a=b/empty.md" ] || die "the empty file is no longer empty"
   ! grep -rqF FROM-STDIN "$d/a=b" "$d/out" || die "fill_file read stdin"
 }
@@ -6714,7 +6727,9 @@ test_the_change_is_added_with_the_head_that_was_sent_from_inside_the_copy() {
   [ "$(in_git -C "$c" log -1 --format=%s "$sent")" = "Set up my-app" ] || die "the id given is not the setup's change"
   [ "$(awk -F'\t' '$2 == "pr" && $3 == "merge" { print $4, $5, $6, $7 }' "$d/gh.log")" = "1 --squash --delete-branch --match-head-commit" ] \
     || { cat "$d/gh.log" >&2; die "not merged with --squash --delete-branch --match-head-commit"; }
-  [ "$(cat "$d/merge-cwd")" = "$c" ] || { cat "$d/merge-cwd" >&2; die "gh pr merge did not run in the copy"; }
+  # Compared as folders, not as text: on macOS $TMPDIR ends in /, so $d
+  # holds a // that the shell's $PWD does not.
+  [ "$(cd "$(cat "$d/merge-cwd")" && pwd -P)" = "$(cd "$c" && pwd -P)" ] || { cat "$d/merge-cwd" >&2; die "gh pr merge did not run in the copy"; }
   [ "$(in_git --git-dir="$bare" rev-parse main)" = "$(cat "$d/merge-sha")" ] || die "main on GitHub is not the added change"
   [ "$(in_git --git-dir="$bare" rev-parse 'main^{tree}')" = "$(in_git --git-dir="$bare" rev-parse "$sent^{tree}")" ] || die "main does not hold the files sent"
   grep -A1 -xF '==> Adding the proposed change to the main version of the project' "$d/out" | sed -n 2p >"$d/done"
@@ -6961,10 +6976,14 @@ test_the_jq_expressions_read_githubs_documented_answers() {
     return 0
   fi
   d="$(tmpdir)"
+  # jq.exe on Windows ends each line with CR LF (its manual: use -b there,
+  # which older jq lacks); gh --jq does not, and the script drops CRs
+  # from what it reads anyway. So CRs are dropped here before comparing.
+  jq_r() { jq -r "$@" | tr -d '\r'; }
   # gh pr checks --json name,bucket,event: an array of checks; another
   # workflow's check (review) is left out.
   printf '%s\n' '[{"name":"build","bucket":"pass","event":"push"},{"name":"review","bucket":"fail","event":"pull_request"},{"name":"build","bucket":"pending","event":"pull_request"}]' >"$d/checks.json"
-  [ "$(jq -r "$BUILD_JQ" "$d/checks.json")" = "$(printf '%s\n' 'push pass' 'pull_request pending')" ] || { jq -r "$BUILD_JQ" "$d/checks.json" >&2; die "the checks expression"; }
+  [ "$(jq_r "$BUILD_JQ" "$d/checks.json")" = "$(printf '%s\n' 'push pass' 'pull_request pending')" ] || { jq_r "$BUILD_JQ" "$d/checks.json" >&2; die "the checks expression"; }
   # GET .../branches/main/protection, as the REST doc's example has it
   # (restrictions left out, as for a project of a personal account).
   cat >"$d/protection.json" <<'JSON'
@@ -6976,14 +6995,14 @@ test_the_jq_expressions_read_githubs_documented_answers() {
  "required_linear_history":{"enabled":false},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false},
  "block_creations":{"enabled":false},"required_conversation_resolution":{"enabled":false},"lock_branch":{"enabled":false},"allow_fork_syncing":{"enabled":false}}
 JSON
-  [ "$(jq -r "$READBACK_JQ" "$d/protection.json")" = "$(printf '%s\n' contexts=build strict=false enforce_admins=true approvals=0 restrictions=null allow_force_pushes=false allow_deletions=false)" ] \
-    || { jq -r "$READBACK_JQ" "$d/protection.json" >&2; die "the read-back expression on the documented answer"; }
+  [ "$(jq_r "$READBACK_JQ" "$d/protection.json")" = "$(printf '%s\n' contexts=build strict=false enforce_admins=true approvals=0 restrictions=null allow_force_pushes=false allow_deletions=false)" ] \
+    || { jq_r "$READBACK_JQ" "$d/protection.json" >&2; die "the read-back expression on the documented answer"; }
   # Step 3's protection, before build is required: no check, and no error.
   printf '%s\n' '{"enforce_admins":{"enabled":true},"required_pull_request_reviews":{"required_approving_review_count":0},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false}}' >"$d/step3.json"
-  [ "$(jq -r "$READBACK_JQ" "$d/step3.json" | sed -n 1,2p)" = "$(printf '%s\n' contexts= strict=null)" ] || { jq -r "$READBACK_JQ" "$d/step3.json" >&2; die "the read-back expression with no required check"; }
+  [ "$(jq_r "$READBACK_JQ" "$d/step3.json" | sed -n 1,2p)" = "$(printf '%s\n' contexts= strict=null)" ] || { jq_r "$READBACK_JQ" "$d/step3.json" >&2; die "the read-back expression with no required check"; }
   # GET .../pulls/N after the merge.
   printf '%s\n' '{"number":1,"state":"closed","merged":true,"merge_commit_sha":"6dcb09b5b57875f334f61aebed695e2e4193db5e"}' >"$d/pull.json"
-  [ "$(jq -r "$MERGED_JQ" "$d/pull.json")" = 'true 6dcb09b5b57875f334f61aebed695e2e4193db5e' ] || die "the merged expression"
+  [ "$(jq_r "$MERGED_JQ" "$d/pull.json")" = 'true 6dcb09b5b57875f334f61aebed695e2e4193db5e' ] || die "the merged expression"
 }
 
 # ---------- resume, failures and private projects (S15) ----------
