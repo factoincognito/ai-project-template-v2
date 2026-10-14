@@ -730,15 +730,117 @@ matrix_job() {
   printf '%s\n' "$jobs" | head -n 1
 }
 
-test_workflow_bootstrapper_runs_on_every_push_and_pull_request() {
-  # The triggers are unchanged by the matrix: every branch push, v* tags,
-  # and pull requests to main.
-  local on
-  on="$(awk '/^on:/ { p = 1; next } /^[^ #]/ { p = 0 } p' "$BWF")"
-  printf '%s\n' "$on" | grep -qxF '    branches: ["**"]' || die "push is not on every branch"
-  printf '%s\n' "$on" | grep -qxF '    tags: ["v*"]' || die "push is not on v* tags"
-  printf '%s\n' "$on" | grep -qxF '  pull_request:' || die "no pull_request trigger"
-  printf '%s\n' "$on" | grep -qxF '    branches: [main]' || die "pull_request is not on main"
+# wf_on: the workflow's on: block, without comments and blank lines.
+wf_on() {
+  awk '/^on:/ { p = 1; next } /^[^ #]/ { p = 0 } p' "$BWF" | grep -vE '^[[:space:]]*(#|$)' || true
+}
+
+test_workflow_bootstrapper_runs_on_pull_requests_to_main_and_v_tags_only() {
+  # One run per pull request push: no branch push trigger, which ran the
+  # whole OS matrix a second time for every push to a PR branch. Main
+  # only changes through pull requests, which run it on the merge ref.
+  # A pushed v* tag still runs the tests, the pack chain and publish.
+  local want got
+  want='  push:
+    tags: ["v*"]
+  pull_request:
+    branches: [main]'
+  got="$(wf_on)"
+  [ "$got" = "$want" ] || { printf 'on: block is:\n%s\n' "$got" >&2; die "triggers are not pull_request to main and v* tags only"; }
+}
+
+test_workflow_bootstrapper_cancels_superseded_pr_runs_but_never_a_tag_run() {
+  # A newer push to the same pull request cancels the older run; a tag
+  # run (tests, pack chain, publish) is never cancelled in progress.
+  local top pub
+  top="$(awk '/^concurrency:/ { p = 1; print; next } /^[^ #]/ { p = 0 } p' "$BWF")"
+  [ -n "$top" ] || die "no workflow-level concurrency"
+  printf '%s\n' "$top" | grep -qxF '  group: bootstrapper-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}' \
+    || { printf '%s\n' "$top" >&2; die "concurrency group is not per pull request (or per ref for a tag)"; }
+  printf '%s\n' "$top" | grep -qxF "  cancel-in-progress: \${{ github.event_name == 'pull_request' }}" \
+    || { printf '%s\n' "$top" >&2; die "cancel-in-progress is not limited to pull_request runs"; }
+  [ "$(printf '%s\n' "$top" | grep -vE '^[[:space:]]*(#|$)' | wc -l | tr -d ' ')" = 3 ] \
+    || { printf '%s\n' "$top" >&2; die "unexpected keys in the workflow-level concurrency"; }
+  # The publish job keeps its own group, which never cancels a publish.
+  pub="$(wf_job publish | awk '/^    concurrency:/ { p = 1; next } /^    [A-Za-z]/ { p = 0 } p')"
+  [ "$pub" = '      group: bootstrapper-publish
+      cancel-in-progress: false' ] || { printf '%s\n' "$pub" >&2; die "publish job concurrency changed"; }
+}
+
+test_workflow_no_continue_on_error_in_the_required_check_or_its_needs() {
+  # continue-on-error on a test job or step turns a failing leg into a
+  # success result, and the required check green with it.
+  local id ids n=0
+  ids="bootstrapper-test $(wf_needs bootstrapper-test | tr '\n' ' ')"
+  for id in $ids; do
+    [ -n "$(wf_job "$id")" ] || die "no job $id"
+    n=$((n + 1))
+    ! wf_job "$id" | grep -nE '(^|[[:space:]])continue-on-error[[:space:]]*:' >&2 \
+      || die "continue-on-error in $id"
+  done
+  [ "$n" -ge 3 ] || die "expected bootstrapper-test and at least two needs, got: $ids"
+  for id in scripts-test bootstrap-project-test; do
+    printf ' %s ' "$ids" | grep -qF " $id " || die "$id is not checked (not needed by bootstrapper-test)"
+  done
+}
+
+test_workflow_matrix_cannot_drop_an_os() {
+  # An exclude: entry would remove a leg and the aggregate would never
+  # see it. include: cannot remove one, so only exclude is refused.
+  local j job o
+  j="$(matrix_job)"; job="$(wf_job "$j")"
+  ! printf '%s\n' "$job" | grep -nE '^[[:space:]]+exclude[[:space:]]*:' >&2 || die "$j has a matrix exclude"
+  for o in ubuntu-latest macos-latest windows-latest; do
+    printf '%s\n' "$job" | grep -E '^        os: \[' | grep -qE "(\[|, *)$o *(,|\])" || die "$o missing from the matrix os list"
+  done
+}
+
+test_workflow_macos_bash_check_passes_on_3_2_and_fails_on_5() {
+  # Runs the macOS step's actual script with a fake bash on PATH (put
+  # there by a fake ln standing in for linking /bin/bash), reporting
+  # the version given, and a stub test file, so nothing slow runs.
+  local j step script fake d v out rc
+  j="$(matrix_job)"
+  step="$(wf_step "$j" "^        if: runner[.]os == 'macOS'\$")"
+  [ -n "$step" ] || die "no macOS step in $j"
+  script="$WORK/mac.$RANDOM.sh"
+  printf '%s\n' "$step" | wf_run_block >"$script"
+  [ -s "$script" ] || die "empty macOS run script"
+  fake="$WORK/fakebin.$RANDOM"; mkdir -p "$fake"
+  # The fake ln writes a fake bash at its last argument.
+  cat >"$fake/ln" <<'LN'
+#!/bin/sh
+for a in "$@"; do dest="$a"; done
+cat >"$dest" <<'FB'
+#!/bin/sh
+case "$1" in
+  --version) echo "GNU bash, version $FAKE_BASH_VERSION(1)-release"; exit 0 ;;
+  -c) case "$2" in *BASH_VERSINFO*) echo "$FAKE_BASH_VERSION" | cut -d. -f1-2; exit 0 ;; esac ;;
+esac
+exec "$REAL_BASH" "$@"
+FB
+chmod +x "$dest"
+LN
+  chmod +x "$fake/ln"
+  for v in 3.2.57 5.2.21; do
+    d="$WORK/mac.$v.$RANDOM"; mkdir -p "$d/bootstrap" "$d/tmp"
+    printf 'echo STUB TESTS RAN\n' >"$d/bootstrap/test-bootstrap-project.sh"
+    set +e
+    out="$(cd "$d" && PATH="$fake:$PATH" RUNNER_TEMP="$d/tmp" REAL_BASH="$BASH" FAKE_BASH_VERSION="$v" \
+      "$BASH" --noprofile --norc -eo pipefail "$script" 2>&1)"
+    rc=$?
+    set -e
+    [ -x "$d/tmp/bash32/bash" ] || { printf '%s\n' "$out" >&2; die "the step did not link a bash into RUNNER_TEMP; this test checks nothing"; }
+    case "$v" in
+      3.2.*)
+        [ "$rc" -eq 0 ] || { printf '%s\n' "$out" >&2; die "check failed on bash $v"; }
+        printf '%s\n' "$out" | grep -qxF 'STUB TESTS RAN' || { printf '%s\n' "$out" >&2; die "tests not run on bash $v"; } ;;
+      *)
+        [ "$rc" -ne 0 ] || { printf '%s\n' "$out" >&2; die "check passed on bash $v"; }
+        printf '%s\n' "$out" | grep -qF '::error::' || { printf '%s\n' "$out" >&2; die "no ::error:: on bash $v"; }
+        ! printf '%s\n' "$out" | grep -qxF 'STUB TESTS RAN' || die "tests ran on bash $v" ;;
+    esac
+  done
 }
 
 test_workflow_bootstrapper_test_is_one_job_that_always_runs() {
