@@ -100,8 +100,10 @@ not proof on its own.
 (https://github.com/factoincognito/ai-project-template-v2) is protected the
 same way, with two required checks: `build` and `bootstrapper-test`.
 The second tests the template's release pipeline, which projects do not
-have. A project sets its own required checks and does not copy the
-template's.
+have. Its workflow (`bootstrapper.yml`) runs on pull requests to `main`
+and pushed `v*` tags only, not on branch pushes, and a newer push to a
+pull request cancels the older run. A project sets its own required
+checks and does not copy the template's.
 
 ### 5. CI/CD
 

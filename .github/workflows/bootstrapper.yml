@@ -2,7 +2,14 @@
 # Template-only: this workflow is not in bootstrap/manifest.txt and never
 # ships to bootstrapped projects.
 #
-# - Every push and pull request: run the build.sh / publish.sh tests and
+# Runs on pull requests to main and on pushed v* tags only, not on branch
+# pushes, so each push to a PR runs the OS matrix once. Main changes
+# only through pull requests, which are tested on the merge ref; a
+# branch pushed without a PR is not tested here. A newer push to the
+# same PR cancels the older run; a tag run is never cancelled in
+# progress.
+#
+# - Every pull request: run the build.sh / publish.sh tests and
 #   the tests of the shared test-first check
 #   (tools/test-require-test-change.sh) on ubuntu, and the tests of the
 #   bootstrap script (bootstrap/test-bootstrap-project.sh) on ubuntu,
@@ -19,10 +26,15 @@ name: Bootstrapper
 
 on:
   push:
-    branches: ["**"]
     tags: ["v*"]
   pull_request:
     branches: [main]
+
+# One group per pull request (per ref for a tag). Only pull_request runs
+# are cancelled in progress, never a tag run with its publish.
+concurrency:
+  group: bootstrapper-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
