@@ -849,11 +849,28 @@ unset GIT_TERMINAL_PROMPT GIT_ASKPASS
 # brew or winget to behave otherwise puts a fake one first on PATH.
 
 REAL_GIT="$(command -v git)"
-# git's own folder goes last on a run's cut-down PATH (in_env): on Linux
-# and macOS git is in /usr/bin, but Git for Windows keeps git and the
-# helpers it starts to copy from and send to a project in a folder
-# (git-upload-pack, git-receive-pack) in /mingw64/bin.
-REAL_GIT_DIR="$(dirname "$REAL_GIT")"
+# A run's cut-down PATH (in_env) has GIT_ONLY_DIR after the fakes, a folder that
+# holds only git and the helpers it starts to copy from and send to a
+# project in a folder (git-upload-pack, git-receive-pack), each a
+# wrapper that runs the real one. git's own folder is not put on that
+# PATH: Git for Windows keeps git in /mingw64/bin with many other tools,
+# and Homebrew's /opt/homebrew/bin holds brew and gh, which a test
+# without them must not find. Wrappers, not links: a link made by Git
+# for Windows' ln may be a copy, and a copied git.exe cannot find the
+# rest of git.
+
+# make_git_only_dir <git's folder> <new folder>
+make_git_only_dir() {
+  local t
+  mkdir -p "$2"
+  for t in git git-upload-pack git-receive-pack; do
+    [ -x "$1/$t" ] || [ -x "$1/$t.exe" ] || continue
+    printf '%s\n' '#!/bin/sh' "exec '$1/$t' \"\$@\"" >"$2/$t"
+    chmod +x "$2/$t"
+  done
+}
+GIT_ONLY_DIR="$WORK/git only"
+make_git_only_dir "$(dirname "$REAL_GIT")" "$GIT_ONLY_DIR"
 REAL_DATE="$(command -v date)"
 # The stub gh seeds and copies projects with the real git.
 export STUB_GIT="$REAL_GIT"
@@ -2568,8 +2585,8 @@ test_pack_and_licence_questions_explain_each_choice() {
 # stdin and never because of --yes.
 #
 # `pre <dir> <command...>` runs a function of the loaded script after
-# detect_os, with PATH="<dir>/bin:/usr/bin:/bin:<git's folder>" (so only
-# the fake tools a test makes, plus the system's own and git, are found:
+# detect_os, with PATH="<dir>/bin:<GIT_ONLY_DIR>:/usr/bin:/bin" (so only
+# the fake tools a test makes, git, and the system's own are found:
 # no brew or winget unless faked), a stub gh, a stub runner and a stub npm (BOOTSTRAP_NPM, the
 # npm the lockfile step runs; the check that npm is installed uses a fake
 # npm on PATH), stdin from <dir>/in, the terminal from <dir>/tty and the
@@ -2596,7 +2613,7 @@ in_env() {
   local d="$1"
   cd "$d/cwd"
   use_home "$d/home"
-  export PATH="$d/bin:/usr/bin:/bin:$REAL_GIT_DIR" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
+  export PATH="$d/bin:$GIT_ONLY_DIR:/usr/bin:/bin" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
     STUB_RUN_LOG="$d/run.log" BOOTSTRAP_RUN="$d/run" STUB_SLEEP_LOG="$d/sleep.log" \
     STUB_NPM_LOG="$d/npm.log" BOOTSTRAP_NPM="$d/npm"
   # git never looks above the harness's own temp folder for a project,
@@ -2675,8 +2692,8 @@ test_a_run_has_no_brew_or_winget_unless_a_test_fakes_them() {
   ( in_env "$d"
     ! command -v brew >/dev/null 2>&1 || die "brew is on the run's PATH: $(command -v brew)"
     ! command -v winget >/dev/null 2>&1 || die "winget is on the run's PATH: $(command -v winget)"
-    [ "$(command -v git)" = "$GIT_ONLY_DIR/git" ] || [ "$(command -v git)" = /usr/bin/git ] || [ "$(command -v git)" = /bin/git ] \
-      || die "git on the run's PATH comes from elsewhere: $(command -v git)" ) || exit 1
+    # The same git on every OS: the wrapper, so it is what the tests run.
+    [ "$(command -v git)" = "$GIT_ONLY_DIR/git" ] || die "git on the run's PATH is not the wrapper: $(command -v git)" ) || exit 1
 }
 
 pre_from_stdin() {
