@@ -2,10 +2,12 @@
 # Template-only: this workflow is not in bootstrap/manifest.txt and never
 # ships to bootstrapped projects.
 #
-# - Every push and pull request: run the build.sh / publish.sh tests, the
-#   tests of the shared test-first check (tools/test-require-test-change.sh)
-#   and the tests of the bootstrap script
-#   (bootstrap/test-bootstrap-project.sh).
+# - Every push and pull request: run the build.sh / publish.sh tests and
+#   the tests of the shared test-first check
+#   (tools/test-require-test-change.sh) on ubuntu, and the tests of the
+#   bootstrap script (bootstrap/test-bootstrap-project.sh) on ubuntu,
+#   macOS (Apple's /bin/bash 3.2) and Windows (Git for Windows bash).
+#   bootstrapper-test, a required check, passes only if all of them did.
 # - A pushed v* tag: run the tests and the pack chain test (packs.yml:
 #   build the bootstrapper, create a project from it, run each pack's
 #   CI), refuse unless the tagged commit is on main, build, and publish
@@ -26,7 +28,7 @@ permissions:
   contents: read
 
 jobs:
-  bootstrapper-test:
+  scripts-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -34,8 +36,63 @@ jobs:
         run: bash bootstrap/test.sh
       - name: Test the require-test-change check
         run: bash tools/test-require-test-change.sh
+
+  bootstrap-project-test:
+    strategy:
+      # Every OS reports, even when one fails first.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        # On Windows this is Git for Windows' bash.
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
       - name: Test bootstrap-project.sh
+        if: runner.os != 'macOS'
         run: bash bootstrap/test-bootstrap-project.sh
+      - name: Test bootstrap-project.sh with macOS /bin/bash 3.2
+        if: runner.os == 'macOS'
+        run: |
+          # The tests start the script and build.sh with plain bash, so
+          # put Apple's /bin/bash first on PATH: the runner image may
+          # have a newer bash there.
+          mkdir -p "$RUNNER_TEMP/bash32"
+          ln -sf /bin/bash "$RUNNER_TEMP/bash32/bash"
+          export PATH="$RUNNER_TEMP/bash32:$PATH"
+          v="$(bash -c 'echo "${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"')"
+          echo "bash on PATH: $(command -v bash), version $v"
+          if [ "$v" != "3.2" ]; then
+            echo "::error::Expected bash 3.2 on PATH, got $v."
+            exit 1
+          fi
+          /bin/bash bootstrap/test-bootstrap-project.sh
+
+  # The required check. A matrix would rename it, so it is one job that
+  # needs the test jobs, always runs (a job skipped because a need failed
+  # reports as success) and passes only if every need succeeded.
+  bootstrapper-test:
+    if: always()
+    needs: [scripts-test, bootstrap-project-test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every test job to have succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Results: $RESULTS"
+          if [ -z "$RESULTS" ]; then
+            echo "::error::No results from the test jobs."
+            exit 1
+          fi
+          for r in $RESULTS; do
+            if [ "$r" != success ]; then
+              echo "::error::A test job did not succeed (results: $RESULTS)."
+              exit 1
+            fi
+          done
 
   packs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
