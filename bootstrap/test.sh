@@ -24,8 +24,10 @@ run_test() {
   local name="$1"
   local log="$WORK/$name.log" rc
   # Not inside an `if`: errexit is ignored in condition context.
+  # Each test gets its own empty WORK, so the $RANDOM in its temp names
+  # cannot collide with another test's.
   set +e
-  ( set -euo pipefail; "$name" ) >"$log" 2>&1
+  ( set -euo pipefail; WORK="$WORK/$name.d"; mkdir "$WORK"; "$name" ) >"$log" 2>&1
   rc=$?
   set -e
   if [ "$rc" -eq 0 ]; then
@@ -476,7 +478,8 @@ test_forbidden_string_in_dotfile_rejected() {
 
 make_bootstrap_output() {
   local fx out
-  fx="$(make_fixture)"; out="$WORK/pubout.$RANDOM"
+  # mktemp, not $RANDOM: callers use $(...), where bash 3.2 can repeat it.
+  fx="$(make_fixture)"; out="$(mktemp -d "$WORK/pubout.XXXXXX")"
   build_ok "$fx" "$out" "$1" "$SHA"
   echo "$out"
 }
