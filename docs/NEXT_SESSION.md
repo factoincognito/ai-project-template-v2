@@ -1,6 +1,6 @@
 # [PROJECT NAME] — Next Session Planning
 
-**Last Updated:** 2026-10-13
+**Last Updated:** 2026-10-14
 **Author:** Clead (Tech Owner)
 **Purpose:** Staging area for reasoning, revised assumptions, and plan-adaptation thoughts that aren't yet mature enough to be a PBI, a decision, a strategy update, or a vision-doc change. Complements `docs/BACKLOG.md` — it does not replace it. Discrete, scoped, actionable work belongs in the backlog as a PBI, not here.
 
@@ -24,7 +24,7 @@ Written 2026-10-02 so the order does not have to be re-derived. "Clead" is the n
 
 | Step | Who | Blocked by |
 |---|---|---|
-| Rest of PBI-1.14 (S14 next), S15 last | Clead (Opus Crog implementer, Opus review) | Nothing; S1 to S4 and S6 to S13a merged (item 8). Each slice follows the PR loop |
+| Rest of PBI-1.14: S17 last (S5 and S16 before it) | Clead (Opus Crog implementer, Opus review) | Nothing; S1 to S4 and S6 to S15 merged (item 8). Each slice follows the PR loop |
 | Release prep PR for the next release (put the version heading over Unreleased, as #76 and #126 did) | Clead | S15 merged; written just before the tag so it is complete |
 | Next release tag `v*` | Adam, from the Releases page | Release prep merged (decision of 2026-10-02: no tag until S15 merges) |
 | Release verified | Clead, through the API: the tag run's checks passed, bootstrapper `main` has the new commit, the tag exists on both repos | The tag |
@@ -43,7 +43,7 @@ publish token and the tag path of `packs.yml`. The four language packs are
 tested on GitHub's runners on every PR; reviews and merges are delegated
 (CLAUDE.md, "Change execution model"). The test-first rule is in force at
 every level. PBI-1.14 (the turn-key bootstrap script) is being built in 17
-slices; S1 to S4 and S6 to S13a are merged as of 2026-10-07 (item 8). Adam's order: PBI-1.14, with no tag until
+slices; S1 to S4 and S6 to S15 are merged as of 2026-10-14 (item 8). Adam's order: PBI-1.14, with no tag until
 S15 merges, then the end-to-end runs, then acuteping. The parallel
 sessions of 2026-10-01 and 2026-10-02 were consolidated into one session
 on 2026-10-02.
@@ -122,12 +122,12 @@ graduate (see the rule above).
 - S3 `packs.yml` uses the script's lockfile command (independent; touches `packs.yml` and `tools/test-layout-pack.sh`). **Done: #130, 2026-10-02.**
 - S4 test harness `bootstrap/test-bootstrap-project.sh`, test hooks, message helpers, wired into `bootstrapper-test`. **Done: #136, 2026-10-02.**
 - S5 `bootstrapper-test` becomes one aggregate check over an OS matrix (ubuntu, macOS, Windows).
-- S6 inputs and validation. **Done: #146, 2026-10-02.** S7 guided preflight, local checks. **Done: #148, 2026-10-06.** S8 guided preflight, GitHub checks. **Done: #149, 2026-10-06.** S9 create and protect. **Done: #150, 2026-10-06** (it also prints the plan and asks "Proceed?"; `--non-interactive` needs `--yes` or `--dry-run`). S10 local tree. **Done: #152, 2026-10-06.** S11 fill placeholders. **Done: #153, 2026-10-06.** S12 lockfile, licence, CHANGELOG. **Done: #154, 2026-10-06.** S13 self-check, commit, push, PR. **Done: #155, 2026-10-06.** S13a (unplanned: unknown licence key checked in the preflight, Actions checked after protect). **Done: #156, 2026-10-07.** S14 wait, require `build`, merge, finish, report. S15 resume, failures, private repos.
+- S6 inputs and validation. **Done: #146, 2026-10-02.** S7 guided preflight, local checks. **Done: #148, 2026-10-06.** S8 guided preflight, GitHub checks. **Done: #149, 2026-10-06.** S9 create and protect. **Done: #150, 2026-10-06** (it also prints the plan and asks "Proceed?"; `--non-interactive` needs `--yes` or `--dry-run`). S10 local tree. **Done: #152, 2026-10-06.** S11 fill placeholders. **Done: #153, 2026-10-06.** S12 lockfile, licence, CHANGELOG. **Done: #154, 2026-10-06.** S13 self-check, commit, push, PR. **Done: #155, 2026-10-06.** S13a (unplanned: unknown licence key checked in the preflight, Actions checked after protect). **Done: #156, 2026-10-07.** S14 wait, require `build`, merge, finish, report. **Done: #158, 2026-10-13.** S15 resume, failures, private repos. **Done: #159, 2026-10-14** (three review rounds; round 1 found `--allow-unprotected` accepted on a public project, an unprotected merge without the decision row, and a hand-made project's protection overwritten; round 2 found the same overwrite again through a removed README heading with the script kept).
 - S16 `bootstrap/e2e-check.sh` (read-only checker for Adam's end-to-end runs). S17 docs and process, last.
 **Critical path:** S1, S2, S4, S6 to S15, S17. S3 can start now; S5 after S4; S16 after S5.
 **Cannot be verified in CI (Adam's end-to-end runs only):** GitHub timing and error texts after create, the protection PUT shape, private-repo clone and push, Git Bash prompts, `winget`, a lockfile made on Windows or macOS under `npm ci` on Linux, the unaided README run, and the red-then-`Test-exempt` PR in a real project.
 **Spec meets changed repo (to fix in the slice named):** the placement-table tests in `bootstrap/test.sh` pin both READMEs (S17); `test_workflow_bootstrapper_test_runs_the_require_test_change_tests` conflicts with the aggregate design (S5); the setup PR's tree must keep `.github/scripts/require-test-change.sh` (S10); stamps from releases before the org move name the old owner, so older repos cannot be resumed (S15).
-**Next slice:** S14 (critical path), or S5.
+**Next slice:** S17 is last; S5 (aggregate check, OS matrix, real bash 3.2) and S16 (`bootstrap/e2e-check.sh`) come before it. Script work that S15 left belongs in S17 or a new slice, not S16.
 **Questions for Adam (neither blocks S1):**
 1. Answered by Adam, 2026-10-02 (`memory/decisions.md`): `--resume` refuses a repo stamped by an older bootstrapper version and tells the user to create a fresh repo; a repo stamped by the current version, including one made with "Use this template" from the current release, still resumes. The spec text is corrected in S15.
 2. Answered by Adam, 2026-10-02: v2.3.0 is released before S1 (nothing of PBI-1.14 ships in it), then no tag until S15 merges. acuteping waits for PBI-1.14 and the end-to-end runs either way (decision of 2026-10-01).
@@ -154,6 +154,12 @@ graduate (see the rule above).
     - End-to-end list (Adam's runs): global `commit.gpgsign=true` or `core.hooksPath` during the commit; the helper string and `gh.exe` paths on Windows; gh's real `pr create` texts and a private repo's fallback; real `licenses/<key>` and `actions/permissions` answers (a fine-grained token without Administration read; an org-level disabled state); npm on Windows or macOS writing LF; a user's `.npmrc` mirror ending in the lockfile's `resolved` URLs.
     - Left open with no slice (cosmetic or optional): the messages now show the folder with `./` (#152); `check_license_known` accepts any 200 without comparing `.key` (#156); `filled_as` in the harness puts `$v` unquoted, so an `&` in a value would break under bash 5.2 (#153).
   - Decisions Clead took in S9 (#150, reviewed): step 2 keeps the spec's `gh repo create` and recognises gh's error text for "name taken" and "not allowed"; the REST `generate` call would give a status code instead, if that text proves unreliable in the end-to-end runs.
+**Notes from the S14 and S15 reviews (#158, #159), by slice:**
+  - S5: a bash 3.2.57 run of `bootstrap/test.sh` fails `test_publish_second_release_mirrors_output_and_keeps_history` (a git push error, then the build fails); it fails the same way on `main` before S14. Fix or exclude it before the 3.2 CI run. S14: the jq-expressions test passes without running anything where `jq` is missing (#158).
+  - New slice or S17, script, left by S15: README on GitHub stored with CRLF passes the GitHub heading check but not the local one, so the run resets protection so `build` is no longer required, changes merge settings, makes a copy and stops with a wrong message (#159 round 3, NB1; needs a CRLF README, which the line-ending settings normally prevent, so improvement rather than blocker; it is the same class as the overwrites fixed in rounds 1 and 2, so fix it before the release tag). The B4 refusal names CHANGELOG.md as the check but reads README.md and `bootstrap-project.sh` (wording). Actions answers other than 200, 403 and 404 after create; `--with-deploy=no` is not carried in the continue command; a closed, unmerged proposed change is ignored; a renamed project's old name still reads as taken.
+  - S17: `gh` older than the one with `gh pr checks --json` and `gh pr merge --match-head-commit` fails only after the project exists, and the user is told to check the connection; add it to the preflight (#158). The local-only Actions guide says "turned off" when Actions are only limited; `selected` without GitHub's own actions gets the plain stop (#158). Whether the change was merged is read once after the merge; a stale "not merged" answer would be misreported (#158; end-to-end list). The bad-merge-id stop says "added to the main version" and then "proposed there" (#158 round 2). The wait counts tries, not elapsed time (#158).
+  - S17, docs: the "Existing repo" spec text in `docs/BACKLOG.md` is not yet corrected (decision of 2026-10-02 says S15 does it; #159 changed no docs). Separate docs PR, reviewed by Crog, before the release prep.
+  - Decisions Clead took in the S15 review (not Adam's): `--allow-unprotected` only for a plan limit on a private project; an unprotected merge needs the decision row in the change or it stops; a hand-made project (current release, no setup section, no script) gets protection read and reported, never set. A project with the README heading removed but the script kept is refused before anything is written.
 
 
 ### 9. Pending from the previous Clead session (PBI-1.17 build), staged on Adam's request — new (2026-10-02)
