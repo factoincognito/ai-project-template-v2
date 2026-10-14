@@ -2636,6 +2636,49 @@ test_a_run_finds_git_and_what_git_needs_for_a_copy_on_this_computer() {
     [ "$(cat "$d/c/f")" = x ] || die "the copy lacks the file" ) || exit 1
 }
 
+test_the_git_folder_of_a_run_holds_only_git_and_its_helpers() {
+  # git's own folder holds other tools too: Homebrew's /opt/homebrew/bin
+  # holds brew and gh, Git for Windows' /mingw64/bin many more. With that
+  # folder on a run's PATH, the macOS runner's brew was found, and the
+  # script offered and ran "brew install gh" in a test that has no brew.
+  # So a run gets a folder of its own that holds only git and the two
+  # helpers, each running the real one.
+  local d src
+  d="$(tmpdir)"
+  src="$d/tools of git"
+  mkdir -p "$src"
+  for t in git git-upload-pack git-receive-pack brew gh winget npm; do
+    printf '%s\n' '#!/bin/sh' "echo \"$t \$*\"" >"$src/$t"
+    chmod +x "$src/$t"
+  done
+  make_git_only_dir "$src" "$d/only"
+  [ "$(cd "$d/only" && ls | LC_ALL=C sort | tr '\n' ' ')" = "git git-receive-pack git-upload-pack " ] \
+    || { ls -A "$d/only" >&2; die "the folder holds more than git and its helpers"; }
+  for t in git git-upload-pack git-receive-pack; do
+    [ "$("$d/only/$t" a 'b c')" = "$t a b c" ] || die "$t does not run the real $t with its arguments"
+  done
+  # A helper that git's folder does not hold (git finds it in its own
+  # exec-path there) is left out.
+  rm "$src/git-upload-pack"
+  make_git_only_dir "$src" "$d/only2"
+  [ ! -e "$d/only2/git-upload-pack" ] || die "a helper that is not there was made"
+  [ -e "$d/only2/git" ] || die "git was not made"
+}
+
+test_a_run_has_no_brew_or_winget_unless_a_test_fakes_them() {
+  # The guides offer a command only where brew (macOS) or winget
+  # (Windows) is found; tests without them rely on the run's PATH having
+  # neither, whatever the runner has installed.
+  local d
+  d="$(tmpdir)"
+  prepare "$d"
+  ( in_env "$d"
+    ! command -v brew >/dev/null 2>&1 || die "brew is on the run's PATH: $(command -v brew)"
+    ! command -v winget >/dev/null 2>&1 || die "winget is on the run's PATH: $(command -v winget)"
+    [ "$(command -v git)" = "$GIT_ONLY_DIR/git" ] || [ "$(command -v git)" = /usr/bin/git ] || [ "$(command -v git)" = /bin/git ] \
+      || die "git on the run's PATH comes from elsewhere: $(command -v git)" ) || exit 1
+}
+
 pre_from_stdin() {
   local d="$1"
   shift
