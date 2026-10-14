@@ -7,8 +7,8 @@
 # Its one step is the test-first check: a pull request that changes code
 # (scripts, workflows, pack files, the shipped dotfiles) without changing
 # a test fails. Patterns: see the --code, --test and --ignore flags below.
-# The check's own tests run in the bootstrapper-test job
-# (.github/workflows/bootstrapper.yml).
+# The check's own tests run in a job that the required bootstrapper-test
+# check needs (.github/workflows/bootstrapper.yml).
 name: CI
 
 on:

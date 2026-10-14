@@ -849,6 +849,28 @@ unset GIT_TERMINAL_PROMPT GIT_ASKPASS
 # brew or winget to behave otherwise puts a fake one first on PATH.
 
 REAL_GIT="$(command -v git)"
+# A run's cut-down PATH (in_env) has GIT_ONLY_DIR after the fakes, a folder that
+# holds only git and the helpers it starts to copy from and send to a
+# project in a folder (git-upload-pack, git-receive-pack), each a
+# wrapper that runs the real one. git's own folder is not put on that
+# PATH: Git for Windows keeps git in /mingw64/bin with many other tools,
+# and Homebrew's /opt/homebrew/bin holds brew and gh, which a test
+# without them must not find. Wrappers, not links: a link made by Git
+# for Windows' ln may be a copy, and a copied git.exe cannot find the
+# rest of git.
+
+# make_git_only_dir <git's folder> <new folder>
+make_git_only_dir() {
+  local t
+  mkdir -p "$2"
+  for t in git git-upload-pack git-receive-pack; do
+    [ -x "$1/$t" ] || [ -x "$1/$t.exe" ] || continue
+    printf '%s\n' '#!/bin/sh' "exec '$1/$t' \"\$@\"" >"$2/$t"
+    chmod +x "$2/$t"
+  done
+}
+GIT_ONLY_DIR="$WORK/git only"
+make_git_only_dir "$(dirname "$REAL_GIT")" "$GIT_ONLY_DIR"
 REAL_DATE="$(command -v date)"
 # The stub gh seeds and copies projects with the real git.
 export STUB_GIT="$REAL_GIT"
@@ -2563,9 +2585,9 @@ test_pack_and_licence_questions_explain_each_choice() {
 # stdin and never because of --yes.
 #
 # `pre <dir> <command...>` runs a function of the loaded script after
-# detect_os, with PATH="<dir>/bin:/usr/bin:/bin" (so only the fake tools a
-# test makes, plus the system's own, are found: no brew or winget unless
-# faked), a stub gh, a stub runner and a stub npm (BOOTSTRAP_NPM, the
+# detect_os, with PATH="<dir>/bin:<GIT_ONLY_DIR>:/usr/bin:/bin" (so only
+# the fake tools a test makes, git, and the system's own are found:
+# no brew or winget unless faked), a stub gh, a stub runner and a stub npm (BOOTSTRAP_NPM, the
 # npm the lockfile step runs; the check that npm is installed uses a fake
 # npm on PATH), stdin from <dir>/in, the terminal from <dir>/tty and the
 # Linux release file from <dir>/os-release when they exist, in <dir>/cwd
@@ -2591,7 +2613,7 @@ in_env() {
   local d="$1"
   cd "$d/cwd"
   use_home "$d/home"
-  export PATH="$d/bin:/usr/bin:/bin" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
+  export PATH="$d/bin:$GIT_ONLY_DIR:/usr/bin:/bin" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
     STUB_RUN_LOG="$d/run.log" BOOTSTRAP_RUN="$d/run" STUB_SLEEP_LOG="$d/sleep.log" \
     STUB_NPM_LOG="$d/npm.log" BOOTSTRAP_NPM="$d/npm"
   # git never looks above the harness's own temp folder for a project,
@@ -2605,6 +2627,73 @@ in_env() {
   # RUN_CWD: a test that runs the script from another folder (such as
   # inside the copy) sets it.
   [ -z "${RUN_CWD:-}" ] || cd "$RUN_CWD"
+}
+
+test_a_run_finds_git_and_what_git_needs_for_a_copy_on_this_computer() {
+  # A run's PATH is cut down to the fake tools and the system's own, but
+  # git must be on it, as on every user's computer, and so must the
+  # helpers git starts to copy from and send to a project in a folder
+  # (git-upload-pack, git-receive-pack). Git for Windows keeps git and
+  # both helpers in /mingw64/bin, which is not /usr/bin or /bin: there the
+  # first run found no git at all, and the stub's projects, copied with
+  # the real git, stopped with "git-upload-pack: command not found".
+  local d bare
+  d="$(tmpdir)"
+  prepare "$d"
+  bare="$d/a remote.git"
+  "$REAL_GIT" -c init.defaultBranch=main init -q --bare "$bare"
+  ( in_env "$d"
+    command -v git >/dev/null || die "no git on the run's PATH"
+    git -c init.defaultBranch=main init -q "$d/w"
+    printf 'x\n' >"$d/w/f"
+    git -C "$d/w" add f
+    git -C "$d/w" -c user.name=T -c user.email=t@example.com commit -q -m one
+    git -C "$d/w" push -q "$bare" main || die "git could not send to a project in a folder"
+    git clone -q "$bare" "$d/c" || die "git could not copy a project from a folder"
+    [ "$(cat "$d/c/f")" = x ] || die "the copy lacks the file" ) || exit 1
+}
+
+test_the_git_folder_of_a_run_holds_only_git_and_its_helpers() {
+  # git's own folder holds other tools too: Homebrew's /opt/homebrew/bin
+  # holds brew and gh, Git for Windows' /mingw64/bin many more. With that
+  # folder on a run's PATH, the macOS runner's brew was found, and the
+  # script offered and ran "brew install gh" in a test that has no brew.
+  # So a run gets a folder of its own that holds only git and the two
+  # helpers, each running the real one.
+  local d src
+  d="$(tmpdir)"
+  src="$d/tools of git"
+  mkdir -p "$src"
+  for t in git git-upload-pack git-receive-pack brew gh winget npm; do
+    printf '%s\n' '#!/bin/sh' "echo \"$t \$*\"" >"$src/$t"
+    chmod +x "$src/$t"
+  done
+  make_git_only_dir "$src" "$d/only"
+  [ "$(cd "$d/only" && ls | LC_ALL=C sort | tr '\n' ' ')" = "git git-receive-pack git-upload-pack " ] \
+    || { ls -A "$d/only" >&2; die "the folder holds more than git and its helpers"; }
+  for t in git git-upload-pack git-receive-pack; do
+    [ "$("$d/only/$t" a 'b c')" = "$t a b c" ] || die "$t does not run the real $t with its arguments"
+  done
+  # A helper that git's folder does not hold (git finds it in its own
+  # exec-path there) is left out.
+  rm "$src/git-upload-pack"
+  make_git_only_dir "$src" "$d/only2"
+  [ ! -e "$d/only2/git-upload-pack" ] || die "a helper that is not there was made"
+  [ -e "$d/only2/git" ] || die "git was not made"
+}
+
+test_a_run_has_no_brew_or_winget_unless_a_test_fakes_them() {
+  # The guides offer a command only where brew (macOS) or winget
+  # (Windows) is found; tests without them rely on the run's PATH having
+  # neither, whatever the runner has installed.
+  local d
+  d="$(tmpdir)"
+  prepare "$d"
+  ( in_env "$d"
+    ! command -v brew >/dev/null 2>&1 || die "brew is on the run's PATH: $(command -v brew)"
+    ! command -v winget >/dev/null 2>&1 || die "winget is on the run's PATH: $(command -v winget)"
+    # The same git on every OS: the wrapper, so it is what the tests run.
+    [ "$(command -v git)" = "$GIT_ONLY_DIR/git" ] || die "git on the run's PATH is not the wrapper: $(command -v git)" ) || exit 1
 }
 
 pre_from_stdin() {
@@ -3129,6 +3218,36 @@ test_the_folder_must_be_in_a_folder_that_exists_and_is_outside_any_git_project()
     chmod 755 "$d/locked2/empty"
   fi
   chmod 755 "$d/locked"
+}
+
+test_the_project_around_the_folder_is_named_as_the_user_wrote_the_path() {
+  # git names the project's top folder with every symbolic link resolved
+  # (on macOS /var is /private/var, so a folder under $TMPDIR came out as
+  # /private/var/...; Git for Windows writes C:/Users/...). The guide
+  # names it as the user wrote the folder, so both paths in one sentence
+  # are spelled alike.
+  local d
+  d="$(tmpdir)"
+  mkdir -p "$d/real"
+  "$REAL_GIT" init -q "$d/real/outer"
+  mkdir -p "$d/real/outer/sub" "$d/real/outer/deep/er"
+  ln -s "$d/real" "$d/link" 2>/dev/null || { echo "no symbolic links here; skipped"; return 0; }
+  # Below the top folder, and straight in it.
+  pre "$d" ni with_dir "$d/link/outer/sub/app" preflight_target_dir
+  expect_rc 3 "$d"
+  expect_out "$d" "The folder $d/link/outer/sub/app is inside another project that git keeps track of (the one in $d/link/outer)."
+  pre "$d" ni with_dir "$d/link/outer/app" preflight_target_dir
+  expect_rc 3 "$d"
+  expect_out "$d" "(the one in $d/link/outer)."
+  # A link inside the project, so the path given does not end in git's
+  # path of the folder: git's own name for the top folder is shown.
+  if ln -s "$d/real/outer/deep/er" "$d/real/outer/lnk" 2>/dev/null && [ -L "$d/real/outer/lnk" ]; then
+    pre "$d" ni with_dir "$d/real/outer/lnk/app" preflight_target_dir
+    expect_rc 3 "$d"
+    expect_out "$d" "(the one in $(cd "$d/real/outer" && pwd -P))."
+  else
+    echo "symbolic links are copies here; the link-inside-the-project case was not run"
+  fi
 }
 
 test_a_folder_starting_with_a_tilde_is_in_the_home_folder() {
@@ -5442,6 +5561,40 @@ test_values_with_special_characters_are_copied_literally() {
   grep -qF '"slug": "tool-shed"' "$(copy_of "$d")/app.json" || die "app.json: the slug is not tool-shed"
 }
 
+test_the_fill_keeps_cr_lf_with_an_awk_that_drops_the_cr_as_it_reads() {
+  # Seen on Git for Windows (S5, first Windows run): the filled CR LF file
+  # came out LF, the CR of each line dropped as awk read it. A fake awk
+  # that reads that way (CR LF becomes LF, as text-mode input does)
+  # stands in for it.
+  local d cr=$'\r' nl=$'\n' real_awk
+  d="$(tmpdir)"
+  real_awk="$(command -v awk)"
+  mkdir -p "$d/bin"
+  printf '%s\n' '#!/usr/bin/env bash' "LC_ALL=C sed 's/\\r\$//' | exec '$real_awk' \"\$@\"" >"$d/bin/awk"
+  chmod +x "$d/bin/awk"
+  printf '%s' "# [PROJECT NAME]$cr$nl**Owner:** [PO NAME]$cr${nl}last [PROJECT NAME]$cr$nl" >"$d/crlf.md"
+  # The fake does drop the CR, so the test would see the bug.
+  [ "$(printf 'a\r\n' | PATH="$d/bin:$PATH" awk '{ print length($0) }')" = 1 ] || die "the fake awk keeps the CR"
+  ( load_script; cd "$d"; PATH="$d/bin:$PATH"
+    IN_PROJECT_NAME='My App' IN_PO_NAME='Ada'
+    fill_file crlf.md name po ) >"$d/out" 2>"$d/err" || { cat "$d/err" >&2; die "fill_file failed"; }
+  printf '%s' "# My App$cr$nl**Owner:** Ada$cr${nl}last My App$cr$nl" >"$d/want"
+  cmp -s "$d/want" "$d/crlf.md" || { od -c "$d/crlf.md" >&2; die "the CR LF line endings were not kept"; }
+}
+
+test_the_fill_refuses_a_file_holding_the_byte_it_uses_for_cr() {
+  # fill_file passes each CR through awk as the byte 036; a file that
+  # already holds that byte would come back with a CR in its place, so
+  # it is refused and left as it was.
+  local d before
+  d="$(tmpdir)"
+  printf '# [PROJECT NAME] \036 x\n' >"$d/odd.md"
+  before="$(od -c "$d/odd.md")"
+  ! ( load_script; cd "$d"; IN_PROJECT_NAME='My App'; fill_file odd.md name ) >"$d/out" 2>"$d/err" \
+    || die "a file with the byte 036 was filled"
+  [ "$(od -c "$d/odd.md")" = "$before" ] || die "the refused file was changed"
+}
+
 test_the_fill_is_literal_in_one_pass_and_keeps_line_endings_and_the_mode() {
   # fill_file <file> <key...>: every text of the keys given is replaced
   # in one pass over the whole file, so:
@@ -5473,7 +5626,15 @@ test_the_fill_is_literal_in_one_pass_and_keeps_line_endings_and_the_mode() {
   expect_same "the LF file" "$d/want" "$d/a=b/lf.md"
   printf '%s' "# $v$cr$nl**Owner:** $p$cr${nl}last $v" >"$d/want"
   cmp -s "$d/want" "$d/a=b/crlf.sh" || { od -c "$d/a=b/crlf.sh" >&2; die "the CR LF file without a newline at the end changed otherwise"; }
-  [ -x "$d/a=b/crlf.sh" ] || die "the executable bit was lost"
+  # Where chmod cannot make a file without #! runnable (Git for Windows,
+  # whose bash decides that from the file's start, not a mode bit), the
+  # mode cannot be seen, and this part is skipped.
+  printf 'x\n' >"$d/probe"; chmod 755 "$d/probe"
+  if [ -x "$d/probe" ]; then
+    [ -x "$d/a=b/crlf.sh" ] || die "the executable bit was lost"
+  else
+    echo "chmod does not set the mode of a file here; the executable bit was not checked"
+  fi
   [ ! -s "$d/a=b/empty.md" ] || die "the empty file is no longer empty"
   ! grep -rqF FROM-STDIN "$d/a=b" "$d/out" || die "fill_file read stdin"
 }
@@ -6626,7 +6787,9 @@ test_the_change_is_added_with_the_head_that_was_sent_from_inside_the_copy() {
   [ "$(in_git -C "$c" log -1 --format=%s "$sent")" = "Set up my-app" ] || die "the id given is not the setup's change"
   [ "$(awk -F'\t' '$2 == "pr" && $3 == "merge" { print $4, $5, $6, $7 }' "$d/gh.log")" = "1 --squash --delete-branch --match-head-commit" ] \
     || { cat "$d/gh.log" >&2; die "not merged with --squash --delete-branch --match-head-commit"; }
-  [ "$(cat "$d/merge-cwd")" = "$c" ] || { cat "$d/merge-cwd" >&2; die "gh pr merge did not run in the copy"; }
+  # Compared as folders, not as text: on macOS $TMPDIR ends in /, so $d
+  # holds a // that the shell's $PWD does not.
+  [ "$(cd "$(cat "$d/merge-cwd")" && pwd -P)" = "$(cd "$c" && pwd -P)" ] || { cat "$d/merge-cwd" >&2; die "gh pr merge did not run in the copy"; }
   [ "$(in_git --git-dir="$bare" rev-parse main)" = "$(cat "$d/merge-sha")" ] || die "main on GitHub is not the added change"
   [ "$(in_git --git-dir="$bare" rev-parse 'main^{tree}')" = "$(in_git --git-dir="$bare" rev-parse "$sent^{tree}")" ] || die "main does not hold the files sent"
   grep -A1 -xF '==> Adding the proposed change to the main version of the project' "$d/out" | sed -n 2p >"$d/done"
@@ -6873,10 +7036,14 @@ test_the_jq_expressions_read_githubs_documented_answers() {
     return 0
   fi
   d="$(tmpdir)"
+  # jq.exe on Windows ends each line with CR LF (its manual: use -b there,
+  # which older jq lacks); gh --jq does not, and the script drops CRs
+  # from what it reads anyway. So CRs are dropped here before comparing.
+  jq_r() { jq -r "$@" | tr -d '\r'; }
   # gh pr checks --json name,bucket,event: an array of checks; another
   # workflow's check (review) is left out.
   printf '%s\n' '[{"name":"build","bucket":"pass","event":"push"},{"name":"review","bucket":"fail","event":"pull_request"},{"name":"build","bucket":"pending","event":"pull_request"}]' >"$d/checks.json"
-  [ "$(jq -r "$BUILD_JQ" "$d/checks.json")" = "$(printf '%s\n' 'push pass' 'pull_request pending')" ] || { jq -r "$BUILD_JQ" "$d/checks.json" >&2; die "the checks expression"; }
+  [ "$(jq_r "$BUILD_JQ" "$d/checks.json")" = "$(printf '%s\n' 'push pass' 'pull_request pending')" ] || { jq_r "$BUILD_JQ" "$d/checks.json" >&2; die "the checks expression"; }
   # GET .../branches/main/protection, as the REST doc's example has it
   # (restrictions left out, as for a project of a personal account).
   cat >"$d/protection.json" <<'JSON'
@@ -6888,14 +7055,14 @@ test_the_jq_expressions_read_githubs_documented_answers() {
  "required_linear_history":{"enabled":false},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false},
  "block_creations":{"enabled":false},"required_conversation_resolution":{"enabled":false},"lock_branch":{"enabled":false},"allow_fork_syncing":{"enabled":false}}
 JSON
-  [ "$(jq -r "$READBACK_JQ" "$d/protection.json")" = "$(printf '%s\n' contexts=build strict=false enforce_admins=true approvals=0 restrictions=null allow_force_pushes=false allow_deletions=false)" ] \
-    || { jq -r "$READBACK_JQ" "$d/protection.json" >&2; die "the read-back expression on the documented answer"; }
+  [ "$(jq_r "$READBACK_JQ" "$d/protection.json")" = "$(printf '%s\n' contexts=build strict=false enforce_admins=true approvals=0 restrictions=null allow_force_pushes=false allow_deletions=false)" ] \
+    || { jq_r "$READBACK_JQ" "$d/protection.json" >&2; die "the read-back expression on the documented answer"; }
   # Step 3's protection, before build is required: no check, and no error.
   printf '%s\n' '{"enforce_admins":{"enabled":true},"required_pull_request_reviews":{"required_approving_review_count":0},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false}}' >"$d/step3.json"
-  [ "$(jq -r "$READBACK_JQ" "$d/step3.json" | sed -n 1,2p)" = "$(printf '%s\n' contexts= strict=null)" ] || { jq -r "$READBACK_JQ" "$d/step3.json" >&2; die "the read-back expression with no required check"; }
+  [ "$(jq_r "$READBACK_JQ" "$d/step3.json" | sed -n 1,2p)" = "$(printf '%s\n' contexts= strict=null)" ] || { jq_r "$READBACK_JQ" "$d/step3.json" >&2; die "the read-back expression with no required check"; }
   # GET .../pulls/N after the merge.
   printf '%s\n' '{"number":1,"state":"closed","merged":true,"merge_commit_sha":"6dcb09b5b57875f334f61aebed695e2e4193db5e"}' >"$d/pull.json"
-  [ "$(jq -r "$MERGED_JQ" "$d/pull.json")" = 'true 6dcb09b5b57875f334f61aebed695e2e4193db5e' ] || die "the merged expression"
+  [ "$(jq_r "$MERGED_JQ" "$d/pull.json")" = 'true 6dcb09b5b57875f334f61aebed695e2e4193db5e' ] || die "the merged expression"
 }
 
 # ---------- resume, failures and private projects (S15) ----------
