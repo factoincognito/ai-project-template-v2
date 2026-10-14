@@ -2607,6 +2607,30 @@ in_env() {
   [ -z "${RUN_CWD:-}" ] || cd "$RUN_CWD"
 }
 
+test_a_run_finds_git_and_what_git_needs_for_a_copy_on_this_computer() {
+  # A run's PATH is cut down to the fake tools and the system's own, but
+  # git must be on it, as on every user's computer, and so must the
+  # helpers git starts to copy from and send to a project in a folder
+  # (git-upload-pack, git-receive-pack). Git for Windows keeps git and
+  # both helpers in /mingw64/bin, which is not /usr/bin or /bin: there the
+  # first run found no git at all, and the stub's projects, copied with
+  # the real git, stopped with "git-upload-pack: command not found".
+  local d bare
+  d="$(tmpdir)"
+  prepare "$d"
+  bare="$d/a remote.git"
+  "$REAL_GIT" -c init.defaultBranch=main init -q --bare "$bare"
+  ( in_env "$d"
+    command -v git >/dev/null || die "no git on the run's PATH"
+    git -c init.defaultBranch=main init -q "$d/w"
+    printf 'x\n' >"$d/w/f"
+    git -C "$d/w" add f
+    git -C "$d/w" -c user.name=T -c user.email=t@example.com commit -q -m one
+    git -C "$d/w" push -q "$bare" main || die "git could not send to a project in a folder"
+    git clone -q "$bare" "$d/c" || die "git could not copy a project from a folder"
+    [ "$(cat "$d/c/f")" = x ] || die "the copy lacks the file" ) || exit 1
+}
+
 pre_from_stdin() {
   local d="$1"
   shift
@@ -3129,6 +3153,36 @@ test_the_folder_must_be_in_a_folder_that_exists_and_is_outside_any_git_project()
     chmod 755 "$d/locked2/empty"
   fi
   chmod 755 "$d/locked"
+}
+
+test_the_project_around_the_folder_is_named_as_the_user_wrote_the_path() {
+  # git names the project's top folder with every symbolic link resolved
+  # (on macOS /var is /private/var, so a folder under $TMPDIR came out as
+  # /private/var/...; Git for Windows writes C:/Users/...). The guide
+  # names it as the user wrote the folder, so both paths in one sentence
+  # are spelled alike.
+  local d
+  d="$(tmpdir)"
+  mkdir -p "$d/real"
+  "$REAL_GIT" init -q "$d/real/outer"
+  mkdir -p "$d/real/outer/sub" "$d/real/outer/deep/er"
+  ln -s "$d/real" "$d/link" 2>/dev/null || { echo "no symbolic links here; skipped"; return 0; }
+  # Below the top folder, and straight in it.
+  pre "$d" ni with_dir "$d/link/outer/sub/app" preflight_target_dir
+  expect_rc 3 "$d"
+  expect_out "$d" "The folder $d/link/outer/sub/app is inside another project that git keeps track of (the one in $d/link/outer)."
+  pre "$d" ni with_dir "$d/link/outer/app" preflight_target_dir
+  expect_rc 3 "$d"
+  expect_out "$d" "(the one in $d/link/outer)."
+  # A link inside the project, so the path given does not end in git's
+  # path of the folder: git's own name for the top folder is shown.
+  if ln -s "$d/real/outer/deep/er" "$d/real/outer/lnk" 2>/dev/null && [ -L "$d/real/outer/lnk" ]; then
+    pre "$d" ni with_dir "$d/real/outer/lnk/app" preflight_target_dir
+    expect_rc 3 "$d"
+    expect_out "$d" "(the one in $(cd "$d/real/outer" && pwd -P))."
+  else
+    echo "symbolic links are copies here; the link-inside-the-project case was not run"
+  fi
 }
 
 test_a_folder_starting_with_a_tilde_is_in_the_home_folder() {
@@ -5440,6 +5494,40 @@ test_values_with_special_characters_are_copied_literally() {
   grep -qxF "# $W_DISPLAY" "$(copy_of "$d")/README.md" || die "README.md: the display name is not the heading"
   grep -qxF "$W_DESCRIPTION" "$(copy_of "$d")/README.md" || die "README.md: the description line is not there"
   grep -qF '"slug": "tool-shed"' "$(copy_of "$d")/app.json" || die "app.json: the slug is not tool-shed"
+}
+
+test_the_fill_keeps_cr_lf_with_an_awk_that_drops_the_cr_as_it_reads() {
+  # Seen on Git for Windows (S5, first Windows run): the filled CR LF file
+  # came out LF, the CR of each line dropped as awk read it. A fake awk
+  # that reads that way (CR LF becomes LF, as text-mode input does)
+  # stands in for it.
+  local d cr=$'\r' nl=$'\n' real_awk
+  d="$(tmpdir)"
+  real_awk="$(command -v awk)"
+  mkdir -p "$d/bin"
+  printf '%s\n' '#!/usr/bin/env bash' "LC_ALL=C sed 's/\\r\$//' | exec '$real_awk' \"\$@\"" >"$d/bin/awk"
+  chmod +x "$d/bin/awk"
+  printf '%s' "# [PROJECT NAME]$cr$nl**Owner:** [PO NAME]$cr${nl}last [PROJECT NAME]$cr$nl" >"$d/crlf.md"
+  # The fake does drop the CR, so the test would see the bug.
+  [ "$(printf 'a\r\n' | PATH="$d/bin:$PATH" awk '{ print length($0) }')" = 1 ] || die "the fake awk keeps the CR"
+  ( load_script; cd "$d"; PATH="$d/bin:$PATH"
+    IN_PROJECT_NAME='My App' IN_PO_NAME='Ada'
+    fill_file crlf.md name po ) >"$d/out" 2>"$d/err" || { cat "$d/err" >&2; die "fill_file failed"; }
+  printf '%s' "# My App$cr$nl**Owner:** Ada$cr${nl}last My App$cr$nl" >"$d/want"
+  cmp -s "$d/want" "$d/crlf.md" || { od -c "$d/crlf.md" >&2; die "the CR LF line endings were not kept"; }
+}
+
+test_the_fill_refuses_a_file_holding_the_byte_it_uses_for_cr() {
+  # fill_file passes each CR through awk as the byte 036; a file that
+  # already holds that byte would come back with a CR in its place, so
+  # it is refused and left as it was.
+  local d before
+  d="$(tmpdir)"
+  printf '# [PROJECT NAME] \036 x\n' >"$d/odd.md"
+  before="$(od -c "$d/odd.md")"
+  ! ( load_script; cd "$d"; IN_PROJECT_NAME='My App'; fill_file odd.md name ) >"$d/out" 2>"$d/err" \
+    || die "a file with the byte 036 was filled"
+  [ "$(od -c "$d/odd.md")" = "$before" ] || die "the refused file was changed"
 }
 
 test_the_fill_is_literal_in_one_pass_and_keeps_line_endings_and_the_mode() {
