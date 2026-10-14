@@ -41,6 +41,14 @@ run_test() {
 
 die() { echo "assertion failed: $*" >&2; exit 1; }
 
+test_harness_gives_each_test_an_empty_work_dir() {
+  # Tests name their temp dirs "$WORK/<name>.$RANDOM". In one shared
+  # WORK, two tests that draw the same number collide (seen once as
+  # "out-dir ... real.4209 is not empty").
+  [ -d "$WORK" ] || die "no WORK dir"
+  [ -z "$(ls -A "$WORK")" ] || die "WORK is not empty: $(ls -A "$WORK" | head -n 3 | tr '\n' ' ')"
+}
+
 # expect_build_fail <fixture> <expected-stderr-substring> <out> <version> <commit>
 expect_build_fail() {
   local fx="$1" msg="$2"; shift 2
@@ -471,6 +479,19 @@ make_bootstrap_output() {
   fx="$(make_fixture)"; out="$WORK/pubout.$RANDOM"
   build_ok "$fx" "$out" "$1" "$SHA"
   echo "$out"
+}
+
+test_make_bootstrap_output_gives_a_new_dir_on_each_call() {
+  # bash 3.2 does not reseed $RANDOM in a command substitution inside a
+  # subshell that already used it, so two $(...) calls in one test got
+  # the same "$WORK/pubout.$RANDOM" and the second build found it full.
+  local a b
+  : "$RANDOM"  # seed this subshell first, as a test that used $RANDOM would
+  a="$(make_bootstrap_output v1.0.0)"
+  b="$(make_bootstrap_output v1.1.0)"
+  [ -n "$a" ] && [ -n "$b" ] || die "a build failed"
+  [ "$a" != "$b" ] || die "both calls returned $a"
+  grep -qF v1.1.0 "$b/CHANGELOG.md" || die "second output is not v1.1.0"
 }
 
 test_publish_to_empty_repo_creates_first_commit_and_tag() {
