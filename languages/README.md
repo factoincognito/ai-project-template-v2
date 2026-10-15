@@ -58,8 +58,13 @@ Every pack follows the same shape. A new pack should too:
   direct dependencies, and its `code-standards.md` says what that
   leaves unpinned.
 - **Every file has a place.** Each file in a pack except
-  `code-standards.md` must appear in the placement table in the README,
-  so nothing is copied by guesswork.
+  `code-standards.md` must be placed by the layout table of the
+  bootstrap script, `bootstrap-project.sh` (its `layout-pack` command):
+  by a row of its own or by a folder row (such as `starter/src/`), so
+  nothing is copied by guesswork. The web pack's deploy files are placed
+  only with `--with-deploy`. That table is the one the script
+  lays packs out by; the placement tables in the READMEs repeat it for
+  laying a pack out by hand.
 - **Nothing project-specific.** Placeholders like `[project-name]`
   instead of project names, service names or domains. Those belong to
   the project.
@@ -68,9 +73,9 @@ Every pack follows the same shape. A new pack should too:
 
 1. Create `languages/<name>/` with the files above, modelled on the
    closest existing pack.
-2. Add every file to the placement table in the template repo's
-   README and in the bootstrapper's README stub, so projects get it
-   too.
+2. Add every file to the script's layout table, and to the placement
+   tables in the template repo's README and in the bootstrapper's
+   README stub, so projects get it too.
 3. Lay it out in a scratch project and run its CI commands until they
    pass. Then break one rule on purpose for each thing CI is meant to
    enforce, and check that CI fails.
@@ -80,9 +85,14 @@ Every pack follows the same shape. A new pack should too:
 In the template repository
 (https://github.com/factoincognito/ai-project-template-v2), each pack is also
 tested on GitHub's own runners on every pull request, by the
-template-only workflow `.github/workflows/packs.yml` and the layout
-script `tools/layout-pack.sh`. A new pack gets a job there, and its
-files are added to the script's layout table.
+template-only workflow `.github/workflows/packs.yml`, which lays each
+pack out with `tools/layout-pack.sh`, a wrapper around the
+`layout-pack` command of `bootstrap/stubs/bootstrap-project.sh`. The
+layout table lives in that script. A new pack gets a job in
+`packs.yml`, its files are added to the script's layout table and to
+both README tables, and the expected paths in
+`tools/test-layout-pack.sh`, a deliberate second statement of the
+table, are changed with them.
 
 ## Keeping packs current
 
