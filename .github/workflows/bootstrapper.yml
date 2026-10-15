@@ -7,9 +7,12 @@
 # only through pull requests, which are tested on the merge ref; a
 # branch pushed without a PR is not tested here. A newer push to the
 # same PR cancels the older run; a tag run is never cancelled in
-# progress.
+# progress. After a merge, main itself is not tested by this workflow:
+# protection has strict: false, so a PR's merge-ref run can predate
+# another PR's merge, and nothing runs the combined tree until a v* tag,
+# whose run still gates publish.
 #
-# - Every pull request: run the build.sh / publish.sh tests and
+# - Every pull request to main: run the build.sh / publish.sh tests and
 #   the tests of the shared test-first check
 #   (tools/test-require-test-change.sh) on ubuntu, and the tests of the
 #   bootstrap script (bootstrap/test-bootstrap-project.sh) on ubuntu,

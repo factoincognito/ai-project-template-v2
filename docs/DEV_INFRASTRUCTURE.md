@@ -102,8 +102,16 @@ same way, with two required checks: `build` and `bootstrapper-test`.
 The second tests the template's release pipeline, which projects do not
 have. Its workflow (`bootstrapper.yml`) runs on pull requests to `main`
 and pushed `v*` tags only, not on branch pushes, and a newer push to a
-pull request cancels the older run. A project sets its own required
-checks and does not copy the template's.
+pull request cancels the older run. After a merge, `main` itself is not
+tested by that workflow: the required checks are not strict ("require
+branches to be up to date" is off), so a pull request's run can predate
+another pull request's merge, and nothing runs the combined tree until
+a `v*` tag, whose run still gates the release. Retargeting a stacked
+pull request's base to `main` is an `edited` event, which is not among
+the default `pull_request` event types, so `bootstrapper-test` stays
+missing (and the merge blocked) until a new push or a close and reopen.
+A project sets its own required checks and does not copy the
+template's.
 
 ### 5. CI/CD
 
