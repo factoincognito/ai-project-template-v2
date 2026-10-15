@@ -1794,11 +1794,13 @@ API_RC=0 API_STATUS="" API_HEADERS="" API_BODY="" API_BODY_CR="" API_MESSAGE="" 
 # (gh's exit code), API_STATUS (the HTTP status; empty when no answer
 # came), API_HEADERS (one "Name: value" per line), API_BODY, API_MESSAGE
 # (the "message" of a JSON body, as GitHub sends with an error) and
-# API_ERR (gh's own error text). Carriage returns are removed, except in
-# API_BODY_CR: the body with its carriage returns kept, for the check of
-# a file's line endings as GitHub stores it (S18a).
+# API_ERR (gh's own error text). Carriage returns are removed. Called as
+# API_KEEP_CR=1 api_call ..., it also fills API_BODY_CR: the body with
+# its carriage returns kept, for the check of a file's line endings as
+# GitHub stores it (S18a). Only on request: building the body twice
+# costs seconds on a big answer, such as the script's own file.
 api_call() {
-  local out err line raw part=status
+  local out err line raw part=status keep="${API_KEEP_CR:-}"
   out="$(make_temp)"
   err="$(make_temp)"
   API_RC=0
@@ -1815,13 +1817,20 @@ api_call() {
             API_STATUS="${API_STATUS%% *}"
             part=headers
             ;;
-          *) part=body; API_BODY="$line$NL"; API_BODY_CR="$raw$NL" ;;
+          *)
+            part=body
+            API_BODY="$line$NL"
+            [ -z "$keep" ] || API_BODY_CR="$raw$NL"
+            ;;
         esac
         ;;
       headers)
         if [ -z "$line" ]; then part=body; else API_HEADERS="$API_HEADERS$line$NL"; fi
         ;;
-      *) API_BODY="$API_BODY$line$NL"; API_BODY_CR="$API_BODY_CR$raw$NL" ;;
+      *)
+        API_BODY="$API_BODY$line$NL"
+        [ -z "$keep" ] || API_BODY_CR="$API_BODY_CR$raw$NL"
+        ;;
     esac
   done <"$out"
   rm -f "$out" "$err"
@@ -4314,26 +4323,26 @@ refuse_project() {
 }
 
 # guide_line_endings: README.md or CHANGELOG.md of a project not set up
-# yet ends its lines with CR LF on GitHub (GH_SECTION_CR, GH_CHANGELOG_CR).
-# The setup's checks in the copy read them line by line and would stop
-# only after the protection was set, so the stop comes before anything is
-# written. The project is the user's to fix: the command shown continues
-# the setup (--resume), FRESH_START stays unset.
+# yet has a carriage return on GitHub (GH_README_CR, GH_CHANGELOG_CR).
+# The setup's checks in the copy would stop on it only after the
+# protection was set, so the stop comes before anything is written. The
+# project is the user's to fix: the command shown continues the setup
+# (--resume), FRESH_START stays unset.
 guide_line_endings() {
   local files="" title
-  [ -z "$GH_SECTION_CR" ] || files="README.md"
+  [ -z "$GH_README_CR" ] || files="README.md"
   [ -z "$GH_CHANGELOG_CR" ] || files="${files:+$files and }CHANGELOG.md"
   case "$files" in
-    *" and "*) title="The files $files of the project $IN_OWNER/$IN_NAME on GitHub end their lines with a carriage return (as on Windows)." ;;
-    *) title="The file $files of the project $IN_OWNER/$IN_NAME on GitHub ends its lines with a carriage return (as on Windows)." ;;
+    *" and "*) title="The files $files of the project $IN_OWNER/$IN_NAME on GitHub each have a carriage return (as files saved on Windows do)." ;;
+    *) title="The file $files of the project $IN_OWNER/$IN_NAME on GitHub has a carriage return (as files saved on Windows do)." ;;
   esac
   guide_begin "$title" \
-    "The setup finds the lines it changes in $files only when they end with LF (as on macOS and Linux), as in every file of the project, so the script changes nothing in the project until then."
-  guide_step "Save $files with LF line endings, in the main version of the project on GitHub. In Visual Studio Code, for example: open the file in a copy of the project, click \"CRLF\" in the bar at the bottom, choose \"LF\", save the file, and send the change to GitHub."
+    "The setup changes $files in a copy of the project, and every file of the project keeps LF line endings (as on macOS and Linux). Found later, a carriage return would stop the setup after it had already changed the project's settings on GitHub, so the script changes nothing in the project until then."
+  guide_step "Save $files with LF line endings, in the main version of the project on GitHub. In Visual Studio Code, for example: open the file in a copy of the project, click \"CRLF\" in the bar at the bottom, choose \"LF\", save the file, and send the change to GitHub. If GitHub refuses to take the change straight into the main version (it is protected already), propose the change on GitHub and add it there."
   guide_step "Then continue the setup with the command shown below."
   guide_end "the script says \"Done.\" after \"Working out where the setup stopped\" and goes on with the setup." \
     "if the script stops here again, the file on GitHub still has a carriage return: check that the change with LF line endings is in the main version there. If it is, ask for help." \
-    "it reads README.md and CHANGELOG.md of the project on GitHub, as GitHub stores them: the setup section's heading in README.md, and every line of CHANGELOG.md, must end without a carriage return."
+    "it reads README.md and CHANGELOG.md of the project on GitHub, as GitHub stores them, and looks for a carriage return anywhere in them."
   stop_at_guide
 }
 
@@ -4352,7 +4361,7 @@ refuse_copy() {
 # resume_read_github: what GitHub has: whether the project is private, the
 # bootstrapper's version in its CHANGELOG.md, its proposed changes from
 # bootstrap-setup, and bootstrap-setup itself.
-GH_TIDY="" GH_PACK="" GH_DEPLOY="" GH_LICENCE="" GH_HAS_SECTION="" GH_SECTION_CR="" GH_CHANGELOG_CR=""
+GH_TIDY="" GH_PACK="" GH_DEPLOY="" GH_LICENCE="" GH_HAS_SECTION="" GH_SECTION_CR="" GH_README_CR="" GH_CHANGELOG_CR=""
 resume_read_github() {
   local line state merged url body
   api_call "repos/$IN_OWNER/$IN_NAME" --jq .private
@@ -4363,7 +4372,7 @@ resume_read_github() {
     false) IN_VISIBILITY=public; VISIBILITY_FROM_GITHUB=1 ;;
   esac
 
-  api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/CHANGELOG.md"
+  API_KEEP_CR=1 api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/CHANGELOG.md"
   if [ "$API_STATUS" = 404 ]; then
     # GitHub may still be copying the files into a project that was just
     # made; one with a main version but no CHANGELOG.md is not ours.
@@ -4372,7 +4381,7 @@ resume_read_github() {
       wait_for_files
       CURRENT_STEP="$RESUME_STEP"
     fi
-    api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/CHANGELOG.md"
+    API_KEEP_CR=1 api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/CHANGELOG.md"
   fi
   body=""
   GH_CHANGELOG_CR=""
@@ -4417,15 +4426,19 @@ resume_read_github() {
   # was tidied up already: set up by this script or by hand. The heading
   # is matched whole and as stored, as the copy's check (grep -x) matches
   # it; one found only with its carriage return removed is GH_SECTION_CR.
+  # GH_README_CR: a carriage return anywhere in the README, which the
+  # copy's checks stop on after the protection was set (#169 review, N1).
   GH_TIDY=""
-  api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/README.md"
+  API_KEEP_CR=1 api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/README.md"
   case "$API_STATUS" in
     200 | 404) ;;
     *) api_fail "read the file README.md of the project" ;;
   esac
   GH_HAS_SECTION=""
   GH_SECTION_CR=""
+  GH_README_CR=""
   if [ "$API_STATUS" = 200 ]; then
+    case "$API_BODY_CR" in *"$CR"*) GH_README_CR=1 ;; esac
     while IFS= read -r line || [ -n "$line" ]; do
       if [ "$line" = "$SETUP_HEADING" ]; then
         GH_HAS_SECTION=1
@@ -4513,11 +4526,11 @@ resume_decide() {
   else
     RESUME_STATE=template
   fi
-  # Not set up yet, and README.md or CHANGELOG.md ends its lines with CR
-  # LF on GitHub: the copy's checks would not find their lines, and only
-  # after the protection was set. A project set up already is only read,
-  # so its line endings do not matter (S18a).
-  if [ "$RESUME_STATE" != added ] && [ -n "$GH_SECTION_CR$GH_CHANGELOG_CR" ]; then
+  # Not set up yet, and README.md or CHANGELOG.md has a carriage return on
+  # GitHub: the copy's checks would stop on it, and only after the
+  # protection was set. A project set up already is only read, so its
+  # line endings do not matter (S18a).
+  if [ "$RESUME_STATE" != added ] && [ -n "$GH_README_CR$GH_CHANGELOG_CR" ]; then
     guide_line_endings
   fi
   # Not set up (the script is there) and not waiting for its setup (the
