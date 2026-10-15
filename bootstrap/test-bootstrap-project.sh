@@ -2273,6 +2273,8 @@ test_help_lists_every_option() {
     --yes --dry-run --resume --help --git-name --git-email layout-pack; do
     grep -qF -- "$o" "$d/out" || { cat "$d/out" >&2; die "help lacks $o"; }
   done
+  # S18b: --non-interactive alone is refused, so the help says what it needs.
+  grep -qF -- "(needs --yes or --dry-run)" "$d/out" || { cat "$d/out" >&2; die "help does not say --non-interactive needs --yes or --dry-run"; }
 }
 
 test_name_takes_letters_digits_dots_dashes_and_underscores() {
