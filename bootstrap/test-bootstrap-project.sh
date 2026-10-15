@@ -2187,6 +2187,7 @@ test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
   # every one with gh's own prompts off; the copy is the only thing made
   # on this computer.
   [ "$(cut -f2- "$d/gh.log" | awk -F'\t' -v OFS='\t' '{ for (i = 2; i <= NF; i++) { if ($(i - 1) == "--body-file") $i = "<file>"; if ($(i - 1) == "--match-head-commit") $i = "<sha>" } print }' | LC_ALL=C sort -u)" = "$(printf '%s\n' '--version' "$(printf 'repo\tcreate\t--help')" \
+      "$(printf 'pr\tchecks\t--help')" "$(printf 'pr\tmerge\t--help')" \
       "$(printf 'api\t-i\tuser\t--jq\t.login, (.name // "")')" \
       "$(printf 'api\t-i\t-H\tAccept: application/vnd.github.raw+json\trepos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md')" \
       "$(printf 'api\t-i\trepos/octo-user/my-app')" \
@@ -4185,11 +4186,13 @@ setup_run() {
 
 # calls_from_create <dir>: the gh calls from creating the project on, one
 # per line, the arguments joined by spaces (the prompt column left out).
-# The temporary file after --body-file is written <file>, the change id
+# The feature checks of the preflight (repo create, pr checks and pr
+# merge with --help) are left out, here and in calls_since: a second run
+# makes them again. The temporary file after --body-file is written <file>, the change id
 # after --match-head-commit <sha> (test_the_change_is_added_with_the_head_that_was_sent
 # checks that id).
 calls_from_create() {
-  awk -F'\t' '$2 == "repo" && $3 == "create" && $4 != "--help" { on = 1 }
+  awk -F'\t' '$4 == "--help" { next } $2 == "repo" && $3 == "create" { on = 1 }
     on { out = $2; for (i = 3; i <= NF; i++) out = out " " ($(i - 1) == "--body-file" ? "<file>" : ($(i - 1) == "--match-head-commit" ? "<sha>" : $i)); print out }' "$1/gh.log"
 }
 
@@ -7146,7 +7149,7 @@ calls_count() { if [ -f "$1/gh.log" ]; then grep -c . "$1/gh.log"; else echo 0; 
 # calls_since <dir> <n>: the gh calls after the first <n>, written as
 # calls_from_create writes them.
 calls_since() {
-  tail -n +"$(($2 + 1))" "$1/gh.log" | awk -F'\t' '$2 == "repo" && $3 == "create" && $4 == "--help" { next } { out = $2; for (i = 3; i <= NF; i++) out = out " " ($(i - 1) == "--body-file" ? "<file>" : ($(i - 1) == "--match-head-commit" ? "<sha>" : $i)); print out }'
+  tail -n +"$(($2 + 1))" "$1/gh.log" | awk -F'\t' '$4 == "--help" { next } { out = $2; for (i = 3; i <= NF; i++) out = out " " ($(i - 1) == "--body-file" ? "<file>" : ($(i - 1) == "--match-head-commit" ? "<sha>" : $i)); print out }'
 }
 
 # again <dir> [options...]: runs the script again, as the user would: the
