@@ -1407,7 +1407,7 @@ test_error_raw_text_has_carriage_returns_removed() {
   # Windows tools end lines with \r\n; a stray \r would garble the output.
   local got="$WORK/got.$RANDOM"
   ( load_script; show_error "It failed." "Try again." "$(printf 'line one\r\nline two\r')" ) 2>"$got"
-  ! grep -q "$(printf '\r')" "$got" || die "a carriage return reached the output"
+  ! has_cr "$got" || die "a carriage return reached the output"
   grep -qxF '    line two' "$got" || { cat "$got" >&2; die "raw text lost"; }
 }
 
@@ -5239,7 +5239,7 @@ expect_setup_tree() {
   esac
   # Every file the setup wrote has LF line endings.
   for f in CHANGELOG.md LICENSE NOTICE package-lock.json; do
-    [ ! -f "$c/$f" ] || ! grep -q "$(printf '\r')" "$c/$f" || die "$p$deploy: $f has a carriage return"
+    [ ! -f "$c/$f" ] || ! has_cr "$c/$f" || die "$p$deploy: $f has a carriage return"
   done
   # Every row of the fill table was checked against some file.
   want_fill_rows "$p" "$deploy" | awk -F'|' '{ print $1 "|" $3 }' | LC_ALL=C sort -u >"$d/rows"
@@ -6482,7 +6482,8 @@ test_a_file_with_windows_line_endings_stops_before_anything_is_saved() {
   unset STUB_NPM_CRLF
   expect_rc 0 "$d"
   grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "a CR LF lockfile did not go through"; }
-  ! in_git --git-dir="$(bare_of "$d")" show main:package-lock.json | grep -q "$(printf '\r')" || die "the lockfile was saved with carriage returns"
+  in_git --git-dir="$(bare_of "$d")" show main:package-lock.json >"$d/saved-lockfile"
+  ! has_cr "$d/saved-lockfile" || die "the lockfile was saved with carriage returns"
   d="$(tmpdir)"
   fake_tool "$d" npm 10.0.0
   export STUB_NPM_CRLF=lone
@@ -7174,14 +7175,23 @@ again() {
 # seed_existing <dir> <OWNER/NAME> <files>: a project GitHub has that the
 # script did not create (as with "Use this template"): a bare repo
 # remotes/OWNER/NAME.git next to the log, whose main holds <files> as
-# one change. The test lists it in STUB_GH_EXISTING itself.
+# one change. The test lists it in STUB_GH_EXISTING itself. Each further
+# path is stored as it is, carriage returns kept: "<path> -text" in the
+# seed's .git/info/attributes wins over the template's .gitattributes
+# (eol=lf) and over a core.autocrlf of the computer.
 seed_existing() {
-  local bare="$1/remotes/$2.git" w
+  local bare="$1/remotes/$2.git" src="$3" w p
+  shift 3
   w="$(mktemp -d "$WORK/seed.XXXXXX")"
   mkdir -p "$bare"
   in_git -c init.defaultBranch=main init -q --bare "$bare"
-  cp -R "$3/." "$w/"
+  cp -R "$src/." "$w/"
   in_git -c init.defaultBranch=main init -q "$w"
+  # "for p do": no "$@" that bash 3.2 with set -u could call unbound.
+  for p do
+    mkdir -p "$w/.git/info"
+    printf '%s -text\n' "$p" >>"$w/.git/info/attributes"
+  done
   in_git -C "$w" add -A
   in_git -C "$w" -c user.name=GitHub -c user.email=noreply@github.com commit -q -m "Initial commit"
   in_git -C "$w" push -q "$bare" HEAD:main 2>/dev/null
@@ -7767,8 +7777,33 @@ nothing_changed_on_github() {
 # hand: the bootstrapper's files of this version, but no setup section in
 # the README and no bootstrap-project.sh, and the protection with build
 # required, kept in the file protected (a copy of it in protected.before).
+# <script>: gone (the default) or kept. <heading>, the README's setup
+# heading: gone (the default), lookalike, kept, crlf (kept, and every
+# line of the README ends with CR LF on GitHub), or note (kept with LF,
+# and one more line at the end with CR LF). <changelog>: lf (the
+# default), crlf (every line ends with CR LF on GitHub), marked (the
+# setup's mark added, as the script writes it when the setup is added),
+# or crlf-marked (both).
+CR="$(printf '\r')"
+# has_cr <file>: the file holds a carriage return. Read through od -c,
+# which writes it as the two characters \r, so no carriage return itself
+# goes through grep or $( ). On Windows CI (#169) Git for Windows' grep
+# did not find a CR that od -c showed in the same file, and $( ) dropped
+# a CR LF that ended the text. A backslash in the file is \\ in od's
+# output and each byte has its own column, so no other text reads as \r.
+has_cr() {
+  od -A n -c "$1" | grep -F '\r' >/dev/null
+}
+# to_crlf <file>: every line of the file ends with CR LF.
+to_crlf() {
+  local line
+  while IFS= read -r line || [ -n "$line" ]; do
+    printf '%s\r\n' "${line%"$CR"}"
+  done <"$1" >"$1.crlf"
+  mv "$1.crlf" "$1"
+}
 hand_made_project() {
-  local d="$1" script="${2:-gone}" heading="${3:-gone}"
+  local d="$1" script="${2:-gone}" heading="${3:-gone}" changelog="${4:-lf}" bare f blob stored=""
   built_bootstrapper
   mkdir -p "$d/files"
   cp -R "$BUILT/." "$d/files/"
@@ -7780,9 +7815,49 @@ hand_made_project() {
       [ "$heading" != lookalike ] || printf '%s\n' '## After bootstrapping: lends tools' >>"$d/files/README.md"
       ! cmp -s "$BUILT/README.md" "$d/files/README.md" || die "the README was not changed (test is stale)"
       ;;
+    crlf)
+      to_crlf "$d/files/README.md"
+      stored="README.md"
+      ;;
+    note)
+      printf 'A note written on Windows.\r\n' >>"$d/files/README.md"
+      stored="README.md"
+      ;;
+  esac
+  case "$changelog" in
+    marked | crlf-marked) printf '%s\n' '- Set up by bootstrap-project.sh.' >>"$d/files/CHANGELOG.md" ;;
+  esac
+  case "$changelog" in
+    crlf | crlf-marked)
+      to_crlf "$d/files/CHANGELOG.md"
+      stored="$stored CHANGELOG.md"
+      ;;
   esac
   if [ "$script" = kept ]; then [ -e "$d/files/bootstrap-project.sh" ] || die "the script is not there (test is stale)"; else [ ! -e "$d/files/bootstrap-project.sh" ] || die "the script is still there (test is stale)"; fi
-  seed_existing "$d" octo-user/my-app "$d/files"
+  # $stored is a list of plain file names, split on purpose.
+  # shellcheck disable=SC2086
+  seed_existing "$d" octo-user/my-app "$d/files" $stored
+  bare="$(bare_of "$d")"
+  # The blob GitHub stores is checked, not the file on disk, with has_cr
+  # (see there why not grep or $( )). A known "a\r\n" is checked first, so
+  # a failure says whether the check or the blob is wrong.
+  if [ -n "$stored" ]; then
+    blob="$(mktemp "$WORK/blob.XXXXXX")"
+    printf 'a\r\n' >"$blob"
+    has_cr "$blob" || { od -A n -c "$blob" >&2; die "has_cr does not see the carriage return of a known a CR LF (od output above): the check, not the fixture, is wrong here"; }
+    rm -f "$blob"
+  fi
+  for f in $stored; do
+    blob="$(mktemp "$WORK/blob.XXXXXX")"
+    in_git --git-dir="$bare" cat-file -p "main:$f" >"$blob"
+    has_cr "$blob" || { od -c "$blob" | tail -4 >&2; die "$f on GitHub has no carriage return (test is stale); its last bytes are above"; }
+    rm -f "$blob"
+  done
+  case "$changelog" in
+    marked | crlf-marked)
+      in_git --git-dir="$bare" cat-file -p main:CHANGELOG.md | grep -F -- '- Set up by bootstrap-project.sh.' >/dev/null || die "the CHANGELOG on GitHub has no mark (test is stale)"
+      ;;
+  esac
   printf '%s\n' "$REQUIRED_PROTECTION" >"$d/protected"
   cp "$d/protected" "$d/protected.before"
 }
@@ -8171,6 +8246,11 @@ test_a_project_with_its_setup_heading_gone_but_its_script_kept_is_refused_before
   unset STUB_GH_EXISTING
   expect_rc 3 "$d"
   expect_out "$d" "no longer has the setup section"
+  # S18a: it says how it checked this refusal: from README.md and
+  # bootstrap-project.sh, not from CHANGELOG.md as the version refusals do.
+  grep '^How the script checks it: ' "$d/out" | tail -1 >"$d/how"
+  grep -qF 'README.md' "$d/how" && grep -qF 'bootstrap-project.sh' "$d/how" || { cat "$d/out" >&2; die "how it checks does not name README.md and bootstrap-project.sh"; }
+  ! grep -qF 'CHANGELOG.md' "$d/how" || { cat "$d/how" >&2; die "how it checks names CHANGELOG.md"; }
   expect_no_out "$d" "$FINISHED"
   nothing_changed_on_github "$d"
   cmp -s "$d/protected" "$d/protected.before" || die "the protection changed"
@@ -8200,6 +8280,211 @@ test_a_readme_with_only_a_lookalike_heading_and_no_script_is_set_up_already() {
   expect_out "$d" "    Done. The project is set up already:"
   nothing_changed_on_github "$d"
   cmp -s "$d/protected" "$d/protected.before" || die "the protection changed"
+}
+
+# ---------- S18a: README.md or CHANGELOG.md stored with CR LF on GitHub ----------
+
+# expect_line_endings_stop <dir> <label> <file>: the run stopped at the
+# line-endings guide for <file> before anything was written: the
+# protection is as it was, no call changed GitHub, nothing was made on
+# this computer (no copy), and the command shown continues with --resume.
+expect_line_endings_stop() {
+  local d="$1" label="$2" file="$3"
+  # First, as the reason the old script failed: it set the protection.
+  cmp -s "$d/protected" "$d/protected.before" || { cat "$d/out" "$d/err" >&2; die "$label: the protection changed"; }
+  nothing_changed_on_github "$d"
+  expect_rc 3 "$d"
+  # Round 1 of the #169 review, N2: exact for a carriage return anywhere
+  # in the file, not only at the end of each line.
+  grep -F 'has a carriage return' "$d/out" | grep -F "$file" >/dev/null || { cat "$d/out" "$d/err" >&2; die "$label: no line-endings message for $file"; }
+  grep '^How the script checks it: ' "$d/out" | tail -1 | grep -F 'carriage return anywhere' >/dev/null || { cat "$d/out" >&2; die "$label: how it checks is not exact for a carriage return anywhere"; }
+  ! grep -qF 'must end without a carriage return' "$d/out" || { cat "$d/out" >&2; die "$label: how it checks still speaks of line ends only"; }
+  expect_out "$d" "LF line endings"
+  # N3: main may be protected by an earlier run: then a proposed change.
+  expect_out "$d" "If GitHub refuses"
+  expect_no_out "$d" "$FINISHED"
+  grep -A1 -xF 'To continue the setup, run this command:' "$d/out" | sed -n 2p >"$d/cmd"
+  grep -q '^    bash ' "$d/cmd" && grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "$label: no command to continue with --resume"; }
+}
+
+# fix_line_endings_on_github <dir> <file>: the user saves <file> with LF
+# line endings on main, as the guide says.
+fix_line_endings_on_github() {
+  local d="$1" file="$2" bare w
+  bare="$(bare_of "$d")"
+  w="$(mktemp -d "$WORK/fix.XXXXXX")"
+  in_git clone -q "$bare" "$w/c" 2>/dev/null
+  tr -d '\r' <"$w/c/$file" >"$w/c/$file.lf"
+  mv "$w/c/$file.lf" "$w/c/$file"
+  in_git -C "$w/c" add -A
+  in_git -C "$w/c" -c user.name=T -c user.email=t@example.com commit -q -m "LF line endings in $file"
+  in_git -C "$w/c" push -q origin HEAD:main 2>/dev/null
+  # Read from a file with has_cr: see there.
+  in_git --git-dir="$bare" cat-file -p "main:$file" >"$w.blob"
+  rm -rf "$w"
+  ! has_cr "$w.blob" || die "$file on GitHub still has a carriage return (test is stale)"
+  rm -f "$w.blob"
+}
+
+test_a_readme_stored_with_crlf_on_github_is_refused_before_anything_is_written() {
+  # S18a: the setup section is found on GitHub only with the carriage
+  # returns removed, and the copy's check (grep -x) would not find it after
+  # the protection was set. It stops before that, script kept or gone;
+  # once the README has LF line endings, the command shown sets it up.
+  local d script
+  for script in kept gone; do
+    d="$(tmpdir)"
+    hand_made_project "$d" "$script" crlf
+    export STUB_GH_EXISTING=octo-user/my-app
+    setup_run "$d" --non-interactive --yes --resume
+    expect_line_endings_stop "$d" "script $script" README.md
+    fix_line_endings_on_github "$d" README.md
+    again "$d"
+    unset STUB_GH_EXISTING
+    expect_rc 0 "$d"
+    grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "script $script: no report after the fix"; }
+    [ "$(grep . "$d/protection-bodies" | tail -1)" = "$REQUIRED_PROTECTION" ] || die "script $script: build is not required at the end"
+  done
+}
+
+test_a_changelog_stored_with_crlf_on_github_is_refused_before_anything_is_written() {
+  # S18a: the version is read with the carriage returns removed, and the
+  # copy's check of the CHANGELOG (grep -x) would fail after the
+  # protection was set. It stops before that; once the CHANGELOG has LF
+  # line endings, the command shown sets it up.
+  local d script
+  for script in kept gone; do
+    d="$(tmpdir)"
+    hand_made_project "$d" "$script" kept crlf
+    export STUB_GH_EXISTING=octo-user/my-app
+    setup_run "$d" --non-interactive --yes --resume
+    expect_line_endings_stop "$d" "script $script" CHANGELOG.md
+    fix_line_endings_on_github "$d" CHANGELOG.md
+    again "$d"
+    unset STUB_GH_EXISTING
+    expect_rc 0 "$d"
+    grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "script $script: no report after the fix"; }
+  done
+}
+
+test_a_set_up_project_with_a_crlf_readme_is_still_only_read() {
+  # S18a: the CHANGELOG has the setup's mark, so the project is set up
+  # already: the README's line endings do not stop it, and it is only
+  # read, as before.
+  local d
+  d="$(tmpdir)"
+  hand_made_project "$d" kept crlf marked
+  export STUB_GH_EXISTING=octo-user/my-app
+  setup_run "$d" --non-interactive --yes --resume
+  unset STUB_GH_EXISTING
+  expect_rc 0 "$d"
+  expect_out "$d" "    Done. The project is set up already:"
+  expect_no_out "$d" "carriage return"
+  nothing_changed_on_github "$d"
+  cmp -s "$d/protected" "$d/protected.before" || die "the protection changed"
+}
+
+test_a_readme_with_one_crlf_line_besides_the_heading_is_refused_before_anything_is_written() {
+  # Round 1 of the #169 review, N1: the heading has LF, another line has
+  # CR LF. The copy's tidy_up edits the README, git keeps the carriage
+  # return of a blob stored with it, and check_line_endings stops after
+  # the protection was set. Any carriage return in the README stops it
+  # first, as in the CHANGELOG; after the fix the command shown sets it up.
+  local d
+  d="$(tmpdir)"
+  hand_made_project "$d" kept note
+  export STUB_GH_EXISTING=octo-user/my-app
+  setup_run "$d" --non-interactive --yes --resume
+  expect_line_endings_stop "$d" "one line" README.md
+  fix_line_endings_on_github "$d" README.md
+  again "$d"
+  unset STUB_GH_EXISTING
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "no report after the fix"; }
+}
+
+test_a_set_up_project_with_a_crlf_changelog_is_still_only_read() {
+  # Round 1 of the #169 review, N4: in state added (the setup's mark in
+  # the CHANGELOG, or tidied up: no section and no script) the CHANGELOG's
+  # line endings do not stop it, and it is only read.
+  local d how
+  for how in marked tidied; do
+    d="$(tmpdir)"
+    if [ "$how" = marked ]; then
+      hand_made_project "$d" kept crlf crlf-marked
+    else
+      hand_made_project "$d" gone gone crlf
+    fi
+    export STUB_GH_EXISTING=octo-user/my-app
+    setup_run "$d" --non-interactive --yes --resume
+    unset STUB_GH_EXISTING
+    expect_rc 0 "$d"
+    expect_out "$d" "    Done. The project is set up already:"
+    expect_no_out "$d" "carriage return"
+    nothing_changed_on_github "$d"
+    cmp -s "$d/protected" "$d/protected.before" || die "$how: the protection changed"
+  done
+}
+
+test_the_tests_carriage_return_check_sees_one_wherever_it_is() {
+  # #169, Windows CI: grep did not see a carriage return there, and $( )
+  # dropped a final CR LF. has_cr must see one at a line end, alone at
+  # the end without a line end, and in the middle of a line, and must not
+  # take LF text or a backslash before an r for one.
+  local d n=0 want
+  d="$(tmpdir)"
+  for want in 'yes:a\r\n' 'yes:a\nb\r\n' 'yes:a\nb\r' 'yes:a\rb\n' 'no:a\nb\n' 'no:a\\r\n' 'no:'; do
+    n=$((n + 1))
+    # The format holds the bytes on purpose: \r, \n and \\ are printf's.
+    # shellcheck disable=SC2059
+    printf "${want#*:}" >"$d/f$n"
+    if has_cr "$d/f$n"; then
+      [ "${want%%:*}" = yes ] || { od -c "$d/f$n" >&2; die "has_cr sees a carriage return in ${want#*:}"; }
+    else
+      [ "${want%%:*}" = no ] || { od -c "$d/f$n" >&2; die "has_cr does not see the carriage return in ${want#*:}"; }
+    fi
+  done
+}
+
+test_api_call_keeps_a_carriage_return_on_a_last_line_without_a_line_end() {
+  # #169 review: a file whose only carriage return ends its last line,
+  # with no line end after it, still counts (the read loop's last line).
+  local d
+  d="$(tmpdir)"
+  printf 'HTTP/2.0 200 OK\r\n\r\nfirst\nlast\r' >"$d/answer"
+  printf '#!/bin/sh\ncat "%s"\n' "$d/answer" >"$d/gh"
+  chmod +x "$d/gh"
+  ( load_script
+    BOOTSTRAP_GH="$d/gh"
+    API_KEEP_CR=1 api_call repos/o/n/contents/README.md
+    [ "$API_STATUS" = 200 ] || die "the answer was not read (status $API_STATUS)"
+    case "$API_BODY_CR" in *"last$CR"*) ;; *) die "the carriage return of the last line was lost" ;; esac
+    [ "$API_BODY" = "first${NL}last$NL" ] || die "API_BODY is not the body"
+  )
+}
+
+test_api_call_keeps_carriage_returns_only_when_asked() {
+  # Round 1 of the #169 review, B1: building the body a second time costs
+  # seconds on a big answer (the script's own file), so API_BODY_CR is
+  # filled only for a call made with API_KEEP_CR=1, and is empty after
+  # any other call. API_BODY never has a carriage return.
+  local d
+  d="$(tmpdir)"
+  printf 'HTTP/2.0 200 OK\r\nContent-Type: text/plain\r\n\r\nA note\r\nlast\r\n' >"$d/answer"
+  printf '#!/bin/sh\ncat "%s"\n' "$d/answer" >"$d/gh"
+  chmod +x "$d/gh"
+  ( load_script
+    BOOTSTRAP_GH="$d/gh"
+    api_call repos/o/n/contents/README.md
+    [ "$API_STATUS" = 200 ] || die "the answer was not read (status $API_STATUS)"
+    [ -z "$API_BODY_CR" ] || die "a call that did not ask kept the body with its carriage returns"
+    API_KEEP_CR=1 api_call repos/o/n/contents/README.md
+    case "$API_BODY_CR" in *"A note$CR$NL"*) ;; *) die "the call that asked did not keep the carriage returns" ;; esac
+    case "$API_BODY" in *"$CR"*) die "API_BODY has a carriage return" ;; esac
+    [ "$API_BODY" = "A note${NL}last$NL" ] || die "API_BODY is not the body"
+    api_call repos/o/n/contents/README.md
+    [ -z "$API_BODY_CR" ] || die "API_BODY_CR was left from the call before"
+  )
 }
 
 test_the_step_16_refusal_holds_with_the_decision_row_in_the_change() {
