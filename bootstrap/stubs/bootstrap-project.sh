@@ -1788,23 +1788,25 @@ BOOTSTRAPPER=factoincognito/ai-project-bootstrap
 SIGN_IN_COMMAND_NEXT="Sign in to GitHub with gh as in step 0 of the README, with the command gh auth login -h github.com -p https -w -s workflow, then start the script again."
 SIGN_IN_CONTINUE_NEXT="Sign in to GitHub with gh as in step 0 of the README, with the command gh auth login -h github.com -p https -w -s workflow, then continue the setup with the command shown above."
 
-API_RC=0 API_STATUS="" API_HEADERS="" API_BODY="" API_MESSAGE="" API_ERR="" API_RAW=""
+API_RC=0 API_STATUS="" API_HEADERS="" API_BODY="" API_BODY_CR="" API_MESSAGE="" API_ERR="" API_RAW=""
 
 # api_call <args...>: runs gh api -i <args> and reads its answer: API_RC
 # (gh's exit code), API_STATUS (the HTTP status; empty when no answer
 # came), API_HEADERS (one "Name: value" per line), API_BODY, API_MESSAGE
 # (the "message" of a JSON body, as GitHub sends with an error) and
-# API_ERR (gh's own error text). Carriage returns are removed.
+# API_ERR (gh's own error text). Carriage returns are removed, except in
+# API_BODY_CR: the body with its carriage returns kept, for the check of
+# a file's line endings as GitHub stores it (S18a).
 api_call() {
-  local out err line part=status
+  local out err line raw part=status
   out="$(make_temp)"
   err="$(make_temp)"
   API_RC=0
   run_gh api -i "$@" >"$out" 2>"$err" || API_RC=$?
-  API_STATUS="" API_HEADERS="" API_BODY="" API_MESSAGE=""
+  API_STATUS="" API_HEADERS="" API_BODY="" API_BODY_CR="" API_MESSAGE=""
   API_ERR="$(tr -d '\r' <"$err")"
-  while IFS= read -r line || [ -n "$line" ]; do
-    line="${line//$CR/}"
+  while IFS= read -r raw || [ -n "$raw" ]; do
+    line="${raw//$CR/}"
     case "$part" in
       status)
         case "$line" in
@@ -1813,13 +1815,13 @@ api_call() {
             API_STATUS="${API_STATUS%% *}"
             part=headers
             ;;
-          *) part=body; API_BODY="$line$NL" ;;
+          *) part=body; API_BODY="$line$NL"; API_BODY_CR="$raw$NL" ;;
         esac
         ;;
       headers)
         if [ -z "$line" ]; then part=body; else API_HEADERS="$API_HEADERS$line$NL"; fi
         ;;
-      *) API_BODY="$API_BODY$line$NL" ;;
+      *) API_BODY="$API_BODY$line$NL"; API_BODY_CR="$API_BODY_CR$raw$NL" ;;
     esac
   done <"$out"
   rm -f "$out" "$err"
@@ -4295,8 +4297,10 @@ set_state_note() {
   esac
 }
 
-# refuse_to_continue <title> <why> <step> <if you see something else> <how checked>: a project
-# the script will not continue; the command shown starts a new project.
+# refuse_project <title> <why> [how checked]: a project the script will
+# not continue; the command shown starts a new project. <how checked> is
+# the guide's "How the script checks it"; without it, the CHANGELOG.md
+# check of the version.
 refuse_project() {
   FRESH_START=1
   CREATED_NOTE=""
@@ -4305,7 +4309,31 @@ refuse_project() {
   guide_step "Or, to finish this project yourself, open https://github.com/$IN_OWNER/$IN_NAME in your browser and do the steps that are still open; the README of the bootstrapper lists them."
   guide_end "the script says \"Done.\" after the last step and shows the report." \
     "if you do not want the project that is there, rename or delete it on GitHub yourself (in its Settings); the script does not delete a project." \
-    "it reads the file CHANGELOG.md of the project on GitHub, which says which version of the bootstrapper made the project."
+    "${3:-it reads the file CHANGELOG.md of the project on GitHub, which says which version of the bootstrapper made the project.}"
+  stop_at_guide
+}
+
+# guide_line_endings: README.md or CHANGELOG.md of a project not set up
+# yet ends its lines with CR LF on GitHub (GH_SECTION_CR, GH_CHANGELOG_CR).
+# The setup's checks in the copy read them line by line and would stop
+# only after the protection was set, so the stop comes before anything is
+# written. The project is the user's to fix: the command shown continues
+# the setup (--resume), FRESH_START stays unset.
+guide_line_endings() {
+  local files="" title
+  [ -z "$GH_SECTION_CR" ] || files="README.md"
+  [ -z "$GH_CHANGELOG_CR" ] || files="${files:+$files and }CHANGELOG.md"
+  case "$files" in
+    *" and "*) title="The files $files of the project $IN_OWNER/$IN_NAME on GitHub end their lines with a carriage return (as on Windows)." ;;
+    *) title="The file $files of the project $IN_OWNER/$IN_NAME on GitHub ends its lines with a carriage return (as on Windows)." ;;
+  esac
+  guide_begin "$title" \
+    "The setup finds the lines it changes in $files only when they end with LF (as on macOS and Linux), as in every file of the project, so the script changes nothing in the project until then."
+  guide_step "Save $files with LF line endings, in the main version of the project on GitHub. In Visual Studio Code, for example: open the file in a copy of the project, click \"CRLF\" in the bar at the bottom, choose \"LF\", save the file, and send the change to GitHub."
+  guide_step "Then continue the setup with the command shown below."
+  guide_end "the script says \"Done.\" after \"Working out where the setup stopped\" and goes on with the setup." \
+    "if the script stops here again, the file on GitHub still has a carriage return: check that the change with LF line endings is in the main version there. If it is, ask for help." \
+    "it reads README.md and CHANGELOG.md of the project on GitHub, as GitHub stores them: the setup section's heading in README.md, and every line of CHANGELOG.md, must end without a carriage return."
   stop_at_guide
 }
 
@@ -4324,7 +4352,7 @@ refuse_copy() {
 # resume_read_github: what GitHub has: whether the project is private, the
 # bootstrapper's version in its CHANGELOG.md, its proposed changes from
 # bootstrap-setup, and bootstrap-setup itself.
-GH_TIDY="" GH_PACK="" GH_DEPLOY="" GH_LICENCE="" GH_HAS_SECTION=""
+GH_TIDY="" GH_PACK="" GH_DEPLOY="" GH_LICENCE="" GH_HAS_SECTION="" GH_SECTION_CR="" GH_CHANGELOG_CR=""
 resume_read_github() {
   local line state merged url body
   api_call "repos/$IN_OWNER/$IN_NAME" --jq .private
@@ -4347,8 +4375,12 @@ resume_read_github() {
     api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/CHANGELOG.md"
   fi
   body=""
+  GH_CHANGELOG_CR=""
   case "$API_STATUS" in
-    200) body="$API_BODY" ;;
+    200)
+      body="$API_BODY"
+      case "$API_BODY_CR" in *"$CR"*) GH_CHANGELOG_CR=1 ;; esac
+      ;;
     404) ;;
     *) api_fail "read the file CHANGELOG.md of the project" ;;
   esac
@@ -4382,7 +4414,9 @@ resume_read_github() {
   done <<<"$body"
 
   # A project with no setup section in its README and no bootstrap-project.sh
-  # was tidied up already: set up by this script or by hand.
+  # was tidied up already: set up by this script or by hand. The heading
+  # is matched whole and as stored, as the copy's check (grep -x) matches
+  # it; one found only with its carriage return removed is GH_SECTION_CR.
   GH_TIDY=""
   api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/README.md"
   case "$API_STATUS" in
@@ -4390,17 +4424,22 @@ resume_read_github() {
     *) api_fail "read the file README.md of the project" ;;
   esac
   GH_HAS_SECTION=""
+  GH_SECTION_CR=""
   if [ "$API_STATUS" = 200 ]; then
     while IFS= read -r line || [ -n "$line" ]; do
-      [ "${line//$CR/}" != "$SETUP_HEADING" ] || GH_HAS_SECTION=1
-    done <<<"$API_BODY"
+      if [ "$line" = "$SETUP_HEADING" ]; then
+        GH_HAS_SECTION=1
+      elif [ "${line%"$CR"}" = "$SETUP_HEADING" ]; then
+        GH_SECTION_CR=1
+      fi
+    done <<<"$API_BODY_CR"
   fi
   api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/bootstrap-project.sh"
   case "$API_STATUS" in
     200 | 404) ;;
     *) api_fail "look for the file bootstrap-project.sh in the project" ;;
   esac
-  if [ -z "$GH_HAS_SECTION" ] && [ "$API_STATUS" = 404 ]; then GH_TIDY=1; fi
+  if [ -z "$GH_HAS_SECTION$GH_SECTION_CR" ] && [ "$API_STATUS" = 404 ]; then GH_TIDY=1; fi
 
   GH_OPEN_URL=""
   GH_MERGED_URL=""
@@ -4474,12 +4513,20 @@ resume_decide() {
   else
     RESUME_STATE=template
   fi
+  # Not set up yet, and README.md or CHANGELOG.md ends its lines with CR
+  # LF on GitHub: the copy's checks would not find their lines, and only
+  # after the protection was set. A project set up already is only read,
+  # so its line endings do not matter (S18a).
+  if [ "$RESUME_STATE" != added ] && [ -n "$GH_SECTION_CR$GH_CHANGELOG_CR" ]; then
+    guide_line_endings
+  fi
   # Not set up (the script is there) and not waiting for its setup (the
   # README has lost the setup section): it cannot be placed, so nothing is
   # written to it.
   if [ "$RESUME_STATE" != added ] && [ -z "$GH_HAS_SECTION" ]; then
     refuse_project "The project $IN_OWNER/$IN_NAME still has the bootstrapper's script, bootstrap-project.sh, but its README.md no longer has the setup section \"$SETUP_HEADING\"." \
-      "--resume continues a project that is waiting for its setup, or one that is set up already, and this one is neither; the script changes nothing in a project it cannot place."
+      "--resume continues a project that is waiting for its setup, or one that is set up already, and this one is neither; the script changes nothing in a project it cannot place." \
+      "it reads the files README.md and bootstrap-project.sh of the project on GitHub: bootstrap-project.sh is there, and README.md has no line that is exactly \"$SETUP_HEADING\"."
   fi
   [ -n "$COPY_PRESENT" ] || return 0
   case "$RESUME_STATE" in
