@@ -118,6 +118,7 @@ show_help() {
     "                             (default: the address already set in git)" \
     "  --ci-timeout <minutes>     how long to wait for the project's checks (default: 20)" \
     "  --non-interactive          ask nothing: every needed option must be given" \
+    "                             (needs --yes or --dry-run)" \
     "  --yes                      do not ask \"Proceed?\" before creating anything" \
     "  --dry-run                  check everything and show the plan, create nothing" \
     "  --resume                   continue a setup that stopped part way" \
