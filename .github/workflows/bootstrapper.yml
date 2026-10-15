@@ -48,6 +48,8 @@ jobs:
         run: bash bootstrap/test.sh
       - name: Test the require-test-change check
         run: bash tools/test-require-test-change.sh
+      - name: Test e2e-check.sh
+        run: bash bootstrap/test-e2e-check.sh
 
   bootstrap-project-test:
     strategy:

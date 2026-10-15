@@ -898,6 +898,17 @@ test_workflow_bootstrapper_test_gates_the_bootstrap_project_tests() {
   assert_gated bootstrap/test-bootstrap-project.sh
 }
 
+test_workflow_bootstrapper_test_gates_the_e2e_check_tests() {
+  # The tests of the end-to-end checker run in a job the required
+  # bootstrapper-test check needs, on ubuntu (they need jq, which the
+  # ubuntu runner image has).
+  local job
+  [ -f "$HERE/test-e2e-check.sh" ] || die "no bootstrap/test-e2e-check.sh"
+  assert_gated bootstrap/test-e2e-check.sh
+  job="$(wf_jobs_running bootstrap/test-e2e-check.sh)"
+  wf_job "$job" | grep -qxE '    runs-on: ubuntu-latest' || die "$job does not run on ubuntu-latest"
+}
+
 test_workflow_bootstrap_project_tests_run_on_ubuntu_macos_and_windows() {
   local j job oses
   j="$(matrix_job)"; job="$(wf_job "$j")"
@@ -945,6 +956,17 @@ test_real_build_does_not_ship_the_bootstrap_project_tests() {
   [ -z "$(cd "$out" && find . -name 'test-bootstrap-project*')" ] || die "the script's tests shipped"
   ! grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -qE '^bootstrap(/|$)' \
     || die "bootstrap/ is listed in the manifest"
+}
+
+test_real_build_does_not_ship_the_e2e_checker() {
+  # bootstrap/e2e-check.sh is template-only (spec: "A template-only
+  # bootstrap/e2e-check.sh"): not in the manifest, and not in the output.
+  local out="$WORK/real.$RANDOM"
+  [ -f "$HERE/e2e-check.sh" ] || die "no bootstrap/e2e-check.sh"
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  [ -z "$(cd "$out" && find . -name '*e2e-check*')" ] || die "the end-to-end checker or its tests shipped"
+  ! grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -qE '(^|/)(test-)?e2e-check\.sh$' \
+    || die "the end-to-end checker is listed in the manifest"
 }
 
 test_real_build_ships_the_require_test_change_script() {
