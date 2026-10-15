@@ -110,6 +110,12 @@ make_stub_gh() {
 set -euo pipefail
 d="$(cd "$(dirname "$0")/.." && pwd)"
 { for a in "$@"; do printf '\t%s' "$a"; done; printf '\n'; } >>"$d/gh.log"
+# <d>/during-check: a test's command, run once at the first gh call, so
+# it lands while the checker runs (as git's background maintenance can).
+if [ -x "$d/during-check" ] && [ ! -e "$d/during-check.done" ]; then
+  : >"$d/during-check.done"
+  "$d/during-check" >/dev/null 2>&1 || true
+fi
 if [ "${1:-}" != api ] || [ "${2:-}" != -i ]; then echo "stub gh: no emulation for: $*" >&2; exit 64; fi
 ep="${3:-}"
 expr=""
@@ -1107,6 +1113,204 @@ test_git_settings_in_the_copy_run_no_command() {
   run_check "$d"
   [ ! -e "$h/RAN" ] || die "a command named in the copy's git settings ran"
   expect_all_pass "$d"
+}
+
+# ---------- git's own maintenance (review round 3) ----------
+# CI's newer git started its automatic maintenance (gc --auto, detached)
+# after a command of the harness, and it wrote into the copy while the
+# checker ran: the snapshot differed. Every repo the tests build turns
+# it off in its own settings, and the checker turns it off on every git
+# call it makes.
+
+# aggressive_home: in this (sub)shell, global git settings that make
+# gc --auto act on any project with two packs.
+aggressive_home() {
+  local h
+  h="$(mktemp -d "$WORK/home.XXXXXX")"
+  printf '[gc]\n\tauto = 1\n\tautoPackLimit = 1\n\tautoDetach = false\n[maintenance]\n\tauto = true\n[receive]\n\tautogc = true\n' >"$h/.gitconfig"
+  export HOME="$h"
+}
+
+test_harness_repos_turn_off_gits_own_maintenance() {
+  local d r v
+  d="$(tmpdir)"; finished "$d" node mit
+  for r in "$(COPY "$d")/.git" "$d/remotes/$OWNER/$NAME.git" "$d/work/.git"; do
+    v="$("$REAL_GIT" --git-dir="$r" config --local --get gc.auto || true)"
+    [ "$v" = 0 ] || die "gc.auto is '$v' in $r"
+    v="$("$REAL_GIT" --git-dir="$r" config --local --get maintenance.auto || true)"
+    [ "$v" = false ] || die "maintenance.auto is '$v' in $r"
+    v="$("$REAL_GIT" --git-dir="$r" config --local --get receive.autogc || true)"
+    [ "$v" = false ] || die "receive.autogc is '$v' in $r"
+  done
+}
+
+test_gits_own_maintenance_during_a_check_changes_nothing() {
+  # The race, made certain: gc --auto runs in the copy at the checker's
+  # first gh call, with global settings under which it repacks.
+  local d c
+  aggressive_home
+  d="$(tmpdir)"; finished "$d" node mit
+  c="$(COPY "$d")"
+  # A second pack, so gc --auto has work under gc.autoPackLimit = 1.
+  printf '%s\n' "$(G -C "$c" rev-parse HEAD)" | G -C "$c" pack-objects -q --revs "$c/.git/objects/pack/pack" >/dev/null
+  [ "$(find "$c/.git/objects/pack" -name '*.pack' | wc -l | tr -d ' ')" -ge 2 ] || die "fixture: no second pack"
+  printf '#!/bin/sh\nexec "%s" -C "%s" gc --auto --quiet\n' "$REAL_GIT" "$c" >"$d/during-check"
+  chmod +x "$d/during-check"
+  run_check "$d"
+  [ -e "$d/during-check.done" ] || die "the maintenance did not run during the check; the test checks nothing"
+  expect_all_pass "$d"
+}
+
+test_every_git_call_of_the_checker_turns_off_what_could_write() {
+  # The checker itself: gc.auto=0, maintenance.auto=false and
+  # core.fsmonitor=false as -c settings, and --no-optional-locks, on
+  # every git call.
+  local d line want
+  d="$(tmpdir)"; finished "$d" node mit
+  run_check "$d"
+  expect_all_pass "$d"
+  [ -s "$d/git.log" ] || die "no git calls logged"
+  while IFS= read -r line; do
+    for want in "${TAB}-c${TAB}gc.auto=0${TAB}" "${TAB}-c${TAB}maintenance.auto=false${TAB}" \
+                "${TAB}-c${TAB}core.fsmonitor=false${TAB}" "${TAB}--no-optional-locks${TAB}"; do
+      case "$line$TAB" in *"$want"*) ;; *) die "git call without $(show "$want"): $(show "$line")" ;; esac
+    done
+  done <"$d/git.log"
+}
+
+# ---------- review round 2, non-blocking 1 to 3 ----------
+
+test_folder_removal_names_the_absolute_folder_for_a_relative_dir() {
+  # M56: pasted from another folder, a relative path would delete the
+  # wrong one.
+  local d abs
+  d="$(tmpdir)"; finished "$d" node mit
+  abs="$(CDPATH='' cd "$(COPY "$d")" && pwd)"
+  ( CDPATH='' cd "$d" && run_check "$d" "$OWNER/$NAME" "my copy" )
+  expect_all_pass "$d"
+  grep -qxF "    rm -rf -- '$abs'" "$d/out" || { cat "$d/out" >&2; die "no absolute folder in the removal line"; }
+}
+
+test_no_folder_removal_for_a_symbolic_link() {
+  # Item 2: rm -rf on a link removes only the link. The safer choice:
+  # no removal line for a link, and a sentence saying so.
+  local d
+  d="$(tmpdir)"; finished "$d" node mit
+  ln -s "$(COPY "$d")" "$d/link"
+  [ -L "$d/link" ] || die "fixture: no symbolic link here"
+  run_check "$d" "$OWNER/$NAME" "$d/link"
+  expect_all_pass "$d"
+  expect_no_folder_removal "$d"
+  grep -qF 'symbolic link' "$d/out" || { cat "$d/out" >&2; die "the sentence does not say it is a link"; }
+}
+
+test_folder_sentences_say_what_is_wrong() {
+  # Item 3: a missing folder, and a copy with unsaved work.
+  local d
+  d="$(tmpdir)"; finished "$d" node mit
+  run_check "$d" "$OWNER/$NAME" "$d/nowhere"
+  grep -F 'No command to remove the folder is shown' "$d/out" | grep -qF 'does not exist' \
+    || { cat "$d/out" >&2; die "missing folder: the sentence does not say it does not exist"; }
+  printf 'x\n' >"$(COPY "$d")/stray.txt"
+  run_check "$d"
+  grep -F 'No command to remove the folder is shown' "$d/out" | grep -qF 'unsaved work' \
+    || { cat "$d/out" >&2; die "dirty copy: the sentence does not name unsaved work"; }
+}
+
+test_near_miss_names_get_no_delete_command() {
+  # M04: only names that start with bootstrap-e2e- (with the dash).
+  local d n
+  for n in bootstrap-e2e bootstrap-x bootstrap-e2ex-1; do
+    echo "case: $n"
+    d="$(tmpdir)"; finished "$d" node mit "" "$n"
+    run_check "$d" "$OWNER/$n" "$(COPY "$d")"
+    expect_all_pass "$d"
+    ! grep -qF 'gh repo delete' "$d/out" || die "$n: delete command shown"
+  done
+}
+
+test_licence_name_with_a_slash_is_refused() {
+  # M13: a / alone must be refused too.
+  local d n
+  for n in ../user a/b; do
+    echo "case: $n"
+    d="$(tmpdir)"; finished "$d" node mit
+    N="$n" change_setup "$d" 'awk '"'"'{ if ($0 == "- Licence: mit.") print "- Licence: " ENVIRON["N"] "."; else print }'"'"' CHANGELOG.md >c.tmp; mv c.tmp CHANGELOG.md'
+    run_check "$d"
+    expect_result "$d" changelog FAIL
+    expect_result "$d" licence FAIL
+    ! grep -qF 'licenses/' "$d/gh.log" || die "$n reached gh"
+  done
+}
+
+test_private_refusal_without_the_row_fails_the_row() {
+  # M09.
+  local d
+  d="$(tmpdir)"; finished "$d" node mit
+  gh_jq "$d" "$P" '.private = true | .visibility = "private"'
+  gh_error "$d" "$P/branches/main/protection" 403 'Upgrade to GitHub Pro or make this repository public to enable this feature.'
+  run_check "$d"
+  expect_rc "$d" 1
+  expect_result "$d" protection FAIL
+  expect_result "$d" decision-row FAIL
+}
+
+test_private_refusal_for_another_reason_is_not_called_expected() {
+  # Item 3: only GitHub's plan message is the --allow-unprotected path.
+  local d
+  d="$(tmpdir)"; finished "$d" node mit
+  gh_jq "$d" "$P" '.private = true | .visibility = "private"'
+  gh_error "$d" "$P/branches/main/protection" 403 'API rate limit exceeded for user ID 1.'
+  run_check "$d"
+  expect_rc "$d" 1
+  expect_result "$d" protection FAIL
+  ! reason_of "$d" protection | grep -qF 'expected' || { cat "$d/out" >&2; die "a rate limit is called the plan case"; }
+  reason_of "$d" decision-row | grep -qF 'not known' || die "decision-row should not judge the row"
+}
+
+test_private_protected_project_passes() {
+  # M06: a private project on a plan with protection.
+  local d
+  d="$(tmpdir)"; finished "$d" node mit
+  gh_jq "$d" "$P" '.private = true | .visibility = "private"'
+  run_check "$d"
+  expect_all_pass "$d"
+}
+
+test_template_of_the_same_name_elsewhere_fails() {
+  # M34.
+  local d
+  d="$(tmpdir)"; finished "$d" node mit
+  gh_jq "$d" "$P" '.template_repository = {"full_name":"someone/ai-project-bootstrap"}'
+  run_check "$d"; expect_only_fail "$d" template
+}
+
+test_mixed_line_endings_fail() {
+  # M44.
+  local d
+  d="$(tmpdir)"; finished "$d" node mit
+  change_setup "$d" 'printf "docs/notes.md -text\n" >.git/info/attributes; printf "a\r\nb\n" >docs/notes.md'
+  run_check "$d"; expect_only_fail "$d" line-endings
+}
+
+test_two_merged_setup_changes_leave_nothing_to_judge() {
+  # M54: with two merged changes neither is taken as the setup.
+  local d
+  d="$(tmpdir)"; finished "$d" node mit
+  gh_jq "$d" "$(PULLS_EP)" '. + [.[0] | .number = 2]'
+  run_check "$d"
+  expect_rc "$d" 1
+  expect_result "$d" setup-change FAIL
+  expect_result "$d" build FAIL
+  expect_result "$d" history FAIL
+}
+
+test_notice_with_other_text_fails() {
+  # M57.
+  local d
+  d="$(tmpdir)"; finished "$d" node polyform-noncommercial-1.0.0
+  change_setup "$d" 'printf "Copyright someone\n" >NOTICE'
+  run_check "$d"; expect_only_fail "$d" licence
 }
 
 # ---------- what it cannot see ----------
