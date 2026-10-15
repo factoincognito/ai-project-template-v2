@@ -2778,7 +2778,7 @@ guide_actions_off() {
   esac
   guide_step "Open https://github.com/$IN_OWNER/$IN_NAME/settings/actions in your browser: the project's Settings, then Actions, then General."
   guide_step "Under \"Actions permissions\", choose \"Allow all actions and reusable workflows\", then click Save."
-  guide_step "If those choices cannot be changed, the organisation (or enterprise) that owns the project has turned GitHub Actions off for its projects: ask one of its owners to allow it, in the organisation's Settings, under Actions, then General."
+  guide_step "If those choices cannot be changed, the organisation (or enterprise) that owns the project has turned off or limited GitHub Actions for its projects: ask one of its owners to allow it, in the organisation's Settings, under Actions, then General."
   if [ "$ACTIONS_PROBLEM" = local-only ]; then
     guide_step "Then run the check again: open $PR_URL in your browser, click Checks, then \"Re-run all jobs\", and wait until build shows a green tick."
     guide_step "Then continue the setup with the command shown below."
