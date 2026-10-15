@@ -404,7 +404,9 @@ test_script_refuses_a_non_empty_target() {
 test_script_usage_errors_exit_2() {
   local out="$WORK/o.$RANDOM"
   # No arguments now start the questions (bootstrap/test-bootstrap-project.sh).
-  expect_rc 2 "usage:" bash "$SCRIPT" no-such-command
+  # A word that is not a subcommand is an option problem of the setup
+  # (S18b): the plain-words message, naming it, not the usage text.
+  expect_rc 2 "What happened: The word no-such-command is not an option" bash "$SCRIPT" no-such-command
   expect_rc 2 "usage:" bash "$SCRIPT" layout-pack
   expect_rc 2 "usage:" bash "$SCRIPT" layout-pack node
   expect_rc 2 "usage:" bash "$SCRIPT" layout-pack node "$out" extra
