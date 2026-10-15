@@ -1392,7 +1392,7 @@ test_error_raw_text_has_carriage_returns_removed() {
   # Windows tools end lines with \r\n; a stray \r would garble the output.
   local got="$WORK/got.$RANDOM"
   ( load_script; show_error "It failed." "Try again." "$(printf 'line one\r\nline two\r')" ) 2>"$got"
-  ! grep -q "$(printf '\r')" "$got" || die "a carriage return reached the output"
+  ! has_cr "$got" || die "a carriage return reached the output"
   grep -qxF '    line two' "$got" || { cat "$got" >&2; die "raw text lost"; }
 }
 
@@ -5191,7 +5191,7 @@ expect_setup_tree() {
   esac
   # Every file the setup wrote has LF line endings.
   for f in CHANGELOG.md LICENSE NOTICE package-lock.json; do
-    [ ! -f "$c/$f" ] || ! grep -q "$(printf '\r')" "$c/$f" || die "$p$deploy: $f has a carriage return"
+    [ ! -f "$c/$f" ] || ! has_cr "$c/$f" || die "$p$deploy: $f has a carriage return"
   done
   # Every row of the fill table was checked against some file.
   want_fill_rows "$p" "$deploy" | awk -F'|' '{ print $1 "|" $3 }' | LC_ALL=C sort -u >"$d/rows"
@@ -6422,7 +6422,8 @@ test_a_file_with_windows_line_endings_stops_before_anything_is_saved() {
   unset STUB_NPM_CRLF
   expect_rc 0 "$d"
   grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "a CR LF lockfile did not go through"; }
-  ! in_git --git-dir="$(bare_of "$d")" show main:package-lock.json | grep -q "$(printf '\r')" || die "the lockfile was saved with carriage returns"
+  in_git --git-dir="$(bare_of "$d")" show main:package-lock.json >"$d/saved-lockfile"
+  ! has_cr "$d/saved-lockfile" || die "the lockfile was saved with carriage returns"
   d="$(tmpdir)"
   fake_tool "$d" npm 10.0.0
   export STUB_NPM_CRLF=lone
@@ -7723,6 +7724,15 @@ nothing_changed_on_github() {
 # setup's mark added, as the script writes it when the setup is added),
 # or crlf-marked (both).
 CR="$(printf '\r')"
+# has_cr <file>: the file holds a carriage return. Read through od -c,
+# which writes it as the two characters \r, so no carriage return itself
+# goes through grep or $( ). On Windows CI (#169) Git for Windows' grep
+# did not find a CR that od -c showed in the same file, and $( ) dropped
+# a CR LF that ended the text. A backslash in the file is \\ in od's
+# output and each byte has its own column, so no other text reads as \r.
+has_cr() {
+  od -A n -c "$1" | grep -F '\r' >/dev/null
+}
 # to_crlf <file>: every line of the file ends with CR LF.
 to_crlf() {
   local line
@@ -7767,16 +7777,19 @@ hand_made_project() {
   # shellcheck disable=SC2086
   seed_existing "$d" octo-user/my-app "$d/files" $stored
   bare="$(bare_of "$d")"
-  # The blob GitHub stores is checked, not the file on disk. It goes to a
-  # file and grep reads that file: not $( ), because Git for Windows' bash
-  # drops trailing CR LF there as it drops trailing line ends, so a blob
-  # whose only carriage return ends its last line (heading "note") looked
-  # as if it had none (#169, Windows CI); and no grep -q after a pipe: it
-  # may stop reading early, and pipefail would fail it.
+  # The blob GitHub stores is checked, not the file on disk, with has_cr
+  # (see there why not grep or $( )). A known "a\r\n" is checked first, so
+  # a failure says whether the check or the blob is wrong.
+  if [ -n "$stored" ]; then
+    blob="$(mktemp "$WORK/blob.XXXXXX")"
+    printf 'a\r\n' >"$blob"
+    has_cr "$blob" || { od -A n -c "$blob" >&2; die "has_cr does not see the carriage return of a known a CR LF (od output above): the check, not the fixture, is wrong here"; }
+    rm -f "$blob"
+  fi
   for f in $stored; do
     blob="$(mktemp "$WORK/blob.XXXXXX")"
     in_git --git-dir="$bare" cat-file -p "main:$f" >"$blob"
-    grep "$CR" "$blob" >/dev/null || { od -c "$blob" | tail -4 >&2; die "$f on GitHub has no carriage return (test is stale); its last bytes are above"; }
+    has_cr "$blob" || { od -c "$blob" | tail -4 >&2; die "$f on GitHub has no carriage return (test is stale); its last bytes are above"; }
     rm -f "$blob"
   done
   case "$changelog" in
@@ -8245,10 +8258,10 @@ fix_line_endings_on_github() {
   in_git -C "$w/c" add -A
   in_git -C "$w/c" -c user.name=T -c user.email=t@example.com commit -q -m "LF line endings in $file"
   in_git -C "$w/c" push -q origin HEAD:main 2>/dev/null
-  # Read from a file, not $( ): see hand_made_project.
+  # Read from a file with has_cr: see there.
   in_git --git-dir="$bare" cat-file -p "main:$file" >"$w.blob"
   rm -rf "$w"
-  ! grep "$CR" "$w.blob" >/dev/null || die "$file on GitHub still has a carriage return (test is stale)"
+  ! has_cr "$w.blob" || die "$file on GitHub still has a carriage return (test is stale)"
   rm -f "$w.blob"
 }
 
@@ -8350,6 +8363,43 @@ test_a_set_up_project_with_a_crlf_changelog_is_still_only_read() {
     nothing_changed_on_github "$d"
     cmp -s "$d/protected" "$d/protected.before" || die "$how: the protection changed"
   done
+}
+
+test_the_tests_carriage_return_check_sees_one_wherever_it_is() {
+  # #169, Windows CI: grep did not see a carriage return there, and $( )
+  # dropped a final CR LF. has_cr must see one at a line end, alone at
+  # the end without a line end, and in the middle of a line, and must not
+  # take LF text or a backslash before an r for one.
+  local d n=0 want
+  d="$(tmpdir)"
+  for want in 'yes:a\r\n' 'yes:a\nb\r\n' 'yes:a\nb\r' 'yes:a\rb\n' 'no:a\nb\n' 'no:a\\r\n' 'no:'; do
+    n=$((n + 1))
+    # The format holds the bytes on purpose: \r, \n and \\ are printf's.
+    # shellcheck disable=SC2059
+    printf "${want#*:}" >"$d/f$n"
+    if has_cr "$d/f$n"; then
+      [ "${want%%:*}" = yes ] || { od -c "$d/f$n" >&2; die "has_cr sees a carriage return in ${want#*:}"; }
+    else
+      [ "${want%%:*}" = no ] || { od -c "$d/f$n" >&2; die "has_cr does not see the carriage return in ${want#*:}"; }
+    fi
+  done
+}
+
+test_api_call_keeps_a_carriage_return_on_a_last_line_without_a_line_end() {
+  # #169 review: a file whose only carriage return ends its last line,
+  # with no line end after it, still counts (the read loop's last line).
+  local d
+  d="$(tmpdir)"
+  printf 'HTTP/2.0 200 OK\r\n\r\nfirst\nlast\r' >"$d/answer"
+  printf '#!/bin/sh\ncat "%s"\n' "$d/answer" >"$d/gh"
+  chmod +x "$d/gh"
+  ( load_script
+    BOOTSTRAP_GH="$d/gh"
+    API_KEEP_CR=1 api_call repos/o/n/contents/README.md
+    [ "$API_STATUS" = 200 ] || die "the answer was not read (status $API_STATUS)"
+    case "$API_BODY_CR" in *"last$CR"*) ;; *) die "the carriage return of the last line was lost" ;; esac
+    [ "$API_BODY" = "first${NL}last$NL" ] || die "API_BODY is not the body"
+  )
 }
 
 test_api_call_keeps_carriage_returns_only_when_asked() {
