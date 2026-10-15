@@ -633,7 +633,10 @@ parse_args() {
         fail 2 "The option $arg is not one this script knows." \
           "Check its spelling and run the script again. $OPTIONS_NEXT"
         ;;
-      *) usage ;;
+      *)
+        fail 2 "The word $arg is not an option: each option starts with --." \
+          "If it is a value, put its option in front of it (for the project's short name, --name), and run the script again. $OPTIONS_NEXT"
+        ;;
     esac
   done
 }
