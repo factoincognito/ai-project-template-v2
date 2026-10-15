@@ -2250,12 +2250,17 @@ test_switch_given_a_value_is_refused() {
   sed -n 1p "$d/err" | grep -qE '^What happened: .*--yes' || { cat "$d/err" >&2; die "not explained"; }
 }
 
-test_a_word_that_is_not_an_option_shows_the_usage() {
+test_a_word_that_is_not_an_option_gets_what_happened_and_what_to_do_next() {
+  # S18b: a bare word (here the name without --name) got the plain usage
+  # text; it gets the message every other option problem gets, naming
+  # the word, with exit code 2.
   local d rc=0
   d="$(tmpdir)"
   bash "$SCRIPT" my-app </dev/null >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 2 ] || { cat "$d/err" >&2; die "exit $rc, want 2"; }
-  grep -qF 'usage:' "$d/err" || { cat "$d/err" >&2; die "no usage shown"; }
+  sed -n 1p "$d/err" | grep -qE '^What happened: .*my-app' || { cat "$d/err" >&2; die "the word is not named"; }
+  sed -n 2p "$d/err" | grep -qE '^What to do next: .*--help' || { cat "$d/err" >&2; die "no next action pointing to --help"; }
+  ! grep -qF 'usage:' "$d/err" || { cat "$d/err" >&2; die "the plain usage text was shown"; }
 }
 
 test_help_lists_every_option() {
