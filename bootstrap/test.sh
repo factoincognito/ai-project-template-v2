@@ -796,11 +796,12 @@ test_workflow_no_continue_on_error_in_the_required_check_or_its_needs() {
   done
 }
 
-test_workflow_continue_on_error_check_catches_every_spelling_of_the_key() {
+test_workflow_continue_on_error_check_catches_the_bare_and_quoted_key() {
   # YAML reads "continue-on-error": true and 'continue-on-error': true as
-  # the same key as the bare one, so each spelling, on a step of a job
+  # the same key as the bare one, so each of the three, on a step of a job
   # bootstrapper-test needs, must fail the check; the real workflow, copied
-  # unchanged, must pass it.
+  # unchanged, must pass it. Not caught: the key inside a flow mapping,
+  # such as "- {continue-on-error: true}" (preceded by "{", not a space).
   local fx key err
   fx="$WORK/bootstrapper.yml"
   cp "$BWF" "$fx"

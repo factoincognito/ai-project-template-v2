@@ -58,9 +58,11 @@ Every pack follows the same shape. A new pack should too:
   direct dependencies, and its `code-standards.md` says what that
   leaves unpinned.
 - **Every file has a place.** Each file in a pack except
-  `code-standards.md` must have a row in the layout table of the
-  bootstrap script, `bootstrap-project.sh` (its `layout-pack` command),
-  so nothing is copied by guesswork. That table is the one the script
+  `code-standards.md` must be placed by the layout table of the
+  bootstrap script, `bootstrap-project.sh` (its `layout-pack` command):
+  by a row of its own or by a folder row (such as `starter/src/`), so
+  nothing is copied by guesswork. The web pack's deploy files are placed
+  only with `--with-deploy`. That table is the one the script
   lays packs out by; the placement tables in the READMEs repeat it for
   laying a pack out by hand.
 - **Nothing project-specific.** Placeholders like `[project-name]`

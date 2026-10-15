@@ -7,10 +7,13 @@
 # only through pull requests, which are tested on the merge ref; a
 # branch pushed without a PR is not tested here. A newer push to the
 # same PR cancels the older run; a tag run is never cancelled in
-# progress. After a merge, main itself is not tested by this workflow:
-# protection has strict: false, so a PR's merge-ref run can predate
-# another PR's merge, and nothing runs the combined tree until a v* tag,
-# whose run still gates publish.
+# progress. After a merge, this workflow does not run on main: protection
+# has strict: false, so a PR's merge-ref run can predate another PR's
+# merge, and this workflow's suites (bootstrap/test.sh,
+# bootstrap/test-bootstrap-project.sh on the OS matrix,
+# tools/test-require-test-change.sh) do not run on the combined tree
+# until a v* tag, whose run still gates publish. ci.yml and packs.yml do
+# run on main after every merge (they trigger on pushes to any branch).
 #
 # - Every pull request to main: run the build.sh / publish.sh tests and
 #   the tests of the shared test-first check
