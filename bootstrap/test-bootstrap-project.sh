@@ -6689,7 +6689,8 @@ test_a_build_failed_with_only_the_projects_own_actions_allowed_gets_the_actions_
   # The same steps as for Actions turned off.
   expect_out "$d" "  1. Open https://github.com/octo-user/my-app/settings/actions in your browser: the project's Settings, then Actions, then General."
   expect_out "$d" "  2. Under \"Actions permissions\", choose \"Allow all actions and reusable workflows\", then click Save."
-  expect_out "$d" "  3. If those choices cannot be changed, the organisation (or enterprise) that owns the project has turned GitHub Actions off for its projects"
+  # S18b: an organisation may limit Actions, not only turn it off.
+  expect_out "$d" "  3. If those choices cannot be changed, the organisation (or enterprise) that owns the project has turned off or limited GitHub Actions for its projects"
   expect_out "$d" "  4. Then run the check again: open https://github.com/octo-user/my-app/pull/1 in your browser, click Checks, then \"Re-run all jobs\""
   expect_out "$d" "How the script checks it: "
   grep -qxF '    allowed_actions: local_only' "$d/out" || { cat "$d/out" >&2; die "GitHub's answer is not below the guide"; }
