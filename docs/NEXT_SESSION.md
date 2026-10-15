@@ -1,10 +1,41 @@
 # [PROJECT NAME] — Next Session Planning
 
-**Last Updated:** 2026-10-14
+**Last Updated:** 2026-10-15
 **Author:** Clead (Tech Owner)
 **Purpose:** Staging area for reasoning, revised assumptions, and plan-adaptation thoughts that aren't yet mature enough to be a PBI, a decision, a strategy update, or a vision-doc change. Complements `docs/BACKLOG.md` — it does not replace it. Discrete, scoped, actionable work belongs in the backlog as a PBI, not here.
 
 **The rule that keeps this useful, not a junk drawer:** every entry below must get a disposition each session it's touched — promoted to a PBI, a decision, or a formal doc update; re-affirmed as still-next; or deleted as resolved/obsolete. This file is read and triaged at the start of every session (see `CLAUDE.md` session-start routine). It is not a substitute for the backlog — it's where things live before they're ready to become backlog items.
+
+---
+
+## Handover: the Clead role moves between Claude app and Claude Code in the cloud (2026-10-15)
+
+**Why:** Adam's weekly credits in the Claude app ran out; his Claude Code cloud credits are available. Adam's instruction: the next prompt goes to Claude Code in the cloud, and when those credits run out the Claude app session takes the project back with no loss. The state below is what both sides read first. Nothing here is private; keep it that way.
+
+**Who does what while the Clead role runs in Claude Code (cloud):** the session acts as **Clead** (Tech Owner), following CLAUDE.md "If you are Clead" in full: startup steps, change execution model, working unattended, `..wrap`. Crog work is done by separate agents the session starts (Opus implementer, a separate Opus reviewer that never wrote the change, a Sonnet merge-only agent), exactly as in item 8 and the PBI-1.14 slices. The CLAUDE.md line "If you are Crog (Claude Code)" is about the implementer agent, not about this session. Never commit to `main`. Merges are verified against the GitHub API by the Clead session, not taken from a relay.
+
+**State at 2026-10-15 ~11:10 Stockholm time (re-derive from GitHub before trusting; this is a snapshot):**
+- PBI-1.14 slices S1 to S16 are merged (S16 = #164, merge commit `adb377c`). S17 is the last slice.
+- **#165** (notes-only, `docs/NEXT_SESSION.md`): notes-only, Clead's own call, no review gate; waits only for green `bootstrapper-test` and `build`, then a Sonnet merge-only agent squash-merges it (verdict comment first).
+- **#166** (S17, docs and process, `pbi-1.14-s17`): Opus review done in two rounds, last verdict APPROVE at head `59991d1` (comment on the PR). Waits only for green `bootstrapper-test` and `build` on that head, then a Sonnet merge-only agent squash-merges it. If the head changes, the approval does not carry over: re-review the delta.
+- CI shape: the Bootstrapper workflow runs once per PR push; the Windows leg takes 54 to 72 minutes (macOS about 26, ubuntu about 16). Do not poll in short loops; check every 10 to 15 minutes, or work on something else.
+
+**Next steps, in order:**
+1. When #165 and #166 are green: merge each through a Sonnet merge-only agent, then verify through the API (`pulls/N`: merged true; `branches/main` sha is the merge commit; changed files are the expected ones).
+2. Graduate NEXT_SESSION entries after #166: S17 is done; its not-done list (in the #166 description, "Not done here, needs a script slice") becomes the input for one new script slice, **S18**, before the release tag. At minimum S18 holds the CRLF-README overwrite risk (item 8, "fix it before the release tag") and the other script-behaviour notes tagged S15 or S17. Decide the S18 scope in a short plan, then build it by the PR loop (Opus implementer test-first, Opus review).
+3. **Open question for Adam, not decided:** the spec's "What changes in the existing manual README steps" (add step 0 and the one command to the template README, cut the stub README's setup section to three lines, change DEV_INFRASTRUCTURE "Turning it on") is not done by S17 and no note lists it. The stub README's setup section is read by the script, resume and `e2e-check.sh`, so it is not a pure docs change. Ask Adam whether it is S18 or a slice of its own.
+4. Release prep PR (version heading over Unreleased, as #76 and #126 did), then Adam creates the tag from the Releases page; Clead verifies the release through the API (tag run green including `publish` and the pack chain, bootstrapper `main` has the new commit, tag on both repos). Also update `memory/decisions.md` (the 2026-10-02 row says the spec is fixed "in slice S15") and mark PBI-1.14 in `docs/BACKLOG.md` when it is built (it still says `[NEXT]`, not yet built). Those two edits are prose; PBI status is Clead's call.
+5. Adam's end-to-end runs on throwaway repos use `bootstrap/e2e-check.sh OWNER/NAME DIR` afterwards (read-only; prints delete commands, never runs them).
+
+**Access facts that cost time before:** GitHub through REST only, `gh api repos/factoincognito/ai-project-template-v2/...`; GraphQL and `gh pr` returned 403 in the app's cloud workspace; branch deletion, tag pushes and Actions/secrets endpoints were blocked (the repo deletes merged remote branches itself). Actions job logs are readable through `gh api repos/.../actions/jobs/<check-run id>/logs`. A cloud Claude Code session may have different access: verify by use at startup (CLAUDE.md startup step 3) and say what differs. Review clones, scratch worktrees and a self-built bash 3.2.57 lived under `/home/claude/` in the app workspace and will not exist in the cloud Claude Code workspace; the reviewers' bash 3.2 runs there need a rebuild (`bash-3.2.57` from the GNU mirror, or rely on the macOS CI leg, which runs the real Apple 3.2).
+
+**Test and CI lessons to keep (from S5 and S16):** put a private git-wrapper dir first on the test PATH; use `mktemp -d`, not `$RANDOM` (bash 3.2 subshell reseed); per-test work dir; Windows and macOS path and CR LF differences; any test that snapshots a tree must switch git maintenance off in the repo it snapshots (`gc.auto=0`, `maintenance.auto=false`, `receive.autogc=false`).
+
+**Model and effort:** the model rules in CLAUDE.md ("Model and effort") apply. In Claude Code the session cannot change its own model either; ask Adam which to select before reviews and design work, and start reviewer agents on Opus.
+
+**Handing the role back to the Claude app:** before the cloud session ends or the credits run out, it (1) lists open PRs and non-main branches from GitHub, (2) opens a notes PR that updates this Handover section: what merged (verified), what is open and why, what it was in the middle of, what it needs from Adam, (3) tells Adam in chat what to say to the app session. The app session starts by reading this section, then CLAUDE.md startup steps 1 to 6, and treats every claim above as a snapshot to re-check.
+
+**Adam's side:** to resume in Claude Code in the cloud, the next prompt can be: "Read CLAUDE.md and the Handover section at the top of docs/NEXT_SESSION.md, act as Clead, and continue." To hand back to the Claude app: "Read the Handover section in docs/NEXT_SESSION.md and continue as Clead."
 
 ---
 
