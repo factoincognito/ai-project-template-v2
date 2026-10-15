@@ -118,6 +118,7 @@ show_help() {
     "                             (default: the address already set in git)" \
     "  --ci-timeout <minutes>     how long to wait for the project's checks (default: 20)" \
     "  --non-interactive          ask nothing: every needed option must be given" \
+    "                             (needs --yes or --dry-run)" \
     "  --yes                      do not ask \"Proceed?\" before creating anything" \
     "  --dry-run                  check everything and show the plan, create nothing" \
     "  --resume                   continue a setup that stopped part way" \
@@ -184,6 +185,8 @@ ASK_NEEDED="An answer is needed here."
 OPTIONS_NEXT="To see every option, run the script with --help."
 START_AGAIN_INTRO="To start again, run this command:"
 CONTINUE_INTRO="To continue the setup, run this command:"
+# The plan and step 10 give it for a public project with no licence.
+NO_LICENCE_WARNING="Warning: the project is public and has no licence: anyone can see its code, but nobody else may copy, change or share it. To add a licence later, see https://choosealicense.com."
 
 # ask <explanation> <question> <default> [choice...]: shows the
 # explanation (why the question is asked, in a sentence), the choices,
@@ -633,7 +636,10 @@ parse_args() {
         fail 2 "The option $arg is not one this script knows." \
           "Check its spelling and run the script again. $OPTIONS_NEXT"
         ;;
-      *) usage ;;
+      *)
+        fail 2 "The word $arg is not an option: each option starts with --." \
+          "If it is a value, put its option in front of it (for the project's short name, --name), and run the script again. $OPTIONS_NEXT"
+        ;;
     esac
   done
 }
@@ -1450,9 +1456,12 @@ preflight_git() {
 
 # ---- gh ----
 
-# check_gh: gh runs, and its create command offers --template (the
-# feature check: no version number is compared). GH_PROBLEM says which
-# part failed: missing or old.
+# check_gh: gh runs, and offers each option the script uses that older
+# versions lack (the feature check: no version number is compared): repo
+# create --template (step 2), pr checks --json (step 15) and pr merge
+# --match-head-commit (step 17). Help goes to stdout or stderr by gh
+# version, so both are read. GH_PROBLEM says which part failed: missing
+# or old.
 GH_PROBLEM=""
 check_gh() {
   local help=""
@@ -1460,14 +1469,17 @@ check_gh() {
     GH_PROBLEM=missing
     return 1
   fi
+  GH_PROBLEM=old
   # The command in quotes is not a message: the marker keeps it out of
   # the banned-words check.
   help="$(run_gh repo create --help 2>&1)" || help="" # not-a-message
-  case "$help" in
-    *--template*) return 0 ;;
-  esac
-  GH_PROBLEM=old
-  return 1
+  case "$help" in *--template*) ;; *) return 1 ;; esac
+  help="$(run_gh pr checks --help 2>&1)" || help=""
+  case "$help" in *--json*) ;; *) return 1 ;; esac
+  help="$(run_gh pr merge --help 2>&1)" || help=""
+  case "$help" in *--match-head-commit*) ;; *) return 1 ;; esac
+  GH_PROBLEM=""
+  return 0
 }
 
 guide_gh() {
@@ -1488,11 +1500,11 @@ guide_gh_missing() {
 
 guide_gh_old() {
   guide_begin "The GitHub command-line tool (gh) on this computer is too old." \
-    "The script needs a gh that can create a project from a template, which older versions of gh cannot do."
+    "The script needs a gh that can create a project from a template, read its checks and add a proposed change, which older versions of gh cannot do."
   gh_install_steps upgrade
   guide_end "the script says \"Done. gh is installed and can create a project from a template.\"" \
     "if the script still says that gh is too old, close this window, open a new one, and start the script again there." \
-    "it checks that gh's command for creating a project offers the --template option."
+    "it checks that gh's commands for creating a project, for reading its checks and for adding a proposed change offer the options the script uses: --template, --json and --match-head-commit."
 }
 
 # gh_install_steps install|upgrade: the steps both gh guides share.
@@ -2364,6 +2376,11 @@ show_plan() {
   fi
   say "  5. Send these changes to GitHub as one proposed change, wait for the project's checks to pass, then add the change to the main version."
   say "  6. Show what was made, and the one thing to do next."
+  # Step 4 adds no licence: the warning step 10 gives, before anything
+  # is created.
+  if [ "$IN_LICENSE" = none ] && [ "$IN_VISIBILITY" != private ]; then
+    say "$NO_LICENCE_WARNING"
+  fi
   if [ "$IN_VISIBILITY" = private ]; then
     # Spec, "Private repo, no protection possible": the plan cannot be
     # read before creating (it needs a permission gh lacks), so it warns.
@@ -2761,7 +2778,7 @@ guide_actions_off() {
   esac
   guide_step "Open https://github.com/$IN_OWNER/$IN_NAME/settings/actions in your browser: the project's Settings, then Actions, then General."
   guide_step "Under \"Actions permissions\", choose \"Allow all actions and reusable workflows\", then click Save."
-  guide_step "If those choices cannot be changed, the organisation (or enterprise) that owns the project has turned GitHub Actions off for its projects: ask one of its owners to allow it, in the organisation's Settings, under Actions, then General."
+  guide_step "If those choices cannot be changed, the organisation (or enterprise) that owns the project has turned off or limited GitHub Actions for its projects: ask one of its owners to allow it, in the organisation's Settings, under Actions, then General."
   if [ "$ACTIONS_PROBLEM" = local-only ]; then
     guide_step "Then run the check again: open $PR_URL in your browser, click Checks, then \"Re-run all jobs\", and wait until build shows a green tick."
     guide_step "Then continue the setup with the command shown below."
@@ -3284,7 +3301,7 @@ add_licence() {
   case "$IN_LICENSE" in
     none)
       if [ "$IN_VISIBILITY" != private ]; then
-        say "Warning: the project is public and has no licence: anyone can see its code, but nobody else may copy, change or share it. To add a licence later, see https://choosealicense.com."
+        say "$NO_LICENCE_WARNING"
       fi
       step_end "No licence file was added, because you chose none."
       ;;

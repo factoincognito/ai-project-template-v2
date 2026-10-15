@@ -551,6 +551,21 @@ case "${1:-}" in
     # changes. STUB_GH_MERGE_FAIL: signed-out, refused (GitHub's text when
     # the protection does not allow it; nothing changes), or
     # broken-but-merged (added, then gh fails as if the connection broke).
+    #
+    # The feature checks of the preflight: pr checks --help lists --json
+    # and pr merge --help lists --match-head-commit, unless the counter
+    # file gh-old-pr-checks (or gh-old-pr-merge) is above 0: a gh too old
+    # for that one option.
+    if [ "$*" = "pr checks --help" ]; then
+      echo "Show CI status for a single pull request."
+      fails_left gh-old-pr-checks || echo "      --json fields   Output JSON with the specified fields"
+      exit 0
+    fi
+    if [ "$*" = "pr merge --help" ]; then
+      echo "Merge a pull request on GitHub."
+      fails_left gh-old-pr-merge || echo "      --match-head-commit SHA   Commit SHA that the pull request head must match to allow merge"
+      exit 0
+    fi
     if [ "${2:-}" = checks ]; then
       if [ "$#" -ne 9 ] || [ "$4 $6 $7 $8" != "--repo --json name,bucket,event --jq" ] \
         || [ "$9" != '.[] | select(.name == "build") | "\(.event) \(.bucket)"' ]; then
@@ -2172,6 +2187,7 @@ test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
   # every one with gh's own prompts off; the copy is the only thing made
   # on this computer.
   [ "$(cut -f2- "$d/gh.log" | awk -F'\t' -v OFS='\t' '{ for (i = 2; i <= NF; i++) { if ($(i - 1) == "--body-file") $i = "<file>"; if ($(i - 1) == "--match-head-commit") $i = "<sha>" } print }' | LC_ALL=C sort -u)" = "$(printf '%s\n' '--version' "$(printf 'repo\tcreate\t--help')" \
+      "$(printf 'pr\tchecks\t--help')" "$(printf 'pr\tmerge\t--help')" \
       "$(printf 'api\t-i\tuser\t--jq\t.login, (.name // "")')" \
       "$(printf 'api\t-i\t-H\tAccept: application/vnd.github.raw+json\trepos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md')" \
       "$(printf 'api\t-i\trepos/octo-user/my-app')" \
@@ -2235,12 +2251,17 @@ test_switch_given_a_value_is_refused() {
   sed -n 1p "$d/err" | grep -qE '^What happened: .*--yes' || { cat "$d/err" >&2; die "not explained"; }
 }
 
-test_a_word_that_is_not_an_option_shows_the_usage() {
+test_a_word_that_is_not_an_option_gets_what_happened_and_what_to_do_next() {
+  # S18b: a bare word (here the name without --name) got the plain usage
+  # text; it gets the message every other option problem gets, naming
+  # the word, with exit code 2.
   local d rc=0
   d="$(tmpdir)"
   bash "$SCRIPT" my-app </dev/null >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 2 ] || { cat "$d/err" >&2; die "exit $rc, want 2"; }
-  grep -qF 'usage:' "$d/err" || { cat "$d/err" >&2; die "no usage shown"; }
+  sed -n 1p "$d/err" | grep -qE '^What happened: .*my-app' || { cat "$d/err" >&2; die "the word is not named"; }
+  sed -n 2p "$d/err" | grep -qE '^What to do next: .*--help' || { cat "$d/err" >&2; die "no next action pointing to --help"; }
+  ! grep -qF 'usage:' "$d/err" || { cat "$d/err" >&2; die "the plain usage text was shown"; }
 }
 
 test_help_lists_every_option() {
@@ -2253,6 +2274,8 @@ test_help_lists_every_option() {
     --yes --dry-run --resume --help --git-name --git-email layout-pack; do
     grep -qF -- "$o" "$d/out" || { cat "$d/out" >&2; die "help lacks $o"; }
   done
+  # S18b: --non-interactive alone is refused, so the help says what it needs.
+  grep -qF -- "(needs --yes or --dry-run)" "$d/out" || { cat "$d/out" >&2; die "help does not say --non-interactive needs --yes or --dry-run"; }
 }
 
 test_name_takes_letters_digits_dots_dashes_and_underscores() {
@@ -3029,6 +3052,25 @@ test_gh_missing_or_too_old_is_guided() {
   ! grep -q '^GH_PROMPT_DISABLED=<unset>' "$d/gh.log" || die "gh ran with its prompts on"
 }
 
+test_a_gh_too_old_to_read_checks_or_merge_stops_before_anything_is_made() {
+  # S18b: steps 15 and 17 use gh pr checks --json and gh pr merge
+  # --match-head-commit. A gh without one of them failed only after the
+  # project existed; the preflight finds it as gh too old (exit 3),
+  # before anything is created. Each option alone, so each check counts.
+  local d mode
+  for mode in gh-old-pr-checks gh-old-pr-merge; do
+    d="$(tmpdir)"
+    echo 9999 >"$d/$mode"
+    setup_run "$d" --non-interactive --yes
+    expect_rc 3 "$d"
+    expect_out "$d" "The GitHub command-line tool (gh) on this computer is too old."
+    expect_out "$d" "How the script checks it: it checks that gh's commands for creating a project, for reading its checks and for adding a proposed change offer the options the script uses: --template, --json and --match-head-commit."
+    [ ! -e "$d/created" ] || die "$mode: a project was created"
+    ! grep -q "$(printf '\trepo\tcreate\t[^-]')" "$d/gh.log" || { cat "$d/gh.log" >&2; die "$mode: gh repo create ran"; }
+    ! grep -q "$(printf '\tapi\t')" "$d/gh.log" || { cat "$d/gh.log" >&2; die "$mode: GitHub was asked before the checks passed"; }
+  done
+}
+
 test_npm_is_needed_only_for_node_web_and_react_native() {
   local d p
   d="$(tmpdir)"
@@ -3435,7 +3477,7 @@ test_checks_on_this_computer_come_before_any_github_call_and_question() {
   fake_tool "$d" npm 10.0.0
   whole "$d" --non-interactive --dry-run "${REQUIRED_OPTS[@]}"
   expect_rc 0 "$d"
-  [ "$(awk -F'\t' '{ print $2 " " $NF }' "$d/gh.log")" = "$(printf '%s\n' '--version --version' 'repo --help' \
+  [ "$(awk -F'\t' '{ print $2 " " $NF }' "$d/gh.log")" = "$(printf '%s\n' '--version --version' 'repo --help' 'pr --help' 'pr --help' \
       'api .login, (.name // "")' 'api repos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md' \
       'api .login, (.name // "")' 'api repos/octo-user/my-app' 'api .key')" ] \
     || { cat "$d/gh.log" >&2; die "gh calls not in the order: tools, account, version, name, licence"; }
@@ -4129,6 +4171,10 @@ EOF
 # setup_run <dir> <options...>: the whole script, as a user gets it (see
 # use_built), with every input given (pack python, so npm is not needed;
 # public unless --private is given) and a working git.
+# The warning for a public project with no licence, given in the plan and
+# again at step 10.
+NO_LICENCE_WARNING='Warning: the project is public and has no licence: anyone can see its code, but nobody else may copy, change or share it. To add a licence later, see https://choosealicense.com.'
+
 setup_run() {
   local d="$1" vis=--public
   shift
@@ -4140,11 +4186,13 @@ setup_run() {
 
 # calls_from_create <dir>: the gh calls from creating the project on, one
 # per line, the arguments joined by spaces (the prompt column left out).
-# The temporary file after --body-file is written <file>, the change id
+# The feature checks of the preflight (repo create, pr checks and pr
+# merge with --help) are left out, here and in calls_since: a second run
+# makes them again. The temporary file after --body-file is written <file>, the change id
 # after --match-head-commit <sha> (test_the_change_is_added_with_the_head_that_was_sent
 # checks that id).
 calls_from_create() {
-  awk -F'\t' '$2 == "repo" && $3 == "create" && $4 != "--help" { on = 1 }
+  awk -F'\t' '$4 == "--help" { next } $2 == "repo" && $3 == "create" { on = 1 }
     on { out = $2; for (i = 3; i <= NF; i++) out = out " " ($(i - 1) == "--body-file" ? "<file>" : ($(i - 1) == "--match-head-commit" ? "<sha>" : $i)); print out }' "$1/gh.log"
 }
 
@@ -5820,7 +5868,7 @@ test_polyform_noncommercial_is_copied_from_licenses_with_a_notice() {
 
 test_no_licence_adds_no_file_and_warns_only_for_a_public_project() {
   # Spec step 10: none: no file, with a warning if the project is public.
-  local d vis warning='Warning: the project is public and has no licence: anyone can see its code, but nobody else may copy, change or share it. To add a licence later, see https://choosealicense.com.'
+  local d vis warning="$NO_LICENCE_WARNING"
   built_bootstrapper
   W_LICENSE=none
   for vis in --public --private; do
@@ -5893,6 +5941,18 @@ test_the_plan_says_whether_a_licence_is_added() {
   grep -qxF "  4. Add the language pack's files and fill in the project's names and description; no licence file is added, because you chose none." "$d/out" \
     || { cat "$d/out" >&2; die "none: step 4 does not say that no licence is added"; }
   expect_no_out "$d" "add the licence"
+  # S18b: a public project with no licence gets step 10's warning in the
+  # plan too, word for word; a private one does not.
+  grep -qxF "$NO_LICENCE_WARNING" "$d/out" || { cat "$d/out" >&2; die "public, none: the plan does not warn"; }
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --dry-run --license none --private
+  expect_rc 0 "$d"
+  grep -qF "no licence file is added, because you chose none." "$d/out" || { cat "$d/out" >&2; die "private, none: no plan shown"; }
+  expect_no_out "$d" "Warning: the project is public"
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --dry-run
+  expect_rc 0 "$d"
+  expect_no_out "$d" "Warning: the project is public"
 }
 
 test_the_changelog_lines_go_at_the_end_of_project_created() {
@@ -6632,7 +6692,8 @@ test_a_build_failed_with_only_the_projects_own_actions_allowed_gets_the_actions_
   # The same steps as for Actions turned off.
   expect_out "$d" "  1. Open https://github.com/octo-user/my-app/settings/actions in your browser: the project's Settings, then Actions, then General."
   expect_out "$d" "  2. Under \"Actions permissions\", choose \"Allow all actions and reusable workflows\", then click Save."
-  expect_out "$d" "  3. If those choices cannot be changed, the organisation (or enterprise) that owns the project has turned GitHub Actions off for its projects"
+  # S18b: an organisation may limit Actions, not only turn it off.
+  expect_out "$d" "  3. If those choices cannot be changed, the organisation (or enterprise) that owns the project has turned off or limited GitHub Actions for its projects"
   expect_out "$d" "  4. Then run the check again: open https://github.com/octo-user/my-app/pull/1 in your browser, click Checks, then \"Re-run all jobs\""
   expect_out "$d" "How the script checks it: "
   grep -qxF '    allowed_actions: local_only' "$d/out" || { cat "$d/out" >&2; die "GitHub's answer is not below the guide"; }
@@ -6782,10 +6843,10 @@ test_the_change_is_added_with_the_head_that_was_sent_from_inside_the_copy() {
   expect_rc 0 "$d"
   c="$(copy_of "$d")"
   bare="$(bare_of "$d")"
-  sent="$(awk -F'\t' '$2 == "pr" && $3 == "merge" { print $NF }' "$d/gh.log")"
+  sent="$(awk -F'\t' '$2 == "pr" && $3 == "merge" && $4 != "--help" { print $NF }' "$d/gh.log")"
   [ -n "$sent" ] && [ "$sent" = "$(cat "$d/merged-head")" ] || { cat "$d/gh.log" >&2; die "the id given is not the head of bootstrap-setup on GitHub"; }
   [ "$(in_git -C "$c" log -1 --format=%s "$sent")" = "Set up my-app" ] || die "the id given is not the setup's change"
-  [ "$(awk -F'\t' '$2 == "pr" && $3 == "merge" { print $4, $5, $6, $7 }' "$d/gh.log")" = "1 --squash --delete-branch --match-head-commit" ] \
+  [ "$(awk -F'\t' '$2 == "pr" && $3 == "merge" && $4 != "--help" { print $4, $5, $6, $7 }' "$d/gh.log")" = "1 --squash --delete-branch --match-head-commit" ] \
     || { cat "$d/gh.log" >&2; die "not merged with --squash --delete-branch --match-head-commit"; }
   # Compared as folders, not as text: on macOS $TMPDIR ends in /, so $d
   # holds a // that the shell's $PWD does not.
@@ -7088,7 +7149,7 @@ calls_count() { if [ -f "$1/gh.log" ]; then grep -c . "$1/gh.log"; else echo 0; 
 # calls_since <dir> <n>: the gh calls after the first <n>, written as
 # calls_from_create writes them.
 calls_since() {
-  tail -n +"$(($2 + 1))" "$1/gh.log" | awk -F'\t' '$2 == "repo" && $3 == "create" && $4 == "--help" { next } { out = $2; for (i = 3; i <= NF; i++) out = out " " ($(i - 1) == "--body-file" ? "<file>" : ($(i - 1) == "--match-head-commit" ? "<sha>" : $i)); print out }'
+  tail -n +"$(($2 + 1))" "$1/gh.log" | awk -F'\t' '$4 == "--help" { next } { out = $2; for (i = 3; i <= NF; i++) out = out " " ($(i - 1) == "--body-file" ? "<file>" : ($(i - 1) == "--match-head-commit" ? "<sha>" : $i)); print out }'
 }
 
 # again <dir> [options...]: runs the script again, as the user would: the
