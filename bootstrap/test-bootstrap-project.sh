@@ -7732,7 +7732,7 @@ to_crlf() {
   mv "$1.crlf" "$1"
 }
 hand_made_project() {
-  local d="$1" script="${2:-gone}" heading="${3:-gone}" changelog="${4:-lf}" bare f stored=""
+  local d="$1" script="${2:-gone}" heading="${3:-gone}" changelog="${4:-lf}" bare f blob stored=""
   built_bootstrapper
   mkdir -p "$d/files"
   cp -R "$BUILT/." "$d/files/"
@@ -7767,13 +7767,17 @@ hand_made_project() {
   # shellcheck disable=SC2086
   seed_existing "$d" octo-user/my-app "$d/files" $stored
   bare="$(bare_of "$d")"
-  # The blob GitHub stores is checked, not the file on disk. No grep -q
-  # after a pipe: it may stop reading early, and pipefail would fail it.
+  # The blob GitHub stores is checked, not the file on disk. It goes to a
+  # file and grep reads that file: not $( ), because Git for Windows' bash
+  # drops trailing CR LF there as it drops trailing line ends, so a blob
+  # whose only carriage return ends its last line (heading "note") looked
+  # as if it had none (#169, Windows CI); and no grep -q after a pipe: it
+  # may stop reading early, and pipefail would fail it.
   for f in $stored; do
-    case "$(in_git --git-dir="$bare" cat-file -p "main:$f")" in
-      *"$CR"*) ;;
-      *) die "$f on GitHub has no carriage return (test is stale)" ;;
-    esac
+    blob="$(mktemp "$WORK/blob.XXXXXX")"
+    in_git --git-dir="$bare" cat-file -p "main:$f" >"$blob"
+    grep "$CR" "$blob" >/dev/null || { od -c "$blob" | tail -4 >&2; die "$f on GitHub has no carriage return (test is stale); its last bytes are above"; }
+    rm -f "$blob"
   done
   case "$changelog" in
     marked | crlf-marked)
@@ -8241,10 +8245,11 @@ fix_line_endings_on_github() {
   in_git -C "$w/c" add -A
   in_git -C "$w/c" -c user.name=T -c user.email=t@example.com commit -q -m "LF line endings in $file"
   in_git -C "$w/c" push -q origin HEAD:main 2>/dev/null
+  # Read from a file, not $( ): see hand_made_project.
+  in_git --git-dir="$bare" cat-file -p "main:$file" >"$w.blob"
   rm -rf "$w"
-  case "$(in_git --git-dir="$bare" cat-file -p "main:$file")" in
-    *"$CR"*) die "$file on GitHub still has a carriage return (test is stale)" ;;
-  esac
+  ! grep "$CR" "$w.blob" >/dev/null || die "$file on GitHub still has a carriage return (test is stale)"
+  rm -f "$w.blob"
 }
 
 test_a_readme_stored_with_crlf_on_github_is_refused_before_anything_is_written() {
