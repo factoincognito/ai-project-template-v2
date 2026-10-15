@@ -185,6 +185,8 @@ ASK_NEEDED="An answer is needed here."
 OPTIONS_NEXT="To see every option, run the script with --help."
 START_AGAIN_INTRO="To start again, run this command:"
 CONTINUE_INTRO="To continue the setup, run this command:"
+# The plan and step 10 give it for a public project with no licence.
+NO_LICENCE_WARNING="Warning: the project is public and has no licence: anyone can see its code, but nobody else may copy, change or share it. To add a licence later, see https://choosealicense.com."
 
 # ask <explanation> <question> <default> [choice...]: shows the
 # explanation (why the question is asked, in a sentence), the choices,
@@ -2374,6 +2376,11 @@ show_plan() {
   fi
   say "  5. Send these changes to GitHub as one proposed change, wait for the project's checks to pass, then add the change to the main version."
   say "  6. Show what was made, and the one thing to do next."
+  # Step 4 adds no licence: the warning step 10 gives, before anything
+  # is created.
+  if [ "$IN_LICENSE" = none ] && [ "$IN_VISIBILITY" != private ]; then
+    say "$NO_LICENCE_WARNING"
+  fi
   if [ "$IN_VISIBILITY" = private ]; then
     # Spec, "Private repo, no protection possible": the plan cannot be
     # read before creating (it needs a permission gh lacks), so it warns.
@@ -3294,7 +3301,7 @@ add_licence() {
   case "$IN_LICENSE" in
     none)
       if [ "$IN_VISIBILITY" != private ]; then
-        say "Warning: the project is public and has no licence: anyone can see its code, but nobody else may copy, change or share it. To add a licence later, see https://choosealicense.com."
+        say "$NO_LICENCE_WARNING"
       fi
       step_end "No licence file was added, because you chose none."
       ;;
