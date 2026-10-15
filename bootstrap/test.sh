@@ -767,15 +767,17 @@ test_workflow_bootstrapper_cancels_superseded_pr_runs_but_never_a_tag_run() {
       cancel-in-progress: false' ] || { printf '%s\n' "$pub" >&2; die "publish job concurrency changed"; }
 }
 
-# assert_no_continue_on_error: no continue-on-error key in bootstrapper-test
-# or a job it needs, in the workflow at BWF; dies naming the job.
+# assert_no_continue_on_error: no continue-on-error key, bare or quoted
+# ("continue-on-error": or 'continue-on-error':, which YAML reads as the
+# same key), in bootstrapper-test or a job it needs, in the workflow at
+# BWF; dies naming the job.
 assert_no_continue_on_error() {
   local id ids n=0
   ids="bootstrapper-test $(wf_needs bootstrapper-test | tr '\n' ' ')"
   for id in $ids; do
     [ -n "$(wf_job "$id")" ] || die "no job $id"
     n=$((n + 1))
-    ! wf_job "$id" | grep -nE '(^|[[:space:]])continue-on-error[[:space:]]*:' >&2 \
+    ! wf_job "$id" | grep -nE '(^|[[:space:]])["'"'"']?continue-on-error["'"'"']?[[:space:]]*:' >&2 \
       || die "continue-on-error in $id"
   done
   CHECKED_IDS="$ids"
