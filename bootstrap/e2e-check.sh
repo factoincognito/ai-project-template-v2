@@ -145,8 +145,18 @@ Each check prints one line: PASS, FAIL or SKIP, its name and a reason.
 SKIP is only for what a finished run cannot show. Exit code 0 when no
 check failed, 1 when one did, 2 for a usage error.
 
+Run it straight after the run, before anything else is merged into the
+project, such as the red-then-Test-exempt change of the end-to-end list:
+main must hold exactly two commits (GitHub's template commit and the
+setup).
+
+The language pack and the licence are read from the lines the run wrote
+into CHANGELOG.md, so a wrong choice written there consistently is not
+caught: compare them with what you chose (the PASS lines name both).
+
 At the end it prints the commands to delete the project and its copy,
-for you to run yourself, only for a name that starts with bootstrap-e2e-.
+for you to run yourself: the project's only for a name that starts with
+bootstrap-e2e-, the folder's only when the copy check passed.
 EOF
 }
 
@@ -196,9 +206,14 @@ api_problem() {
 
 DIR_ABS=""
 COPY_READABLE=""
+# COPY_PASSED: the copy check passed (DIR is the top folder of a clean
+# copy of OWNER/NAME on main); only then is the folder removal shown.
+COPY_PASSED=""
 COPY_PROBLEM=""
 TRACKED=""
-in_git() { git -C "$DIR" "$@"; }
+# core.fsmonitor=false: a setting in the copy's own git settings cannot
+# make these read commands run a command.
+in_git() { git -C "$DIR" -c core.fsmonitor=false "$@"; }
 
 # read_copy: whether DIR is the top folder of a git copy (COPY_READABLE),
 # and its tracked files (TRACKED, one per line).
@@ -345,7 +360,7 @@ check_history() {
   read -r first fp <<<"$(printf '%s\n' "$lines" | sed -n 1p)"
   read -r second sp <<<"$(printf '%s\n' "$lines" | sed -n 2p)"
   if [ "$n" -ne 2 ]; then
-    result FAIL history "main has $( [ "$n" -ge 3 ] && echo "3 or more changes" || echo "$n change(s)" ), not two (GitHub's template change and the setup merged as one); a run, resumed or not, adds exactly one."
+    result FAIL history "main has $( [ "$n" -ge 3 ] && echo "3 or more changes" || echo "$n change(s)" ), not two (GitHub's template change and the setup merged as one); a run, resumed or not, adds exactly one. The usual cause is a change merged after the run, such as the red-then-Test-exempt one: run this check before merging anything else."
   elif [ "$sp" != 0 ] || [ "$fp" != 1 ]; then
     result FAIL history "main's last change has $fp parents and the one before it $sp; the setup merged as one change has one, GitHub's template change none."
   elif [ "$first" != "$MAIN_SHA" ]; then
@@ -388,6 +403,11 @@ check_protection() {
     result FAIL protection "main is not protected (GitHub: not found); the run protects it and requires the check build."
     return 0
   fi
+  if [ "$API_STATUS" = 403 ] && [ "$R_PRIVATE" = true ]; then
+    PROTECTED=plan
+    result FAIL protection "GitHub refused to show the protection of main (HTTP 403). For a private project this is expected when its GitHub plan cannot protect it, the path of --allow-unprotected; the end-to-end runs use public projects, so it fails here. Check the project's plan, and that memory/decisions.md records the choice (see decision-row)."
+    return 0
+  fi
   if [ "$API_STATUS" != 200 ]; then
     PROTECTED=unknown
     api_problem
@@ -420,6 +440,8 @@ check_decision_row() {
     yes:1) result FAIL decision-row "memory/decisions.md says main is not protected, but GitHub reports it protected." ;;
     no:1) result PASS decision-row "main is not protected, and memory/decisions.md records that choice." ;;
     no:) result FAIL decision-row "main is not protected, and memory/decisions.md has no row saying so." ;;
+    plan:1) result PASS decision-row "This private project's plan most likely cannot protect main, and memory/decisions.md records the choice to go on without protection." ;;
+    plan:) result FAIL decision-row "This private project's plan most likely cannot protect main, and memory/decisions.md has no row saying so." ;;
     *) result FAIL decision-row "Whether main is protected is not known, so the row in memory/decisions.md could not be judged (see protection)." ;;
   esac
 }
@@ -462,11 +484,12 @@ check_copy() {
   if [ -n "$problems" ]; then
     result FAIL copy "The copy in $DIR is not clean on main: $problems."
   else
+    COPY_PASSED=1
     result PASS copy "The copy in $DIR is on main, at GitHub's main ($(short "$MAIN_SHA")), with nothing unsaved."
   fi
 }
 
-PACK="" DEPLOY="" LICENCE=""
+PACK="" DEPLOY="" LICENCE="" BAD_LICENCE=""
 check_changelog() {
   local section missing="" line p
   if [ -z "$COPY_READABLE" ]; then no_copy changelog; return 0; fi
@@ -482,11 +505,21 @@ check_changelog() {
       "- Licence: "*.) LICENCE="${line#- Licence: }"; LICENCE="${LICENCE%.}" ;;
     esac
   done <<<"$section"
+  # The licence name goes into a gh api path: a licence key only
+  # (lowercase letters, digits, . and -, not starting with . or -).
+  case "$LICENCE" in
+    "") ;;
+    *[!a-z0-9.-]* | [.-]*) BAD_LICENCE="$LICENCE"; LICENCE="" ;;
+  esac
   [ -n "$PACK" ] || missing="- Language pack: <pack>."
-  [ -n "$LICENCE" ] || missing="${missing:+$missing, }- Licence: <licence>."
+  if [ -n "$BAD_LICENCE" ]; then
+    missing="${missing:+$missing, }- Licence: <licence> (it names \"$BAD_LICENCE\", which is not a licence key: lowercase letters, digits, . and -)"
+  elif [ -z "$LICENCE" ]; then
+    missing="${missing:+$missing, }- Licence: <licence>."
+  fi
   case "$NL$section$NL" in *"$NL- Set up by bootstrap-project.sh.$NL"*) ;; *) missing="${missing:+$missing, }- Set up by bootstrap-project.sh." ;; esac
   if [ -n "$missing" ]; then
-    result FAIL changelog "The section \"## Project created\" of CHANGELOG.md lacks: $missing"
+    result FAIL changelog "The section \"## Project created\" of CHANGELOG.md lacks: ${missing%.}."
   else
     result PASS changelog "CHANGELOG.md names the pack ($PACK${DEPLOY:+, with the deploy files}), the licence ($LICENCE) and the setup script."
   fi
@@ -603,10 +636,12 @@ check_pack_links() {
 }
 
 # licence_matches <expected text>: LICENSE (stdin) is the text, line by
-# line, with [year] and [fullname] filled in (each by something that is
-# not a placeholder), trailing blank lines ignored.
+# line, with each [year] and [fullname] filled in by text that is not
+# empty, not only spaces and not a placeholder; trailing blank lines are
+# ignored.
 licence_matches() {
   LM_WANT="$1" awk '
+    function filled(t) { return t ~ /[^ \t]/ && index(t, "[year]") == 0 && index(t, "[fullname]") == 0 }
     BEGIN { n = split(ENVIRON["LM_WANT"], want, "\n"); while (n > 0 && want[n] == "") n-- }
     { sub(/\r$/, ""); got[++m] = $0 }
     END {
@@ -616,17 +651,21 @@ licence_matches() {
         w = want[i]; g = got[i]
         if (index(w, "[year]") == 0 && index(w, "[fullname]") == 0) { if (w != g) exit 1; continue }
         if (index(g, "[year]") || index(g, "[fullname]")) exit 1
-        # The literal pieces between the placeholders appear in order.
+        # The literal pieces around the placeholders, in order, with text
+        # between each two of them.
         gsub(/\[fullname\]/, "\001", w); gsub(/\[year\]/, "\001", w)
-        k = split(w, piece, "\001"); pos = 1
+        k = split(w, piece, "\001")
         if (substr(g, 1, length(piece[1])) != piece[1]) exit 1
         rest = substr(g, length(piece[1]) + 1)
-        for (j = 2; j <= k; j++) {
-          if (piece[j] == "") continue
-          if (j == k) { if (substr(rest, length(rest) - length(piece[j]) + 1) != piece[j]) exit 1; continue }
-          p = index(rest, piece[j]); if (p < 2) exit 1
+        for (j = 2; j < k; j++) {
+          if (piece[j] == "") exit 1
+          p = index(rest, piece[j])
+          if (p < 2 || !filled(substr(rest, 1, p - 1))) exit 1
           rest = substr(rest, p + length(piece[j]))
         }
+        if (length(rest) < length(piece[k])) exit 1
+        if (substr(rest, length(rest) - length(piece[k]) + 1) != piece[k]) exit 1
+        if (!filled(substr(rest, 1, length(rest) - length(piece[k])))) exit 1
       }
     }'
 }
@@ -741,13 +780,13 @@ delete_hint() {
   echo "To delete this throwaway project when you are done, run these yourself (this check deleted nothing):"
   echo "    gh auth refresh -h github.com -s delete_repo"
   echo "    gh repo delete $OWNER/$NAME --yes"
-  if [ -d "$DIR" ]; then
+  if [ -n "$COPY_PASSED" ] && [ -d "$DIR" ]; then
     abs="$(CDPATH='' cd -- "$DIR" && pwd)" || abs=""
   fi
   if [ -n "$abs" ]; then
     echo "    rm -rf -- $(shell_quote "$abs")"
   else
-    echo "The folder $DIR does not exist, so there is nothing to remove there."
+    echo "No command to remove the folder is shown, because the copy check did not pass (see copy): $DIR may not be this project's copy. Look at the folder yourself before you delete anything there."
   fi
 }
 
