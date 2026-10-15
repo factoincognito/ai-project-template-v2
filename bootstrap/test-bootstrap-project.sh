@@ -4170,6 +4170,10 @@ EOF
 # setup_run <dir> <options...>: the whole script, as a user gets it (see
 # use_built), with every input given (pack python, so npm is not needed;
 # public unless --private is given) and a working git.
+# The warning for a public project with no licence, given in the plan and
+# again at step 10.
+NO_LICENCE_WARNING='Warning: the project is public and has no licence: anyone can see its code, but nobody else may copy, change or share it. To add a licence later, see https://choosealicense.com.'
+
 setup_run() {
   local d="$1" vis=--public
   shift
@@ -5861,7 +5865,7 @@ test_polyform_noncommercial_is_copied_from_licenses_with_a_notice() {
 
 test_no_licence_adds_no_file_and_warns_only_for_a_public_project() {
   # Spec step 10: none: no file, with a warning if the project is public.
-  local d vis warning='Warning: the project is public and has no licence: anyone can see its code, but nobody else may copy, change or share it. To add a licence later, see https://choosealicense.com.'
+  local d vis warning="$NO_LICENCE_WARNING"
   built_bootstrapper
   W_LICENSE=none
   for vis in --public --private; do
@@ -5934,6 +5938,18 @@ test_the_plan_says_whether_a_licence_is_added() {
   grep -qxF "  4. Add the language pack's files and fill in the project's names and description; no licence file is added, because you chose none." "$d/out" \
     || { cat "$d/out" >&2; die "none: step 4 does not say that no licence is added"; }
   expect_no_out "$d" "add the licence"
+  # S18b: a public project with no licence gets step 10's warning in the
+  # plan too, word for word; a private one does not.
+  grep -qxF "$NO_LICENCE_WARNING" "$d/out" || { cat "$d/out" >&2; die "public, none: the plan does not warn"; }
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --dry-run --license none --private
+  expect_rc 0 "$d"
+  grep -qF "no licence file is added, because you chose none." "$d/out" || { cat "$d/out" >&2; die "private, none: no plan shown"; }
+  expect_no_out "$d" "Warning: the project is public"
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --dry-run
+  expect_rc 0 "$d"
+  expect_no_out "$d" "Warning: the project is public"
 }
 
 test_the_changelog_lines_go_at_the_end_of_project_created() {
