@@ -389,6 +389,10 @@ test_help_prints_usage_and_exits_0() {
   expect_rc "$d" 0
   grep -qF 'e2e-check.sh OWNER/NAME DIR' "$d/out" || { cat "$d/out" >&2; die "no usage line"; }
   grep -qi 'read' "$d/out" || die "help does not say it only reads"
+  # Review round 2, items 3 and 8.
+  grep -qF 'Test-exempt' "$d/out" && grep -qF 'exactly two commits' "$d/out" \
+    || { cat "$d/out" >&2; die "help does not say to run it before the Test-exempt change is merged"; }
+  grep -qF 'CHANGELOG' "$d/out" || die "help does not say the pack and licence are read from CHANGELOG.md"
   [ ! -s "$d/gh.log" ] && [ ! -s "$d/git.log" ] || die "--help called gh or git"
 }
 
@@ -630,6 +634,7 @@ test_extra_commit_on_main_fails() {
   sync_github "$d"
   run_check "$d"; expect_only_fail "$d" history
   reason_of "$d" history | grep -qF '3 or more changes' || { cat "$d/out" >&2; die "the reason does not count the changes"; }
+  reason_of "$d" history | grep -qF 'Test-exempt' || die "the reason does not name the usual cause (a change merged after the run)"
 }
 
 test_merge_with_two_parents_fails() {
@@ -707,6 +712,45 @@ test_unprotected_with_its_decision_row_still_fails_protection() {
   expect_result "$d" decision-row PASS
 }
 
+test_private_project_refused_protection_says_it_is_expected() {
+  # Review round 2, item 2: GitHub answers 403 for the protection of a
+  # private project on a plan without protection (the text is GitHub's
+  # as the script's tests have it; unverified). That is the
+  # --allow-unprotected path: still FAIL for the e2e runs, in the right
+  # words, and the decision row then counts.
+  local d
+  d="$(tmpdir)"; finished "$d" node mit
+  gh_jq "$d" "$P" '.private = true | .visibility = "private"'
+  change_setup "$d" 'printf "%s\n" "| 2026-10-15 | The main version (main) is not protected | because. |" >>memory/decisions.md'
+  gh_error "$d" "$P/branches/main/protection" 403 'Upgrade to GitHub Pro or make this repository public to enable this feature.'
+  run_check "$d"
+  expect_only_fail "$d" protection
+  reason_of "$d" protection | grep -qF 'expected' || { cat "$d/out" >&2; die "the reason does not say a 403 is expected here"; }
+  reason_of "$d" protection | grep -qF 'private' || die "the reason does not name the private project"
+  reason_of "$d" protection | grep -qF -- '--allow-unprotected' || die "the reason does not name --allow-unprotected"
+  expect_result "$d" decision-row PASS
+  # A public project refused the same way: a permission, not the plan.
+  d="$(tmpdir)"; finished "$d" node mit
+  gh_error "$d" "$P/branches/main/protection" 403 'Resource not accessible by personal access token'
+  run_check "$d"
+  expect_rc "$d" 1
+  expect_result "$d" protection FAIL
+  ! reason_of "$d" protection | grep -qF 'expected' || die "a public project's 403 is called expected"
+}
+
+test_unreadable_protection_is_never_called_protected() {
+  # Review round 2, item 4 (mutant M04).
+  local d
+  d="$(tmpdir)"; finished "$d" node mit
+  gh_error "$d" "$P/branches/main/protection" 500 'Server Error'
+  run_check "$d"
+  expect_rc "$d" 1
+  expect_result "$d" protection FAIL
+  expect_result "$d" decision-row FAIL
+  ! reason_of "$d" decision-row | grep -qF 'it is protected' || { cat "$d/out" >&2; die "decision-row claims main is protected"; }
+  reason_of "$d" decision-row | grep -qF 'not known' || die "decision-row does not say it is not known"
+}
+
 test_decision_row_while_protected_fails() {
   local d
   d="$(tmpdir)"; finished "$d" node mit
@@ -769,15 +813,48 @@ test_folder_missing_or_not_a_copy_fails() {
   expect_rc "$d" 1
   expect_result "$d" copy FAIL
   expect_result "$d" project PASS
-  grep -qF "nothing to remove" "$d/out" || { cat "$d/out" >&2; die "missing folder: no word on the removal line"; }
+  expect_no_folder_removal "$d"
   mkdir "$d/plain"
   run_check "$d" "$OWNER/$NAME" "$d/plain"
   expect_rc "$d" 1
   expect_result "$d" copy FAIL
+  expect_no_folder_removal "$d"
   # A folder inside the copy is not the copy.
   run_check "$d" "$OWNER/$NAME" "$(COPY "$d")/docs"
   expect_rc "$d" 1
   expect_result "$d" copy FAIL
+  expect_no_folder_removal "$d"
+}
+
+# expect_no_folder_removal <d>: no rm line, a sentence saying why, and
+# the project's delete command still shown (it depends on the name only).
+expect_no_folder_removal() {
+  ! grep -qF 'rm -rf' "$1/out" || { cat "$1/out" >&2; die "a folder removal command is shown for a folder that is not the project's copy"; }
+  grep -qF 'No command to remove the folder is shown' "$1/out" || { cat "$1/out" >&2; die "no sentence saying why the folder removal is not shown"; }
+  grep -qxF "    gh repo delete $OWNER/$NAME --yes" "$1/out" || { cat "$1/out" >&2; die "the project's delete command is gone"; }
+}
+
+test_no_folder_removal_unless_the_copy_check_passed() {
+  # Review round 2, blocking 1: the rm line only for a folder that passed
+  # the copy check. Another project's copy (as with "." run from inside
+  # the template's own checkout), and a copy of this project that is not
+  # clean, get a sentence instead.
+  local d other
+  d="$(tmpdir)"; finished "$d" node mit
+  other="$d/template checkout"
+  G clone -q "$d/remotes/$OWNER/$NAME.git" "$other"
+  G -C "$other" remote set-url origin "https://github.com/factoincognito/ai-project-template-v2.git"
+  run_check "$d" "$OWNER/$NAME" "$other"
+  expect_result "$d" copy FAIL
+  expect_no_folder_removal "$d"
+  ( CDPATH='' cd "$other" && run_check "$d" "$OWNER/$NAME" . )
+  expect_result "$d" copy FAIL
+  expect_no_folder_removal "$d"
+  # The right project, but not clean.
+  printf 'x\n' >"$(COPY "$d")/stray.txt"
+  run_check "$d"
+  expect_only_fail "$d" copy
+  expect_no_folder_removal "$d"
 }
 
 test_changelog_lines_missing_fail() {
@@ -849,6 +926,40 @@ test_placeholder_left_fails() {
     run_check "$d"; expect_only_fail "$d" placeholders
     reason_of "$d" placeholders | grep -qF "$file" || { cat "$d/out" >&2; die "$spec: the reason does not name $file"; }
   done
+}
+
+test_fill_table_file_missing_fails() {
+  # Review round 2, item 4 (mutant M20).
+  local d
+  d="$(tmpdir)"; finished "$d" node mit
+  change_setup "$d" 'git rm -q docs/NEXT_SESSION.md'
+  run_check "$d"; expect_only_fail "$d" placeholders
+  reason_of "$d" placeholders | grep -qF docs/NEXT_SESSION.md || { cat "$d/out" >&2; die "the reason does not name the missing file"; }
+}
+
+test_licence_with_an_empty_holder_or_year_fails() {
+  # Review round 2, item 5: each placeholder must be filled with text.
+  local d line
+  for line in 'Copyright (c) 2026 ' 'Copyright (c)  Octo User' 'Copyright (c) 2026  '; do
+    echo "case: '$line'"
+    d="$(tmpdir)"; finished "$d" node mit
+    LINE="$line" change_setup "$d" 'awk '"'"'NR == 3 { print ENVIRON["LINE"]; next } { print }'"'"' LICENSE >l.tmp; mv l.tmp LICENSE'
+    run_check "$d"; expect_only_fail "$d" licence
+  done
+}
+
+test_licence_name_from_the_changelog_is_checked_before_use() {
+  # Review round 2, item 6: the name goes into a gh api path only when it
+  # looks like a licence key.
+  local d
+  d="$(tmpdir)"; finished "$d" node mit
+  change_setup "$d" 'awk '"'"'{ if ($0 == "- Licence: mit.") print "- Licence: ../user?x={owner}."; else print }'"'"' CHANGELOG.md >c.tmp; mv c.tmp CHANGELOG.md'
+  run_check "$d"
+  expect_rc "$d" 1
+  expect_result "$d" changelog FAIL
+  expect_result "$d" licence FAIL
+  ! grep -F 'licenses/' "$d/gh.log" | grep -qF '..' || die "the name reached gh"
+  ! grep -qF '{owner}' "$d/gh.log" || die "the name reached gh"
 }
 
 test_placeholder_over_two_lines_left_fails() {
@@ -981,6 +1092,21 @@ test_github_unreachable_fails_every_github_check_plainly() {
   expect_result "$d" copy FAIL
   reason_of "$d" project | grep -qF 'gh auth status' || { cat "$d/out" >&2; die "no next step for an unreachable GitHub"; }
   ! grep -nE 'error connecting|githubstatus' "$d/out" >&2 || die "gh's own words in the output"
+}
+
+test_git_settings_in_the_copy_run_no_command() {
+  # Review round 2, item 7: core.fsmonitor in the copy's settings names a
+  # command that git status would run.
+  local d h
+  d="$(tmpdir)"; finished "$d" node mit
+  # git runs the setting through a shell: a folder without a space.
+  h="$(mktemp -d "$WORK/hook.XXXXXX")"
+  printf '#!/bin/sh\n: >"%s/RAN"\nexit 1\n' "$h" >"$h/hook.sh"
+  chmod +x "$h/hook.sh"
+  G -C "$(COPY "$d")" config core.fsmonitor "$h/hook.sh"
+  run_check "$d"
+  [ ! -e "$h/RAN" ] || die "a command named in the copy's git settings ran"
+  expect_all_pass "$d"
 }
 
 # ---------- what it cannot see ----------
