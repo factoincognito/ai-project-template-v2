@@ -767,9 +767,9 @@ test_workflow_bootstrapper_cancels_superseded_pr_runs_but_never_a_tag_run() {
       cancel-in-progress: false' ] || { printf '%s\n' "$pub" >&2; die "publish job concurrency changed"; }
 }
 
-test_workflow_no_continue_on_error_in_the_required_check_or_its_needs() {
-  # continue-on-error on a test job or step turns a failing leg into a
-  # success result, and the required check green with it.
+# assert_no_continue_on_error: no continue-on-error key in bootstrapper-test
+# or a job it needs, in the workflow at BWF; dies naming the job.
+assert_no_continue_on_error() {
   local id ids n=0
   ids="bootstrapper-test $(wf_needs bootstrapper-test | tr '\n' ' ')"
   for id in $ids; do
@@ -778,9 +778,42 @@ test_workflow_no_continue_on_error_in_the_required_check_or_its_needs() {
     ! wf_job "$id" | grep -nE '(^|[[:space:]])continue-on-error[[:space:]]*:' >&2 \
       || die "continue-on-error in $id"
   done
+  CHECKED_IDS="$ids"
+  CHECKED_N="$n"
+}
+
+test_workflow_no_continue_on_error_in_the_required_check_or_its_needs() {
+  # continue-on-error on a test job or step turns a failing leg into a
+  # success result, and the required check green with it.
+  local id ids n
+  assert_no_continue_on_error
+  ids="$CHECKED_IDS"; n="$CHECKED_N"
   [ "$n" -ge 3 ] || die "expected bootstrapper-test and at least two needs, got: $ids"
   for id in scripts-test bootstrap-project-test; do
     printf ' %s ' "$ids" | grep -qF " $id " || die "$id is not checked (not needed by bootstrapper-test)"
+  done
+}
+
+test_workflow_continue_on_error_check_catches_every_spelling_of_the_key() {
+  # YAML reads "continue-on-error": true and 'continue-on-error': true as
+  # the same key as the bare one, so each spelling, on a step of a job
+  # bootstrapper-test needs, must fail the check; the real workflow, copied
+  # unchanged, must pass it.
+  local fx key err
+  fx="$WORK/bootstrapper.yml"
+  cp "$BWF" "$fx"
+  ( BWF="$fx"; assert_no_continue_on_error ) || die "the unchanged copy of the workflow fails the check"
+  for key in 'continue-on-error' '"continue-on-error"' "'continue-on-error'"; do
+    awk -v k="$key" '{ print }
+      /^  scripts-test:[[:space:]]*$/ { injob = 1; next }
+      /^  [A-Za-z0-9_-]+:/ { injob = 0 }
+      injob && !done && /^      - uses: actions\/checkout/ { print "        " k ": true"; done = 1 }' "$BWF" >"$fx"
+    grep -qF "        $key: true" "$fx" || die "fixture: the key $key was not inserted"
+    err="$WORK/err.$RANDOM"
+    if ( BWF="$fx"; assert_no_continue_on_error ) 2>"$err"; then
+      die "the check passed a step with $key: true in scripts-test"
+    fi
+    grep -qF "continue-on-error in scripts-test" "$err" || { cat "$err" >&2; die "the check failed for another reason with $key"; }
   done
 }
 
