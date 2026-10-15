@@ -1450,9 +1450,12 @@ preflight_git() {
 
 # ---- gh ----
 
-# check_gh: gh runs, and its create command offers --template (the
-# feature check: no version number is compared). GH_PROBLEM says which
-# part failed: missing or old.
+# check_gh: gh runs, and offers each option the script uses that older
+# versions lack (the feature check: no version number is compared): repo
+# create --template (step 2), pr checks --json (step 15) and pr merge
+# --match-head-commit (step 17). Help goes to stdout or stderr by gh
+# version, so both are read. GH_PROBLEM says which part failed: missing
+# or old.
 GH_PROBLEM=""
 check_gh() {
   local help=""
@@ -1460,14 +1463,17 @@ check_gh() {
     GH_PROBLEM=missing
     return 1
   fi
+  GH_PROBLEM=old
   # The command in quotes is not a message: the marker keeps it out of
   # the banned-words check.
   help="$(run_gh repo create --help 2>&1)" || help="" # not-a-message
-  case "$help" in
-    *--template*) return 0 ;;
-  esac
-  GH_PROBLEM=old
-  return 1
+  case "$help" in *--template*) ;; *) return 1 ;; esac
+  help="$(run_gh pr checks --help 2>&1)" || help=""
+  case "$help" in *--json*) ;; *) return 1 ;; esac
+  help="$(run_gh pr merge --help 2>&1)" || help=""
+  case "$help" in *--match-head-commit*) ;; *) return 1 ;; esac
+  GH_PROBLEM=""
+  return 0
 }
 
 guide_gh() {
@@ -1488,11 +1494,11 @@ guide_gh_missing() {
 
 guide_gh_old() {
   guide_begin "The GitHub command-line tool (gh) on this computer is too old." \
-    "The script needs a gh that can create a project from a template, which older versions of gh cannot do."
+    "The script needs a gh that can create a project from a template, read its checks and add a proposed change, which older versions of gh cannot do."
   gh_install_steps upgrade
   guide_end "the script says \"Done. gh is installed and can create a project from a template.\"" \
     "if the script still says that gh is too old, close this window, open a new one, and start the script again there." \
-    "it checks that gh's command for creating a project offers the --template option."
+    "it checks that gh's commands for creating a project, for reading its checks and for adding a proposed change offer the options the script uses: --template, --json and --match-head-commit."
 }
 
 # gh_install_steps install|upgrade: the steps both gh guides share.
