@@ -71,7 +71,7 @@ REAL_GIT="$(command -v git)"
 export GIT_CONFIG_NOSYSTEM=1
 HOME_DIR="$WORK/home"
 mkdir -p "$HOME_DIR"
-: >"$HOME_DIR/.gitconfig"
+printf '[gc]\n\tauto = 0\n[maintenance]\n\tauto = false\n[receive]\n\tautogc = false\n' >"$HOME_DIR/.gitconfig"
 export HOME="$HOME_DIR"
 unset XDG_CONFIG_HOME GIT_CONFIG_GLOBAL GH_TOKEN GITHUB_TOKEN GIT_DIR GIT_WORK_TREE
 # Settings passed in the environment (GIT_CONFIG_COUNT and its keys, as
@@ -79,6 +79,17 @@ unset XDG_CONFIG_HOME GIT_CONFIG_GLOBAL GH_TOKEN GITHUB_TOKEN GIT_DIR GIT_WORK_T
 # reports, such as the copy's remote.
 unset GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
 G() { "$REAL_GIT" -c user.name=Tester -c user.email=tester@example.invalid -c init.defaultBranch=main "$@"; }
+
+# quiet_repo <git folder>: git's own automatic maintenance (gc --auto,
+# maintenance run --auto, gc after a push received) is turned off in the
+# repo's own settings, which win over any global ones: started detached
+# by a command of the harness, it wrote into the copy while the checker
+# ran and its snapshot differed (seen on CI's newer git).
+quiet_repo() {
+  "$REAL_GIT" --git-dir="$1" config gc.auto 0
+  "$REAL_GIT" --git-dir="$1" config maintenance.auto false
+  "$REAL_GIT" --git-dir="$1" config receive.autogc false
+}
 
 # The real bootstrapper, built once (build.sh is tested in bootstrap/test.sh).
 BUILT="$WORK/built"
@@ -207,6 +218,7 @@ finished() {
   # GitHub's template change: the bootstrapper's files, as one commit.
   cp -R "$BUILT/." "$work/"
   G init -q "$work"
+  quiet_repo "$work/.git"
   G -C "$work" add -A
   G -C "$work" -c user.name=GitHub -c user.email=noreply@github.com commit -q -m "Initial commit"
   # The setup, by the script's own functions, then its self-check.
@@ -235,10 +247,12 @@ finished() {
   ) >"$d/setup.out" 2>&1 || { cat "$d/setup.out" >&2; die "the script's setup functions failed"; }
   G -C "$work" commit -q -m "Set up $NAME (#1)"
   G init -q --bare "$bare"
+  quiet_repo "$bare"
   G --git-dir="$bare" symbolic-ref HEAD refs/heads/main
   G -C "$work" push -q "$bare" main
   # The copy on this computer, as gh repo clone makes it.
   G clone -q "$bare" "$d/my copy"
+  quiet_repo "$d/my copy/.git"
   G -C "$d/my copy" remote set-url origin "https://github.com/$OWNER/$NAME.git"
   # GitHub's answers.
   gh_set "$d" "$P" "{\"id\":1,\"name\":\"$NAME\",\"full_name\":\"$OWNER/$NAME\",\"private\":false,\"visibility\":\"public\",\"default_branch\":\"main\",\"delete_branch_on_merge\":true,\"allow_squash_merge\":true,\"allow_merge_commit\":true,\"template_repository\":{\"id\":2,\"name\":\"ai-project-bootstrap\",\"full_name\":\"factoincognito/ai-project-bootstrap\"}}"
@@ -742,6 +756,13 @@ test_private_project_refused_protection_says_it_is_expected() {
   expect_rc "$d" 1
   expect_result "$d" protection FAIL
   ! reason_of "$d" protection | grep -qF 'expected' || die "a public project's 403 is called expected"
+  # A public project can be protected on any plan, so even GitHub's plan
+  # message is not the --allow-unprotected path there.
+  d="$(tmpdir)"; finished "$d" node mit
+  gh_error "$d" "$P/branches/main/protection" 403 'Upgrade to GitHub Pro or make this repository public to enable this feature.'
+  run_check "$d"
+  expect_rc "$d" 1
+  ! reason_of "$d" protection | grep -qF 'expected' || die "a public project's plan 403 is called expected"
 }
 
 test_unreadable_protection_is_never_called_protected() {
@@ -849,6 +870,7 @@ test_no_folder_removal_unless_the_copy_check_passed() {
   d="$(tmpdir)"; finished "$d" node mit
   other="$d/template checkout"
   G clone -q "$d/remotes/$OWNER/$NAME.git" "$other"
+  quiet_repo "$other/.git"
   G -C "$other" remote set-url origin "https://github.com/factoincognito/ai-project-template-v2.git"
   run_check "$d" "$OWNER/$NAME" "$other"
   expect_result "$d" copy FAIL

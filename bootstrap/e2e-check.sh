@@ -211,9 +211,12 @@ COPY_READABLE=""
 COPY_PASSED=""
 COPY_PROBLEM=""
 TRACKED=""
-# core.fsmonitor=false: a setting in the copy's own git settings cannot
-# make these read commands run a command.
-in_git() { git -C "$DIR" -c core.fsmonitor=false "$@"; }
+# Every git call of the checker: --no-optional-locks (git status would
+# otherwise refresh the index), core.fsmonitor=false (a setting in the
+# copy's own git settings cannot make it run a command), gc.auto=0 and
+# maintenance.auto=false (git never starts its own maintenance, which
+# writes into the copy).
+in_git() { git -C "$DIR" --no-optional-locks -c core.fsmonitor=false -c gc.auto=0 -c maintenance.auto=false "$@"; }
 
 # read_copy: whether DIR is the top folder of a git copy (COPY_READABLE),
 # and its tracked files (TRACKED, one per line).
@@ -395,6 +398,10 @@ check_setup_branch() {
 }
 
 PROTECTED=""
+plan_refusal() {
+  case "$API_BODY" in *"Upgrade to GitHub Pro"* | *"make this repository public"*) return 0 ;; esac
+  return 1
+}
 check_protection() {
   local got diff="" want w g field
   api_get "repos/$OWNER/$NAME/branches/main/protection" "$READBACK_JQ"
@@ -403,7 +410,10 @@ check_protection() {
     result FAIL protection "main is not protected (GitHub: not found); the run protects it and requires the check build."
     return 0
   fi
-  if [ "$API_STATUS" = 403 ] && [ "$R_PRIVATE" = true ]; then
+  # GitHub's message for a plan without protection (as the script's tests
+  # have it; unverified): only then is a private project's 403 the
+  # --allow-unprotected path, not a missing permission or a rate limit.
+  if [ "$API_STATUS" = 403 ] && [ "$R_PRIVATE" = true ] && plan_refusal; then
     PROTECTED=plan
     result FAIL protection "GitHub refused to show the protection of main (HTTP 403). For a private project this is expected when its GitHub plan cannot protect it, the path of --allow-unprotected; the end-to-end runs use public projects, so it fails here. Check the project's plan, and that memory/decisions.md records the choice (see decision-row)."
     return 0
@@ -470,7 +480,7 @@ check_copy() {
   elif [ "$branch" != main ]; then
     problems="${problems:+$problems; }it is on $branch, not on main"
   fi
-  status="$(in_git --no-optional-locks status --porcelain --untracked-files=all 2>&1 | tr -d '\r')" || status="git status failed"
+  status="$(in_git status --porcelain --untracked-files=all 2>&1 | tr -d '\r')" || status="git status failed"
   if [ -n "$status" ]; then
     n="$(printf '%s\n' "$status" | grep -c . || true)"
     problems="${problems:+$problems; }$n file(s) changed or not saved: $(printf '%s\n' "$status" | head -n 5 | awk '{ $1 = ""; sub(/^ /, ""); printf "%s%s", (n++ ? ", " : ""), $0 }')"
@@ -780,13 +790,19 @@ delete_hint() {
   echo "To delete this throwaway project when you are done, run these yourself (this check deleted nothing):"
   echo "    gh auth refresh -h github.com -s delete_repo"
   echo "    gh repo delete $OWNER/$NAME --yes"
-  if [ -n "$COPY_PASSED" ] && [ -d "$DIR" ]; then
+  # A symbolic link gets no removal line: rm -rf would remove only the
+  # link, and the folder it points to is not checked to be the one meant.
+  if [ -n "$COPY_PASSED" ] && [ -d "$DIR" ] && [ ! -L "${DIR%/}" ]; then
     abs="$(CDPATH='' cd -- "$DIR" && pwd)" || abs=""
   fi
   if [ -n "$abs" ]; then
     echo "    rm -rf -- $(shell_quote "$abs")"
+  elif [ ! -e "$DIR" ]; then
+    echo "No command to remove the folder is shown: $DIR does not exist, so there is nothing to remove there."
+  elif [ -L "${DIR%/}" ]; then
+    echo "No command to remove the folder is shown, because $DIR is a symbolic link: removing it would leave the copy. Look at the folder it points to yourself before you delete it."
   else
-    echo "No command to remove the folder is shown, because the copy check did not pass (see copy): $DIR may not be this project's copy. Look at the folder yourself before you delete anything there."
+    echo "No command to remove the folder is shown, because the copy check did not pass (see copy): $DIR may not be this project's copy, or it holds unsaved work. Look at the folder yourself before you delete anything there."
   fi
 }
 
