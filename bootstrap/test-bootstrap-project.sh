@@ -8567,6 +8567,302 @@ test_the_words_for_a_project_set_up_already_are_not_those_for_one_the_script_jus
   done
 }
 
+# ---------- S19: the README steps for the script ----------
+# Spec: PBI-1.14, "What changes in the existing manual README steps" and
+# "Guided steps in the script, and what only the README can cover". The
+# READMEs are read from this checkout (the stub as it ships, before the
+# build fills anything in).
+
+STUB_README="$REPO/bootstrap/stubs/README.md"
+TEMPLATE_README="$REPO/README.md"
+# The one command of the spec ("Obtaining and starting it").
+ONE_COMMAND='gh api repos/factoincognito/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh && bash bootstrap-project.sh'
+SIGN_IN_LINE='gh auth login -h github.com -p https -w -s workflow'
+
+# section_of <file> <heading line> <stop regex>: the lines after the
+# exact heading line up to (not including) the first line matching the
+# stop regex. Fails when the heading is not there exactly once.
+section_of() {
+  [ "$(grep -cxF -- "$2" "$1")" -eq 1 ] || die "$1: the heading \"$2\" is not there exactly once"
+  HEADING="$2" STOP="$3" awk '
+    on && $0 ~ ENVIRON["STOP"] { exit }
+    on { print }
+    $0 == ENVIRON["HEADING"] { on = 1 }' "$1"
+}
+
+# prose_of: stdin without code: fenced blocks (``` lines, indented or
+# not) and inline `code`. That is the text a reader reads as words; an
+# exact command or file name is text to copy, as say_command is in the
+# script. Indentation alone is not code (review of #174, B1): wrapped
+# lines of nested list items are indented too, and they are prose.
+prose_of() {
+  awk '/^ *```/ { f = !f; next } !f { print }' | sed -E 's/`[^`]*`//g'
+}
+
+# placement_rows <file>: every markdown table row that names a pack file
+# (the by-hand placement table, under any header).
+placement_rows() {
+  grep -nE '^ *\|.*(ci\.yml|gitignore|package\.json|pyproject\.toml|app\.json|starter/|vscode-settings)' "$1" || true
+}
+
+test_stub_readme_keeps_the_setup_heading_and_its_setup_boundary() {
+  # The script (SETUP_HEADING, remove_setup_section, the resume checks)
+  # and e2e-check.sh match this whole heading line, and the section ends
+  # at "## Setup".
+  local next
+  grep -qxF -- '## After bootstrapping (delete this section when done)' "$STUB_README" \
+    || die "the stub README lost the setup heading line"
+  ( load_script; [ "$SETUP_HEADING" = '## After bootstrapping (delete this section when done)' ] ) \
+    || die "the script's SETUP_HEADING is not the stub's heading"
+  next="$(awk '$0 == "## After bootstrapping (delete this section when done)" { on = 1; next } on && /^## / { print; exit }' "$STUB_README")"
+  [ "$next" = '## Setup' ] || die "the next heading after the setup section is [$next], want [## Setup]"
+}
+
+test_stub_readme_setup_section_is_three_lines_with_the_resume_command() {
+  local body n
+  body="$(section_of "$STUB_README" '## After bootstrapping (delete this section when done)' '^## ')"
+  # Lines of text: not empty and not a ``` fence line around the command.
+  n="$(grep -v '^ *```' <<<"$body" | grep -c . || true)"
+  [ "$n" -eq 3 ] || { printf '%s\n' "$body" >&2; die "the setup section has $n lines of text, want 3"; }
+  grep -qF -- "$ONE_COMMAND --resume --owner " <<<"$body" \
+    || { printf '%s\n' "$body" >&2; die "the setup section lacks the one command with --resume --owner"; }
+  grep -qF -- ' --name ' <<<"$body" || die "the setup section lacks --name"
+  grep -qF 'If you see this, setup has not run' <<<"$body" \
+    || die "the setup section does not say that setup has not run"
+}
+
+test_stub_readme_setup_section_has_no_pack_table_and_no_numbered_steps() {
+  local body
+  body="$(section_of "$STUB_README" '## After bootstrapping (delete this section when done)' '^## ')"
+  ! grep -qE '^ *\|' <<<"$body" || die "the setup section still has a table"
+  ! grep -qE '^ *[1-9]\. ' <<<"$body" || die "the setup section still has numbered steps"
+  [ -z "$(placement_rows "$STUB_README")" ] || { placement_rows "$STUB_README" >&2; die "the stub README still has a placement table row"; }
+}
+
+test_placement_row_check_catches_a_table_under_another_header() {
+  # Review of #174, note 5: a placement table under a renamed header.
+  local d
+  d="$(tmpdir)"
+  cp "$STUB_README" "$d/r"
+  printf '%s\n' '' '| File | Place |' '|---|---|' '| `ci.yml` | `.github/workflows/ci.yml` |' >>"$d/r"
+  [ "$(placement_rows "$d/r" | grep -c . || true)" -eq 1 ] || { placement_rows "$d/r" >&2; die "the planted row was not caught exactly once"; }
+}
+
+test_stub_readme_branch_protection_points_to_the_runbook() {
+  local body
+  ! grep -qF 'step 2 above' "$STUB_README" || die "the stub README still says (step 2 above)"
+  body="$(section_of "$STUB_README" '## Branch protection' '^## ')"
+  grep -qF '`docs/DEV_INFRASTRUCTURE.md`' <<<"$body" \
+    || die "the stub README's Branch protection section does not point to docs/DEV_INFRASTRUCTURE.md"
+}
+
+test_template_readme_has_step_0_and_the_one_command() {
+  local body
+  body="$(section_of "$TEMPLATE_README" '### Creating a project from the template' '^##')"
+  grep -qiE 'step 0' <<<"$body" || die "no step 0"
+  grep -qF -- "$SIGN_IN_LINE" <<<"$body" || die "step 0 lacks the sign-in line"
+  grep -qF 'Authenticate Git' <<<"$body" || die "step 0 does not say to answer Yes to Authenticate Git"
+  grep -qF 'Git for Windows' <<<"$body" || die "step 0 lacks Git for Windows"
+  grep -qF 'https://cli.github.com' <<<"$body" || die "step 0 does not say where gh comes from"
+  # Here-strings, not printf | grep -q: under pipefail, grep -q leaving
+  # early on a match can end printf with SIGPIPE and fail the pipe.
+  [ "$(sed 's/^ *//' <<<"$body" | grep -cxF -- "$ONE_COMMAND" || true)" -ge 1 ] \
+    || die "the one command is not on a line of its own"
+  ! grep -qF 'does not exist until' "$TEMPLATE_README" || die "the stale 'does not exist until' text is still there"
+  [ -z "$(placement_rows "$TEMPLATE_README")" ] || { placement_rows "$TEMPLATE_README" >&2; die "the by-hand pack table is still there"; }
+  ! grep -qF 'Turn on branch protection for `main`' "$TEMPLATE_README" || die "the by-hand protection step is still there"
+}
+
+# README_GUIDES: each guide of the script as "<function>|<group>|<phrase>":
+# the phrase is found only in that guide's bullet of the README, under the
+# group the guide belongs to. Groups (README "What the script guides you
+# through"): recheck (before anything exists; it checks again and goes
+# on), restart (before anything exists; it stops, and you start it again),
+# create (GitHub refuses to create the project), after (the project
+# exists; continue it), resume (only when continuing with --resume).
+# A function may have several rows (one per case it covers).
+README_GUIDES='guide_bash_old|restart|a bash that is too old
+guide_old_script|restart|an older version of the script
+guide_github_permissions|restart|a key (a token) set in GH_TOKEN
+guide_git|recheck|git not installed
+guide_gh_missing|recheck|gh not installed
+guide_gh_old|recheck|gh installed, but too old for the script
+guide_npm|recheck|Node.js and npm not installed
+guide_github_account|recheck|gh signed out, or its sign-in no longer accepted
+guide_github_permissions|recheck|signed in without the `workflow` permission
+guide_github_offline|recheck|GitHub not reachable from this computer
+guide_project_exists|recheck|a project with that name that already exists on GitHub
+guide_dir_no_parent|recheck|a folder for the new project that does not exist
+guide_dir_not_empty|recheck|or that is not empty
+guide_dir_is_file|recheck|or that is a file
+guide_dir_not_writable|recheck|or that cannot be written to
+guide_dir_in_git|recheck|is inside another project that git keeps track of
+guide_create_taken|create|the name is taken by a project your account cannot see
+guide_create_refused|create|your account may not create projects there (an organisation
+guide_protect|after|a private project on a free GitHub account
+guide_actions_off|after|GitHub Actions (the GitHub service
+guide_git_sign_in|after|git cannot sign in to GitHub
+guide_dir_not_own_copy|resume|the folder is not a copy of this project
+guide_project_missing|resume|there is no project with that name to continue
+refuse_project|resume|the project was not made by this version of the bootstrapper
+guide_line_endings|resume|README.md or CHANGELOG.md on GitHub has Windows line endings
+refuse_copy|resume|the copy on this computer does not match GitHub'
+# README_GUIDE_LEADS: the first words of each group's top bullet.
+README_GUIDE_LEADS='recheck|- Before anything is created, the script checks again and goes on
+restart|- Before anything is created, the script stops and you start it again
+create|- When GitHub refuses to create the project
+after|- After the project exists
+resume|- Only when you continue a setup with'
+
+# guide_group <group>: the README lines of that group's top bullet, up to
+# the next top bullet or the first line that is not indented.
+guide_group() {
+  local lead
+  lead="$(awk -F'|' -v g="$1" '$1 == g { print $2 }' <<<"$README_GUIDE_LEADS")"
+  [ -n "$lead" ] || die "no lead for group $1"
+  LEAD="$lead" awk '
+    on && (/^- / || /^[^ ]/) { exit }
+    on { print }
+    index($0, ENVIRON["LEAD"]) == 1 { on = 1; print }' "$TEMPLATE_README"
+}
+
+test_template_readme_lists_every_guide_in_its_group() {
+  # Spec: the README lists every guide of the script, so a user can read
+  # them first. Review of #174, notes 2, 3 and 4: a phrase unique to each
+  # guide, in the group that says what happens after it.
+  local fn group phrase n g
+  while IFS='|' read -r fn group phrase; do
+    grep -qE "^${fn}\(\) \{" "$SCRIPT" || die "README_GUIDES names $fn, which the script does not have"
+    guide_group "$group" | tr '\n' ' ' | sed 's/  */ /g' | grep -qF -- "$phrase" \
+      || die "the README group $group lacks the guide $fn: $phrase"
+    n="$(sed -n '/^### Creating a project from the template$/,/^##[^#]/p' "$TEMPLATE_README" | tr '\n' ' ' | sed 's/  */ /g' | grep -oF -- "$phrase" | grep -c . || true)"
+    [ "$n" -eq 1 ] || die "the phrase for $fn is in the README $n times, want 1: $phrase"
+  done <<<"$README_GUIDES"
+  # Every guide of the script has a row: a new guide must be listed.
+  for g in $(grep -oE '^(guide|refuse)_[a-z_]+\(\)' "$SCRIPT" | sed 's/()//'); do
+    case "$g" in
+      guide_begin | guide_step | guide_end | guide_details) continue ;; # helpers
+      guide_gh | guide_dir | guide_project | guide_published_version) continue ;; # pick one of the guides above
+    esac
+    grep -q "^$g|" <<<"$README_GUIDES" || die "the script's guide $g is not in README_GUIDES (add it to the README and here)"
+  done
+}
+
+test_guide_list_check_fails_when_a_bullet_is_deleted() {
+  # Review of #174, note 4: deleting the whole old-bash bullet left the
+  # old check green. Plant that deletion in a copy and run the check.
+  local d
+  d="$(tmpdir)"
+  grep -vF 'a bash that is too old' "$TEMPLATE_README" >"$d/README.md"
+  ! cmp -s "$TEMPLATE_README" "$d/README.md" || die "nothing was deleted (test is stale)"
+  ! ( TEMPLATE_README="$d/README.md"; test_template_readme_lists_every_guide_in_its_group ) 2>/dev/null \
+    || die "the check passed with the old-bash bullet deleted"
+}
+
+test_template_readme_names_every_question() {
+  # Review of #174, note 8: the README names every question the script
+  # can ask, read from the script's own answer calls.
+  local body q n=0
+  body="$(section_of "$TEMPLATE_README" '### Creating a project from the template' '^##' | tr '\n' ' ' | sed 's/  */ /g')"
+  while IFS= read -r q; do
+    n=$((n + 1))
+    grep -qiF -- "$q" <<<"$body" || die "the README does not name the question: $q"
+  done < <(awk '/^ *answer --/ { want = 3 } want { want--; if (want == 0) print }' "$SCRIPT" \
+    | sed -E 's/^ *"//; s/".*//; s/ \(type the number or the name\)//; s/\? \(yes or no\)//')
+  [ "$n" -ge 13 ] || die "read $n questions from the script, want at least 13 (test is stale)"
+}
+
+test_template_readme_lists_the_readme_only_steps() {
+  local body t
+  body="$(section_of "$TEMPLATE_README" '### Creating a project from the template' '^##' | tr '\n' ' ' | sed 's/  */ /g')"
+  for t in 'Claude app' 'gh repo delete' 'delete_repo' 'Billing and plans' 'Member privileges'; do
+    grep -qF -- "$t" <<<"$body" || die "the README-only part does not mention: $t"
+  done
+}
+
+test_template_readme_branch_protection_has_no_step_reference() {
+  local body
+  ! grep -qF 'step 3 above' "$TEMPLATE_README" || die "the template README still says (step 3 above)"
+  body="$(section_of "$TEMPLATE_README" '## Branch protection' '^## ')"
+  grep -qF '`docs/DEV_INFRASTRUCTURE.md`' <<<"$body" \
+    || die "the template README's Branch protection section does not point to docs/DEV_INFRASTRUCTURE.md"
+}
+
+test_readme_resume_sentence_matches_what_the_script_prints() {
+  # Review of #174, B2. The script's command to go on: no --resume before
+  # the project exists, or when it refuses to continue one (FRESH_START);
+  # --resume once it exists, with earlier answers after it. The README
+  # says that, and not that the command ends with --resume.
+  local out
+  out="$( load_script
+    RESTART_CMD=bootstrap-project.sh RESTART_ARGS=" --name foo"
+    IN_OWNER=me ANSWERED=" --owner " OPT_RESUME="" OPT_ALLOW_UNPROTECTED=""
+    CREATED_NOTE="" FRESH_START=""; shown_command; echo "before:$SHOWN_CMD"
+    CREATED_NOTE=x; shown_command; echo "after:$SHOWN_CMD"
+    FRESH_START=1; shown_command; echo "refused:$SHOWN_CMD" )"
+  grep -qxF 'before:bootstrap-project.sh --owner me' <<<"$out" || { echo "$out" >&2; die "before: unexpected command"; }
+  grep -qxF 'after:bootstrap-project.sh --resume --owner me' <<<"$out" || { echo "$out" >&2; die "after: --resume is not followed by the answers"; }
+  grep -qxF 'refused:bootstrap-project.sh --owner me' <<<"$out" || { echo "$out" >&2; die "refused: unexpected command"; }
+  ! grep -qiE 'ends? with `--resume`|always ends with' "$TEMPLATE_README" || die "the README says the command ends with --resume"
+  sed -n '/^### Creating a project from the template$/,/^##[^#]/p' "$TEMPLATE_README" | tr '\n' ' ' | sed 's/  */ /g' \
+    | grep -ciF 'once the project exists on GitHub, that command includes `--resume`' >/dev/null \
+    || die "the README does not say when the command includes --resume"
+}
+
+test_readme_commands_are_the_ones_the_script_prints() {
+  # The download part of the one command and the sign-in line are the
+  # script's own strings, so the README and the script cannot drift.
+  local dl="${ONE_COMMAND% && bash bootstrap-project.sh}"
+  grep -qF -- "say_command '$dl'" "$SCRIPT" || die "the script no longer prints the README's download command"
+  grep -qF -- "say_command \"$SIGN_IN_LINE\"" "$SCRIPT" || die "the script no longer prints the README's sign-in line"
+}
+
+test_readme_setup_text_has_no_banned_words() {
+  # The same banned-word rule as the script's messages, over the prose of
+  # the new README text (commands and file names left out).
+  local hits
+  hits="$( {
+    section_of "$STUB_README" '## After bootstrapping (delete this section when done)' '^## '
+    section_of "$TEMPLATE_README" '### Creating a project from the template' '^##'
+  } | prose_of | awk '{ print NR ": " $0 }' | banned_hits)"
+  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "banned word without its explanation in the README setup text"; }
+}
+
+test_readme_banned_word_check_catches_a_planted_word() {
+  # Guards the check above: prose_of keeps prose, also the wrapped and
+  # indented lines of nested list items (review of #174, B1), and leaves
+  # out fenced blocks and inline code.
+  local hits
+  hits="$(printf '%s\n' 'Open the repo page.' '  - a folder that is inside' '    another repo that git keeps' \
+    '     clone the project' 'Run `gh api user`.' '```' 'git clone x' '```' '   ```' '   gh repo view' '   ```' \
+    | prose_of | awk '{ print NR ": " $0 }' | banned_hits)"
+  [ "$(grep -c . <<<"$hits" || true)" -eq 3 ] || { printf '%s\n' "$hits" >&2; die "want exactly the 3 planted prose lines"; }
+  grep -qF 'Open the repo page.' <<<"$hits" || die "the planted top-level word was not caught"
+  grep -qF 'another repo that git keeps' <<<"$hits" || die "the planted word on a wrapped list line was not caught"
+  grep -qF 'clone the project' <<<"$hits" || die "the planted word on a 5-space list line was not caught"
+}
+
+test_readme_banned_word_check_reads_the_real_list_lines() {
+  # The same plant as the review, in a copy of the real README: a banned
+  # word on a wrapped line of a nested guide bullet is caught.
+  local d hits
+  d="$(tmpdir)"
+  awk '/download Git for Windows and run the installer/ && !done { sub(/download Git/, "clone the repo, download Git"); done = 1 } { print }' \
+    "$TEMPLATE_README" >"$d/README.md"
+  ! cmp -s "$TEMPLATE_README" "$d/README.md" || die "nothing was planted (test is stale)"
+  hits="$(section_of "$d/README.md" '### Creating a project from the template' '^##' | prose_of | awk '{ print NR ": " $0 }' | banned_hits)"
+  grep -qF 'clone the repo' <<<"$hits" || die "the planted word was not caught"
+}
+
+test_dev_infrastructure_says_the_script_turns_protection_on() {
+  local body
+  body="$(awk '/^\*\*Turning it on in a new project/ { on = 1 } on && /^\*\*Checking that it works\.\*\*/ { exit } on { print }' "$REPO/docs/DEV_INFRASTRUCTURE.md")"
+  [ -n "$body" ] || die "no 'Turning it on in a new project' paragraph"
+  grep -qF 'bootstrap-project.sh' <<<"$body" || die "it does not say the setup script does this"
+  grep -qiF 'fallback' <<<"$body" || die "the manual steps are not called the fallback"
+  grep -qF 'Settings, Branches' <<<"$body" || die "the manual steps are gone"
+}
+
 # ---------- run ----------
 
 TESTS=$(declare -F | awk '{print $3}' | grep '^test_')

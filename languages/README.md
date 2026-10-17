@@ -16,10 +16,10 @@ project changes them as it needs to.
 | `react-native/` | A mobile app for Android and iOS, built with React Native and Expo | Biome lint and format, TypeScript type check, Jest (jest-expo) unit and component tests with an 80% line coverage gate. No device, simulator or app-store builds |
 
 The web pack also has an optional deploy to Cloudflare (`deploy.yml`,
-`wrangler.jsonc`). Where each file goes is listed in the project's
-README ("Creating a project from the template", or "After
-bootstrapping" in a bootstrapped project), and each pack's
-`code-standards.md` explains how to work with it.
+`wrangler.jsonc`). The setup script, `bootstrap-project.sh`, lays the
+chosen pack out in a new project; where each file goes is its layout
+table, and each pack's `code-standards.md` explains how to work with
+it.
 
 ## What every pack contains
 
@@ -62,9 +62,13 @@ Every pack follows the same shape. A new pack should too:
   bootstrap script, `bootstrap-project.sh` (its `layout-pack` command):
   by a row of its own or by a folder row (such as `starter/src/`), so
   nothing is copied by guesswork. The web pack's deploy files are placed
-  only with `--with-deploy`. That table is the one the script
-  lays packs out by; the placement tables in the READMEs repeat it for
-  laying a pack out by hand.
+  only with `--with-deploy`. That table is the only one. To lay a pack
+  out by hand, in the template repository run
+  `bash tools/layout-pack.sh <pack> <empty folder>`; the script's own
+  `bash bootstrap-project.sh layout-pack <pack> <empty folder>`
+  works only in the bootstrapper, where the script sits next to
+  `languages/`.
+  Then copy what it lays out.
 - **Nothing project-specific.** Placeholders like `[project-name]`
   instead of project names, service names or domains. Those belong to
   the project.
@@ -73,9 +77,8 @@ Every pack follows the same shape. A new pack should too:
 
 1. Create `languages/<name>/` with the files above, modelled on the
    closest existing pack.
-2. Add every file to the script's layout table, and to the placement
-   tables in the template repo's README and in the bootstrapper's
-   README stub, so projects get it too.
+2. Add every file to the script's layout table, so projects get it
+   too.
 3. Lay it out in a scratch project and run its CI commands until they
    pass. Then break one rule on purpose for each thing CI is meant to
    enforce, and check that CI fails.
