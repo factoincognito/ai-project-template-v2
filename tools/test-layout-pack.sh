@@ -70,18 +70,18 @@ copy_packs() {
   echo "$d"
 }
 
-# ---------- happy path: the README table ----------
+# ---------- happy path: the layout table ----------
 
-test_node_layout_matches_readme_table() {
+test_node_layout_matches_the_expected_files() {
   local out="$WORK/node.$RANDOM"
   bash "$LAYOUT" node "$out" >/dev/null || die "layout failed"
   diff <(list_files "$out") <(printf '%s\n' \
     .github/workflows/ci.yml .gitignore .vscode/extensions.json .vscode/settings.json \
     biome.json package.json src/placeholder.test.ts tsconfig.json | LC_ALL=C sort) \
-    || die "node layout differs from the README table"
+    || die "node layout differs from the expected files"
 }
 
-test_web_layout_matches_readme_table() {
+test_web_layout_matches_the_expected_files() {
   local out="$WORK/web.$RANDOM" expected
   bash "$LAYOUT" web "$out" >/dev/null || die "layout failed"
   expected="$( {
@@ -90,10 +90,10 @@ test_web_layout_matches_readme_table() {
       vite.config.mts playwright.config.ts
     (cd "$REPO/languages/web/starter" && find src e2e -type f)
   } | LC_ALL=C sort)"
-  diff <(list_files "$out") <(echo "$expected") || die "web layout differs from the README table"
+  diff <(list_files "$out") <(echo "$expected") || die "web layout differs from the expected files"
 }
 
-test_python_layout_matches_readme_table() {
+test_python_layout_matches_the_expected_files() {
   local out="$WORK/python.$RANDOM" expected
   bash "$LAYOUT" python "$out" >/dev/null || die "layout failed"
   expected="$( {
@@ -102,11 +102,11 @@ test_python_layout_matches_readme_table() {
       .pre-commit-config.yaml
     (cd "$REPO/languages/python/starter" && find src -type f)
   } | LC_ALL=C sort)"
-  diff <(list_files "$out") <(echo "$expected") || die "python layout differs from the README table"
+  diff <(list_files "$out") <(echo "$expected") || die "python layout differs from the expected files"
   [ -f "$out/src/tests/test_placeholder.py" ] || die "no placeholder test in src/tests/"
 }
 
-test_react_native_layout_matches_readme_table() {
+test_react_native_layout_matches_the_expected_files() {
   local out="$WORK/rn.$RANDOM" expected
   bash "$LAYOUT" react-native "$out" >/dev/null || die "layout failed"
   expected="$( {
@@ -114,7 +114,7 @@ test_react_native_layout_matches_readme_table() {
       .vscode/settings.json biome.json package.json tsconfig.json app.json
     (cd "$REPO/languages/react-native/starter" && find src -type f)
   } | LC_ALL=C sort)"
-  diff <(list_files "$out") <(echo "$expected") || die "react-native layout differs from the README table"
+  diff <(list_files "$out") <(echo "$expected") || die "react-native layout differs from the expected files"
   [ -f "$out/src/App.test.tsx" ] || die "no starter test in src/"
 }
 
@@ -259,7 +259,7 @@ test_non_empty_target_dir_fails() {
 }
 
 test_pack_file_not_in_the_table_fails() {
-  # A new pack file must be placed by the table (README and this script)
+  # A new pack file must be placed by the script's layout table
   # or listed as not laid out; it must never be silently dropped.
   local packs out="$WORK/o.$RANDOM"
   packs="$(copy_packs)"
@@ -331,7 +331,7 @@ test_wrapper_lays_out_what_the_script_does() {
 
 # The expected placement, written out independently of the script:
 # "<project path> <pack path>", a trailing / meaning a whole folder. It
-# repeats the README placement table on purpose. A check derived from
+# repeats the script's placement table on purpose. A check derived from
 # the script's own table would compare the script with itself, so the
 # only honest oracle for "each file lands at the right path" is a second,
 # independent statement of where files go. It lives here, in the test,
@@ -447,6 +447,20 @@ test_the_layout_table_is_only_in_the_script_not_the_readmes() {
   ! grep -qiF 'placement tables in the' "$langs" || die "languages/README.md still points to README placement tables"
   ! grep -qF '"After' "$langs" || die "languages/README.md still points to the README's \"After bootstrapping\" section"
   grep -qF 'bootstrap-project.sh layout-pack' "$langs" || die "languages/README.md does not give the layout-pack command"
+  # Review of #174, note 1: that command works only in the bootstrapper;
+  # in the template the wrapper is the command that works.
+  grep -qF 'bash tools/layout-pack.sh <pack> <empty folder>' "$langs" \
+    || die "languages/README.md does not give tools/layout-pack.sh for the template"
+}
+
+test_the_layout_commands_languages_readme_gives_work_where_it_says() {
+  # In the template: the wrapper works and the script alone does not
+  # (it looks for languages/ next to itself, in bootstrap/stubs/).
+  local out="$WORK/o.$RANDOM" err="$WORK/e.$RANDOM"
+  bash "$LAYOUT" node "$out" >/dev/null || die "tools/layout-pack.sh failed in the template"
+  ! bash "$SCRIPT" layout-pack node "$WORK/o2.$RANDOM" >/dev/null 2>"$err" || die "bootstrap-project.sh layout-pack worked in the template"
+  grep -qF 'pack folder not found' "$err" || { cat "$err" >&2; die "unexpected failure"; }
+  grep -qF 'works only in the bootstrapper' "$REPO/languages/README.md" || die "languages/README.md does not say where each command works"
 }
 
 test_packs_workflow_uses_the_script_for_every_pack() {
