@@ -39,13 +39,17 @@ Windows.
 
    When it has worked, this command prints a version number:
 
-       gh --version
+   ```
+   gh --version
+   ```
 
    If it says "command not found", close the window, open a new one and
    try again.
 2. Sign in to GitHub. Copy this line into the window and press Enter:
 
-       gh auth login -h github.com -p https -w -s workflow
+   ```
+   gh auth login -h github.com -p https -w -s workflow
+   ```
 
    gh shows a one-time code and opens your browser (press Enter if it
    asks first). Enter the code on the GitHub page and approve. When gh
@@ -58,47 +62,68 @@ Windows.
 should hold the new project (for example `cd ~/Documents`), then copy
 this line and press Enter:
 
-    gh api repos/factoincognito/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh && bash bootstrap-project.sh
+```
+gh api repos/factoincognito/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh && bash bootstrap-project.sh
+```
 
 The first part downloads the script into that folder; the second part
-starts it. The script asks for the project's name, a one-line
-description, the language pack and the licence, shows its plan and
-waits for your yes. Each step prints a line when it starts and when it
-ends, and at the end it says what it created and what to do next. If it
-stops, it says why and prints the exact command to continue; the
-command always ends with `--resume`.
+starts it. It asks, one question at a time, for each answer you did not
+give as an option: Project name, Display name, Description, Owner,
+Product owner name, Language pack, Add the publishing files (web pack
+only), Visibility, Licence, Copyright holder (not asked when you choose
+no licence), Folder, Your name for git and Your email address for git.
+Each question says what it is for, and where a default is safe, Enter
+accepts it. Then the script shows its plan and waits for your yes. Each
+step prints a line when it starts and when it ends, and at the end it
+says what it created and what to do next.
+
+If it stops, it says why and prints the exact command to run next: one
+that starts again, or one that continues the setup. It carries your
+answers along, so you are not asked again. Before the project exists,
+that command is the one you ran. Once the project exists on GitHub,
+that command includes `--resume`, which tells the script to continue
+the project that is there instead of creating a new one.
 
 **What the script guides you through.** When something is missing, the
-script stops, prints numbered steps for your system (what to do, the
-page to open, what you will see when it has worked), and checks again.
-You can read the guides here first:
+script prints numbered steps for your system (what to do, the page to
+open, what you will see when it has worked). You can read the guides
+here first:
 
-- Before anything is created (fix it, the script checks again and goes
-  on):
-  - a bash that is too old (Windows: install the current Git for
-    Windows);
+- Before anything is created, the script checks again and goes on once
+  you have fixed it (press Enter):
   - git not installed;
-  - gh not installed, or too old;
+  - gh not installed;
+  - gh installed, but too old for the script;
   - Node.js and npm not installed (only for the node, web and
     react-native packs; the guide points to https://nodejs.org);
   - gh signed out, or its sign-in no longer accepted;
   - gh signed in without the `workflow` permission (the right to change
-    the project's checks): the script offers to run
+    the files that run the project's checks): the script offers to run
     `gh auth refresh -h github.com -s workflow` and walks you through
     the browser step;
   - your name and email for git, which it asks for;
   - GitHub not reachable from this computer;
+  - a project with that name that already exists on GitHub;
+  - a folder for the new project that does not exist, or that
+    is not empty, or that is a file, or that cannot be written to, or
+    that is inside another project that git keeps track of.
+- Before anything is created, the script stops and you start it again
+  with the command it prints, because it cannot check again in the same
+  run:
+  - a bash that is too old (Windows: install the current Git for
+    Windows; macOS: use /bin/bash);
   - an older version of the script (it shows the command to download
     the current one);
-  - a project with that name that already exists on GitHub;
-  - a folder for the new project that does not exist, is not empty, is
-    a file, cannot be written to, or is inside another project that git
-    keeps track of.
+  - gh signs in with a key (a token) set in GH_TOKEN or GITHUB_TOKEN
+    that lacks a permission: make a new key, put it there, and open a
+    new window.
 - When GitHub refuses to create the project (nothing exists yet; fix it
-  and start the script again): your account may not create projects in
-  that organisation, or gh does not have every permission it needs.
+  and start the script again with the command it prints): the name is
+  taken by a project your account cannot see, or your account may not
+  create projects there (an organisation's setting, or the permissions
+  of the key gh signs in with).
 - After the project exists (fix it, then continue with the command the
-  script prints, which ends with `--resume`):
+  script prints):
   - gh does not have every permission it needs;
   - GitHub Actions (the GitHub service that runs your project's checks)
     is turned off, or allows only the project's own actions;
@@ -110,6 +135,20 @@ You can read the guides here first:
     paid GitHub plan, make the project public, or go on without
     protection with `--allow-unprotected`, which it records in the
     project's `memory/decisions.md`).
+- Only when you continue a setup with `--resume`:
+  - there is no project with that name to continue (the command it
+    prints then starts a new one);
+  - the project was not made by this version of the bootstrapper, or
+    not by the bootstrapper at all, or its README lost the setup
+    section: the script will not continue it, and suggests a new
+    project under another name;
+  - README.md or CHANGELOG.md on GitHub has Windows line endings (a
+    carriage return): save it with LF line endings, then continue;
+  - the folder is not a copy of this project: give the right folder
+    with `--dir`, or choose a new or empty one;
+  - the copy on this computer does not match GitHub (unsaved changes,
+    or another version): move the folder away, or make it match, then
+    continue. The script never deletes your work.
 
 **What only this README covers.**
 

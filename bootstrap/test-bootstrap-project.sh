@@ -8686,19 +8686,19 @@ guide_old_script|restart|an older version of the script
 guide_github_permissions|restart|a key (a token) set in GH_TOKEN
 guide_git|recheck|git not installed
 guide_gh_missing|recheck|gh not installed
-guide_gh_old|recheck|or too old
+guide_gh_old|recheck|gh installed, but too old for the script
 guide_npm|recheck|Node.js and npm not installed
 guide_github_account|recheck|gh signed out, or its sign-in no longer accepted
-guide_github_permissions|recheck|without the
+guide_github_permissions|recheck|signed in without the `workflow` permission
 guide_github_offline|recheck|GitHub not reachable from this computer
 guide_project_exists|recheck|a project with that name that already exists on GitHub
 guide_dir_no_parent|recheck|a folder for the new project that does not exist
-guide_dir_not_empty|recheck|is not empty
-guide_dir_is_file|recheck|is a file
-guide_dir_not_writable|recheck|cannot be written to
+guide_dir_not_empty|recheck|or that is not empty
+guide_dir_is_file|recheck|or that is a file
+guide_dir_not_writable|recheck|or that cannot be written to
 guide_dir_in_git|recheck|is inside another project that git keeps track of
 guide_create_taken|create|the name is taken by a project your account cannot see
-guide_create_refused|create|your account may not create projects there
+guide_create_refused|create|your account may not create projects there (an organisation
 guide_protect|after|a private project on a free GitHub account
 guide_actions_off|after|GitHub Actions (the GitHub service
 guide_git_sign_in|after|git cannot sign in to GitHub
@@ -8805,7 +8805,7 @@ test_readme_resume_sentence_matches_what_the_script_prints() {
   grep -qxF 'refused:bootstrap-project.sh --owner me' <<<"$out" || { echo "$out" >&2; die "refused: unexpected command"; }
   ! grep -qiE 'ends? with `--resume`|always ends with' "$TEMPLATE_README" || die "the README says the command ends with --resume"
   sed -n '/^### Creating a project from the template$/,/^##[^#]/p' "$TEMPLATE_README" | tr '\n' ' ' | sed 's/  */ /g' \
-    | grep -cF 'once the project exists on GitHub, that command includes `--resume`' >/dev/null \
+    | grep -ciF 'once the project exists on GitHub, that command includes `--resume`' >/dev/null \
     || die "the README does not say when the command includes --resume"
 }
 

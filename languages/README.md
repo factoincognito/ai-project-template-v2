@@ -62,9 +62,13 @@ Every pack follows the same shape. A new pack should too:
   bootstrap script, `bootstrap-project.sh` (its `layout-pack` command):
   by a row of its own or by a folder row (such as `starter/src/`), so
   nothing is copied by guesswork. The web pack's deploy files are placed
-  only with `--with-deploy`. That table is the only one: to lay a
-  pack out by hand, run `bash bootstrap-project.sh layout-pack <pack>
-  <empty folder>` and copy what it lays out.
+  only with `--with-deploy`. That table is the only one. To lay a pack
+  out by hand, in the template repository run
+  `bash tools/layout-pack.sh <pack> <empty folder>`; the script's own
+  `bash bootstrap-project.sh layout-pack <pack> <empty folder>`
+  works only in the bootstrapper, where the script sits next to
+  `languages/`.
+  Then copy what it lays out.
 - **Nothing project-specific.** Placeholders like `[project-name]`
   instead of project names, service names or domains. Those belong to
   the project.
