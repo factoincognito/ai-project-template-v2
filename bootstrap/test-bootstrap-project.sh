@@ -8567,6 +8567,152 @@ test_the_words_for_a_project_set_up_already_are_not_those_for_one_the_script_jus
   done
 }
 
+# ---------- S19: the README steps for the script ----------
+# Spec: PBI-1.14, "What changes in the existing manual README steps" and
+# "Guided steps in the script, and what only the README can cover". The
+# READMEs are read from this checkout (the stub as it ships, before the
+# build fills anything in).
+
+STUB_README="$REPO/bootstrap/stubs/README.md"
+TEMPLATE_README="$REPO/README.md"
+# The one command of the spec ("Obtaining and starting it").
+ONE_COMMAND='gh api repos/factoincognito/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh && bash bootstrap-project.sh'
+SIGN_IN_LINE='gh auth login -h github.com -p https -w -s workflow'
+
+# section_of <file> <heading line> <stop regex>: the lines after the
+# exact heading line up to (not including) the first line matching the
+# stop regex. Fails when the heading is not there exactly once.
+section_of() {
+  [ "$(grep -cxF -- "$2" "$1")" -eq 1 ] || die "$1: the heading \"$2\" is not there exactly once"
+  HEADING="$2" STOP="$3" awk '
+    on && $0 ~ ENVIRON["STOP"] { exit }
+    on { print }
+    $0 == ENVIRON["HEADING"] { on = 1 }' "$1"
+}
+
+# prose_of: stdin without code (fenced blocks, indented code lines and
+# inline `code`): the text a reader reads as words. An exact command or
+# file name is text to copy, as say_command is in the script.
+prose_of() {
+  awk '/^ *```/ { f = !f; next } !f && !/^    / { print }' | sed -E 's/`[^`]*`//g'
+}
+
+test_stub_readme_keeps_the_setup_heading_and_its_setup_boundary() {
+  # The script (SETUP_HEADING, remove_setup_section, the resume checks)
+  # and e2e-check.sh match this whole heading line, and the section ends
+  # at "## Setup".
+  local next
+  grep -qxF -- '## After bootstrapping (delete this section when done)' "$STUB_README" \
+    || die "the stub README lost the setup heading line"
+  ( load_script; [ "$SETUP_HEADING" = '## After bootstrapping (delete this section when done)' ] ) \
+    || die "the script's SETUP_HEADING is not the stub's heading"
+  next="$(awk '$0 == "## After bootstrapping (delete this section when done)" { on = 1; next } on && /^## / { print; exit }' "$STUB_README")"
+  [ "$next" = '## Setup' ] || die "the next heading after the setup section is [$next], want [## Setup]"
+}
+
+test_stub_readme_setup_section_is_three_lines_with_the_resume_command() {
+  local body n
+  body="$(section_of "$STUB_README" '## After bootstrapping (delete this section when done)' '^## ')"
+  n="$(grep -c . <<<"$body" || true)"
+  [ "$n" -eq 3 ] || { printf '%s\n' "$body" >&2; die "the setup section has $n lines of text, want 3"; }
+  grep -qF -- "$ONE_COMMAND --resume --owner " <<<"$body" \
+    || { printf '%s\n' "$body" >&2; die "the setup section lacks the one command with --resume --owner"; }
+  grep -qF -- ' --name ' <<<"$body" || die "the setup section lacks --name"
+  grep -qF 'If you see this, setup has not run' <<<"$body" \
+    || die "the setup section does not say that setup has not run"
+}
+
+test_stub_readme_setup_section_has_no_pack_table_and_no_numbered_steps() {
+  local body
+  body="$(section_of "$STUB_README" '## After bootstrapping (delete this section when done)' '^## ')"
+  ! grep -qE '^ *\|' <<<"$body" || die "the setup section still has a table"
+  ! grep -qE '^ *[1-9]\. ' <<<"$body" || die "the setup section still has numbered steps"
+  ! grep -qF '| Pack file | Goes to |' "$STUB_README" || die "the stub README still has the pack table"
+}
+
+test_stub_readme_branch_protection_points_to_the_runbook() {
+  local body
+  ! grep -qF 'step 2 above' "$STUB_README" || die "the stub README still says (step 2 above)"
+  body="$(section_of "$STUB_README" '## Branch protection' '^## ')"
+  grep -qF '`docs/DEV_INFRASTRUCTURE.md`' <<<"$body" \
+    || die "the stub README's Branch protection section does not point to docs/DEV_INFRASTRUCTURE.md"
+}
+
+test_template_readme_has_step_0_and_the_one_command() {
+  local body
+  body="$(section_of "$TEMPLATE_README" '### Creating a project from the template' '^##')"
+  grep -qiE 'step 0' <<<"$body" || die "no step 0"
+  grep -qF -- "$SIGN_IN_LINE" <<<"$body" || die "step 0 lacks the sign-in line"
+  grep -qF 'Authenticate Git' <<<"$body" || die "step 0 does not say to answer Yes to Authenticate Git"
+  grep -qF 'Git for Windows' <<<"$body" || die "step 0 lacks Git for Windows"
+  grep -qF 'https://cli.github.com' <<<"$body" || die "step 0 does not say where gh comes from"
+  # Here-strings, not printf | grep -q: under pipefail, grep -q leaving
+  # early on a match can end printf with SIGPIPE and fail the pipe.
+  [ "$(sed 's/^ *//' <<<"$body" | grep -cxF -- "$ONE_COMMAND" || true)" -ge 1 ] \
+    || die "the one command is not on a line of its own"
+  ! grep -qF 'does not exist until' "$TEMPLATE_README" || die "the stale 'does not exist until' text is still there"
+  ! grep -qF '| Pack file | Goes to |' "$TEMPLATE_README" || die "the by-hand pack table is still there"
+  ! grep -qF 'Turn on branch protection for `main`' "$TEMPLATE_README" || die "the by-hand protection step is still there"
+}
+
+test_template_readme_lists_the_guides_and_the_readme_only_steps() {
+  # Spec: the README lists every guide of the script, so a user can read
+  # them first, and what only the README covers.
+  local body t
+  body="$(section_of "$TEMPLATE_README" '### Creating a project from the template' '^##')"
+  for t in 'bash' 'git' 'Node.js' 'workflow' 'name and email' 'organisation' 'GitHub Actions' \
+    'gh auth setup-git' 'paid GitHub plan' '--allow-unprotected' 'already exists' 'older version' \
+    'Claude app' 'Settings' 'gh repo delete' 'delete_repo' 'billing' '--resume'; do
+    grep -qF -- "$t" <<<"$body" || die "the section does not mention: $t"
+  done
+}
+
+test_template_readme_branch_protection_has_no_step_reference() {
+  local body
+  ! grep -qF 'step 3 above' "$TEMPLATE_README" || die "the template README still says (step 3 above)"
+  body="$(section_of "$TEMPLATE_README" '## Branch protection' '^## ')"
+  grep -qF '`docs/DEV_INFRASTRUCTURE.md`' <<<"$body" \
+    || die "the template README's Branch protection section does not point to docs/DEV_INFRASTRUCTURE.md"
+}
+
+test_readme_commands_are_the_ones_the_script_prints() {
+  # The download part of the one command and the sign-in line are the
+  # script's own strings, so the README and the script cannot drift.
+  local dl="${ONE_COMMAND% && bash bootstrap-project.sh}"
+  grep -qF -- "say_command '$dl'" "$SCRIPT" || die "the script no longer prints the README's download command"
+  grep -qF -- "say_command \"$SIGN_IN_LINE\"" "$SCRIPT" || die "the script no longer prints the README's sign-in line"
+}
+
+test_readme_setup_text_has_no_banned_words() {
+  # The same banned-word rule as the script's messages, over the prose of
+  # the new README text (commands and file names left out).
+  local hits
+  hits="$( {
+    section_of "$STUB_README" '## After bootstrapping (delete this section when done)' '^## '
+    section_of "$TEMPLATE_README" '### Creating a project from the template' '^##'
+  } | prose_of | awk '{ print NR ": " $0 }' | banned_hits)"
+  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "banned word without its explanation in the README setup text"; }
+}
+
+test_readme_banned_word_check_catches_a_planted_word() {
+  # Guards the check above: prose_of keeps prose and banned_hits finds
+  # the word in it, while a command line is left out.
+  local hits
+  hits="$(printf '%s\n' 'Open the repo page.' '    gh repo view' 'Run `gh api user`.' '```' 'git clone x' '```' \
+    | prose_of | awk '{ print NR ": " $0 }' | banned_hits)"
+  [ "$(grep -c . <<<"$hits" || true)" -eq 1 ] || { printf '%s\n' "$hits" >&2; die "want exactly the planted prose line"; }
+  grep -qF 'Open the repo page.' <<<"$hits" || die "the planted word was not caught"
+}
+
+test_dev_infrastructure_says_the_script_turns_protection_on() {
+  local body
+  body="$(awk '/^\*\*Turning it on in a new project/ { on = 1 } on && /^\*\*Checking that it works\.\*\*/ { exit } on { print }' "$REPO/docs/DEV_INFRASTRUCTURE.md")"
+  [ -n "$body" ] || die "no 'Turning it on in a new project' paragraph"
+  grep -qF 'bootstrap-project.sh' <<<"$body" || die "it does not say the setup script does this"
+  grep -qiF 'fallback' <<<"$body" || die "the manual steps are not called the fallback"
+  grep -qF 'Settings, Branches' <<<"$body" || die "the manual steps are gone"
+}
+
 # ---------- run ----------
 
 TESTS=$(declare -F | awk '{print $3}' | grep '^test_')

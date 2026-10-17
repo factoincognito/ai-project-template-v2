@@ -436,21 +436,17 @@ test_script_missing_packs_dir_fails() {
 
 # ---------- the README and the workflow agree with the script ----------
 
-test_readme_table_names_every_laid_out_file() {
-  # Both placement tables: the template's README and the bootstrapper's.
-  local f readme
+test_the_layout_table_is_only_in_the_script_not_the_readmes() {
+  # S19: the bootstrap script lays the pack out, so the READMEs no longer
+  # repeat its placement table, and languages/README.md points to the
+  # script's table (its layout-pack command) for laying a pack out by hand.
+  local readme langs="$REPO/languages/README.md"
   for readme in "$REPO/README.md" "$REPO/bootstrap/stubs/README.md"; do
-    for f in ci.yml gitignore vscode-settings.json vscode-extensions.json package.json \
-      tsconfig.json biome.json placeholder.test.ts index.html vite.config.mts \
-      playwright.config.ts 'starter/src/' 'starter/e2e/' pyproject.toml requirements.txt \
-      requirements-dev.txt pre-commit-config.yaml '.pre-commit-config.yaml' app.json; do
-      grep -qF "\`$f\`" "$readme" || die "$readme table lacks $f"
-    done
-    grep -qE '^ *\| python: ' "$readme" || die "$readme table has no python row"
-    grep -qE '^ *\| react-native: ' "$readme" || die "$readme table has no react-native row"
-    grep -qE '^ *\|[^|]*react-native[^|]*: [^|]*`package.json`' "$readme" \
-      || die "$readme table does not place react-native's package.json"
+    ! grep -qF '| Pack file | Goes to |' "$readme" || die "$readme still has a placement table"
   done
+  ! grep -qiF 'placement tables in the' "$langs" || die "languages/README.md still points to README placement tables"
+  ! grep -qF '"After' "$langs" || die "languages/README.md still points to the README's \"After bootstrapping\" section"
+  grep -qF 'bootstrap-project.sh layout-pack' "$langs" || die "languages/README.md does not give the layout-pack command"
 }
 
 test_packs_workflow_uses_the_script_for_every_pack() {
