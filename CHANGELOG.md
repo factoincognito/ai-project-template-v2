@@ -6,6 +6,8 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-10-18
+
 ### Added
 - Prepared the 2.3.0 changelog (PR #126)
 - Closed NEXT_SESSION item 7 after the verified v2.3.0 release (PR #127)
@@ -15,11 +17,47 @@ A bootstrapped project records the tag it was built from.
 - PBI-1.14 S1: the pack layout table moved into `bootstrap/stubs/bootstrap-project.sh` (`layout-pack` subcommand); `tools/layout-pack.sh` is a wrapper; the script ships at the bootstrapper root, executable and LF (PR #131)
 - Recorded PBI-1.14 S1 and S3 done in NEXT_SESSION, with the deferred review notes (PR #132)
 - PBI-1.14 S2: `build.sh` stamps the version and commit into the script as well as `CHANGELOG.md`, in place, keeping the executable bit (PR #133)
+- Added CHANGELOG entries for PRs #126-#133 (PR #134)
+- Recorded PBI-1.14 S2 done in NEXT_SESSION (PR #135)
 - PBI-1.14 S4: the bootstrap script's test harness (`bootstrap/test-bootstrap-project.sh`), the `BOOTSTRAP_GH` and `BOOTSTRAP_RUN` test hooks and the message helpers in `bootstrap-project.sh`; `bootstrapper-test` runs the harness (PR #136)
 - Recorded PBI-1.14 S4 done in NEXT_SESSION and parked its review notes (PR #137)
 - Recorded the temporary arrangement until 2026-10-05 13:00 UTC: Clead runs in a Claude Code cloud session and starts Crog as subagents; added NEXT_SESSION item 12 (PR #138)
 - Corrected the evidence behind the 2026-10-01 decision on Crog sessions in `memory/decisions.md`; the decision stands (PR #139)
 - Added Adam's token-use hypothesis and Clead's data to NEXT_SESSION item 12 (PR #140)
+- Added CHANGELOG entries for PRs #136-#140 (PR #141)
+- Staged the template's value and target user in NEXT_SESSION item 13 (PR #142)
+- Recorded Adam's answer on PBI-1.14 in NEXT_SESSION item 13 (PR #143)
+- Staged Adam's entry-point idea in NEXT_SESSION item 13 (PR #144)
+- Reworded NEXT_SESSION item 13 question 3 to Adam's one-path model (PR #145)
+- PBI-1.14 S6: the bootstrap script's inputs and their validation (PR #146)
+- Session handoff in NEXT_SESSION: S6 done, item 5 audit, items 13 and 14 (PR #147)
+- PBI-1.14 S7: guided checks on this computer before setup (PR #148)
+- PBI-1.14 S8: guided GitHub checks before setup (PR #149)
+- PBI-1.14 S9: the plan, then create the project and protect `main` (PR #150)
+- Recorded PBI-1.14 S7 to S9 and their review notes in NEXT_SESSION (PR #151)
+- PBI-1.14 S10: the copy on this computer, its line of work, the pack and the tidy-up (PR #152)
+- PBI-1.14 S11: fill the placeholders from one fixed table (PR #153)
+- PBI-1.14 S12: lockfile, licence and CHANGELOG (PR #154)
+- PBI-1.14 S13: self-check, commit, push and setup PR (PR #155)
+- PBI-1.14 S13a: check the licence in the preflight and Actions after protect (PR #156)
+- Recorded PBI-1.14 S10 to S13a and their review notes in NEXT_SESSION (PR #157)
+- PBI-1.14 S14: wait for build, require it, merge, finish and report (PR #158)
+- PBI-1.14 S15: resume, failures and private repos (PR #159)
+- Recorded PBI-1.14 S14 and S15 and their review notes in NEXT_SESSION (PR #160)
+- PBI-1.14 S5: `bootstrapper-test` as one aggregate check over an OS matrix (PR #161)
+- Recorded PBI-1.14 S5 and its review notes in NEXT_SESSION (PR #162)
+- CI: run the bootstrapper workflow once per PR push and cancel superseded runs (PR #163)
+- PBI-1.14 S16: `bootstrap/e2e-check.sh`, the read-only checker for the end-to-end runs (PR #164)
+- Recorded S16 merged and the #163 and S16 review notes in NEXT_SESSION (PR #165)
+- PBI-1.14 S17: docs and process (PR #166)
+- Recorded the handover of the Clead role (app and cloud Claude Code) in NEXT_SESSION (PR #167)
+- Recorded S17 merged (#166), the handover state, and S18 as next in NEXT_SESSION (PR #168)
+- PBI-1.14 S18a: refuse a CRLF README or CHANGELOG before anything is written (PR #169)
+- PBI-1.14 S18b: gh preflight, bare-word message, help and plan wording (PR #171)
+- Recorded S18 merged (#169, #171), follow-ups and deferred items in NEXT_SESSION (PR #172)
+- Handed the Clead role back to the Claude app in NEXT_SESSION (PR #173)
+- PBI-1.14 S19: README steps for the bootstrap script (PR #174)
+- Recorded S19 merged (#174), the deferred review notes and the unverified items in NEXT_SESSION (PR #175)
 
 ## [2.3.0] — 2026-10-02
 
