@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Lays out a language pack in a project directory, exactly as the README
-# table "Creating a project from the template", step 2, says to by hand.
+# Lays out a language pack in a project directory, exactly as the setup
+# script's layout table places it.
 # Usage: bash tools/layout-pack.sh <node|web|python|react-native> <target-dir>
 #
 # Template-only: tools/ is not in bootstrap/manifest.txt. Used by

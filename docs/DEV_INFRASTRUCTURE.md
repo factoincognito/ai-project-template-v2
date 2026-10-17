@@ -75,8 +75,15 @@ approvals: every PR is opened under the owner's own GitHub account, and
 GitHub does not let authors approve their own PRs. Review happens as a
 verdict comment instead (see `CLAUDE.md`, "Change execution model").
 
-**Turning it on in a new project** (repo owner, once, after the first
-push of the pack's `ci.yml`):
+**Turning it on in a new project.** The setup script,
+`bootstrap-project.sh` (see the README of
+https://github.com/factoincognito/ai-project-template-v2), does this:
+it protects `main` right after it creates the project, and adds `build`
+as a required check once the setup pull request's `build` has passed.
+It then reads the protection back and reports it. The steps below are
+the fallback, for a project set up without the script or whose
+protection was changed by hand (repo owner, once, after the first push
+of the pack's `ci.yml`):
 
 1. Push a branch and let CI run once. The required-checks picker only
    offers checks that have run in the repo recently.
