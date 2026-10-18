@@ -1000,7 +1000,8 @@ test_harness_records_the_tests_it_ran() {
   # number of tests leaves shard 1 with only the first test, so this
   # runs one real test.
   local d="$WORK/rec" first out="$WORK/out"
-  first="$(harness_tests | head -n 1)"
+  harness_tests >"$WORK/tests"
+  first="$(sed -n 1p "$WORK/tests")"
   mkdir -p "$d"
   ( cd "$d" && run_harness "$out" BOOTSTRAP_TEST_SHARD=1/100000 BOOTSTRAP_TEST_MANIFEST=list/ran.txt ) \
     || { tail -n 20 "$out" >&2; die "the one-test shard failed"; }
