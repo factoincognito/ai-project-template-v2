@@ -252,7 +252,7 @@ get a working project in any supported language.
   direction than today's setting, and which rules in CLAUDE.md the option
   would change (review gates, merge delegation, intent approval).
 
-- **[NEXT] PBI-1.14** (proposed 2026-10-01 by Clead from Adam's request; spec reviewed by Crog and intent approved by Adam in chat, 2026-10-01, with every open decision answered as recommended; recorded on PR #97; supersedes PBI-1.4 for new projects and absorbs PBI-1.8; not yet built) — Turn-key bootstrap script.
+- **[DONE] PBI-1.14** (proposed 2026-10-01 by Clead from Adam's request; spec reviewed by Crog and intent approved by Adam in chat, 2026-10-01, with every open decision answered as recommended; recorded on PR #97; supersedes PBI-1.4 for new projects and absorbs PBI-1.8; built in slices S1-S19 (last: #174), to be tagged v2.4.0; the end-to-end runs are PBI-1.17) — Turn-key bootstrap script.
 
   **Why.**
   Adam: "the bootstrap script should be the only thing you need to run in order for the bootstrapped project to be created. Turn-key." Today a new project takes five manual README steps after "Use this template": copy a pack, turn on protection, fill placeholders, choose a licence and delete the section. Each one can go wrong without anyone noticing.
