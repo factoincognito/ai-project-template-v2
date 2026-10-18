@@ -36,11 +36,14 @@ if [ -n "${BOOTSTRAP_TEST_SHARD:-}" ]; then
     [1-9]*/[1-9]*) SHARD_I="${BOOTSTRAP_TEST_SHARD%%/*}"; SHARD_N="${BOOTSTRAP_TEST_SHARD#*/}" ;;
     *) SHARD_I=x ;;
   esac
+  # More than 6 digits is refused before any arithmetic: a number that
+  # overflows bash's integers would make the test below err (and so be
+  # false) or wrap.
   case "$SHARD_I/$SHARD_N" in
-    *[!0-9/]* | */*/*) SHARD_I=x ;;
+    *[!0-9/]* | */*/* | *[0-9][0-9][0-9][0-9][0-9][0-9][0-9]*) SHARD_I=x ;;
   esac
   if [ "$SHARD_I" = x ] || [ "$SHARD_I" -gt "$SHARD_N" ]; then
-    echo "BOOTSTRAP_TEST_SHARD must be i/n, whole numbers with 1 <= i <= n and no leading zeros; got '$BOOTSTRAP_TEST_SHARD'." >&2
+    echo "BOOTSTRAP_TEST_SHARD must be i/n, whole numbers of up to 6 digits with 1 <= i <= n and no leading zeros; got '$BOOTSTRAP_TEST_SHARD'." >&2
     exit 2
   fi
 fi
@@ -8917,6 +8920,10 @@ for t in $TESTS; do
   k=$((k + 1))
 done
 [ "${BOOTSTRAP_TEST_LIST:-}" != 1 ] || exit 0
+if [ $((PASSED + FAILED)) -eq 0 ]; then
+  echo "This run ran no test: shard $SHARD_I of $SHARD_N selects none of the $k tests." >&2
+  exit 1
+fi
 
 echo
 echo "$PASSED passed, $FAILED failed"

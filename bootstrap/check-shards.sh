@@ -97,6 +97,16 @@ for os in "$@"; do
     continue
   fi
   n="$(head -n 1 "$WORK/ns")"
+  # A GitHub matrix has at most 256 jobs: a larger count is refused at
+  # once instead of looped over (and is never read as a number).
+  case "$n" in
+    ? | ?? | ???) ;;
+    *) n=999 ;;
+  esac
+  if [ "$n" -gt 256 ]; then
+    problem "$os: shard count $(head -n 1 "$WORK/ns") is above 256."
+    continue
+  fi
   i=1
   while [ "$i" -le "$n" ]; do
     if [ -f "$DIR/$os-$i-of-$n.txt" ]; then
@@ -108,7 +118,7 @@ for os in "$@"; do
     i=$((i + 1))
   done
   while read -r i; do
-    [ "$i" -le "$n" ] || problem "$os: shard $i of $n is beyond the count."
+    [ "${#i}" -le 3 ] && [ "$i" -le "$n" ] || problem "$os: shard $i of $n is beyond the count."
   done <"$WORK/is"
   : >>"$WORK/ran.$os"
   LC_ALL=C sort "$WORK/ran.$os" >"$WORK/sorted"
