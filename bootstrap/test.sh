@@ -983,7 +983,10 @@ test_harness_shards_interleave_by_index() {
 
 test_harness_refuses_a_shard_setting_it_cannot_read() {
   local v out="$WORK/out" rc
-  for v in 0/4 5/4 1/0 4 1/4/2 a/b 1/b -1/4 01/4 1/04 ' 1/4' '1 /4' 1/; do
+  # The last ones overflow bash's integers (review of #178, B1): [ -gt ]
+  # then errs inside an if, and the setting was taken.
+  for v in 0/4 5/4 1/0 4 1/4/2 a/b 1/b -1/4 01/4 1/04 ' 1/4' '1 /4' 1/ \
+           1/99999999999999999999 99999999999999999999/4 2/9223372036854775808 1/1000000; do
     set +e
     run_harness "$out" BOOTSTRAP_TEST_SHARD="$v"
     rc=$?
@@ -1011,6 +1014,23 @@ test_harness_records_the_tests_it_ran() {
   grep -qxF '1 passed, 0 failed' "$out" || { cat "$out" >&2; die "not exactly one test ran"; }
 }
 
+test_harness_fails_when_its_shard_selects_no_test() {
+  # A valid setting can select nothing (shard i of n with i above the
+  # number of tests). A run that ran no test fails, so it is never taken
+  # for a green one; list mode just lists nothing.
+  local out="$WORK/out" rc
+  set +e
+  run_harness "$out" BOOTSTRAP_TEST_SHARD=100000/100000
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || { cat "$out" >&2; die "a shard that ran no test exited 0"; }
+  [ "$rc" -ne 124 ] || die "timed out"
+  grep -qF 'ran no test' "$out" || { cat "$out" >&2; die "the failure does not say no test ran"; }
+  ! grep -qE '^(ok|FAIL) ' "$out" || die "tests ran"
+  run_harness "$out" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD=100000/100000 || { cat "$out" >&2; die "list mode of an empty shard failed"; }
+  [ ! -s "$out" ] || { cat "$out" >&2; die "list mode of an empty shard printed something"; }
+}
+
 # shard_fixture <dir> <n> <os>...: <dir>/all.txt lists 10 tests;
 # <dir>/shards holds, for each os, the manifests of shards 1..n of n,
 # interleaved, as the harness writes them.
@@ -1034,7 +1054,13 @@ check_shards() {
   local d="$1" r="$2"
   shift 2
   [ -f "$CHECK_SHARDS" ] || die "no bootstrap/check-shards.sh"
-  RESULTS="$r" bash "$CHECK_SHARDS" "$d/shards" "$d/all.txt" "$@" >"$d/out" 2>&1
+  # Capped at 20 s (timeout, on the ubuntu runner): a check that loops
+  # over an absurd shard count fails here instead of hanging.
+  if command -v timeout >/dev/null 2>&1; then
+    RESULTS="$r" timeout 20 bash "$CHECK_SHARDS" "$d/shards" "$d/all.txt" "$@" >"$d/out" 2>&1
+  else
+    RESULTS="$r" bash "$CHECK_SHARDS" "$d/shards" "$d/all.txt" "$@" >"$d/out" 2>&1
+  fi
 }
 
 # expect_shards_refused <dir> <results> <message> <os>...
@@ -1100,6 +1126,21 @@ test_check_shards_fails_when_shards_disagree_on_their_count() {
   shard_fixture "$d" 2 os-a
   cp "$d/shards/os-a-2-of-2.txt" "$d/shards/os-a-3-of-3.txt"
   expect_shards_refused "$d" "success" "os-a: shards disagree on their count" os-a
+}
+
+test_check_shards_refuses_a_shard_count_above_a_matrix_at_once() {
+  # A GitHub matrix has at most 256 jobs, so a manifest named with a
+  # larger count is refused at once, not looped over (review of #178).
+  local d="$WORK/fx" n
+  for n in 257 9223372036854775807 99999999999999999999; do
+    d="$WORK/fx.$n"; shard_fixture "$d" 1 os-a
+    mv "$d/shards/os-a-1-of-1.txt" "$d/shards/os-a-1-of-$n.txt"
+    expect_shards_refused "$d" "success" "os-a: shard count $n is above 256" os-a
+  done
+  # 256 itself is a count a matrix can have.
+  d="$WORK/fx.256"; shard_fixture "$d" 1 os-a
+  mv "$d/shards/os-a-1-of-1.txt" "$d/shards/os-a-1-of-256.txt"
+  expect_shards_refused "$d" "success" "os-a: shard 2 of 256 did not report" os-a
 }
 
 test_check_shards_fails_on_a_file_it_does_not_expect() {
