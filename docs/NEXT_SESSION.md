@@ -1,6 +1,6 @@
 # [PROJECT NAME] — Next Session Planning
 
-**Last Updated:** 2026-10-17
+**Last Updated:** 2026-10-20
 **Author:** Clead (Tech Owner)
 **Purpose:** Staging area for reasoning, revised assumptions, and plan-adaptation thoughts that aren't yet mature enough to be a PBI, a decision, a strategy update, or a vision-doc change. Complements `docs/BACKLOG.md` — it does not replace it. Discrete, scoped, actionable work belongs in the backlog as a PBI, not here.
 
@@ -53,8 +53,9 @@
 Written 2026-10-02 so nothing depends on anyone remembering. **Each Clead session lists this to Adam in its first reply and removes each line when Adam confirms it is done.** Agents cannot do these: the access proxy returns 403 on branch deletion, tag pushes and the Actions and secrets settings, and branch protection and tokens are GitHub account settings.
 
 1. **Decide** (item 10) whether CLAUDE.md should say that only one Clead session works on the template at a time, and that every session starts by listing open PRs and non-main branches.
-2. **Later, when PBI-1.14 is built:** after S15 merges, the next release tag, which agents cannot do; then the end-to-end runs on throwaway repos, including PBI-1.17's red-then-`Test-exempt` pull request in a real project (PBI-1.17 stays `[NEXT]` until then).
-3. **If an agent has to change files in your connected PC folder,** it asks for delete permission once per session (a failed pull left a stale `.git/index.lock` last time). Your PC clone of the template is behind main and its `origin` points at the org; the session fast-forwards it after you grant that.
+2. **Now:** create tag `v2.4.0` on `main` (at `7dd7fd0`, the release prep #176, merged 2026-10-18) from the GitHub Releases page; Clead tried the API and the proxy refused it (403 on creating a ref). Nothing else may merge before it exists. Then the end-to-end runs on throwaway repos, including PBI-1.17's red-then-`Test-exempt` pull request in a real project (PBI-1.17 stays `[NEXT]` until then).
+3. **Decide** whether the stricter meaning of the required check `bootstrapper-test` in #178 (it also fails when a shard is missing or a test ran twice or not at all) needs your intent approval; the answer is recorded as a comment on #178 before it merges.
+4. **If an agent has to change files in your connected PC folder,** it asks for delete permission once per session (a failed pull left a stale `.git/index.lock` last time). Your PC clone of the template is behind main and its `origin` points at the org; the session fast-forwards it after you grant that.
 
 ---
 
@@ -65,9 +66,10 @@ Written 2026-10-02 so the order does not have to be re-derived. "Clead" is the n
 | Step | Who | Blocked by |
 |---|---|---|
 | Rest of PBI-1.14: none. The README steps were built as S19, merged as #174 on 2026-10-17 | done | S1 to S19 merged |
-| Release prep PR for the next release (put the version heading over Unreleased, as #76 and #126 did) | Clead | S15 merged; written just before the tag so it is complete |
-| Next release tag `v*` | Adam, from the Releases page | Release prep merged (decision of 2026-10-02: no tag until S15 merges) |
+| Release prep PR for v2.4.0 | done: #176, merged 2026-10-18 (`7dd7fd0`) | |
+| Release tag `v2.4.0` | Adam, from the Releases page | Nothing; open now. Nothing may merge before it exists |
 | Release verified | Clead, through the API: the tag run's checks passed, bootstrapper `main` has the new commit, the tag exists on both repos | The tag |
+| #177 (PBI-1.18 spec), then #178 (the sharding, round-2 review done, one blocker: #177 first and Adam's answer on intent approval) | Clead merges through a merge agent, verified on GitHub | The tag (nothing merges before it); Adam's answer (to-do 3) |
 | End-to-end runs on throwaway repos; PBI-1.17 to `[DONE]` | Adam runs, Clead reads the results | PBI-1.14 built and released (to-do 2) |
 | acuteping created | Adam | The end-to-end runs |
 
@@ -168,7 +170,7 @@ graduate (see the rule above).
 **Cannot be verified in CI (Adam's end-to-end runs only):** GitHub timing and error texts after create, the protection PUT shape, private-repo clone and push, Git Bash prompts, `winget`, a lockfile made on Windows or macOS under `npm ci` on Linux, the unaided README run, and the red-then-`Test-exempt` PR in a real project.
 **Spec meets changed repo (to fix in the slice named):** the placement-table tests in `bootstrap/test.sh` pin both READMEs (S17); `test_workflow_bootstrapper_test_runs_the_require_test_change_tests` conflicts with the aggregate design (S5); the setup PR's tree must keep `.github/scripts/require-test-change.sh` (S10); stamps from releases before the org move name the old owner, so older repos cannot be resumed (S15).
 - S18a CRLF in README or CHANGELOG on GitHub is refused before anything is written. **Done: #169, 2026-10-15** (four review rounds; round 1 found a 4 to 5 s cost on every `--resume`, rounds 3 and 4 followed two Windows CI failures of the tests' own CR checks). S18b gh feature preflight, bare-word message, help and plan wording. **Done: #171, 2026-10-15** (one review round, approved).
-**Next slice:** none. S19 is merged (#174, 2026-10-17). Next: the release prep PR, the tag (Adam, from the Releases page, straight after the release prep PR with nothing merged in between), then Adam's end-to-end runs.
+**Next slice:** none. S19 is merged (#174, 2026-10-17) and the release prep PR is merged (#176, 2026-10-18). Next: the tag `v2.4.0` (Adam, from the Releases page), then Adam's end-to-end runs.
 **Questions for Adam (neither blocks S1):**
 1. Answered by Adam, 2026-10-02 (`memory/decisions.md`): `--resume` refuses a repo stamped by an older bootstrapper version and tells the user to create a fresh repo; a repo stamped by the current version, including one made with "Use this template" from the current release, still resumes. The spec text is corrected in S15.
 2. Answered by Adam, 2026-10-02: v2.3.0 is released before S1 (nothing of PBI-1.14 ships in it), then no tag until S15 merges. acuteping waits for PBI-1.14 and the end-to-end runs either way (decision of 2026-10-01).
@@ -222,6 +224,12 @@ graduate (see the rule above).
   - What S19 did: the stub README's setup section is three lines (its heading and the `## Setup` boundary are unchanged, because the script, resume and `e2e-check.sh` match them); the template README has step 0, the one command and the guide list by group; `docs/DEV_INFRASTRUCTURE.md` "Turning it on" says the script does it and keeps the manual steps as the fallback; `languages/README.md` and two header comments (`tools/layout-pack.sh`, `packs.yml`) follow the removed README tables. 11 new checks in `bootstrap/test-bootstrap-project.sh` (section "S19"); the README-table layout test was replaced by one that pins the table to the script. Two review rounds. Round 1 found a banned-word test that skipped every indented list line, and a README claim ("the command always ends with `--resume`") that the script contradicts; round 2 approved.
   - Open, non-blocking (round-2 review): the `--resume` sentence test (`bootstrap/test-bootstrap-project.sh`, about lines 8806-8810) checks one phrase and two forbidden wordings, so a differently worded false sentence passes; the table test (about line 8604) catches a by-hand pack table only when it names certain pack files (a table naming only `tsconfig.json` passed); the banned-word rule lets a word through when a bracketed explanation of three or more words follows it (predates S19); two README conditions ("web pack only", "not asked with no licence") are read from the script and no test pins them.
   - Not verified, for Adam's end-to-end runs: gh's own prompt and output texts that the README quotes ("Authenticate Git...", "Logged in as"); the GitHub Settings path and button names for limiting the Claude GitHub App; the Linux install link; whether someone with no help can follow the README (PBI-1.14 "Done when" 7); bash 3.2 and Git Bash behaviour of the new checks beyond what CI ran.
+
+**Notes from PBI-1.18, the Windows leg (#177 spec, #178 sharding), 2026-10-18 to 2026-10-20:**
+- Measured from the logs of run 39070866362: the bootstrap script's tests took 18.9 min on ubuntu, 24.3 on macOS and 72.5 on Windows; all 294 tests were slower on Windows (median about 14 times) and the cost tracks process launches (about 24 to 36 ms each on Windows, about 2 ms on Linux). Not measured: why a launch costs more on Windows.
+- #178 shards each OS leg into 4 and keeps the required check `bootstrapper-test`, which now also fails unless every shard of every OS reported and together ran every test exactly once. Two CI runs gave a Windows leg of 23.3 and 22.7 min. Two Opus review rounds: round 1 found an overflowing shard value accepted silently (fixed, red then green), round 2 found the code correct and left only the merge precondition (#177 first, Adam's answer on intent approval).
+- Not verified: CI never ran with a shard actually failing or missing (local tests only); how "Re-run failed jobs" resolves earlier attempts' artifacts; the full 19-min harness locally; the new exit paths under a real bash 3.2 binary. Open non-blocking: a one-line fixture for the shard-index length guard in `bootstrap/check-shards.sh`, and two misleading messages there (`0256` reported as a count above 256; an extra manifest still prints "ran all tests").
+- Option 2 of PBI-1.18 (cut process launches in the harness: the bash wrapper around every `git` call, many small commands per test) stays open and unmeasured.
 
 ### 9. Pending from the previous Clead session (PBI-1.17 build), staged on Adam's request — new (2026-10-02)
 
