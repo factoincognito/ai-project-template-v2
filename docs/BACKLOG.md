@@ -670,7 +670,7 @@ get a working project in any supported language.
   - The bootstrapper repo gets no test support for itself, by design: it is generated from the template and changed only there, where the tests and the chain test run. Someone who edits a copy of it directly works without them.
   - Honest limit: the check cannot prove the test came first, or that it is a good one. Review covers that.
 
-- **[LATER] PBI-1.18** (Clead, 2026-10-18, on Adam's request; the WHAT is Adam's wish for a faster Windows check, the HOW is Clead's; not yet specced, reviewed or intent-approved) — Shorten the Windows leg of `bootstrapper-test`.
+- **[DONE] PBI-1.18** (2026-10-23, PR #178: option 1, 4 shards per OS leg; Adam, 2026-10-23: intent approval not needed. Windows leg measured on #178's runs: 23.3, 22.7 and 19.1 min, against about 73 before; the check `bootstrapper-test` keeps its name and fails when a shard is missing or a test ran twice or not at all. Earlier note: Clead, 2026-10-18, on Adam's request; the WHAT is Adam's wish for a faster Windows check, the HOW is Clead's) — Shorten the Windows leg of `bootstrapper-test`.
 
   **Why.**
   Every pull request that touches the bootstrapper waits for the Windows leg of `bootstrap-project-test`, the slowest of the three OS legs. From the timestamps in the logs of the last completed run (head `020a3f5`, run 39070866362): the test step took 18.9 min on ubuntu, 24.3 min on macOS and 72.5 min on Windows. In that run all 294 tests were slower on Windows (median ratio about 14 times); the 15 slowest tests were only 32% of the Windows total, so no single test explains it. A Windows leg of 70 to 76 minutes was seen on #175 and #176.
