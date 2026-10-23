@@ -893,9 +893,311 @@ test_workflow_bootstrapper_test_is_one_job_that_always_runs() {
   [ -n "$(wf_needs bootstrapper-test)" ] || die "bootstrapper-test needs nothing"
 }
 
+# ---------- bootstrapper-test: the shards of the OS legs ----------
+# Each OS leg of the bootstrap script's tests runs as several shards
+# (BOOTSTRAP_TEST_SHARD=i/n): shard i runs the tests at index i-1, i-1+n,
+# ... of the harness's list, interleaved because the slow tests are
+# spread over the whole list. Each shard records the tests it ran
+# (BOOTSTRAP_TEST_MANIFEST); bootstrapper-test fails unless every need
+# succeeded and, for every OS, shards 1..n together ran every test
+# exactly once (bootstrap/check-shards.sh).
+
+HARNESS="$HERE/test-bootstrap-project.sh"
+CHECK_SHARDS="$HERE/check-shards.sh"
+
+# run_harness <out> [NAME=value ...]: runs the harness with the given
+# environment, stdout and stderr to <out>, and returns its exit code.
+# Capped at 60 s (timeout, on the ubuntu runner): a harness that ignores
+# list mode would otherwise run all of its tests here.
+run_harness() {
+  local out="$1" cap=""
+  shift
+  if command -v timeout >/dev/null 2>&1; then cap="timeout 60"; fi
+  env "$@" $cap bash "$HARNESS" >"$out" 2>&1
+}
+
+# harness_tests: every test function the harness defines, sorted, read
+# from its source independently of the harness's own list.
+harness_tests() {
+  grep -oE '^test_[A-Za-z0-9_]+\(\)' "$HARNESS" | sed 's/()$//' | LC_ALL=C sort
+}
+
+# harness_list <out> [shard]: the harness's list of the tests it would
+# run (all, or one shard's), one name per line, nothing else in it.
+harness_list() {
+  local out="$1"
+  if [ -n "${2:-}" ]; then
+    run_harness "$out" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD="$2" || { head -n 5 "$out" >&2; die "list mode failed for shard ${2}"; }
+  else
+    run_harness "$out" BOOTSTRAP_TEST_LIST=1 || { head -n 5 "$out" >&2; die "list mode failed"; }
+  fi
+  ! grep -vE '^test_[A-Za-z0-9_]+$' "$out" | head -n 5 >&2 || die "list mode printed something other than test names (shard ${2:-all})"
+}
+
+test_harness_list_mode_lists_every_test_and_runs_none() {
+  local got="$WORK/list" want="$WORK/want"
+  harness_tests >"$want"
+  [ "$(wc -l <"$want" | tr -d ' ')" -gt 100 ] || die "found too few tests in the harness source; this test checks nothing"
+  harness_list "$got"
+  LC_ALL=C sort "$got" | diff "$want" - >&2 || die "list mode does not list exactly the harness's tests (want, then got)"
+}
+
+test_harness_shards_together_run_every_test_exactly_once() {
+  # For several shard counts, shards 1..n together list every test
+  # once: none left out, none twice, and the shards differ in size by
+  # at most one test.
+  local want="$WORK/want" all="$WORK/all" n i sizes min max s
+  harness_tests >"$want"
+  for n in 1 2 3 4 5 7; do
+    : >"$all"; sizes=""
+    i=1
+    while [ "$i" -le "$n" ]; do
+      harness_list "$WORK/shard.$n.$i" "$i/$n"
+      cat "$WORK/shard.$n.$i" >>"$all"
+      sizes="$sizes $(wc -l <"$WORK/shard.$n.$i" | tr -d ' ')"
+      i=$((i + 1))
+    done
+    [ -z "$(LC_ALL=C sort "$all" | uniq -d)" ] || { LC_ALL=C sort "$all" | uniq -d | head >&2; die "with $n shards, these tests run twice"; }
+    LC_ALL=C sort "$all" | diff "$want" - >&2 || die "with $n shards, the shards together do not run every test once (want, then got)"
+    min=""; max=""
+    for s in $sizes; do
+      if [ -z "$min" ] || [ "$s" -lt "$min" ]; then min="$s"; fi
+      if [ -z "$max" ] || [ "$s" -gt "$max" ]; then max="$s"; fi
+    done
+    [ $((max - min)) -le 1 ] || die "with $n shards, the sizes are uneven:$sizes"
+  done
+}
+
+test_harness_shards_interleave_by_index() {
+  # Shard i of n holds the tests at index i-1, i-1+n, ... of the full
+  # list, not a contiguous range: the slowest tests are spread over the
+  # list, and contiguous ranges balanced worse (PBI-1.18).
+  local full="$WORK/full" want="$WORK/want" i
+  harness_list "$full"
+  for i in 1 2 3 4; do
+    awk -v i="$i" '(NR - 1) % 4 == i - 1' "$full" >"$want"
+    harness_list "$WORK/got.$i" "$i/4"
+    diff "$want" "$WORK/got.$i" >&2 || die "shard $i/4 is not every 4th test from index $((i - 1)) (want, then got)"
+  done
+}
+
+test_harness_refuses_a_shard_setting_it_cannot_read() {
+  local v out="$WORK/out" rc
+  # The last ones overflow bash's integers (review of #178, B1): [ -gt ]
+  # then errs inside an if, and the setting was taken.
+  for v in 0/4 5/4 1/0 4 1/4/2 a/b 1/b -1/4 01/4 1/04 ' 1/4' '1 /4' 1/ \
+           1/99999999999999999999 99999999999999999999/4 2/9223372036854775808 1/1000000; do
+    set +e
+    run_harness "$out" BOOTSTRAP_TEST_SHARD="$v"
+    rc=$?
+    set -e
+    [ "$rc" -eq 2 ] || { head -n 5 "$out" >&2; die "BOOTSTRAP_TEST_SHARD='$v': exit $rc, want 2"; }
+    grep -qF "BOOTSTRAP_TEST_SHARD" "$out" || { cat "$out" >&2; die "BOOTSTRAP_TEST_SHARD='$v': the message does not name the setting"; }
+    ! grep -qE '^(ok|FAIL) ' "$out" || die "BOOTSTRAP_TEST_SHARD='$v': tests ran"
+  done
+}
+
+test_harness_records_the_tests_it_ran() {
+  # BOOTSTRAP_TEST_MANIFEST names a file (relative to where the harness
+  # starts) that gets one line per test run. A shard count above the
+  # number of tests leaves shard 1 with only the first test, so this
+  # runs one real test.
+  local d="$WORK/rec" first out="$WORK/out"
+  harness_tests >"$WORK/tests"
+  first="$(sed -n 1p "$WORK/tests")"
+  mkdir -p "$d"
+  ( cd "$d" && run_harness "$out" BOOTSTRAP_TEST_SHARD=1/100000 BOOTSTRAP_TEST_MANIFEST=list/ran.txt ) \
+    || { tail -n 20 "$out" >&2; die "the one-test shard failed"; }
+  [ -f "$d/list/ran.txt" ] || { cat "$out" >&2; die "no manifest at list/ran.txt, relative to where the harness started"; }
+  [ "$(cat "$d/list/ran.txt")" = "$first" ] || { cat "$d/list/ran.txt" >&2; die "the manifest is not the one test that ran ($first)"; }
+  grep -qxF "ok   $first" "$out" || { cat "$out" >&2; die "$first did not run"; }
+  grep -qxF '1 passed, 0 failed' "$out" || { cat "$out" >&2; die "not exactly one test ran"; }
+}
+
+test_harness_fails_when_its_shard_selects_no_test() {
+  # A valid setting can select nothing (shard i of n with i above the
+  # number of tests). A run that ran no test fails, so it is never taken
+  # for a green one; list mode just lists nothing.
+  local out="$WORK/out" rc
+  set +e
+  run_harness "$out" BOOTSTRAP_TEST_SHARD=100000/100000
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || { cat "$out" >&2; die "a shard that ran no test exited 0"; }
+  [ "$rc" -ne 124 ] || die "timed out"
+  grep -qF 'ran no test' "$out" || { cat "$out" >&2; die "the failure does not say no test ran"; }
+  ! grep -qE '^(ok|FAIL) ' "$out" || die "tests ran"
+  run_harness "$out" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD=100000/100000 || { cat "$out" >&2; die "list mode of an empty shard failed"; }
+  [ ! -s "$out" ] || { cat "$out" >&2; die "list mode of an empty shard printed something"; }
+}
+
+# shard_fixture <dir> <n> <os>...: <dir>/all.txt lists 10 tests;
+# <dir>/shards holds, for each os, the manifests of shards 1..n of n,
+# interleaved, as the harness writes them.
+shard_fixture() {
+  local d="$1" n="$2" os i
+  shift 2
+  mkdir -p "$d/shards"
+  printf 'test_%s\n' a b c d e f g h i j >"$d/all.txt"
+  for os in "$@"; do
+    i=1
+    while [ "$i" -le "$n" ]; do
+      awk -v i="$i" -v n="$n" '(NR - 1) % n == i - 1' "$d/all.txt" >"$d/shards/$os-$i-of-$n.txt"
+      i=$((i + 1))
+    done
+  done
+}
+
+# check_shards <dir> <results> <os>...: runs check-shards.sh on the
+# fixture; output in <dir>/out; returns its exit code.
+check_shards() {
+  local d="$1" r="$2"
+  shift 2
+  [ -f "$CHECK_SHARDS" ] || die "no bootstrap/check-shards.sh"
+  # Capped at 20 s (timeout, on the ubuntu runner): a check that loops
+  # over an absurd shard count fails here instead of hanging.
+  if command -v timeout >/dev/null 2>&1; then
+    RESULTS="$r" timeout 20 bash "$CHECK_SHARDS" "$d/shards" "$d/all.txt" "$@" >"$d/out" 2>&1
+  else
+    RESULTS="$r" bash "$CHECK_SHARDS" "$d/shards" "$d/all.txt" "$@" >"$d/out" 2>&1
+  fi
+}
+
+# expect_shards_refused <dir> <results> <message> <os>...
+expect_shards_refused() {
+  local d="$1" r="$2" msg="$3"
+  shift 3
+  if check_shards "$d" "$r" "$@"; then cat "$d/out" >&2; die "passed, want refused with: $msg"; fi
+  grep -qF -- "$msg" "$d/out" || { cat "$d/out" >&2; die "refused, but without: $msg"; }
+  grep -qF '::error::' "$d/out" || { cat "$d/out" >&2; die "no ::error:: line"; }
+}
+
+test_check_shards_passes_when_every_need_succeeded_and_every_shard_ran_all_tests() {
+  local d="$WORK/fx"
+  shard_fixture "$d" 3 os-a os-b
+  check_shards "$d" "success success" os-a os-b || { cat "$d/out" >&2; die "refused a complete, green run"; }
+  # One shard per OS is a complete run too.
+  d="$WORK/fx1"; shard_fixture "$d" 1 os-a
+  check_shards "$d" "success" os-a || { cat "$d/out" >&2; die "refused one shard of one"; }
+}
+
+test_check_shards_fails_unless_every_need_succeeded() {
+  local d="$WORK/fx" r
+  shard_fixture "$d" 2 os-a
+  for r in "" "failure" "success failure" "failure success" "skipped success" \
+           "success skipped" "success cancelled" "cancelled" "success  success failure"; do
+    if check_shards "$d" "$r" os-a; then die "passed on results: '$r'"; fi
+    grep -qF '::error::' "$d/out" || { cat "$d/out" >&2; die "no ::error:: on results: '$r'"; }
+  done
+}
+
+test_check_shards_fails_when_a_shard_is_missing() {
+  local d="$WORK/fx"
+  shard_fixture "$d" 4 os-a os-b
+  rm "$d/shards/os-b-3-of-4.txt"
+  expect_shards_refused "$d" "success success" "os-b: shard 3 of 4 did not report" os-a os-b
+  # The last shard missing, too: nothing else says there were 4.
+  d="$WORK/fx2"; shard_fixture "$d" 4 os-a
+  rm "$d/shards/os-a-4-of-4.txt"
+  expect_shards_refused "$d" "success" "os-a: shard 4 of 4 did not report" os-a
+}
+
+test_check_shards_fails_when_an_os_did_not_report() {
+  local d="$WORK/fx"
+  shard_fixture "$d" 2 os-a
+  expect_shards_refused "$d" "success success" "os-b: no shard reported" os-a os-b
+}
+
+test_check_shards_fails_when_a_test_ran_twice_or_not_at_all() {
+  local d="$WORK/fx"
+  shard_fixture "$d" 2 os-a
+  echo test_c >>"$d/shards/os-a-2-of-2.txt"
+  expect_shards_refused "$d" "success" "os-a: ran more than once: test_c" os-a
+  d="$WORK/fx2"; shard_fixture "$d" 2 os-a
+  grep -vxF test_e "$d/shards/os-a-1-of-2.txt" >"$d/x" && mv "$d/x" "$d/shards/os-a-1-of-2.txt"
+  expect_shards_refused "$d" "success" "os-a: did not run: test_e" os-a
+  d="$WORK/fx3"; shard_fixture "$d" 2 os-a
+  echo test_zzz >>"$d/shards/os-a-2-of-2.txt"
+  expect_shards_refused "$d" "success" "os-a: not in the list of tests: test_zzz" os-a
+}
+
+test_check_shards_fails_when_shards_disagree_on_their_count() {
+  local d="$WORK/fx"
+  shard_fixture "$d" 2 os-a
+  cp "$d/shards/os-a-2-of-2.txt" "$d/shards/os-a-3-of-3.txt"
+  expect_shards_refused "$d" "success" "os-a: shards disagree on their count" os-a
+}
+
+test_check_shards_refuses_a_shard_count_above_a_matrix_at_once() {
+  # A GitHub matrix has at most 256 jobs, so a manifest named with a
+  # larger count is refused at once, not looped over (review of #178).
+  local d="$WORK/fx" n
+  for n in 257 9223372036854775807 99999999999999999999; do
+    d="$WORK/fx.$n"; shard_fixture "$d" 1 os-a
+    mv "$d/shards/os-a-1-of-1.txt" "$d/shards/os-a-1-of-$n.txt"
+    expect_shards_refused "$d" "success" "os-a: shard count $n is above 256" os-a
+  done
+  # 256 itself is a count a matrix can have.
+  d="$WORK/fx.256"; shard_fixture "$d" 1 os-a
+  mv "$d/shards/os-a-1-of-1.txt" "$d/shards/os-a-1-of-256.txt"
+  expect_shards_refused "$d" "success" "os-a: shard 2 of 256 did not report" os-a
+}
+
+test_check_shards_fails_on_a_file_it_does_not_expect() {
+  local d="$WORK/fx"
+  shard_fixture "$d" 2 os-a
+  : >"$d/shards/os-c-1-of-1.txt"
+  expect_shards_refused "$d" "success" "unexpected file: os-c-1-of-1.txt" os-a
+  d="$WORK/fx2"; shard_fixture "$d" 2 os-a
+  : >"$d/shards/notes.txt"
+  expect_shards_refused "$d" "success" "unexpected file: notes.txt" os-a
+}
+
+test_check_shards_fails_on_an_empty_test_list_or_no_manifests() {
+  local d="$WORK/fx"
+  shard_fixture "$d" 1 os-a
+  : >"$d/all.txt"
+  expect_shards_refused "$d" "success" "the list of tests is empty" os-a
+  d="$WORK/fx2"; shard_fixture "$d" 1 os-a
+  rm -rf "$d/shards"
+  expect_shards_refused "$d" "success" "no shard reported" os-a
+  d="$WORK/fx3"; shard_fixture "$d" 1 os-a
+  if RESULTS=success bash "$CHECK_SHARDS" "$d/shards" "$d/all.txt" >/dev/null 2>&1; then
+    die "passed with no OS to check"
+  fi
+}
+
+test_check_shards_reads_manifests_with_windows_line_ends() {
+  local d="$WORK/fx"
+  shard_fixture "$d" 2 os-a
+  awk '{ printf "%s\r\n", $0 }' "$d/shards/os-a-1-of-2.txt" >"$d/x" && mv "$d/x" "$d/shards/os-a-1-of-2.txt"
+  check_shards "$d" "success" os-a || { cat "$d/out" >&2; die "refused manifests with CRLF line ends"; }
+}
+
+# gate_fixture <dir>: a checkout for the aggregate step's script: a stub
+# harness whose list mode lists 5 tests (it fails if run otherwise), the
+# real check-shards.sh, and the manifests of 4 shards for each OS leg
+# in shard-list/, where the step downloads them.
+gate_fixture() {
+  local d="$1" os i
+  mkdir -p "$d/bootstrap" "$d/shard-list"
+  cat >"$d/bootstrap/test-bootstrap-project.sh" <<'STUB'
+if [ "${BOOTSTRAP_TEST_LIST:-}" = 1 ]; then printf 'test_%s\n' one two three four five; exit 0; fi
+echo "stub harness: only list mode is emulated" >&2; exit 64
+STUB
+  [ -f "$CHECK_SHARDS" ] || die "no bootstrap/check-shards.sh"
+  cp "$CHECK_SHARDS" "$d/bootstrap/check-shards.sh"
+  for os in ubuntu-latest macos-latest windows-latest; do
+    for i in 1 2 3 4; do
+      printf 'test_%s\n' one two three four five | awk -v i="$i" '(NR - 1) % 4 == i - 1' >"$d/shard-list/$os-$i-of-4.txt"
+    done
+  done
+}
+
 test_workflow_bootstrapper_test_fails_unless_every_need_succeeded() {
-  # Runs the aggregate job's script with the results GitHub would pass.
-  local step script r
+  # Runs the aggregate job's script, in a checkout with every shard's
+  # manifest, with the results GitHub would pass.
+  local step script r d
   step="$(wf_step bootstrapper-test '^ *run: [|]')"
   [ -n "$step" ] || die "bootstrapper-test has no run: | step"
   [ "$(printf '%s\n' "$step" | grep -cE '^ *run:')" = 1 ] || die "expected one run step in bootstrapper-test"
@@ -905,13 +1207,67 @@ test_workflow_bootstrapper_test_fails_unless_every_need_succeeded() {
   script="$WORK/gate.$RANDOM.sh"
   printf '%s\n' "$step" | wf_run_block >"$script"
   [ -s "$script" ] || die "empty run script"
+  d="$WORK/gate"; gate_fixture "$d"
   for r in "success" "success success" "success success success"; do
-    RESULTS="$r" bash "$script" >/dev/null 2>&1 || die "failed on results: $r"
+    ( cd "$d" && RESULTS="$r" bash "$script" ) >"$WORK/out" 2>&1 || { cat "$WORK/out" >&2; die "failed on results: $r"; }
   done
   for r in "" "failure" "success failure" "failure success" "skipped success" \
            "success skipped" "success cancelled" "cancelled" "success  success failure"; do
-    ! RESULTS="$r" bash "$script" >/dev/null 2>&1 || die "passed on results: '$r'"
+    ! ( cd "$d" && RESULTS="$r" bash "$script" ) >/dev/null 2>&1 || die "passed on results: '$r'"
   done
+}
+
+test_workflow_bootstrapper_test_fails_when_a_shard_or_leg_did_not_report() {
+  # All needs green, but one shard's manifest is missing (its upload did
+  # not happen, or the matrix lost the shard), or a whole OS leg's: the
+  # required check fails.
+  local step script d f
+  step="$(wf_step bootstrapper-test '^ *run: [|]')"
+  script="$WORK/gate.$RANDOM.sh"
+  printf '%s\n' "$step" | wf_run_block >"$script"
+  for f in windows-latest-2-of-4.txt macos-latest-4-of-4.txt ubuntu-latest-1-of-4.txt; do
+    d="$WORK/gate.$f"; gate_fixture "$d"
+    rm "$d/shard-list/$f"
+    if ( cd "$d" && RESULTS="success success" bash "$script" ) >"$WORK/out" 2>&1; then
+      die "passed with $f missing"
+    fi
+    grep -qF 'did not report' "$WORK/out" || { cat "$WORK/out" >&2; die "failed with $f missing, but not for that reason"; }
+  done
+  d="$WORK/gate.leg"; gate_fixture "$d"
+  rm "$d/shard-list/macos-latest-"*
+  if ( cd "$d" && RESULTS="success success" bash "$script" ) >"$WORK/out" 2>&1; then
+    die "passed with the macOS leg missing"
+  fi
+  grep -qF 'macos-latest: no shard reported' "$WORK/out" || { cat "$WORK/out" >&2; die "the missing macOS leg is not named"; }
+}
+
+test_workflow_every_os_leg_is_sharded_and_records_what_it_ran() {
+  # The matrix job runs shards 1..n of every OS, each recording the
+  # tests it ran into shard-list/ and uploading that; bootstrapper-test
+  # downloads them all into shard-list/ before its step runs.
+  local j job n list agg
+  j="$(matrix_job)"; job="$(wf_job "$j")"
+  list="$(printf '%s\n' "$job" | grep -E '^        shard: \[' | sed -E 's/^        shard: \[//; s/\][[:space:]]*$//' | tr -d ' ' || true)"
+  [ -n "$list" ] || die "$j has no matrix shard list"
+  n="$(printf '%s\n' "$list" | tr ',' '\n' | grep -c .)"
+  [ "$list" = "$(seq -s, 1 "$n")" ] || die "the shard list is not 1..$n: $list"
+  [ "$n" -ge 2 ] || die "the legs are not sharded (n = $n)"
+  printf '%s\n' "$job" | grep -qxF "      BOOTSTRAP_TEST_SHARD: \${{ matrix.shard }}/$n" \
+    || die "the shard setting is not matrix.shard/$n"
+  printf '%s\n' "$job" | grep -qxF "      BOOTSTRAP_TEST_MANIFEST: shard-list/\${{ matrix.os }}-\${{ matrix.shard }}-of-$n.txt" \
+    || die "the shards do not record what they ran as shard-list/<os>-<i>-of-$n.txt"
+  printf '%s\n' "$job" | grep -qE '^        uses: actions/upload-artifact@v[0-9]+$|^      - uses: actions/upload-artifact@v[0-9]+$' \
+    || die "the shards do not upload what they ran"
+  printf '%s\n' "$job" | grep -qxF '          name: bootstrap-tests-${{ matrix.os }}-${{ matrix.shard }}' || die "unexpected artifact name"
+  printf '%s\n' "$job" | grep -qxF '          path: shard-list/' || die "the upload is not shard-list/"
+  printf '%s\n' "$job" | grep -qxF '          if-no-files-found: error' || die "an upload with no manifest does not fail"
+  agg="$(wf_job bootstrapper-test)"
+  printf '%s\n' "$agg" | grep -qE 'uses: actions/download-artifact@v[0-9]+$' || die "bootstrapper-test does not download the manifests"
+  printf '%s\n' "$agg" | grep -qxF '          pattern: bootstrap-tests-*' || die "the download pattern is not bootstrap-tests-*"
+  printf '%s\n' "$agg" | grep -qxF '          path: shard-list' || die "the manifests are not downloaded to shard-list"
+  printf '%s\n' "$agg" | grep -qxF '          merge-multiple: true' || die "the manifests are not merged into one folder"
+  # The gate runs even when the download fails (no artifact at all).
+  wf_step bootstrapper-test '^ *run: [|]' | grep -qxF '        if: always()' || die "the gate step does not run when the download fails"
 }
 
 test_workflow_bootstrapper_test_gates_the_build_and_publish_tests() {

@@ -6,6 +6,18 @@
 # tested in bootstrap/test.sh.
 # Usage: bash bootstrap/test-bootstrap-project.sh
 #
+# Settings, all optional (unset: every test runs, as before):
+#   BOOTSTRAP_TEST_SHARD=i/n   run only shard i of n: the tests at index
+#                              i-1, i-1+n, i-1+2n, ... of the sorted list
+#                              of tests (interleaved, so the slow tests
+#                              spread over the shards). CI runs each OS
+#                              leg as n shards (PBI-1.18).
+#   BOOTSTRAP_TEST_LIST=1      print the names of the tests that would
+#                              run, one per line, and run none.
+#   BOOTSTRAP_TEST_MANIFEST=f  write the name of each test run to file f
+#                              (relative to where this starts), one per
+#                              line; bootstrap/check-shards.sh reads it.
+#
 # Template-only: bootstrap/ is not in bootstrap/manifest.txt, so this
 # file never ships. It runs on bash 3.2 (macOS /bin/bash) and Git for
 # Windows bash as well as Linux: no associative arrays, no mapfile, no
@@ -15,6 +27,31 @@
 # part only when it is executed, not when it is sourced, so a test can
 # call one function at a time. Each test runs in its own subshell.
 set -euo pipefail
+
+# The shard setting, read before anything else so a bad one fails fast.
+SHARD_I=1
+SHARD_N=1
+if [ -n "${BOOTSTRAP_TEST_SHARD:-}" ]; then
+  case "$BOOTSTRAP_TEST_SHARD" in
+    [1-9]*/[1-9]*) SHARD_I="${BOOTSTRAP_TEST_SHARD%%/*}"; SHARD_N="${BOOTSTRAP_TEST_SHARD#*/}" ;;
+    *) SHARD_I=x ;;
+  esac
+  # More than 6 digits is refused before any arithmetic: a number that
+  # overflows bash's integers would make the test below err (and so be
+  # false) or wrap.
+  case "$SHARD_I/$SHARD_N" in
+    *[!0-9/]* | */*/* | *[0-9][0-9][0-9][0-9][0-9][0-9][0-9]*) SHARD_I=x ;;
+  esac
+  if [ "$SHARD_I" = x ] || [ "$SHARD_I" -gt "$SHARD_N" ]; then
+    echo "BOOTSTRAP_TEST_SHARD must be i/n, whole numbers of up to 6 digits with 1 <= i <= n and no leading zeros; got '$BOOTSTRAP_TEST_SHARD'." >&2
+    exit 2
+  fi
+fi
+MANIFEST="${BOOTSTRAP_TEST_MANIFEST:-}"
+case "$MANIFEST" in
+  "" | /*) ;;
+  *) MANIFEST="$PWD/$MANIFEST" ;;
+esac
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
@@ -8866,9 +8903,27 @@ test_dev_infrastructure_says_the_script_turns_protection_on() {
 # ---------- run ----------
 
 TESTS=$(declare -F | awk '{print $3}' | grep '^test_')
+if [ -n "$MANIFEST" ]; then
+  mkdir -p "$(dirname "$MANIFEST")"
+  : >"$MANIFEST"
+fi
+k=0
 for t in $TESTS; do
-  run_test "$t"
+  if [ $((k % SHARD_N)) -eq $((SHARD_I - 1)) ]; then
+    if [ "${BOOTSTRAP_TEST_LIST:-}" = 1 ]; then
+      printf '%s\n' "$t"
+    else
+      run_test "$t"
+      if [ -n "$MANIFEST" ]; then printf '%s\n' "$t" >>"$MANIFEST"; fi
+    fi
+  fi
+  k=$((k + 1))
 done
+[ "${BOOTSTRAP_TEST_LIST:-}" != 1 ] || exit 0
+if [ $((PASSED + FAILED)) -eq 0 ]; then
+  echo "This run ran no test: shard $SHARD_I of $SHARD_N selects none of the $k tests." >&2
+  exit 1
+fi
 
 echo
 echo "$PASSED passed, $FAILED failed"

@@ -109,7 +109,11 @@ same way, with two required checks: `build` and `bootstrapper-test`.
 The second tests the template's release pipeline, which projects do not
 have. Its workflow (`bootstrapper.yml`) runs on pull requests to `main`
 and pushed `v*` tags only, not on branch pushes, and a newer push to a
-pull request cancels the older run. After a merge, that workflow does
+pull request cancels the older run. Each OS leg of the bootstrap
+script's tests runs as 4 parallel shards (`BOOTSTRAP_TEST_SHARD`), and
+`bootstrapper-test` fails unless every shard succeeded and, for every
+OS, the shards together ran every test exactly once
+(`bootstrap/check-shards.sh`). After a merge, that workflow does
 not run on `main`: the required checks are not strict ("require
 branches to be up to date" is off), so a pull request's run can predate
 another pull request's merge, and the workflow's suites and its OS
