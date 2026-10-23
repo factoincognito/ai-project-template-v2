@@ -18,7 +18,7 @@ A bootstrapped project records the tag it was built from.
 - Recorded in NEXT_SESSION the verified v2.4.0 release, Adam's answer on #178 and the end-to-end run plan (PR #185)
 - Marked PBI-1.18 done (PR #186)
 
-## [2.4.0] — 2026-10-18
+## [2.4.0] — 2026-10-23
 
 ### Added
 - Prepared the 2.3.0 changelog (PR #126)
