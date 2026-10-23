@@ -15,7 +15,7 @@ A bootstrapped project records the tag it was built from.
 - Added PBI-1.19: make the setup command short enough to type (PR #183)
 - PBI-1.18: the bootstrap script's tests run in 4 shards per OS leg; `bootstrapper-test` also fails when a shard is missing or a test ran twice or not at all (PR #178)
 
-## [2.4.0] — 2026-10-18
+## [2.4.0] — 2026-10-23
 
 ### Added
 - Prepared the 2.3.0 changelog (PR #126)
