@@ -53,8 +53,12 @@
 Written 2026-10-02 so nothing depends on anyone remembering. **Each Clead session lists this to Adam in its first reply and removes each line when Adam confirms it is done.** Agents cannot do these: the access proxy returns 403 on branch deletion, tag pushes and the Actions and secrets settings, and branch protection and tokens are GitHub account settings.
 
 1. **Decide** (item 10) whether CLAUDE.md should say that only one Clead session works on the template at a time, and that every session starts by listing open PRs and non-main branches.
-2. **Now:** create tag `v2.4.0` on `main` (at `7dd7fd0`, the release prep #176, merged 2026-10-18) from the GitHub Releases page; Clead tried the API and the proxy refused it (403 on creating a ref). Nothing else may merge before it exists. Then the end-to-end runs on throwaway repos, including PBI-1.17's red-then-`Test-exempt` pull request in a real project (PBI-1.17 stays `[NEXT]` until then).
-3. **Decide** whether the stricter meaning of the required check `bootstrapper-test` in #178 (it also fails when a shard is missing or a test ran twice or not at all) needs your intent approval; the answer is recorded as a comment on #178 before it merges.
+2. **Now: the end-to-end runs** on throwaway public repos `bootstrap-e2e-<pack>-<date>`, one at a time, in this order (agreed 2026-10-23). After each, run `bash bootstrap/e2e-check.sh OWNER/NAME DIR` from a template clone and give Clead its output; delete only after that.
+   1. Windows, Git Bash, interactive, web pack. Log in first without the `workflow` scope so the guided scope refresh runs; press Ctrl-C during the CI wait and continue with the printed `--resume` command. **Stop until this run is clean**; a defect is fixed and released before the other runs.
+   2. node pack, `--non-interactive`, any OS.
+   3. python pack, interactive, on macOS if available (`/bin/bash` 3.2), with PBI-1.17's red-then-`Test-exempt` pull request in that project (PBI-1.17 stays `[NEXT]` until then).
+   4. react-native pack, interactive, any OS.
+   5. Separately, now: someone who has never used `gh` or a terminal sets up a project from the README alone (PBI-1.14 Done when 7). Where they get stuck is a defect and evidence for PBI-1.19; repeat it if PBI-1.19 changes step 1.
 4. **If an agent has to change files in your connected PC folder,** it asks for delete permission once per session (a failed pull left a stale `.git/index.lock` last time). Your PC clone of the template is behind main and its `origin` points at the org; the session fast-forwards it after you grant that.
 
 ---
@@ -67,10 +71,10 @@ Written 2026-10-02 so the order does not have to be re-derived. "Clead" is the n
 |---|---|---|
 | Rest of PBI-1.14: none. The README steps were built as S19, merged as #174 on 2026-10-17 | done | S1 to S19 merged |
 | Release prep PR for v2.4.0 | done: #176, merged 2026-10-18 (`7dd7fd0`) | |
-| Release tag `v2.4.0` | Adam, from the Releases page | Nothing; open now. Nothing may merge before it exists |
-| Release verified | Clead, through the API: the tag run's checks passed, bootstrapper `main` has the new commit, the tag exists on both repos | The tag |
-| #177 (PBI-1.18 spec), then #178 (the sharding, round-2 review done, one blocker: #177 first and Adam's answer on intent approval) | Clead merges through a merge agent, verified on GitHub | The tag (nothing merges before it); Adam's answer (to-do 3) |
-| End-to-end runs on throwaway repos; PBI-1.17 to `[DONE]` | Adam runs, Clead reads the results | PBI-1.14 built and released (to-do 2) |
+| Release tag `v2.4.0` | done: Adam, 2026-10-23, at `7dd7fd0` | |
+| Release verified | done 2026-10-23: tag run 39920156317 green including `publish`; bootstrapper `main` and its tag `v2.4.0` at `b93a395`, with `bootstrap-project.sh` at its root (executable, LF) | |
+| #177 (PBI-1.18 spec), then #178 (the sharding) | done: #177 merged 2026-10-23 (`e22bd39`); #178 merged 2026-10-23 (`31de9e9`) after Adam answered that intent approval is not needed (recorded on #178). Windows leg 19.1 min on its last run (was about 73) | |
+| End-to-end runs on throwaway repos; PBI-1.17 to `[DONE]` | Adam runs, in the order of to-do 2; Clead reads the `e2e-check.sh` output | Nothing; open now |
 | acuteping created | Adam | The end-to-end runs |
 
 ---
