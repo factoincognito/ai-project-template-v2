@@ -284,6 +284,32 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 - **Open, for Adam:** measure the template's value instead of judging it (he named the risk of overvaluing his own creation)? Options: fix in advance what would make a feature go; use acuteping as a measurement (per guardrail: real problems caught versus time and tokens spent); a comparison run (the same small app with the template and with plain Claude Code).
 
 
+### 16. A multi-agent bootstrapped project, and a possible v3 — new (2026-10-21)
+
+**Adam (2026-10-21):** asked whether the package can be expanded so that a bootstrapped project becomes more multi-agentic, and whether that is a step towards something that could be called v3. Asked for the thinking to be kept as an idea for the future.
+
+**Status:** an idea, documented only. Not a PBI, not decided, nothing built. It builds on PBI-4.4 (autonomous PR loop, `[LATER]`) and PBI-4.5 (Copi as a third-layer reviewer, `[LATER]`) and on item 15 (the product office overview).
+
+**Where things stand (verified in the repo, 2026-10-21):** this repo already works multi-agent in practice: one orchestrating Clead session starts an implementer, separate reviewers who never saw the implementation, and merge-only agents. But the template ships only `CLAUDE.md`, `memory/roles.md` (two roles, Clead and Crog) and `docs/ROUTINES.md` (the wiring, in prose). It ships no agent definitions, so which agent runs, on which model, with which inputs is decided by the orchestrating session each time, in ad hoc briefs.
+
+**Clead's first thoughts (not decided).** A multi-agent bootstrapped project would consist of:
+1. **A roster as files:** one definition per agent (Claude Code supports project-level agent definitions) with its role, model, tools, the inputs it may receive and what it must never do. Candidates: implementer, reviewer, merger, perhaps researcher or tester.
+2. **Briefing contracts:** a template per role for what the orchestrator hands over, for example "the reviewer gets only the diff and `memory/standards.md`", so that independence is built in.
+3. **A written protocol:** task, implement test-first (red then green), independent review rounds (cap 3), CI, merge agent, verification against GitHub. Written once, the same in every project.
+4. **The repo as the shared channel:** agents do not message each other; they leave PRs, review comments, check runs and handoff notes. No second copy of the state.
+5. **Triggers, later:** the loop runs without a session (PBI-4.4). Needs tokens held as secrets, and has cost and permission limits (the proxy refused creating a tag on 2026-10-18).
+6. **Hard guardrails:** CI gates and branch protection enforce the rules because agents are fallible (in PBI-1.18 an independent reviewer found a real silent-overflow bug; an implementer once measured a baseline while editing the file it was timing). Every merge and CI result is verified on GitHub, not taken from an agent's report.
+7. **A view for Adam:** item 15, the product office querying each project for what happens next.
+
+**Cheap and not cheap:** the roster files, briefing templates and protocol document, with a check that they exist and keep their headings, are cheap and would be one PBI in the template that bootstrapped projects inherit. The triggers are not cheap (secrets, runner minutes, permissions). Not verified: how a freshly bootstrapped project's Claude setup picks up the agent files; to be tested before promising it. More agents also means more cost and more handoffs that can go wrong, so add agents only where independence helps (review, verification).
+
+**On v3 (Clead's judgement, not a rule; the repo has none on versioning):** the roster, briefing contracts and protocol add files and break nothing, so they would still be v2.x minor releases. The step that would justify calling it a new generation is the triggers (the loop runs by itself) or product office becoming the top layer, because they change how Adam operates, not only what the template contains. A practical test: if existing projects cannot adopt it without changes, it is v3.
+
+**Open questions for Adam:**
+1. Start with the cheap part as one PBI (roster, contracts, protocol)?
+2. Where is the v3 line: the triggers, the product office layer, or the "existing projects cannot simply adopt it" test?
+3. Does it extend the Clead and Crog model or replace it? (Replacing would be a break.)
+
 ### 14. How Clead reports to Adam — new (2026-10-02)
 
 **Adam:** he does not read every long message. When Clead stops and waits for him, it ends with a short **For you** block: what it recommends and what it needs from him, including any recommendation made earlier in the message. **Action:** put this into CLAUDE.md with the next CLAUDE.md change (item 5), reviewed by Crog; until then every Clead session follows it from here.
