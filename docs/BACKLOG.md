@@ -670,6 +670,54 @@ get a working project in any supported language.
   - The bootstrapper repo gets no test support for itself, by design: it is generated from the template and changed only there, where the tests and the chain test run. Someone who edits a copy of it directly works without them.
   - Honest limit: the check cannot prove the test came first, or that it is a good one. Review covers that.
 
+- **[LATER] PBI-1.18** (Clead, 2026-10-18, on Adam's request; the WHAT is Adam's wish for a faster Windows check, the HOW is Clead's; not yet specced, reviewed or intent-approved) — Shorten the Windows leg of `bootstrapper-test`.
+
+  **Why.**
+  Every pull request that touches the bootstrapper waits for the Windows leg of `bootstrap-project-test`, the slowest of the three OS legs. From the timestamps in the logs of the last completed run (head `020a3f5`, run 39070866362): the test step took 18.9 min on ubuntu, 24.3 min on macOS and 72.5 min on Windows. In that run all 294 tests were slower on Windows (median ratio about 14 times); the 15 slowest tests were only 32% of the Windows total, so no single test explains it. A Windows leg of 70 to 76 minutes was seen on #175 and #176.
+
+  **Cause, as far as measured.**
+  Counting process launches (`execve`) on Linux for three slow tests gave 1,933, 2,791 and 8,991 launches. Dividing their Windows times by those counts gives 36, 28 and 24 ms per launch, roughly constant across tests with different command mixes (Linux: about 2 ms). So the time follows the number of processes started. Contributors seen in the harness: each test runs the real script through many small commands (`grep`, `mktemp`, `tr`, `rm`, `cat`); `fake_tool` puts a bash wrapper in front of every `git` call (it starts bash, logs, then execs the real `git`); the "every guide says why, how, what you see…" test alone launches `grep` 2,106 times and `mkdir` 2,031 times. Not measured: why a launch costs more on Windows (Git Bash's process emulation is the usual suspect), and the Windows runner itself.
+
+  **Options.**
+  1. Shard the Windows leg (or all legs) into 3 or 4 parallel jobs by test index, for example `BOOTSTRAP_TEST_SHARD=i/n` read by `bootstrap/test-bootstrap-project.sh`. No test changes. Expected wall time about 20 to 25 min for Windows if the shards balance (an estimate, not measured). Costs more runner minutes, not more total time. Things to settle: the one-off cost of building the bootstrapper in each shard; the required check `bootstrapper-test` must stay one aggregate check named as today and must fail if any shard fails or is missing; a test that proves the shards together run every test exactly once.
+  2. Cut process launches in the harness: replace the `git` wrapper with something cheaper, use shell builtins instead of `tr`, `cat` and `rm`, batch the `grep`s in the guide test. Payoff real but unmeasured, more work, and it touches many tests.
+  3. Both, option 1 first.
+
+  **Done when.**
+  - The Windows leg of a pull request that changes the bootstrapper finishes in 30 min or less on the same kind of runner, measured from the check-run timestamps of at least two runs.
+  - `bootstrapper-test` still has the same name, still requires all OS legs, and still fails when any shard fails or does not run.
+  - A check, red before the change, proves that no test is skipped or run twice across the shards.
+
+  **Rules that apply.**
+  A change to the workflow or the harness is code and config: test-first, reviewed by the role that did not write it (an Opus reviewer). It does not need Adam's intent approval unless the required check's name or meaning changes.
+
+- **[LATER] PBI-1.19** (Clead, 2026-10-23, on Adam's request; the WHAT is Adam's, the HOW is Clead's; not yet specced, reviewed or intent-approved) — Make the setup command short enough to type by hand.
+
+  **Why.**
+  Adam, 2026-10-23: typing in the step 1 command line "is a recipe for failure". A user at home on the command line pastes it; one who is not may type it. The line is 175 characters with a quoted header and a redirect, and one wrong character (a space for the hyphen in `bootstrap-project.sh`, a dropped quote) makes it fail with an error that user cannot read. The goal is to remove that risk, not to save keystrokes.
+
+  **Proposed HOW (to be specced): a gh extension.**
+  - A public repo `factoincognito/gh-bootstrap-project` holding an executable `gh-bootstrap-project` (the setup script). The gh manual (`gh extension`) requires the repo name to start with `gh-` and to contain an executable of the same name.
+  - README step 0 gains one line after the login: `gh extension install factoincognito/gh-bootstrap-project`. Step 1 becomes `gh bootstrap-project`.
+  - gh forwards all arguments to the extension (gh manual), so `--resume` and the options work as today. gh checks for a new version every 24 hours and shows an upgrade notice (gh manual); `gh extension upgrade bootstrap-project` updates it.
+  - Rejected: a `gh alias set` line in step 0 (the alias line is as long as today's command, and has no update path); `curl … | bash` from a short URL (still a URL to type, and it skips the gh login check that the `gh api` download gives for free).
+
+  **To settle in the spec.**
+  1. Publishing: the release pipeline (`bootstrap/publish.sh`, `.github/workflows/bootstrapper.yml`) also publishes the script to the extension repo at the same version, or the extension is a thin launcher that downloads the script from the bootstrapper repo (one copy, but two downloads). Decide which.
+  2. Versions: the script checks the bootstrapper's version stamp at step 4, and `--resume` refuses a repo stamped by an older version. An outdated installed extension must stop with a message naming `gh extension upgrade bootstrap-project`, not a refusal the user cannot act on. How `install` and `upgrade` fetch a script extension (a clone of the default branch, or a release) is UNVERIFIED.
+  3. Windows: whether gh runs a bash script extension from Git Bash, and from cmd or PowerShell, is UNVERIFIED; it needs a real run on each OS, macOS `/bin/bash` 3.2 included. If it works only from Git Bash, the README still says so.
+  4. Messages: the commands the script prints to restart or continue, its usage text and the stub README's setup section give the download line and `bash bootstrap-project.sh`. Each must give the command that works for the user.
+  5. Whether the README keeps today's line as a fallback, or gives one way only.
+  6. Trust: gh states that extensions are not verified by GitHub. The trust is the same as for today's downloaded script; the README says so plainly.
+
+  **Done when.**
+  - On Windows (Git Bash), macOS and Linux, a project is set up with README step 0 plus `gh bootstrap-project`, typed by hand: an end-to-end run on each OS.
+  - Every restart or continue command the script prints works as printed when the script runs as the extension (a test).
+  - An outdated installed extension stops with a message naming `gh extension upgrade bootstrap-project` (a test).
+
+  **Rules that apply.**
+  Script, workflow and release-pipeline changes are code and config: test-first, reviewed by the role that did not write it. The spec needs Adam's intent approval, because it adds a public repo and changes the command every user types.
+
 ---
 
 ## Phase 2 — Validate unproven pieces

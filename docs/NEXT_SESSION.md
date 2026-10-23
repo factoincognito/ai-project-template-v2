@@ -1,6 +1,6 @@
 # [PROJECT NAME] — Next Session Planning
 
-**Last Updated:** 2026-10-17
+**Last Updated:** 2026-10-20
 **Author:** Clead (Tech Owner)
 **Purpose:** Staging area for reasoning, revised assumptions, and plan-adaptation thoughts that aren't yet mature enough to be a PBI, a decision, a strategy update, or a vision-doc change. Complements `docs/BACKLOG.md` — it does not replace it. Discrete, scoped, actionable work belongs in the backlog as a PBI, not here.
 
@@ -53,8 +53,9 @@
 Written 2026-10-02 so nothing depends on anyone remembering. **Each Clead session lists this to Adam in its first reply and removes each line when Adam confirms it is done.** Agents cannot do these: the access proxy returns 403 on branch deletion, tag pushes and the Actions and secrets settings, and branch protection and tokens are GitHub account settings.
 
 1. **Decide** (item 10) whether CLAUDE.md should say that only one Clead session works on the template at a time, and that every session starts by listing open PRs and non-main branches.
-2. **Later, when PBI-1.14 is built:** after S15 merges, the next release tag, which agents cannot do; then the end-to-end runs on throwaway repos, including PBI-1.17's red-then-`Test-exempt` pull request in a real project (PBI-1.17 stays `[NEXT]` until then).
-3. **If an agent has to change files in your connected PC folder,** it asks for delete permission once per session (a failed pull left a stale `.git/index.lock` last time). Your PC clone of the template is behind main and its `origin` points at the org; the session fast-forwards it after you grant that.
+2. **Now:** create tag `v2.4.0` on `main` (at `7dd7fd0`, the release prep #176, merged 2026-10-18) from the GitHub Releases page; Clead tried the API and the proxy refused it (403 on creating a ref). Nothing else may merge before it exists. Then the end-to-end runs on throwaway repos, including PBI-1.17's red-then-`Test-exempt` pull request in a real project (PBI-1.17 stays `[NEXT]` until then).
+3. **Decide** whether the stricter meaning of the required check `bootstrapper-test` in #178 (it also fails when a shard is missing or a test ran twice or not at all) needs your intent approval; the answer is recorded as a comment on #178 before it merges.
+4. **If an agent has to change files in your connected PC folder,** it asks for delete permission once per session (a failed pull left a stale `.git/index.lock` last time). Your PC clone of the template is behind main and its `origin` points at the org; the session fast-forwards it after you grant that.
 
 ---
 
@@ -65,9 +66,10 @@ Written 2026-10-02 so the order does not have to be re-derived. "Clead" is the n
 | Step | Who | Blocked by |
 |---|---|---|
 | Rest of PBI-1.14: none. The README steps were built as S19, merged as #174 on 2026-10-17 | done | S1 to S19 merged |
-| Release prep PR for the next release (put the version heading over Unreleased, as #76 and #126 did) | Clead | S15 merged; written just before the tag so it is complete |
-| Next release tag `v*` | Adam, from the Releases page | Release prep merged (decision of 2026-10-02: no tag until S15 merges) |
+| Release prep PR for v2.4.0 | done: #176, merged 2026-10-18 (`7dd7fd0`) | |
+| Release tag `v2.4.0` | Adam, from the Releases page | Nothing; open now. Nothing may merge before it exists |
 | Release verified | Clead, through the API: the tag run's checks passed, bootstrapper `main` has the new commit, the tag exists on both repos | The tag |
+| #177 (PBI-1.18 spec), then #178 (the sharding, round-2 review done, one blocker: #177 first and Adam's answer on intent approval) | Clead merges through a merge agent, verified on GitHub | The tag (nothing merges before it); Adam's answer (to-do 3) |
 | End-to-end runs on throwaway repos; PBI-1.17 to `[DONE]` | Adam runs, Clead reads the results | PBI-1.14 built and released (to-do 2) |
 | acuteping created | Adam | The end-to-end runs |
 
@@ -168,7 +170,7 @@ graduate (see the rule above).
 **Cannot be verified in CI (Adam's end-to-end runs only):** GitHub timing and error texts after create, the protection PUT shape, private-repo clone and push, Git Bash prompts, `winget`, a lockfile made on Windows or macOS under `npm ci` on Linux, the unaided README run, and the red-then-`Test-exempt` PR in a real project.
 **Spec meets changed repo (to fix in the slice named):** the placement-table tests in `bootstrap/test.sh` pin both READMEs (S17); `test_workflow_bootstrapper_test_runs_the_require_test_change_tests` conflicts with the aggregate design (S5); the setup PR's tree must keep `.github/scripts/require-test-change.sh` (S10); stamps from releases before the org move name the old owner, so older repos cannot be resumed (S15).
 - S18a CRLF in README or CHANGELOG on GitHub is refused before anything is written. **Done: #169, 2026-10-15** (four review rounds; round 1 found a 4 to 5 s cost on every `--resume`, rounds 3 and 4 followed two Windows CI failures of the tests' own CR checks). S18b gh feature preflight, bare-word message, help and plan wording. **Done: #171, 2026-10-15** (one review round, approved).
-**Next slice:** none. S19 is merged (#174, 2026-10-17). Next: the release prep PR, the tag (Adam, from the Releases page, straight after the release prep PR with nothing merged in between), then Adam's end-to-end runs.
+**Next slice:** none. S19 is merged (#174, 2026-10-17) and the release prep PR is merged (#176, 2026-10-18). Next: the tag `v2.4.0` (Adam, from the Releases page), then Adam's end-to-end runs.
 **Questions for Adam (neither blocks S1):**
 1. Answered by Adam, 2026-10-02 (`memory/decisions.md`): `--resume` refuses a repo stamped by an older bootstrapper version and tells the user to create a fresh repo; a repo stamped by the current version, including one made with "Use this template" from the current release, still resumes. The spec text is corrected in S15.
 2. Answered by Adam, 2026-10-02: v2.3.0 is released before S1 (nothing of PBI-1.14 ships in it), then no tag until S15 merges. acuteping waits for PBI-1.14 and the end-to-end runs either way (decision of 2026-10-01).
@@ -223,6 +225,12 @@ graduate (see the rule above).
   - Open, non-blocking (round-2 review): the `--resume` sentence test (`bootstrap/test-bootstrap-project.sh`, about lines 8806-8810) checks one phrase and two forbidden wordings, so a differently worded false sentence passes; the table test (about line 8604) catches a by-hand pack table only when it names certain pack files (a table naming only `tsconfig.json` passed); the banned-word rule lets a word through when a bracketed explanation of three or more words follows it (predates S19); two README conditions ("web pack only", "not asked with no licence") are read from the script and no test pins them.
   - Not verified, for Adam's end-to-end runs: gh's own prompt and output texts that the README quotes ("Authenticate Git...", "Logged in as"); the GitHub Settings path and button names for limiting the Claude GitHub App; the Linux install link; whether someone with no help can follow the README (PBI-1.14 "Done when" 7); bash 3.2 and Git Bash behaviour of the new checks beyond what CI ran.
 
+**Notes from PBI-1.18, the Windows leg (#177 spec, #178 sharding), 2026-10-18 to 2026-10-20:**
+- Measured from the logs of run 39070866362: the bootstrap script's tests took 18.9 min on ubuntu, 24.3 on macOS and 72.5 on Windows; all 294 tests were slower on Windows (median about 14 times) and the cost tracks process launches (about 24 to 36 ms each on Windows, about 2 ms on Linux). Not measured: why a launch costs more on Windows.
+- #178 shards each OS leg into 4 and keeps the required check `bootstrapper-test`, which now also fails unless every shard of every OS reported and together ran every test exactly once. Two CI runs gave a Windows leg of 23.3 and 22.7 min. Two Opus review rounds: round 1 found an overflowing shard value accepted silently (fixed, red then green), round 2 found the code correct and left only the merge precondition (#177 first, Adam's answer on intent approval).
+- Not verified: CI never ran with a shard actually failing or missing (local tests only); how "Re-run failed jobs" resolves earlier attempts' artifacts; the full 19-min harness locally; the new exit paths under a real bash 3.2 binary. Open non-blocking: a one-line fixture for the shard-index length guard in `bootstrap/check-shards.sh`, and two misleading messages there (`0256` reported as a count above 256; an extra manifest still prints "ran all tests").
+- Option 2 of PBI-1.18 (cut process launches in the harness: the bash wrapper around every `git` call, many small commands per test) stays open and unmeasured.
+
 ### 9. Pending from the previous Clead session (PBI-1.17 build), staged on Adam's request — new (2026-10-02)
 
 **Why this exists:** Adam, 2026-10-02: too many parallel sessions work on the template, so every session stages what it has pending here and one new session consolidates. The session that wrote this was bound to the old `sugose/` path and cannot reach the moved repo's API, so it pushed this as a branch and could not open the PR.
@@ -276,9 +284,53 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 - **Open, for Adam:** measure the template's value instead of judging it (he named the risk of overvaluing his own creation)? Options: fix in advance what would make a feature go; use acuteping as a measurement (per guardrail: real problems caught versus time and tokens spent); a comparison run (the same small app with the template and with plain Claude Code).
 
 
+### 16. A multi-agent bootstrapped project, and a possible v3 — new (2026-10-21)
+
+**Adam (2026-10-21):** asked whether the package can be expanded so that a bootstrapped project becomes more multi-agentic, and whether that is a step towards something that could be called v3. Asked for the thinking to be kept as an idea for the future.
+
+**Status:** an idea, documented only. Not a PBI, not decided, nothing built. It builds on PBI-4.4 (autonomous PR loop, `[LATER]`) and PBI-4.5 (Copi as a third-layer reviewer, `[LATER]`) and on item 15 (the product office overview).
+
+**Where things stand (verified in the repo, 2026-10-21):** this repo already works multi-agent in practice: one orchestrating Clead session starts an implementer, separate reviewers who never saw the implementation, and merge-only agents. But the template ships only `CLAUDE.md`, `memory/roles.md` (two roles, Clead and Crog) and `docs/ROUTINES.md` (the wiring, in prose). It ships no agent definitions, so which agent runs, on which model, with which inputs is decided by the orchestrating session each time, in ad hoc briefs.
+
+**Clead's first thoughts (not decided).** A multi-agent bootstrapped project would consist of:
+1. **A roster as files:** one definition per agent (Claude Code supports project-level agent definitions) with its role, model, tools, the inputs it may receive and what it must never do. Candidates: implementer, reviewer, merger, perhaps researcher or tester.
+2. **Briefing contracts:** a template per role for what the orchestrator hands over, for example "the reviewer gets only the diff and `memory/standards.md`", so that independence is built in.
+3. **A written protocol:** task, implement test-first (red then green), independent review rounds (cap 3), CI, merge agent, verification against GitHub. Written once, the same in every project.
+4. **The repo as the shared channel:** agents do not message each other; they leave PRs, review comments, check runs and handoff notes. No second copy of the state.
+5. **Triggers, later:** the loop runs without a session (PBI-4.4). Needs tokens held as secrets, and has cost and permission limits (the proxy refused creating a tag on 2026-10-18).
+6. **Hard guardrails:** CI gates and branch protection enforce the rules because agents are fallible (in PBI-1.18 an independent reviewer found a real silent-overflow bug; an implementer once measured a baseline while editing the file it was timing). Every merge and CI result is verified on GitHub, not taken from an agent's report.
+7. **A view for Adam:** item 15, the product office querying each project for what happens next.
+
+**Cheap and not cheap:** the roster files, briefing templates and protocol document, with a check that they exist and keep their headings, are cheap and would be one PBI in the template that bootstrapped projects inherit. The triggers are not cheap (secrets, runner minutes, permissions). Not verified: how a freshly bootstrapped project's Claude setup picks up the agent files; to be tested before promising it. More agents also means more cost and more handoffs that can go wrong, so add agents only where independence helps (review, verification).
+
+**On v3 (Clead's judgement, not a rule; the repo has none on versioning):** the roster, briefing contracts and protocol add files and break nothing, so they would still be v2.x minor releases. The step that would justify calling it a new generation is the triggers (the loop runs by itself) or product office becoming the top layer, because they change how Adam operates, not only what the template contains. A practical test: if existing projects cannot adopt it without changes, it is v3.
+
+**Open questions for Adam:**
+1. Start with the cheap part as one PBI (roster, contracts, protocol)?
+2. Where is the v3 line: the triggers, the product office layer, or the "existing projects cannot simply adopt it" test?
+3. Does it extend the Clead and Crog model or replace it? (Replacing would be a break.)
+
 ### 14. How Clead reports to Adam — new (2026-10-02)
 
 **Adam:** he does not read every long message. When Clead stops and waits for him, it ends with a short **For you** block: what it recommends and what it needs from him, including any recommendation made earlier in the message. **Action:** put this into CLAUDE.md with the next CLAUDE.md change (item 5), reviewed by Crog; until then every Clead session follows it from here.
+### 15. The product office overlooking all projects: one way to ask any project what happens next — new (2026-10-20)
+
+**Adam (2026-10-20):** the private product office (item 11) should sit as the head of product with a link to every project, and he should be able to go there and see what is going on in all projects. "What is going on" means what is going to happen and what is needed to progress, not a report of what has happened. No double storage: all the information about a project stays in that project; product office stores none of it, only queries the projects and reports up to Adam. There should be one unified way for the product office to query the status of the sub projects, and every project is aware of it.
+
+**Status:** an idea, documented only. Not a PBI, not decided, nothing built. Adam asked for this note and nothing more for now.
+
+**Clead's first thoughts (not decided):**
+- **Source of truth stays in each project.** The forward view already exists in this repo as "Adam's to-do", "What waits for what" and the `[NEXT]` items in `docs/BACKLOG.md`. Product office keeps only a registry (project, repo, where its forward-looking sections are), and the overview is read from the projects when asked, never copied.
+- **The unified way is a contract that the template defines and every bootstrapped project inherits:** stable section headings (and the rule that they hold only forward-looking content) in a file every project has. Which file and which headings is open. A CI check on the headings, like the test-first check, is one way to keep every project to it.
+- **Verified from this repo, 2026-10-20:** a bootstrapped project gets `docs/NEXT_SESSION.md` and `docs/BACKLOG.md` (the fill table in `bootstrap/stubs/bootstrap-project.sh`), but the shipped `NEXT_SESSION.md` stub has only "Current situation summary", "What needs adapting" and "Items that do not change". It has no "Adam's to-do" and no "What waits for what", so the contract is not there today.
+- **Access:** a session reads a private repo only if that repo is attached to it. This session is bound to this repo only. A product-office session would need each project repo attached, and anything private stays in the product-office repo, never here (item 11).
+- **Overlap to settle first:** the backlog visualiser (PBI-1.11, moved to its own project) reads any project's `BACKLOG.md`. The overview could be that project or a sibling of it.
+
+**Open questions for Adam:**
+1. The form of the overview: a Claude session in product office that fetches live when asked (no new infrastructure), or a published page.
+2. Where it starts: a PBI in the template defining the contract and its check, with the registry written separately in the product-office repo, or something else.
+3. Which file and which headings are the contract, and whether it replaces or sits beside "What waits for what".
+
 ---
 
 ## Items that do not change
