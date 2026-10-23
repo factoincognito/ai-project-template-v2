@@ -17,6 +17,9 @@ A bootstrapped project records the tag it was built from.
 - Added CHANGELOG entries for PRs #177-#183 (PR #184)
 - Recorded in NEXT_SESSION the verified v2.4.0 release, Adam's answer on #178 and the end-to-end run plan (PR #185)
 - Marked PBI-1.18 done (PR #186)
+- Added CHANGELOG entries for PRs #184-#186 (PR #187)
+- Dated the 2.4.0 entry by its release, 2026-10-23 (PR #188)
+- Recorded the decision that a release is dated by the day its tag and GitHub release are created (PR #189)
 
 ## [2.4.0] — 2026-10-23
 
