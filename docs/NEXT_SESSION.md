@@ -287,6 +287,24 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 ### 14. How Clead reports to Adam — new (2026-10-02)
 
 **Adam:** he does not read every long message. When Clead stops and waits for him, it ends with a short **For you** block: what it recommends and what it needs from him, including any recommendation made earlier in the message. **Action:** put this into CLAUDE.md with the next CLAUDE.md change (item 5), reviewed by Crog; until then every Clead session follows it from here.
+### 15. The product office overlooking all projects: one way to ask any project what happens next — new (2026-10-20)
+
+**Adam (2026-10-20):** the private product office (item 11) should sit as the head of product with a link to every project, and he should be able to go there and see what is going on in all projects. "What is going on" means what is going to happen and what is needed to progress, not a report of what has happened. No double storage: all the information about a project stays in that project; product office stores none of it, only queries the projects and reports up to Adam. There should be one unified way for the product office to query the status of the sub projects, and every project is aware of it.
+
+**Status:** an idea, documented only. Not a PBI, not decided, nothing built. Adam asked for this note and nothing more for now.
+
+**Clead's first thoughts (not decided):**
+- **Source of truth stays in each project.** The forward view already exists in this repo as "Adam's to-do", "What waits for what" and the `[NEXT]` items in `docs/BACKLOG.md`. Product office keeps only a registry (project, repo, where its forward-looking sections are), and the overview is read from the projects when asked, never copied.
+- **The unified way is a contract that the template defines and every bootstrapped project inherits:** stable section headings (and the rule that they hold only forward-looking content) in a file every project has. Which file and which headings is open. A CI check on the headings, like the test-first check, is one way to keep every project to it.
+- **Verified from this repo, 2026-10-20:** a bootstrapped project gets `docs/NEXT_SESSION.md` and `docs/BACKLOG.md` (the fill table in `bootstrap/stubs/bootstrap-project.sh`), but the shipped `NEXT_SESSION.md` stub has only "Current situation summary", "What needs adapting" and "Items that do not change". It has no "Adam's to-do" and no "What waits for what", so the contract is not there today.
+- **Access:** a session reads a private repo only if that repo is attached to it. This session is bound to this repo only. A product-office session would need each project repo attached, and anything private stays in the product-office repo, never here (item 11).
+- **Overlap to settle first:** the backlog visualiser (PBI-1.11, moved to its own project) reads any project's `BACKLOG.md`. The overview could be that project or a sibling of it.
+
+**Open questions for Adam:**
+1. The form of the overview: a Claude session in product office that fetches live when asked (no new infrastructure), or a published page.
+2. Where it starts: a PBI in the template defining the contract and its check, with the registry written separately in the product-office repo, or something else.
+3. Which file and which headings are the contract, and whether it replaces or sits beside "What waits for what".
+
 ---
 
 ## Items that do not change
