@@ -6,6 +6,15 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Added
+- Added PBI-1.18: shorten the Windows leg of `bootstrapper-test` (PR #177)
+- Recorded in NEXT_SESSION that the release prep merged (#176), the PBI-1.18 state and what waits for Adam (PR #179)
+- Staged the product office overview idea as NEXT_SESSION item 15 (PR #180)
+- Recorded the decision to release v2.4.0 with the tag straight after the release prep (PR #181)
+- Staged the multi-agent bootstrapped project idea as NEXT_SESSION item 16 (PR #182)
+- Added PBI-1.19: make the setup command short enough to type (PR #183)
+- PBI-1.18: the bootstrap script's tests run in 4 shards per OS leg; `bootstrapper-test` also fails when a shard is missing or a test ran twice or not at all (PR #178)
+
 ## [2.4.0] — 2026-10-18
 
 ### Added
