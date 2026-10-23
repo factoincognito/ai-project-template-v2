@@ -691,6 +691,33 @@ get a working project in any supported language.
   **Rules that apply.**
   A change to the workflow or the harness is code and config: test-first, reviewed by the role that did not write it (an Opus reviewer). It does not need Adam's intent approval unless the required check's name or meaning changes.
 
+- **[LATER] PBI-1.19** (Clead, 2026-10-23, on Adam's request; the WHAT is Adam's, the HOW is Clead's; not yet specced, reviewed or intent-approved) — Make the setup command short enough to type by hand.
+
+  **Why.**
+  Adam, 2026-10-23: typing in the step 1 command line "is a recipe for failure". A user at home on the command line pastes it; one who is not may type it. The line is 175 characters with a quoted header and a redirect, and one wrong character (a space for the hyphen in `bootstrap-project.sh`, a dropped quote) makes it fail with an error that user cannot read. The goal is to remove that risk, not to save keystrokes.
+
+  **Proposed HOW (to be specced): a gh extension.**
+  - A public repo `factoincognito/gh-bootstrap-project` holding an executable `gh-bootstrap-project` (the setup script). The gh manual (`gh extension`) requires the repo name to start with `gh-` and to contain an executable of the same name.
+  - README step 0 gains one line after the login: `gh extension install factoincognito/gh-bootstrap-project`. Step 1 becomes `gh bootstrap-project`.
+  - gh forwards all arguments to the extension (gh manual), so `--resume` and the options work as today. gh checks for a new version every 24 hours and shows an upgrade notice (gh manual); `gh extension upgrade bootstrap-project` updates it.
+  - Rejected: a `gh alias set` line in step 0 (the alias line is as long as today's command, and has no update path); `curl … | bash` from a short URL (still a URL to type, and it skips the gh login check that the `gh api` download gives for free).
+
+  **To settle in the spec.**
+  1. Publishing: the release pipeline (`bootstrap/publish.sh`, `.github/workflows/bootstrapper.yml`) also publishes the script to the extension repo at the same version, or the extension is a thin launcher that downloads the script from the bootstrapper repo (one copy, but two downloads). Decide which.
+  2. Versions: the script checks the bootstrapper's version stamp at step 4, and `--resume` refuses a repo stamped by an older version. An outdated installed extension must stop with a message naming `gh extension upgrade bootstrap-project`, not a refusal the user cannot act on. How `install` and `upgrade` fetch a script extension (a clone of the default branch, or a release) is UNVERIFIED.
+  3. Windows: whether gh runs a bash script extension from Git Bash, and from cmd or PowerShell, is UNVERIFIED; it needs a real run on each OS, macOS `/bin/bash` 3.2 included. If it works only from Git Bash, the README still says so.
+  4. Messages: the commands the script prints to restart or continue, its usage text and the stub README's setup section give the download line and `bash bootstrap-project.sh`. Each must give the command that works for the user.
+  5. Whether the README keeps today's line as a fallback, or gives one way only.
+  6. Trust: gh states that extensions are not verified by GitHub. The trust is the same as for today's downloaded script; the README says so plainly.
+
+  **Done when.**
+  - On Windows (Git Bash), macOS and Linux, a project is set up with README step 0 plus `gh bootstrap-project`, typed by hand: an end-to-end run on each OS.
+  - Every restart or continue command the script prints works as printed when the script runs as the extension (a test).
+  - An outdated installed extension stops with a message naming `gh extension upgrade bootstrap-project` (a test).
+
+  **Rules that apply.**
+  Script, workflow and release-pipeline changes are code and config: test-first, reviewed by the role that did not write it. The spec needs Adam's intent approval, because it adds a public repo and changes the command every user types.
+
 ---
 
 ## Phase 2 — Validate unproven pieces
