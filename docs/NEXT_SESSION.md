@@ -335,6 +335,13 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 2. Where it starts: a PBI in the template defining the contract and its check, with the registry written separately in the product-office repo, or something else.
 3. Which file and which headings are the contract, and whether it replaces or sits beside "What waits for what".
 
+
+### 17. Are the setup answers saved to a file? — new (2026-10-25)
+
+**Adam (2026-10-15), unanswered:** are the settings the bootstrap script collects (the answers to its questions) saved to a file; can that file be inspected; and what happens if its contents are changed? The session that was asked ran out of tokens; the next session (2026-10-17) noted the question but moved on to S19, and no later chat or repo file answers it (checked 2026-10-25 from the Claude Project's chats and this repo's `docs/` and `memory/`).
+
+**Status:** open question for Adam to get answered. Clead answers it from `bootstrap/stubs/bootstrap-project.sh` as it is on `main`, checked, not from memory. If the answer shows a gap (for example nothing is saved and a resume needs the answers again), it becomes a PBI.
+
 ---
 
 ## Items that do not change
