@@ -79,14 +79,16 @@ says what it created and what to do next.
 
 Right after your yes, before it changes anything on GitHub, it prints
 the command to continue the setup if it stops before it finishes, for
-any reason (also Ctrl-C or a closed window). That command includes
+any reason (also Ctrl-C or a closed window). Copy that command and
+keep it until the setup has finished. That command includes
 `--resume`, which tells the script to continue the project that is
 there instead of creating a new one; if you run it and the project was
 not created yet, the script says so and prints the command to start
 again. When it stops by itself, it also says why and prints the exact
 command to run next: one that starts again, or one that continues the
-setup. Every command it prints carries your answers along, so you are
-not asked again. At a stop before the project exists, that command is
+setup. The command to continue and the command to start again carry
+your answers along, so you are not asked again. At a stop before the
+project exists, that command is
 the one you ran. Once the project exists on GitHub, that command
 includes `--resume` as well.
 

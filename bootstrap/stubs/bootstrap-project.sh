@@ -186,7 +186,7 @@ OPTIONS_NEXT="To see every option, run the script with --help."
 START_AGAIN_INTRO="To start again, run this command:"
 CONTINUE_INTRO="To continue the setup, run this command:"
 # Shown once, after the yes and before the first change (show_advance_command).
-ADVANCE_INTRO="If the setup stops before it finishes, for any reason, also with Ctrl-C or a closed window, continue it with this command:"
+ADVANCE_INTRO="If the setup stops before it finishes, for any reason, also with Ctrl-C or a closed window, continue it with the command below. Copy it now and keep it until the setup has finished:"
 # The plan and step 10 give it for a public project with no licence.
 NO_LICENCE_WARNING="Warning: the project is public and has no licence: anyone can see its code, but nobody else may copy, change or share it. To add a licence later, see https://choosealicense.com."
 

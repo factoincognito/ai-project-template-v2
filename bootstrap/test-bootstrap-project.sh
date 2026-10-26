@@ -4360,7 +4360,7 @@ test_yes_skips_proceed_and_non_interactive_needs_yes_or_dry_run() {
 # The line above the command to continue that the script shows once, after
 # the yes and before its first change (end-to-end run 1, finding 6: a stop
 # that runs no trap shows nothing, so the command comes first).
-ADVANCE_INTRO='If the setup stops before it finishes, for any reason, also with Ctrl-C or a closed window, continue it with this command:'
+ADVANCE_INTRO='If the setup stops before it finishes, for any reason, also with Ctrl-C or a closed window, continue it with the command below. Copy it now and keep it until the setup has finished:'
 
 # advance_command <dir>: the command shown under ADVANCE_INTRO, without
 # its indent; fails unless the intro is there exactly once.
@@ -4397,6 +4397,10 @@ test_the_command_to_continue_is_shown_after_yes_and_before_the_project_is_create
   c="$(line_of "$d" '==> Creating the project octo-user/my-app on GitHub')"
   [ "$p" -gt 0 ] && [ "$p" -lt "$a" ] && [ "$a" -lt "$c" ] || { cat "$d/out" >&2; die "not in the order Proceed? ($p), the command ($a), create ($c)"; }
   expect_out "$d" "If the project was not created yet, that command says so and shows the command to start again."
+  # #203 review, N1: after a closed window the command helps only if the
+  # user kept it, so the line above it says to copy it and keep it.
+  grep -B1 -xF "    $cmd" "$d/out" | sed -n 1p | grep -qF 'Copy it now and keep it until the setup has finished:' \
+    || { cat "$d/out" >&2; die "the line above the command does not say to copy it and keep it"; }
   # --yes: the same, without Proceed?.
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
@@ -9035,7 +9039,15 @@ test_readme_says_the_command_to_continue_comes_before_the_first_change() {
     || die "the README does not say the command to continue comes before the first change"
   grep -qF 'When it stops by itself, it also says why and prints the exact command to run next' <<<"$body" \
     || die "the README does not say what a stop prints when the script can"
-  ( load_script; [ "$ADVANCE_INTRO" = 'If the setup stops before it finishes, for any reason, also with Ctrl-C or a closed window, continue it with this command:' ] ) \
+  grep -qF 'Copy that command and keep it until the setup has finished.' <<<"$body" \
+    || die "the README does not say to copy the command and keep it"
+  # #203 review, N4: the commands the script offers to run (such as gh auth
+  # refresh) carry no answers, so the README says which commands do.
+  ! grep -qF 'Every command it prints carries your answers' <<<"$body" \
+    || die "the README says every command carries the answers"
+  grep -qF 'The command to continue and the command to start again carry your answers along' <<<"$body" \
+    || die "the README does not say which commands carry the answers"
+  ( load_script; [ "$ADVANCE_INTRO" = 'If the setup stops before it finishes, for any reason, also with Ctrl-C or a closed window, continue it with the command below. Copy it now and keep it until the setup has finished:' ] ) \
     || die "the script's ADVANCE_INTRO is not the line the tests look for"
 }
 
