@@ -2226,6 +2226,9 @@ check_project_absent() {
       if [ -n "$OPT_RESUME" ]; then
         PROJECT_DONE="The project $IN_OWNER/$IN_NAME exists on GitHub, which --resume allows."
         CREATED_NOTE="The project $IN_OWNER/$IN_NAME exists on GitHub."
+        # Found after the project-missing guide (Enter there): its "start
+        # again" choice no longer holds, so a later stop shows --resume.
+        FRESH_START=""
         return 0
       fi
       PROJECT_PROBLEM=exists

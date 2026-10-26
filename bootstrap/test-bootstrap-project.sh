@@ -7540,6 +7540,27 @@ test_resume_with_no_project_on_github_creates_nothing() {
   expect_nothing_created "$d"
 }
 
+test_resume_continues_with_resume_once_the_project_missing_at_first_is_found() {
+  # #203 review: --resume, the project not found at the first check (a
+  # typing mistake, or not made yet), found after Enter at the guide. The
+  # run goes on, and a later stop shows the command to continue with
+  # --resume: the guide's "start again" choice is not kept.
+  local d
+  built_bootstrapper
+  d="$(tmpdir)"
+  seed_existing "$d" octo-user/my-app "$BUILT"
+  export STUB_GH_EXISTING="octo-user/my-app" STUB_GH_REPO_FAIL=not-found STUB_GH_PROTECT_FAIL=token
+  echo 1 >"$d/repo-fails"
+  printf '\nyes\n' >"$d/in"
+  setup_run "$d" --resume
+  unset STUB_GH_EXISTING STUB_GH_REPO_FAIL STUB_GH_PROTECT_FAIL
+  expect_rc 3 "$d"
+  expect_out "$d" "There is no project named octo-user/my-app on GitHub to continue."
+  expect_out "$d" "    Done. The project octo-user/my-app exists on GitHub, which --resume allows."
+  expect_out "$d" "==> Protecting"
+  expect_continue_command "$d" " --resume"
+}
+
 test_resume_refuses_a_copy_without_the_line_of_work_github_has() {
   local d c n
   d="$(tmpdir)"
