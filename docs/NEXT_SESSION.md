@@ -271,7 +271,7 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 - **PBI-1.14 spec meets the changed repo** in the places listed in item 8; the spec text itself is not corrected yet. Fix it in the slice that touches each place, not in a bulk edit.
 - **Adam's PC clone** of the template was fast-forwarded to `01d39e4` on 2026-10-01 and is now behind; its `origin` points at the org. Agents cannot delete files in his connected folder unless he grants it per session: a failed pull left a stale `.git/index.lock` that needed that grant. Clean-up needed next time: fast-forward again.
 - **Process question for Adam:** two sessions each wrote an item numbered 8 within hours, and a session on the old path wrote to a side branch. Does he want a rule in CLAUDE.md that only one Clead session works on the template at a time, and that every session starts by listing open PRs and non-main branches? Not written; his call.
-  **Answered 2026-10-27:** Adam decided the "Parallel sessions" rule, now in `CLAUDE.md` ("Both agents: parallel sessions", #222): more than one session may work at once, and they coordinate through the repo.
+  **Answered 2026-10-27:** Adam decided the parallel-sessions rule, now in `CLAUDE.md` ("Both agents: parallel sessions", #222): more than one session may work at once, and they coordinate through the repo.
 - **Working practice that held up, kept as a reminder for the next session:** Crog agents on Opus review process, code and config changes and also merge; Sonnet Crog agents do merge-only runs; every merge is re-verified against the GitHub API by Clead, not taken from the agent's report.
 
 ### 11. From the product-office session's handoff, folded in — new (2026-10-02)

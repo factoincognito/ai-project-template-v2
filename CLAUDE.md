@@ -36,16 +36,24 @@ three review rounds without agreement) is unchanged.
   nothing is written yet, whose description names the area and the files
   you expect to change. Do not open it as a draft: a session without
   GraphQL access cannot take a PR out of draft, so a draft can never be
-  merged. The claim PR becomes the PR for the change.
+  merged. Until the change is pushed and ready for review, the PR title
+  starts with `[claim]`, and nobody reviews or merges a `[claim]` PR. The
+  claim PR becomes the PR for the change. When you need a file the
+  description does not name, add it to the description before editing it.
 - At startup, and before opening or updating each PR, list the open PRs and
   the branches other than the default branch.
 - If another open PR claims files you need, do not edit them: comment on
   that PR and settle the overlap there. Without an answer, the later claim
   (the higher PR number) waits until the earlier one is merged or closed.
-- A claim with no new commit or comment for 7 days counts as abandoned: a
+- Files that many sessions add entries to (`docs/NEXT_SESSION.md`,
+  `docs/BACKLOG.md`) are not claimed as a whole: a claim on one covers
+  only the entries or sections it names, and any session may add its own.
+- A claim with no new commit or comment from the claiming session for 7
+  days counts as abandoned, unless it waits on a product owner decision: a
   session may say on it that it takes the files over, and go ahead.
 - On a conflict, merge the default branch into your branch and keep both
   sides' content where possible; never rebase or force-push a pushed branch.
+  If the merge resolved conflicts, say so on the PR and name the files.
 - Listing PRs and merging the default branch into your branch are allowed
   at any time, also while your PR is in a review or fix round.
 
