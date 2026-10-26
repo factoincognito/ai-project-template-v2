@@ -6,6 +6,8 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.5.0] — 2026-10-26
+
 ### Added
 - Added PBI-1.18: shorten the Windows leg of `bootstrapper-test` (PR #177)
 - Recorded in NEXT_SESSION that the release prep merged (#176), the PBI-1.18 state and what waits for Adam (PR #179)
@@ -20,6 +22,27 @@ A bootstrapped project records the tag it was built from.
 - Added CHANGELOG entries for PRs #184-#186 (PR #187)
 - Dated the 2.4.0 entry by its release, 2026-10-23 (PR #188)
 - Recorded the decision that a release is dated by the day its tag and GitHub release are created (PR #189)
+- Added CHANGELOG entries for PRs #187-#189 (PR #190)
+- Staged Adam's unanswered question on saved setup answers as NEXT_SESSION item 17 (PR #191)
+- CLAUDE.md: sessions delete their fired one-shot scheduled tasks (PR #192)
+- CLAUDE.md: ground rule against loose ends (PR #193)
+- Recorded the findings of end-to-end run 1 in NEXT_SESSION (PR #194)
+- README step 0 says how to open Git Bash (run-1 finding 1) (PR #195)
+- Added PBI-1.20: the user journey from an itch to a project (PR #196)
+- Staged rolling back a bad release by re-tagging as NEXT_SESSION item 18 (PR #197)
+- The bootstrap script says why the default answer to "Proceed?" is no (run-1 finding 5) (PR #198)
+- The product owner question says where its default comes from (run-1 finding 4) (PR #199)
+- `changelog.yml` posts no reminder on a PR that already changed CHANGELOG.md, such as a project's setup PR (run-1 finding 11) (PR #200)
+- Added the bootstrapper's tagline to PBI-1.20 (PR #201)
+- The bootstrap script sets its questions, the plan, its stops and the closing "What to do next" apart from its progress log: one blank line before each, and one restrained colour on the lines to act on when writing to a terminal (`NO_COLOR` and `TERM=dumb` turn it off) (run-1 finding 8) (PR #202)
+- The bootstrap script prints the command to continue before its first change on GitHub, so a stop that runs no trap (Ctrl-C in Git Bash) still leaves it (run-1 finding 6) (PR #203)
+- While it waits for `build`, the bootstrap script shows a `*` per second and a "Checking the build status" line with the time waited against the limit, gives the checks page link, and says that the minutes are a limit and what happens then (run-1 finding 9) (PR #204)
+- A `--resume` run shows the six steps of the plan, with the steps done and the next one marked (run-1 finding 7) (PR #205)
+- The closing text says to create a Claude Project for the project and chat inside it, and its last line says Clead is there to help when stuck; the READMEs match (run-1 finding 10) (PR #206)
+- A `--resume` run that first misses the project keeps `--resume` in the command it shows once the project is found (PR #207)
+- `e2e-check.sh` no longer stops with exit 141 when the copy has thousands of unsaved files (PR #209)
+- The PBI-1.14 spec text in the backlog follows the run-1 fixes (PR #210)
+- Recorded the status of every run-1 finding, the open review notes and what waits for v2.5.0 in NEXT_SESSION (PR #211)
 
 ## [2.4.0] — 2026-10-23
 
