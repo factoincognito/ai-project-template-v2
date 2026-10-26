@@ -6,6 +6,13 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Added
+- Tests: no `grep -q` at the end of a pipe under pipefail, which made tests flaky through SIGPIPE; a lint keeps it out (PR #208)
+- Release prep for v2.5.0 (PR #212)
+- Added PBI-1.21: the release tag created by merging the release prep, for the template and every bootstrapped project (PR #213)
+- An empty `STATUS.md` stub ships with every bootstrapped project (PR #214)
+- Recorded in NEXT_SESSION that v2.5.0 is released and verified (PR #217)
+
 ## [2.5.0] — 2026-10-26
 
 ### Added
