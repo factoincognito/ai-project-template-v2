@@ -599,7 +599,7 @@ test_packs_workflow_creates_the_lockfile_with_the_script_command() {
     ' "$wf")"
     n="$(printf '%s\n' "$got" | grep -c '^Create the lockfile	')" || true
     [ "$n" -eq 1 ] || die "pack-$p: expected 1 \"Create the lockfile\" step, found $n"
-    printf '%s\n' "$got" | grep -qxF "Create the lockfile	$want" \
+    grep -qxF "Create the lockfile	$want" <<<"$got" \
       || die "pack-$p: lockfile step does not run exactly: $want (got: $(printf '%s\n' "$got" | grep '^Create the lockfile	' | cut -f2-))"
     printf '%s\n' "$got" | awk -F'\t' -v want="$want" '
       $2 == want { seen = 1 } $2 == "npm ci" { ci = 1; if (!seen) exit 1 }
@@ -608,7 +608,7 @@ test_packs_workflow_creates_the_lockfile_with_the_script_command() {
   done
   n="$(grep -cE '^ *run: npm (install|i)( |$)' "$wf")" || true
   [ "$n" -eq 3 ] || die "expected exactly 3 npm install steps (the lockfile steps), found $n"
-  ! grep -E '^ *run: npm (install|i)( |$)' "$wf" | grep -vqxE " *run: $want" \
+  ! grep -E '^ *run: npm (install|i)( |$)' "$wf" | grep -vxE " *run: $want" >/dev/null \
     || die "packs.yml runs an npm install other than: $want"
 }
 
