@@ -429,7 +429,7 @@ check_protection() {
   got="${got% }"
   for w in $REQUIRE_READBACK; do
     field="${w%%=*}"
-    g="$(printf '%s\n' "$API_BODY" | awk -v f="$field" 'index($0, f "=") == 1 { print substr($0, length(f) + 2); exit }')"
+    g="$(awk -v f="$field" 'index($0, f "=") == 1 { print substr($0, length(f) + 2); exit }' <<<"$API_BODY")"
     [ "$g" = "${w#*=}" ] || diff="${diff:+$diff; }$field is ${g:-empty}, want ${w#*=}"
   done
   want="$REQUIRE_READBACK"
@@ -483,7 +483,10 @@ check_copy() {
   status="$(in_git status --porcelain --untracked-files=all 2>&1 | tr -d '\r')" || status="git status failed"
   if [ -n "$status" ]; then
     n="$(printf '%s\n' "$status" | grep -c . || true)"
-    problems="${problems:+$problems; }$n file(s) changed or not saved: $(printf '%s\n' "$status" | head -n 5 | awk '{ $1 = ""; sub(/^ /, ""); printf "%s%s", (n++ ? ", " : ""), $0 }')"
+    # The first five, picked by awk, which reads to the end: a reader that
+    # stops early (head) kills printf with SIGPIPE on a long status, and
+    # pipefail turns that into exit 141 before the copy check reports.
+    problems="${problems:+$problems; }$n file(s) changed or not saved: $(awk 'NR <= 5 { $1 = ""; sub(/^ /, ""); printf "%s%s", (NR > 1 ? ", " : ""), $0 }' <<<"$status")"
   fi
   head="$(in_git rev-parse -q --verify HEAD 2>/dev/null | tr -d '\r')" || head=""
   if [ -z "$MAIN_SHA" ]; then
