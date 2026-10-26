@@ -243,6 +243,14 @@ earlier report:
    the session ends. Pins are transient and unwritten by design; an
    empty list at close is the only proof none were silently lost.
 
+### Ground rule: no loose ends
+Never leave a dangling thread or loose end (Adam, 2026-10-25). Anything
+agreed to need follow-up has at least one persisted reference in the
+repo: a backlog PBI, a `docs/NEXT_SESSION.md` entry or an open PR. A chat
+log, a memory note or a Claude Project doc is volatile and does not
+count. Before reporting done, look for loose ends, including ones not
+from this session, and record or resolve them.
+
 ### Scheduled tasks
 A session deletes a one-shot scheduled task once it has fired and its
 work is done, without asking (Adam, 2026-10-24). The session that created
