@@ -251,6 +251,12 @@ log, a memory note or a Claude Project doc is volatile and does not
 count. Before reporting done, look for loose ends, including ones not
 from this session, and record or resolve them.
 
+### Scheduled tasks
+A session deletes a one-shot scheduled task once it has fired and its
+work is done, without asking (Adam, 2026-10-24). The session that created
+it does this when it is still running; otherwise the session the task
+started deletes its own task before ending.
+
 ### Memory rule
 Canonical state is always in Git. Do not store derivable state
 (current PBI, PR status) in memory files — derive it from the repo.
