@@ -80,12 +80,20 @@ accepts it. Then the script shows its plan and waits for your yes. Each
 step prints a line when it starts and when it ends, and at the end it
 says what it created and what to do next.
 
-If it stops, it says why and prints the exact command to run next: one
-that starts again, or one that continues the setup. It carries your
-answers along, so you are not asked again. Before the project exists,
-that command is the one you ran. Once the project exists on GitHub,
-that command includes `--resume`, which tells the script to continue
-the project that is there instead of creating a new one.
+Right after your yes, before it changes anything on GitHub, it prints
+the command to continue the setup if it stops before it finishes, for
+any reason (also Ctrl-C or a closed window). Copy that command and
+keep it until the setup has finished. That command includes
+`--resume`, which tells the script to continue the project that is
+there instead of creating a new one; if you run it and the project was
+not created yet, the script says so and prints the command to start
+again. When it stops by itself, it also says why and prints the exact
+command to run next: one that starts again, or one that continues the
+setup. The command to continue and the command to start again carry
+your answers along, so you are not asked again. At a stop before the
+project exists, that command is
+the one you ran. Once the project exists on GitHub, that command
+includes `--resume` as well.
 
 **What the script guides you through.** When something is missing, the
 script prints numbered steps for your system (what to do, the page to
