@@ -2212,6 +2212,10 @@ PROJECT_PROBLEM=""
 PROJECT_DONE=""
 check_project_absent() {
   PROJECT_PROBLEM=""
+  # Each check starts again from what the user gave: the "start again"
+  # choice of an earlier project-missing guide holds only until the next
+  # answer (found, or a failure that says nothing about the project).
+  FRESH_START=""
   api_call "repos/$IN_OWNER/$IN_NAME"
   case "$API_STATUS" in
     404)
@@ -2226,9 +2230,6 @@ check_project_absent() {
       if [ -n "$OPT_RESUME" ]; then
         PROJECT_DONE="The project $IN_OWNER/$IN_NAME exists on GitHub, which --resume allows."
         CREATED_NOTE="The project $IN_OWNER/$IN_NAME exists on GitHub."
-        # Found after the project-missing guide (Enter there): its "start
-        # again" choice no longer holds, so a later stop shows --resume.
-        FRESH_START=""
         return 0
       fi
       PROJECT_PROBLEM=exists
