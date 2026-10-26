@@ -56,6 +56,10 @@
 #   BOOTSTRAP_NPM  the npm the lockfile step runs (default: npm on the
 #                  PATH), so the tests never reach the npm registry. The
 #                  check that npm is installed runs the npm on the PATH.
+#   BOOTSTRAP_COLOR  set (not empty): the lines the user acts on are in
+#                  colour as at a terminal, though the output goes to a
+#                  file. NO_COLOR, set and not empty, and TERM=dumb still
+#                  turn colour off (see colour_on).
 #
 # Sourcing this file defines its functions and runs nothing (the tests
 # load it that way); running it with bash runs the main part at the end.
@@ -137,21 +141,88 @@ show_help() {
 # on the same line (the signs of life of the wait for build). The next
 # message of any helper below ends that line first (end_line).
 LINE_OPEN=""
-say_open() { printf '%s' "$*"; LINE_OPEN=1; }
+say_open() { printf '%s' "$*"; LINE_OPEN=1; OUT_BLANK=""; }
 end_line() {
   [ -z "$LINE_OPEN" ] || printf '\n'
   LINE_OPEN=""
 }
 
-# say <text>: one line of information.
-say() { end_line; printf '%s\n' "$*"; }
+# Two kinds of output (finding 8 of the first end-to-end run): the
+# progress log (step_start, step_end, and say while the script works),
+# plain; and what the script says to the user: a question (ask,
+# prompt_for, ask_terminal, wait_for_enter), the plan (say_heading), a
+# guide (guide_begin to guide_end), a stop (show_error, and the command
+# shown above it), the command to continue shown before the first change
+# (ADVANCE_INTRO), and the closing "What to do next" line. Each of those
+# blocks starts with block_start: it ends an open line first (end_line),
+# then prints one blank line, unless the last line printed was blank
+# already (or nothing is printed yet), so there are never two in a row.
+# The blank line goes to stdout, after the log it closes, also before a
+# stop on stderr, whose first line stays "What happened". OUT_BLANK
+# tracks the last line: every helper that prints sets it. Output that
+# does not go through the helpers (an offered command's own) is not seen;
+# at worst a blank line is then left out, never doubled.
+OUT_BLANK=1
+block_start() {
+  end_line
+  [ -n "$OUT_BLANK" ] || printf '\n'
+  OUT_BLANK=1
+}
+
+# The lines the user acts on or reads first (a question with its default,
+# the plan's heading, "Proceed?", "What to do next") are in one colour,
+# bold cyan, and nothing else is. colour_on [err]: colour is used when the
+# stream the line goes to is a terminal (stdout_is_terminal, whose hook
+# BOOTSTRAP_STDOUT_TERMINAL counts too; [ -t 2 ] for a line on stderr),
+# or BOOTSTRAP_COLOR is set (a test hook that forces colour); never when
+# NO_COLOR is set and not empty (https://no-color.org), which wins over
+# all of these, or when TERM is dumb.
+colour_on() {
+  [ -z "${NO_COLOR:-}" ] || return 1
+  [ "${TERM:-}" != dumb ] || return 1
+  [ -z "${BOOTSTRAP_COLOR:-}" ] || return 0
+  if [ "${1:-}" = err ]; then [ -t 2 ]; else stdout_is_terminal; fi
+}
+
+# painted <text> [err]: the text, in colour when colour_on (err: for a
+# line on stderr), with the colour reset straight after it; no line
+# break, so what the user types after a question is not coloured.
+painted() {
+  if colour_on "${2:-}"; then
+    printf '\033[1;36m%s\033[0m' "$1"
+  else
+    printf '%s' "$1"
+  fi
+  OUT_BLANK=""
+}
+
+# say_heading <text>: the first line of a block the user reads (the
+# plan), after a blank line, in colour.
+say_heading() {
+  block_start
+  painted "$*"
+  printf '\n'
+}
+
+# say <text>: one line of information. A line that tells the user what
+# to do next (the closing one of the report) is a block of its own, in
+# colour; the line above a command to start again or to continue opens a
+# block of its own, plain.
+say() {
+  case "$*" in
+    "What to do next: "*) say_heading "$*" ;;
+    "$START_AGAIN_INTRO" | "$CONTINUE_INTRO" | "$ADVANCE_INTRO") block_start; printf '%s\n' "$*"; OUT_BLANK="" ;;
+    "") end_line; printf '\n'; OUT_BLANK=1 ;;
+    *) end_line; printf '%s\n' "$*"; OUT_BLANK="" ;;
+  esac
+}
 
 # say_command <command>: a command for the user to copy, indented.
-say_command() { end_line; printf '    %s\n' "$*"; }
+say_command() { end_line; printf '    %s\n' "$*"; OUT_BLANK=""; }
 
 # step_start <what>, step_end <result>: the first and last line of a step.
-step_start() { end_line; CURRENT_STEP="$*"; printf '==> %s\n' "$*"; }
-step_end() { end_line; printf '    Done. %s\n' "$*"; }
+step_start() { end_line; CURRENT_STEP="$*"; printf '==> %s\n' "$*"; OUT_BLANK=""; }
+step_end() { end_line; printf '    Done. %s\n' "$*"; OUT_BLANK=""; }
 
 # show_error <what happened> <what to do next> [raw text]: an error in
 # plain words with the next action, on stderr. Raw text (an error from a
@@ -160,10 +231,11 @@ show_error() {
   local what="${1:-}" next="${2:-}" raw="${3:-}"
   [ -n "$what" ] || what="Something unexpected happened."
   [ -n "$next" ] || next="Run the script again. If the same thing happens, ask for help and show the details below."
-  end_line
+  block_start
   {
     printf 'What happened: %s\n' "$what"
-    printf 'What to do next: %s\n' "$next"
+    painted "What to do next: $next" err
+    printf '\n'
     [ -z "$raw" ] || details_block "$raw"
   } >&2
 }
@@ -173,6 +245,7 @@ show_error() {
 # comes alone: show_error and guide_details put it under a plain message.
 details_block() {
   local line
+  OUT_BLANK=""
   printf 'Details for support (you can ignore these):\n'
   printf '%s\n' "$1" | tr -d '\r' | while IFS= read -r line; do
     printf '    %s\n' "$line"
@@ -214,14 +287,15 @@ NO_LICENCE_WARNING="Warning: the project is public and has no licence: anyone ca
 ask() {
   local why="$1" question="$2" default="$3" got=""
   shift 3
-  end_line
+  block_start
   printf '%s\n' "$why"
   [ "$#" -eq 0 ] || printf '  %s\n' "$@"
   if [ -n "$default" ]; then
-    printf '%s [%s]: ' "$question" "$default"
+    painted "$question [$default]:"
   else
-    printf '%s: ' "$question"
+    painted "$question:"
   fi
+  printf ' '
   if ! IFS= read -r got && [ -z "$got" ]; then
     printf '\n'
     return 1
@@ -235,8 +309,9 @@ ask() {
 # (or stop) or stdin has no more lines, else 0 (check again).
 wait_for_enter() {
   local got=""
-  end_line
-  printf 'Press Enter to check again, or type q to stop: '
+  block_start
+  painted 'Press Enter to check again, or type q to stop:'
+  printf ' '
   if ! IFS= read -r got && [ -z "$got" ]; then
     printf '\n'
     return 1
@@ -259,8 +334,10 @@ wait_for_enter() {
 # fails, the read does not run, got stays empty, and that is not a yes.
 ask_terminal() {
   local tty="${BOOTSTRAP_TTY:-/dev/tty}" got=""
-  end_line
-  printf '%s\n%s [no]: ' "$1" "$2"
+  block_start
+  printf '%s\n' "$1"
+  painted "$2 [no]:"
+  printf ' '
   if [ ! -r "$tty" ]; then
     printf '\n'
     return 1
@@ -286,15 +363,18 @@ GUIDE_N=0
 guide_begin() {
   GUIDE_TITLE="$1"
   GUIDE_N=0
-  end_line
+  block_start
   printf '%s\n' "$1" "Why this is needed: $2"
+  OUT_BLANK=""
 }
 guide_step() {
   GUIDE_N=$((GUIDE_N + 1))
   printf '  %s. %s\n' "$GUIDE_N" "$*"
+  OUT_BLANK=""
 }
 guide_end() {
   printf '%s\n' "When it has worked: $1" "If you see something else: $2" "How the script checks it: $3"
+  OUT_BLANK=""
 }
 # guide_details <raw text>: after guide_end, the raw text of what went
 # wrong (gh's or GitHub's own words), for support; nothing when empty.
@@ -2419,7 +2499,7 @@ plan_steps() {
   step_mark "$5"; m5="$STEP_MARK"
   step_mark "$6"; m6="$STEP_MARK"
   # show_plan gives a new setup's heading itself.
-  [ -z "$state" ] || say "The steps, in this order: (done) marks a step that is done already, and (next) the step the setup continues with."
+  [ -z "$state" ] || say_heading "The steps, in this order: (done) marks a step that is done already, and (next) the step the setup continues with."
   say "  1. Create the project on GitHub, with the bootstrapper's files in it.$m1"
   say "  2. Protect its main version, so that from then on every change comes as a proposed change, not straight into it.$m2"
   say "  3. Make a copy of the project on this computer, in $IN_DIR.$m3"
@@ -2485,7 +2565,7 @@ show_plan() {
     licence="$IN_LICENSE, in the name of $IN_COPYRIGHT_HOLDER"
   fi
   [ "$IN_WITH_DEPLOY" != yes ] || deploy=", with the files that publish the website"
-  say "Here is the plan. Nothing has been created yet."
+  say_heading "Here is the plan. Nothing has been created yet."
   say "The project:"
   say "    On GitHub: $IN_OWNER/$IN_NAME, $vis"
   say "    Its page: https://github.com/$IN_OWNER/$IN_NAME"
