@@ -718,33 +718,33 @@ get a working project in any supported language.
   **Rules that apply.**
   Script, workflow and release-pipeline changes are code and config: test-first, reviewed by the role that did not write it. The spec needs Adam's intent approval, because it adds a public repo and changes the command every user types.
 
-- **[LATER] PBI-1.20** (Clead, 2026-10-26, from Adam's questions after end-to-end run 1; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — Plan the project with Claude before the script, and carry the plan into the project.
+- **[LATER] PBI-1.20** (Clead, 2026-10-26, from Adam's questions after end-to-end run 1; the WHAT is Adam's, the HOW is Clead's; not yet designed, specced or reviewed) — The user journey from an itch to a project being built.
 
-  **Why.**
-  Adam, 2026-10-26: a product owner running the script gets no guidance on its HOW questions, the language pack above all (example: is a mobile app of an idea `react-native`, or a `web` app opened on the phone?). And what the user told Claude about the idea before the setup has no way into the project: the script does not depend on it, so it is lost. By the template's own roles the pack is a HOW choice, Clead's, not the product owner's.
+  **Adam's WHAT (2026-10-26).**
+  - "All the user knows is that I want to do something. That something may be more or less crisp, or just an itch. The user has been told there is an AI package you can use to help you do all this, you just need to describe WHAT and it fixes the rest."
+  - "From the user's perspective there must be a clear entry point and a solid process to get there, initially by use of the bootstrapper." v2.4.0 is solid but covers only part of the journey.
+  - The user bootstraps the idea, not the project. The product office is Adam's own; it does not exist in the user's world.
+  - **The test for every HOW decision:** it fits the journey of the intended user, who never needs to be aware of technical setup details. Wherever the user needs technical knowledge or help, that is a defect (the rule of the end-to-end runs).
+  - Adam's stance on the trial (2026-10-26): not sure a proposal covers the gaps, so it is tried and tested, and what the test shows decides what stays.
 
-  **Adam's intent (2026-10-26).** "I am not sure that what you are describing actually is covering the gaps, but let's run with it, do testing and see how it works." So this is a trial: the Done when below is a test with a real idea, and what it shows decides what stays.
+  **The journey and what covers it today (Clead, read from `main` 2026-10-26).**
+  1. Finding the entry point: not covered; the README starts with installing tools.
+  2. Installing the tools: README step 0 (with the run-1 findings).
+  3. Creating the project: the script, v2.4.0; solid in run 1.
+  4. Turning the itch into a clear WHAT: not covered.
+  5. Design, and the HOW choices (the pack and others): not covered; the script asks the user for the pack up front.
+  6. Starting work with Clead: partly (run-1 finding 10).
+  7. The build loop (specs, PRs, reviews): the template's workflow.
 
-  **Proposed HOW (Clead's, to be specced).**
-  1. **README, first section, before step 0:** start with a chat in the Claude app; describe the idea, however vague; when it is clear enough, Claude gives the setup command with every answer filled in; then step 0 and step 1. It gives the prompt to paste as a code block, pointing Claude to the planning guide by its URL.
-  2. **A planning guide** shipped next to the script in the bootstrapper: the questions only the user can answer (what, for whom, why; name, description, licence), the choices Claude makes and explains (pack, visibility), the script's options and how to write the command, and the design note's format. A test keeps it in step with the script's options (an option the script takes but the guide lacks fails the build).
-  3. **`--design-note <file>`:** Claude writes the design note as a file the user downloads from the chat; the command includes this option; the script adds the note to the project as `docs/DESIGN_NOTE.md` in the setup change.
-  4. **The first Clead session** reads `docs/DESIGN_NOTE.md` when it is there and drafts `memory/project.md` and `docs/SPEC.md` from it, asking only what is still open.
-  5. **Two backstops in the script:** when it starts with neither a description nor a pack given as options, its first line says that planning with Claude comes first, with the README link, and that Ctrl-C stops it; the pack question gains a line: not sure, ask Clead which pack fits the idea.
+  **Clead's candidate HOW (not decided): bootstrap the idea.** The script asks only WHAT questions (name, the idea in a sentence or two, licence, owner) and creates the project with no pack; the first Clead session in the project shapes the idea into `memory/project.md` and a high-level design in `docs/SPEC.md`, asking one question at a time; when the design settles, Clead picks the pack, explains why in plain words, and adds it through a PR. Known HOW problem, unchecked: protection requires a green `build`, which comes with the pack today, so a project without a pack needs a basic check until then. An earlier candidate (a planning chat outside the project, a planning guide and a `--design-note` file) was dropped the same day: it needs the user to plan before the entry point.
 
-  **To settle in the spec.**
-  1. Whether a Claude chat can read the guide from its URL (public repo, raw file) on every surface the README sends users to. UNVERIFIED.
-  2. Where the downloaded note lands on each OS and how the command names it so it works when pasted (Windows Git Bash paths, spaces in names).
-  3. `--resume` with `--design-note`: the note is part of the setup change, so a resumed run must find it or say what to do.
-  4. The guide's place in the release (manifest and stubs), and whether the script's `--help` and the guide share one source.
+  **Next.** A design draft of the whole journey (CLAUDE.md, "Model and effort": written on Opus, reviewed by Crog), checked stage by stage against the test above; then Adam's intent approval; then the spec. Not part of the run-1 fix batch.
 
   **Done when.**
-  - A trial with a real idea, starting vague, run by Adam: a plain chat with the README's prompt ends with a design note and a command; the command sets up the project; its first Clead session drafts `memory/project.md` and `docs/SPEC.md` from the note. Every point where Adam needed technical knowledge or help is recorded as a finding (the rule of the end-to-end runs).
-  - The guide-versus-options test and the `--design-note` tests pass on the OS matrix.
+  - Someone with only an itch, who has never used a terminal, goes from the entry point to a project with a first spec and its pack, following only what the journey gives them; every point where they needed technical knowledge or help is recorded as a finding and fixed.
 
   **Rules that apply.**
-  Script, workflow and release changes are code and config: test-first, reviewed by the role that did not write it. The README and the first-session step change the process: reviewed by Crog. The spec needs Adam's intent approval, because it changes what every user does first. Not part of the run-1 fix batch.
-
+  Script, workflow and release changes are code and config: test-first, reviewed by the role that did not write it. README and first-session changes are process: reviewed by Crog. The design needs Adam's intent approval, because it changes what every user does.
 ---
 
 ## Phase 2 — Validate unproven pieces
