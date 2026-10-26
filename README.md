@@ -28,9 +28,12 @@ Windows.
    - **Windows:** open https://git-scm.com/download/win in your browser,
      download Git for Windows and run the installer, keeping the default
      choices. Then open https://cli.github.com, click Download for
-     Windows and run that installer too. Open **Git Bash** from the Start
-     menu; you type every command below in that window. If Git Bash was
-     already open, close it and open it again, so it finds `gh`.
+     Windows and run that installer too. Then open **Git Bash**: press
+     the Windows key, type `Git Bash` and press Enter (or click the
+     Start button and choose Git Bash from the list of apps). A window
+     opens with a line that ends in `$`; you type every command below
+     in that window. If Git Bash was already open, close it and open it
+     again, so it finds `gh`.
    - **macOS:** open the Terminal app. If you have Homebrew, run
      `brew install gh`; otherwise open https://cli.github.com, click
      Download for Mac, open the downloaded file and follow the installer.
