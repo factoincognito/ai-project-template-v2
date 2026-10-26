@@ -765,6 +765,25 @@ get a working project in any supported language.
   **Done when.** Merging a release prep PR, with Adam's recorded yes, creates the tag at its merge commit, the tag run is green including `publish`, and a PR without that branch name or heading creates no tag (tested in the workflow tests). A freshly bootstrapped project has the same workflow and doc, and a release prep PR there creates its tag (checked in an end-to-end run).
 
   **Rules that apply.** A release-process change: the workflow is code (test-first, reviewed by Crog), the process change needs Adam's intent approval, and CLAUDE.md, `docs/DEV_INFRASTRUCTURE.md` and the release decision rows are updated with it.
+
+- **[NOW] PBI-1.22** (Clead, 2026-10-27, on Adam's request of 2026-10-26, from the product office (PO-58); the WHAT is Adam's, the HOW is Clead's) — Make the template's CI faster without losing coverage.
+
+  **Why.** A Bootstrapper run takes 18 to 37 min wall time; the Windows shards take 13 to 23 min each and are split unevenly; queue waits reach 15 min when several PRs run; doc-only PRs (#215, #216) ran the full three-OS matrix. PBI-1.18's option 2 (cut process launches in the harness) was never done, only the sharding of #178.
+
+  **Baseline (from job timestamps, minutes; runs 40411892511 / 40408171782 / 40404043345).** Wall time of the run 17.9 / 19.2 / 36.9. Per OS, longest shard run time and sum of the four shards' run times: ubuntu 6.3/7.5/7.5, sum 17.2/19.4/21.2; macOS 10.2/9.9/13.0, sum 35.1/33.7/35.1; Windows 17.2/18.8/23.2, sum 64.8/64.3/75.7. Run 40404043345 had queue waits of up to 12 min per shard.
+
+  **Scope (Adam, 2026-10-26), in this order, each part as its own PR or PRs.**
+  1. Part 4, the main lever: make the tests faster. Measure process launches per test on Linux, rank the tests, and cut launches in the biggest hot spots a few per PR (a cheaper `git` stand-in, builtins instead of external commands, batching repeated `grep`/`mkdir`). Same tests, same assertions, passing on ubuntu, macOS (bash 3.2) and Windows.
+  2. Part 2: split the shards by measured duration instead of evenly, keeping the guarantee that every test runs exactly once across shards and that `bootstrapper-test` fails when a shard is missing.
+  3. Part 1: run the three-OS matrix only when a PR touches something the tests read, while `bootstrapper-test` still reports on every PR. The path list comes from what the tests actually read (some read `README.md` and docs), with a test that fails if a file the tests read is outside the list. If this cannot be done without changing the required check's meaning, it stops for Adam's intent approval instead of merging.
+  4. Part 3, a working practice: batch doc-only changes; one line with the measured cost in `docs/NEXT_SESSION.md`, "Test and CI lessons to keep".
+
+  **Done when.**
+  - A before/after table (Adam's request) from job timestamps: for the baseline and for at least two Bootstrapper runs of the final merged state, the run's wall time and, per OS, the longest shard's run time, the longest shard including its queue wait, and the sum of the four shards' run times; plus the per-test launch counts before and after for the top 10 hot spots.
+  - Every test that ran before still runs, with the same assertions, on all three OS legs.
+  - `bootstrapper-test` keeps its name and meaning.
+
+  **Rules that apply.** Harness, test and workflow changes are code and config: test-first (red run in the PR), reviewed by Crog on Opus. A change to the name or meaning of the required check `bootstrapper-test` needs Adam's intent approval.
 ---
 
 ## Phase 2 — Validate unproven pieces
