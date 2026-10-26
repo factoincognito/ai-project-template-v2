@@ -5712,6 +5712,7 @@ expect_setup_tree() {
   LC_ALL=C sort -u "$d/applied" >"$d/applied-rows"
   expect_same "$p$deploy: the fill rows checked" "$d/rows" "$d/applied-rows"
   # Left for the first session with Clead (spec step 8): not filled in.
+  cmp -s "$BUILT/STATUS.md" "$c/STATUS.md" || die "$p$deploy: STATUS.md is not the bootstrapper's stub, unchanged"
   grep -qF '[PHASE NAME]' "$c/docs/BACKLOG.md" || die "$p$deploy: [PHASE NAME] was filled in"
   grep -qxF -- '- [Goal]' "$c/memory/project.md" || die "$p$deploy: [Goal] was filled in"
   grep -qF '[What the system does' "$c/docs/SPEC.md" || die "$p$deploy: the SPEC section prompts were filled in"
@@ -6186,7 +6187,7 @@ test_the_placeholders_left_for_clead_are_listed_in_plain_words() {
   d="$(tmpdir)"
   ( load_script; say_left_for_clead ) >"$d/out" 2>"$d/err" || { cat "$d/err" >&2; die "say_left_for_clead failed"; }
   for t in 'left for your first session with Clead' '[PHASE NAME]' docs/BACKLOG.md '[Goal]' \
-    memory/project.md docs/SPEC.md memory/context.md; do
+    memory/project.md docs/SPEC.md memory/context.md STATUS.md; do
     grep -qF -- "$t" "$d/out" || { cat "$d/out" >&2; die "the list does not name $t"; }
   done
   [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "it wrote to stderr"; }
@@ -7641,7 +7642,8 @@ These parts of the project are left for your first session with Clead (Claude, t
   - the name of the first phase, [PHASE NAME], in docs/BACKLOG.md;
   - the goals, [Goal], and the rest of memory/project.md;
   - the questions in square brackets in the sections of docs/SPEC.md;
-  - memory/context.md.
+  - memory/context.md;
+  - STATUS.md, where the project stands and what comes next.
 TEXT
   # The blank line above "What to do next" sets it apart from the report
   # (finding 8: user interaction after one blank line); the line after it

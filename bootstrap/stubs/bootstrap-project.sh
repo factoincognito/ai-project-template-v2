@@ -4052,7 +4052,8 @@ say_left_for_clead() {
   say "  - the name of the first phase, [PHASE NAME], in docs/BACKLOG.md;"
   say "  - the goals, [Goal], and the rest of memory/project.md;"
   say "  - the questions in square brackets in the sections of docs/SPEC.md;"
-  say "  - memory/context.md."
+  say "  - memory/context.md;"
+  say "  - STATUS.md, where the project stands and what comes next."
 }
 
 # ---------- wait, require, add, finish and report ----------

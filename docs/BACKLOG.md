@@ -170,7 +170,10 @@ get a working project in any supported language.
   steps: copy in a language pack, turn on branch protection including
   any extra required checks, fill in placeholders, delete the steps),
   `CHANGELOG.md`, `docs/BACKLOG.md`, `docs/NEXT_SESSION.md`,
-  `memory/context.md`, `memory/decisions.md`, `memory/project.md`. A
+  `memory/context.md`, `memory/decisions.md`, `memory/project.md`,
+  `STATUS.md` (added 2026-10-26: the fixed-format status file the
+  product office's overview of all projects reads; its update rule is
+  an HTML comment at its top, not in `CLAUDE.md`). A
   stub may not have the same path as a manifest entry or sit inside a
   manifest directory (build error: ambiguous source).
 
@@ -327,7 +330,7 @@ get a working project in any supported language.
      - `[DATE]` becomes today's date (ISO) in `docs/SPEC.md` and `docs/NEXT_SESSION.md` only. In `memory/roles.md` and `docs/CROG_ONBOARDING.md`, `[DATE]` is a format token and stays.
      - The README line `[One or two sentences: …]` and the two-line description in `memory/project.md` become the description. The second is read as a whole file, not line by line. `[project-description]` becomes the description in `package.json` (node, web, react-native).
      - `[project-name]` becomes an npm-safe slug (the lowercased repo name, `.` replaced by `-`; Cloudflare Worker name limits such as `_` and length are not verified) in `package.json` and web `wrangler.jsonc`, and the display name in web `index.html` `<title>`. `[project-slug]` becomes the slug in `app.json`.
-     - **Left for the first Clead session** (the script lists them at the end): `[PHASE NAME]`, `[Goal]`, the SPEC section prompts, the rest of `memory/project.md` and `memory/context.md`.
+     - **Left for the first Clead session** (the script lists them at the end): `[PHASE NAME]`, `[Goal]`, the SPEC section prompts, the rest of `memory/project.md`, `memory/context.md` and `STATUS.md` (shipped as the stub, filled in by Clead).
      - **Never touched:** the BACKLOG markers, `[Unreleased]`, the ADR's `[If approved]` and `licenses/`.
   9. **Tidy up.**
      - Delete the README section from `## After bootstrapping` up to the next `## ` heading.
