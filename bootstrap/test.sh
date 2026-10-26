@@ -277,6 +277,42 @@ test_real_build_ships_the_generic_docs() {
     || die "DEV_INFRASTRUCTURE.md shipped altered"
 }
 
+test_real_build_ships_the_status_stub() {
+  # Every project gets STATUS.md at its root, in the fixed format the
+  # product owner's status overview reads, with its update rule in an
+  # HTML comment at the top and every field still to be written.
+  local out="$WORK/real.$RANDOM" want="$WORK/want.$RANDOM" body="$WORK/body.$RANDOM"
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  [ -f "$out/STATUS.md" ] || die "STATUS.md not shipped"
+  cmp -s "$REPO/bootstrap/stubs/STATUS.md" "$out/STATUS.md" || die "STATUS.md shipped altered"
+  [ "$(sed -n 1p "$out/STATUS.md")" = '<!--' ] || die "STATUS.md does not start with the comment that holds its update rule"
+  sed -n '1,/^-->$/p' "$out/STATUS.md" >"$body"
+  for t in 'in the same PR' 'Last update' 'Forward-looking only' 'History lives in Git'; do
+    grep -qF -- "$t" "$body" || die "the update rule in STATUS.md does not say: $t"
+  done
+  sed '1,/^-->$/d' "$out/STATUS.md" >"$body"
+  cat >"$want" <<'TEXT'
+
+# Status
+
+Last update: YYYY-MM-DD
+
+## Phase
+One line: where the project is in its life (idea, design, build, running).
+
+## Current focus
+What the project is working on now.
+
+## Next step
+The next concrete step and who takes it.
+
+## Blockers
+What stops progress, and who can unblock it. "None" when nothing does.
+A blocker that waits on Adam starts with "Adam:".
+TEXT
+  diff "$want" "$body" >&2 || die "STATUS.md after its comment is not the fixed format (diff above)"
+}
+
 test_real_build_ships_the_template_licence() {
   # The template's own files are PolyForm Noncommercial 1.0.0. The text
   # must ship unaltered, with a Required Notice line, in licenses/ and
