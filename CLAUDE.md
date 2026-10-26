@@ -244,8 +244,10 @@ earlier report:
    empty list at close is the only proof none were silently lost.
 
 ### Scheduled tasks
-A session deletes the one-shot scheduled tasks it created once they have
-fired and their work is done, without asking (Adam, 2026-10-24).
+A session deletes a one-shot scheduled task once it has fired and its
+work is done, without asking (Adam, 2026-10-24). The session that created
+it does this when it is still running; otherwise the session the task
+started deletes its own task before ending.
 
 ### Memory rule
 Canonical state is always in Git. Do not store derivable state
