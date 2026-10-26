@@ -4325,6 +4325,36 @@ test_proceed_is_asked_with_no_as_its_default() {
   expect_nothing_created "$d"
 }
 
+test_proceed_says_why_its_default_is_no() {
+  # End-to-end run 1, finding 5: the explanation above "Proceed?" says
+  # why the default is no (Enter alone answers no, so nothing happens by
+  # accident), on a first run and on a --resume run, and keeps what it
+  # said before. Enter then stops with nothing created or changed.
+  local d mode why keep enter
+  for mode in first resume; do
+    d="$(tmpdir)"
+    printf '\n' >"$d/in"
+    set +e
+    ( load_script
+      [ "$mode" = first ] || OPT_RESUME=1
+      confirm_plan
+    ) <"$d/in" >"$d/out" 2>"$d/err"
+    RC=$?
+    set -e
+    if [ "$mode" = first ]; then
+      keep="If you answer yes, the script creates the project on GitHub and carries out the plan above; if you answer no, it stops and creates nothing."
+      enter="Pressing Enter alone answers no, so nothing is created by accident; type yes to go on."
+    else
+      keep="If you answer yes, the script continues the setup as described above; if you answer no, it stops and changes nothing."
+      enter="Pressing Enter alone answers no, so nothing is changed by accident; type yes to go on."
+    fi
+    why="$(grep -B1 -xF 'Proceed? (yes or no) [no]: ' "$d/out" | sed -n 1p)"
+    [ "$why" = "$keep $enter" ] || { cat "$d/out" >&2; die "[$mode] explanation is: $why"; }
+    expect_rc 1 "$d"
+    sed -n 1p "$d/err" | grep -q '^What happened: You answered no' || { cat "$d/err" >&2; die "[$mode] Enter did not stop as a no"; }
+  done
+}
+
 test_yes_skips_proceed_and_non_interactive_needs_yes_or_dry_run() {
   local d
   d="$(tmpdir)"

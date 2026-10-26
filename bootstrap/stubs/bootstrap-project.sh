@@ -2399,21 +2399,23 @@ show_plan() {
   fi
 }
 
-# confirm_plan: "Proceed?", unless --yes. The default is no; a no stops
-# with nothing created (exit 1). --non-interactive without --yes never
-# gets here: cmd_setup refuses it with the other option problems.
+# confirm_plan: "Proceed?", unless --yes. The default is no, because it
+# is the safe answer: a stray Enter must create or change nothing, and
+# the explanation says so. A no stops with nothing created (exit 1).
+# --non-interactive without --yes never gets here: cmd_setup refuses it
+# with the other option problems.
 confirm_plan() {
   [ -z "$OPT_YES" ] || return 0
   if [ -n "$OPT_RESUME" ]; then
     prompt_for check_yes_no \
-      "If you answer yes, the script continues the setup as described above; if you answer no, it stops and changes nothing." \
+      "If you answer yes, the script continues the setup as described above; if you answer no, it stops and changes nothing. Pressing Enter alone answers no, so nothing is changed by accident; type yes to go on." \
       "Proceed? (yes or no)" no
     [ "$CHECKED" != yes ] || return 0
     fail 1 "You answered no, so the script stopped, and nothing was changed." \
       "To continue the setup, run the script again and answer yes."
   fi
   prompt_for check_yes_no \
-    "If you answer yes, the script creates the project on GitHub and carries out the plan above; if you answer no, it stops and creates nothing." \
+    "If you answer yes, the script creates the project on GitHub and carries out the plan above; if you answer no, it stops and creates nothing. Pressing Enter alone answers no, so nothing is created by accident; type yes to go on." \
     "Proceed? (yes or no)" no
   [ "$CHECKED" != yes ] || return 0
   fail 1 "You answered no, so the script stopped, and nothing was created." \
