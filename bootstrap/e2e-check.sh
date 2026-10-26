@@ -817,7 +817,7 @@ main() {
     -h | --help) show_help; return 0 ;;
   esac
   if [ "$#" -ne 2 ]; then usage >&2; return 2; fi
-  if ! printf '%s\n' "$1" | grep -qE '^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+$' || [ "$(printf '%s\n' "$1" | wc -l | tr -d ' ')" != 1 ]; then
+  if ! grep -qE '^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+$' <<<"$1" || [ "$(printf '%s\n' "$1" | wc -l | tr -d ' ')" != 1 ]; then
     echo "Not a project name of the form OWNER/NAME: $1" >&2
     usage >&2
     return 2

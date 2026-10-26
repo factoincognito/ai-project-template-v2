@@ -430,7 +430,9 @@ test_wrong_argument_count_exits_2() {
 test_bad_owner_name_exits_2() {
   local d n
   d="$(tmpdir)"; mkdir -p "$d/bin"; make_stub_gh "$d"; make_git_wrapper "$d"
-  for n in noslash a/b/c '/name' 'owner/' 'ow ner/name' 'owner/na;me' '-x/y'; do
+  # The last name is two good names on two lines: only the line count
+  # rejects it, as grep matches its first line.
+  for n in noslash a/b/c '/name' 'owner/' 'ow ner/name' 'owner/na;me' '-x/y' "$(printf 'a/b\nc/d')"; do
     run_check "$d" "$n" "$d"
     expect_rc "$d" 2
   done
@@ -653,8 +655,8 @@ test_extra_commit_on_main_fails() {
   G -C "$(COPY "$d")" fetch -q "$bare" "+refs/heads/main:refs/remotes/origin/main"
   sync_github "$d"
   run_check "$d"; expect_only_fail "$d" history
-  reason_of "$d" history | grep -qF '3 or more changes' || { cat "$d/out" >&2; die "the reason does not count the changes"; }
-  reason_of "$d" history | grep -qF 'Test-exempt' || die "the reason does not name the usual cause (a change merged after the run)"
+  reason_of "$d" history | grep -F '3 or more changes' >/dev/null || { cat "$d/out" >&2; die "the reason does not count the changes"; }
+  reason_of "$d" history | grep -F 'Test-exempt' >/dev/null || die "the reason does not name the usual cause (a change merged after the run)"
 }
 
 test_merge_with_two_parents_fails() {
@@ -745,9 +747,9 @@ test_private_project_refused_protection_says_it_is_expected() {
   gh_error "$d" "$P/branches/main/protection" 403 'Upgrade to GitHub Pro or make this repository public to enable this feature.'
   run_check "$d"
   expect_only_fail "$d" protection
-  reason_of "$d" protection | grep -qF 'expected' || { cat "$d/out" >&2; die "the reason does not say a 403 is expected here"; }
-  reason_of "$d" protection | grep -qF 'private' || die "the reason does not name the private project"
-  reason_of "$d" protection | grep -qF -- '--allow-unprotected' || die "the reason does not name --allow-unprotected"
+  reason_of "$d" protection | grep -F 'expected' >/dev/null || { cat "$d/out" >&2; die "the reason does not say a 403 is expected here"; }
+  reason_of "$d" protection | grep -F 'private' >/dev/null || die "the reason does not name the private project"
+  reason_of "$d" protection | grep -F -- '--allow-unprotected' >/dev/null || die "the reason does not name --allow-unprotected"
   expect_result "$d" decision-row PASS
   # A public project refused the same way: a permission, not the plan.
   d="$(tmpdir)"; finished "$d" node mit
@@ -755,14 +757,14 @@ test_private_project_refused_protection_says_it_is_expected() {
   run_check "$d"
   expect_rc "$d" 1
   expect_result "$d" protection FAIL
-  ! reason_of "$d" protection | grep -qF 'expected' || die "a public project's 403 is called expected"
+  ! reason_of "$d" protection | grep -F 'expected' >/dev/null || die "a public project's 403 is called expected"
   # A public project can be protected on any plan, so even GitHub's plan
   # message is not the --allow-unprotected path there.
   d="$(tmpdir)"; finished "$d" node mit
   gh_error "$d" "$P/branches/main/protection" 403 'Upgrade to GitHub Pro or make this repository public to enable this feature.'
   run_check "$d"
   expect_rc "$d" 1
-  ! reason_of "$d" protection | grep -qF 'expected' || die "a public project's plan 403 is called expected"
+  ! reason_of "$d" protection | grep -F 'expected' >/dev/null || die "a public project's plan 403 is called expected"
 }
 
 test_unreadable_protection_is_never_called_protected() {
@@ -774,8 +776,8 @@ test_unreadable_protection_is_never_called_protected() {
   expect_rc "$d" 1
   expect_result "$d" protection FAIL
   expect_result "$d" decision-row FAIL
-  ! reason_of "$d" decision-row | grep -qF 'it is protected' || { cat "$d/out" >&2; die "decision-row claims main is protected"; }
-  reason_of "$d" decision-row | grep -qF 'not known' || die "decision-row does not say it is not known"
+  ! reason_of "$d" decision-row | grep -F 'it is protected' >/dev/null || { cat "$d/out" >&2; die "decision-row claims main is protected"; }
+  reason_of "$d" decision-row | grep -F 'not known' >/dev/null || die "decision-row does not say it is not known"
 }
 
 test_decision_row_while_protected_fails() {
@@ -820,7 +822,7 @@ test_copy_not_on_main_fails() {
   d="$(tmpdir)"; finished "$d" node mit
   G -C "$(COPY "$d")" checkout -q --detach
   run_check "$d"; expect_only_fail "$d" copy
-  reason_of "$d" copy | grep -qF 'on no line of work' || { cat "$d/out" >&2; die "the reason does not say the copy is detached"; }
+  reason_of "$d" copy | grep -F 'on no line of work' >/dev/null || { cat "$d/out" >&2; die "the reason does not say the copy is detached"; }
 }
 
 test_copy_behind_github_fails() {
@@ -969,7 +971,7 @@ test_placeholder_left_fails() {
     change_setup "$d" "printf '%s\n' '$text' >>'$file'"
     echo "case: $spec"
     run_check "$d"; expect_only_fail "$d" placeholders
-    reason_of "$d" placeholders | grep -qF "$file" || { cat "$d/out" >&2; die "$spec: the reason does not name $file"; }
+    reason_of "$d" placeholders | grep -F "$file" >/dev/null || { cat "$d/out" >&2; die "$spec: the reason does not name $file"; }
   done
 }
 
@@ -979,7 +981,7 @@ test_fill_table_file_missing_fails() {
   d="$(tmpdir)"; finished "$d" node mit
   change_setup "$d" 'git rm -q docs/NEXT_SESSION.md'
   run_check "$d"; expect_only_fail "$d" placeholders
-  reason_of "$d" placeholders | grep -qF docs/NEXT_SESSION.md || { cat "$d/out" >&2; die "the reason does not name the missing file"; }
+  reason_of "$d" placeholders | grep -F docs/NEXT_SESSION.md >/dev/null || { cat "$d/out" >&2; die "the reason does not name the missing file"; }
 }
 
 test_licence_with_an_empty_holder_or_year_fails() {
@@ -1003,7 +1005,7 @@ test_licence_name_from_the_changelog_is_checked_before_use() {
   expect_rc "$d" 1
   expect_result "$d" changelog FAIL
   expect_result "$d" licence FAIL
-  ! grep -F 'licenses/' "$d/gh.log" | grep -qF '..' || die "the name reached gh"
+  ! grep -F 'licenses/' "$d/gh.log" | grep -F '..' >/dev/null || die "the name reached gh"
   ! grep -qF '{owner}' "$d/gh.log" || die "the name reached gh"
 }
 
@@ -1067,7 +1069,7 @@ test_licence_not_as_chosen_fails() {
   d="$(tmpdir)"; finished "$d" node mit
   change_setup "$d" 'git rm -q LICENSE'
   run_check "$d"; expect_only_fail "$d" licence
-  reason_of "$d" licence | grep -qF 'no LICENSE file' || { cat "$d/out" >&2; die "the reason does not say LICENSE is missing"; }
+  reason_of "$d" licence | grep -F 'no LICENSE file' >/dev/null || { cat "$d/out" >&2; die "the reason does not say LICENSE is missing"; }
   d="$(tmpdir)"; finished "$d" node mit
   change_setup "$d" 'printf "%s\n" "Some other text." >LICENSE'
   run_check "$d"; expect_only_fail "$d" licence
@@ -1116,7 +1118,7 @@ test_key_in_a_file_fails_and_is_never_shown() {
   d="$(tmpdir)"; finished "$d" node mit
   change_setup "$d" "printf 'token: %s\n' '$key' >>docs/SPEC.md"
   run_check "$d"; expect_only_fail "$d" no-keys
-  reason_of "$d" no-keys | grep -qF docs/SPEC.md || die "the reason does not name the file"
+  reason_of "$d" no-keys | grep -F docs/SPEC.md >/dev/null || die "the reason does not name the file"
   ! grep -qF "$key" "$d/out" || die "the key was shown"
   key="github_pat_$(printf 'B%.0s' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22)"
   d="$(tmpdir)"; finished "$d" node mit
@@ -1135,7 +1137,7 @@ test_github_unreachable_fails_every_github_check_plainly() {
       || { cat "$d/out" >&2; die "$id is $(result_of "$d" "$id") with GitHub unreachable"; }
   done
   expect_result "$d" copy FAIL
-  reason_of "$d" project | grep -qF 'gh auth status' || { cat "$d/out" >&2; die "no next step for an unreachable GitHub"; }
+  reason_of "$d" project | grep -F 'gh auth status' >/dev/null || { cat "$d/out" >&2; die "no next step for an unreachable GitHub"; }
   ! grep -nE 'error connecting|githubstatus' "$d/out" >&2 || die "gh's own words in the output"
 }
 
@@ -1248,11 +1250,11 @@ test_folder_sentences_say_what_is_wrong() {
   local d
   d="$(tmpdir)"; finished "$d" node mit
   run_check "$d" "$OWNER/$NAME" "$d/nowhere"
-  grep -F 'No command to remove the folder is shown' "$d/out" | grep -qF 'does not exist' \
+  grep -F 'No command to remove the folder is shown' "$d/out" | grep -F 'does not exist' >/dev/null \
     || { cat "$d/out" >&2; die "missing folder: the sentence does not say it does not exist"; }
   printf 'x\n' >"$(COPY "$d")/stray.txt"
   run_check "$d"
-  grep -F 'No command to remove the folder is shown' "$d/out" | grep -qF 'unsaved work' \
+  grep -F 'No command to remove the folder is shown' "$d/out" | grep -F 'unsaved work' >/dev/null \
     || { cat "$d/out" >&2; die "dirty copy: the sentence does not name unsaved work"; }
 }
 
@@ -1303,8 +1305,8 @@ test_private_refusal_for_another_reason_is_not_called_expected() {
   run_check "$d"
   expect_rc "$d" 1
   expect_result "$d" protection FAIL
-  ! reason_of "$d" protection | grep -qF 'expected' || { cat "$d/out" >&2; die "a rate limit is called the plan case"; }
-  reason_of "$d" decision-row | grep -qF 'not known' || die "decision-row should not judge the row"
+  ! reason_of "$d" protection | grep -F 'expected' >/dev/null || { cat "$d/out" >&2; die "a rate limit is called the plan case"; }
+  reason_of "$d" decision-row | grep -F 'not known' >/dev/null || die "decision-row should not judge the row"
 }
 
 test_private_protected_project_passes() {
@@ -1361,7 +1363,7 @@ test_skips_only_what_it_cannot_see_and_says_why() {
   ids="$(awk '$1 == "SKIP" { sub(/:$/, "", $2); print $2 }' "$d/out" | tr '\n' ' ')"
   [ "$ids" = "$SKIP_CHECKS " ] || die "skipped: '$ids', want '$SKIP_CHECKS '"
   for id in $SKIP_CHECKS; do
-    reason_of "$d" "$id" | grep -qiE 'cannot|only|not visible|not something' || { cat "$d/out" >&2; die "$id: the reason does not say why it cannot be seen"; }
+    reason_of "$d" "$id" | grep -iE 'cannot|only|not visible|not something' >/dev/null || { cat "$d/out" >&2; die "$id: the reason does not say why it cannot be seen"; }
   done
 }
 
