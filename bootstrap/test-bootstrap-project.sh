@@ -2482,6 +2482,39 @@ test_an_empty_answer_takes_the_default_shown() {
   grep -qxF 'Owner [octo-user]: ' "$d/out" || { cat "$d/out" >&2; die "owner default not shown"; }
 }
 
+# line_above <file> <exact line>: the line just above the first line
+# that is exactly <exact line> (a question's explanation).
+line_above() {
+  LINE="$2" awk '$0 == ENVIRON["LINE"] { print prev; found = 1; exit } { prev = $0 } END { if (!found) exit 1 }' "$1"
+}
+
+test_po_name_question_says_its_default_is_the_github_profile_name() {
+  # End-to-end run 1, finding 4: the question did not say where its
+  # default came from.
+  local d why
+  d="$(tmpdir)"
+  printf '%s\n' my-app "" "Lends tools." "" "" python "" mit "" "" "" "" >"$d/in"
+  inputs "$d"
+  expect_inputs "$d" "PO_NAME=Octo User"
+  why="$(line_above "$d/out" 'Product owner name [Octo User]: ')" \
+    || { cat "$d/out" >&2; die "the product owner question with its default was not asked"; }
+  [ "$why" = "The name of the product owner, the person who decides what the project should do (usually you). The default is the name on the GitHub profile of octo-user, the account gh is signed in to." ] \
+    || { cat "$d/out" >&2; die "the explanation does not say the default is the profile name: [$why]"; }
+}
+
+test_po_name_question_says_its_default_is_the_account_name_when_the_profile_has_none() {
+  local d why
+  d="$(tmpdir)"
+  export STUB_GH_NAME=""
+  printf '%s\n' my-app "" "Lends tools." "" "" python "" mit "" "" "" "" >"$d/in"
+  inputs "$d"
+  expect_inputs "$d" PO_NAME=octo-user
+  why="$(line_above "$d/out" 'Product owner name [octo-user]: ')" \
+    || { cat "$d/out" >&2; die "the product owner question with its default was not asked"; }
+  [ "$why" = "The name of the product owner, the person who decides what the project should do (usually you). The default is octo-user, the name of the GitHub account gh is signed in to, because its profile has no name." ] \
+    || { cat "$d/out" >&2; die "the explanation does not say the default is the account name: [$why]"; }
+}
+
 test_answers_have_spaces_and_carriage_returns_removed() {
   local d cr
   d="$(tmpdir)"

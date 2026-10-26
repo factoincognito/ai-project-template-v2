@@ -960,6 +960,7 @@ check_options() {
 }
 
 collect_inputs() {
+  local po_default_from
   check_options
 
   # Then each one not given, in the order of the questions.
@@ -991,8 +992,16 @@ collect_inputs() {
   fi
   if [ -z "$IN_PO_NAME" ]; then
     need_github_account
+    # The explanation says where the default comes from (end-to-end run
+    # 1, finding 4). GH_LOGIN is never empty here, so there is always a
+    # default.
+    if [ -n "$GH_PROFILE_NAME" ]; then
+      po_default_from="The default is the name on the GitHub profile of $GH_LOGIN, the account gh is signed in to."
+    else
+      po_default_from="The default is $GH_LOGIN, the name of the GitHub account gh is signed in to, because its profile has no name."
+    fi
     answer --po-name check_table_text "${GH_PROFILE_NAME:-$GH_LOGIN}" \
-      "The name of the product owner, the person who decides what the project should do (usually you)." \
+      "The name of the product owner, the person who decides what the project should do (usually you). $po_default_from" \
       "Product owner name" || true
     IN_PO_NAME="$CHECKED"
   fi
