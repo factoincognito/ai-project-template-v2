@@ -62,6 +62,7 @@ Written 2026-10-02 so nothing depends on anyone remembering. **Each Clead sessio
    - **Rule for every run (Adam, 2026-10-26):** any point where Adam has to ask Claude for help is a failure of the README or the script. It is recorded here with the date and the step, and addressed before release.
    - **Findings so far:**
      - 2026-10-26, run 1, before step 0's first command: Adam did not know how to open Git Bash. README step 0 says only "Open Git Bash from the Start menu". Not yet addressed.
+     - 2026-10-26, run 1, setting up "log in first without the `workflow` scope": `gh auth logout` then `gh auth login -h github.com -p https -w` still gave a token with `workflow` (`gh auth status`: 'gist', 'read:org', 'repo', 'workflow'). GitHub keeps the scopes already granted to the GitHub CLI app, and the authorize page listed them as "Existing access". To-do 2 does not say how to get a token without `workflow`: revoking GitHub CLI under GitHub Settings, Applications, Authorized OAuth Apps, and signing in again, is the likely way (not yet confirmed). Not yet addressed.
 4. **If an agent has to change files in your connected PC folder,** it asks for delete permission once per session (a failed pull left a stale `.git/index.lock` last time). Your PC clone of the template is behind main and its `origin` points at the org; the session fast-forwards it after you grant that.
 
 ---
