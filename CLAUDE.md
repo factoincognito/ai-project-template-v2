@@ -72,11 +72,12 @@ three review rounds without agreement) is unchanged.
 ## Both agents: `STATUS.md`
 
 (Product office rule, 2026-10-26.) `STATUS.md` at the repo root is read
-by the product owner's dashboard. A session that changes what one of its
-fields says (Phase, Current focus, Next step, Blockers) updates it in the
-same PR and sets "Last update". It holds only what lies ahead; history is
-in Git. A blocker that waits on the product owner starts with
-"Product Owner:".
+by the product owner's dashboard. A session whose work changes what one
+of its fields says (Phase, Current focus, Next step, Blockers) updates it
+in the same PR and sets "Last update" (`YYYY-MM-DD`). It holds only what
+lies ahead; history is in Git. Keep the file's headings and format as
+they are: the dashboard reads them. A blocker that waits on the product
+owner starts with "Product Owner:", written exactly so.
 
 ---
 
