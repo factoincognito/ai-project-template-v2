@@ -12,7 +12,7 @@ all projects reads them.
 Last update: 2026-10-26
 
 ## Phase
-Build and release: the turn-key bootstrap script is built (v2.4.0); v2.5.0, with the fixes for end-to-end run 1, is released (2026-10-26).
+Build and release: the turn-key bootstrap script is built (v2.4.0); v2.5.0, with the fixes for end-to-end run 1, is tagged (2026-10-26); its publish to the bootstrapper is still to be verified.
 
 ## Current focus
 Getting the bootstrapper through Adam's end-to-end runs, which must pass before acuteping, the first real project, is created. v2.5.0 fixes all eleven findings of run 1 (`docs/NEXT_SESSION.md`, Adam's to-do 2).
