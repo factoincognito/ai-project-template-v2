@@ -342,6 +342,14 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 
 **Status:** open question for Adam to get answered. Clead answers it from `bootstrap/stubs/bootstrap-project.sh` as it is on `main`, checked, not from memory. If the answer shows a gap (for example nothing is saved and a resume needs the answers again), it becomes a PBI.
 
+### 18. Rolling back a bad release — new (2026-10-26)
+
+**Adam (2026-10-26):** fine with restoring the code of an earlier tag under a new tag ("feature-wise they are identical").
+
+**What Clead read (2026-10-26, `main`, not tried):** the script runs only when its version equals the one the bootstrapper's `main` CHANGELOG.md names, and `gh repo create --template` copies the bootstrapper's `main`; so running an older script is refused, and what users get is whatever is on the bootstrapper's `main`. `bootstrap/require-on-main.sh` accepts any commit that is an ancestor of the template's `main`. So a rollback is: Adam tags the earlier release's template commit (v2.4.0: `7dd7fd0`) with a new, higher version; the tag run rebuilds that content, stamps it with the new version and publishes it as the bootstrapper's `main`. The other route is reverting the bad PRs in the template and releasing again.
+
+**Status:** untested. Unchecked: whether anything refuses a tag on an older commit or a version lower than the published one, and whether a tag run on an old commit uses that commit's workflow and still has the secret it needs. Projects already made from a bad release are not changed by a rollback. Once tested, or when a rollback is first needed, this goes into `docs/DEV_INFRASTRUCTURE.md` as the procedure.
+
 ---
 
 ## Items that do not change
