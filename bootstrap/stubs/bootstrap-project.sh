@@ -50,6 +50,9 @@
 #   BOOTSTRAP_OS_RELEASE  the Linux release file (default: /etc/os-release).
 #   BOOTSTRAP_SLEEP  the command that waits between two checks of GitHub
 #                  (default: sleep). It gets the seconds as its argument.
+#   BOOTSTRAP_STDOUT_TERMINAL  yes or no: whether the output goes to a
+#                  terminal, where the wait for build shows a * a second
+#                  (default: asked of the shell, [ -t 1 ]).
 #   BOOTSTRAP_NPM  the npm the lockfile step runs (default: npm on the
 #                  PATH), so the tests never reach the npm registry. The
 #                  check that npm is installed runs the npm on the PATH.
@@ -130,15 +133,25 @@ show_help() {
     "An option takes its value after a space or after =, as in --name=my-app."
 }
 
+# say_open <text>: text with no line break after it, so more can follow
+# on the same line (the signs of life of the wait for build). The next
+# message of any helper below ends that line first (end_line).
+LINE_OPEN=""
+say_open() { printf '%s' "$*"; LINE_OPEN=1; }
+end_line() {
+  [ -z "$LINE_OPEN" ] || printf '\n'
+  LINE_OPEN=""
+}
+
 # say <text>: one line of information.
-say() { printf '%s\n' "$*"; }
+say() { end_line; printf '%s\n' "$*"; }
 
 # say_command <command>: a command for the user to copy, indented.
-say_command() { printf '    %s\n' "$*"; }
+say_command() { end_line; printf '    %s\n' "$*"; }
 
 # step_start <what>, step_end <result>: the first and last line of a step.
-step_start() { CURRENT_STEP="$*"; printf '==> %s\n' "$*"; }
-step_end() { printf '    Done. %s\n' "$*"; }
+step_start() { end_line; CURRENT_STEP="$*"; printf '==> %s\n' "$*"; }
+step_end() { end_line; printf '    Done. %s\n' "$*"; }
 
 # show_error <what happened> <what to do next> [raw text]: an error in
 # plain words with the next action, on stderr. Raw text (an error from a
@@ -147,6 +160,7 @@ show_error() {
   local what="${1:-}" next="${2:-}" raw="${3:-}"
   [ -n "$what" ] || what="Something unexpected happened."
   [ -n "$next" ] || next="Run the script again. If the same thing happens, ask for help and show the details below."
+  end_line
   {
     printf 'What happened: %s\n' "$what"
     printf 'What to do next: %s\n' "$next"
@@ -200,6 +214,7 @@ NO_LICENCE_WARNING="Warning: the project is public and has no licence: anyone ca
 ask() {
   local why="$1" question="$2" default="$3" got=""
   shift 3
+  end_line
   printf '%s\n' "$why"
   [ "$#" -eq 0 ] || printf '  %s\n' "$@"
   if [ -n "$default" ]; then
@@ -220,6 +235,7 @@ ask() {
 # (or stop) or stdin has no more lines, else 0 (check again).
 wait_for_enter() {
   local got=""
+  end_line
   printf 'Press Enter to check again, or type q to stop: '
   if ! IFS= read -r got && [ -z "$got" ]; then
     printf '\n'
@@ -243,6 +259,7 @@ wait_for_enter() {
 # fails, the read does not run, got stays empty, and that is not a yes.
 ask_terminal() {
   local tty="${BOOTSTRAP_TTY:-/dev/tty}" got=""
+  end_line
   printf '%s\n%s [no]: ' "$1" "$2"
   if [ ! -r "$tty" ]; then
     printf '\n'
@@ -269,6 +286,7 @@ GUIDE_N=0
 guide_begin() {
   GUIDE_TITLE="$1"
   GUIDE_N=0
+  end_line
   printf '%s\n' "$1" "Why this is needed: $2"
 }
 guide_step() {
@@ -2429,6 +2447,31 @@ step_mark() {
   esac
 }
 
+# duration_words <seconds>: DURATION is the time in words, such as
+# "1 minute 15 seconds" or "20 minutes".
+duration_words() {
+  local m=$(($1 / 60)) s=$(($1 % 60)) mw="minutes" sw="seconds"
+  [ "$m" -ne 1 ] || mw="minute"
+  [ "$s" -ne 1 ] || sw="second"
+  if [ "$m" -eq 0 ]; then
+    DURATION="$s $sw"
+  elif [ "$s" -eq 0 ]; then
+    DURATION="$m $mw"
+  else
+    DURATION="$m $mw $s $sw"
+  fi
+}
+
+# stdout_is_terminal: true when the output goes to a terminal, or
+# BOOTSTRAP_STDOUT_TERMINAL says yes (the tests' stand-in for one).
+stdout_is_terminal() {
+  case "${BOOTSTRAP_STDOUT_TERMINAL:-}" in
+    yes) return 0 ;;
+    no) return 1 ;;
+  esac
+  [ -t 1 ]
+}
+
 show_plan() {
   local vis licence deploy=""
   if [ "$IN_VISIBILITY" = private ]; then
@@ -2453,7 +2496,8 @@ show_plan() {
   say "    Licence: $licence"
   say "    Copy on this computer: $IN_DIR"
   say "    Your name and email for git: $IN_GIT_NAME, $IN_GIT_EMAIL"
-  say "    Waiting for the project's checks: up to $IN_CI_TIMEOUT minutes"
+  duration_words $((IN_CI_TIMEOUT * 60))
+  say "    Waiting for the project's checks: at most $DURATION; if build has not passed by then, the script stops, leaves the proposed change open and shows how to continue (--ci-timeout sets a different limit)"
   say "The steps, in this order:"
   plan_steps
   # Step 4 adds no licence: the warning step 10 gives, before anything
@@ -4035,25 +4079,57 @@ build_failed() {
     "$seen"
 }
 
-# wait_for_build: spec step 15.
+# The signs of life of the wait for build (E2E run 1, finding 9): each
+# look after the first starts a line of its own, and on a terminal the
+# line stays open and gets a * for each second of the wait after it.
+# Without a terminal (a log, a pipe) there are no stars, and each wait is
+# one pause of CHECKS_DELAY seconds.
+# wait_line <text>: such a line, after the stars of the line before.
+wait_line() {
+  end_line
+  if stdout_is_terminal; then say_open "$1"; else say "$1"; fi
+}
+# wait_with_signs: the wait of CHECKS_DELAY seconds between two looks.
+wait_with_signs() {
+  local i=0
+  if ! stdout_is_terminal; then
+    pause_for "$CHECKS_DELAY"
+    return 0
+  fi
+  say_open " "
+  while [ "$i" -lt "$CHECKS_DELAY" ]; do
+    pause_for 1
+    say_open "*"
+    i=$((i + 1))
+  done
+}
+
+# wait_for_build: spec step 15. Each look after the first says the time
+# waited so far against the limit (the waits counted, not the time gh
+# takes to answer).
 wait_for_build() {
-  local tries=0 max unit=minutes
-  [ "$IN_CI_TIMEOUT" -ne 1 ] || unit=minute
+  local tries=0 max limit
   PR_NUMBER="${PR_URL##*/}"
-  step_start "Waiting for the project's check build to pass on the proposed change, for up to $IN_CI_TIMEOUT $unit"
+  duration_words $((IN_CI_TIMEOUT * 60))
+  limit="$DURATION"
+  step_start "Waiting for the project's check build to pass on the proposed change, for at most $limit"
+  say "That is the limit: if build has not passed after $limit, the script stops, leaves the proposed change open and shows how to continue (--ci-timeout sets a different limit)."
+  say "You can follow the check here: $PR_URL/checks"
   max=$((IN_CI_TIMEOUT * 60 / CHECKS_DELAY))
   while :; do
     look_at_build
     [ "$BUILD_STATE" != pass ] || break
     [ "$BUILD_STATE" != fail ] || build_failed
     if [ "$tries" -ge "$max" ]; then
-      stop_with_error "The project's check build had not passed on the proposed change after $IN_CI_TIMEOUT $unit, so the script did not add the change to the main version. The proposed change stays open on GitHub." \
+      stop_with_error "The project's check build had not passed on the proposed change after $limit, so the script did not add the change to the main version. The proposed change stays open on GitHub." \
         "Open $PR_URL in your browser and click Checks to see whether build is still running. Then continue the setup with the command shown above; to wait longer, add --ci-timeout and a number of minutes to it, such as --ci-timeout 40." \
         "$BUILD_SEEN"
     fi
-    [ "$tries" -gt 0 ] || say "The check build has not finished yet; the script looks again every $CHECKS_DELAY seconds."
+    [ "$tries" -gt 0 ] || wait_line "The check build has not finished yet; the script looks again every $CHECKS_DELAY seconds."
+    wait_with_signs
     tries=$((tries + 1))
-    pause_for "$CHECKS_DELAY"
+    duration_words $((tries * CHECKS_DELAY))
+    wait_line "Checking the build status ($DURATION of at most $limit)"
   done
   step_end "The check build passed on the proposed change."
 }
