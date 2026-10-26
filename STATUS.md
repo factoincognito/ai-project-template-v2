@@ -15,7 +15,7 @@ Last update: 2026-10-26
 Build and release: the turn-key bootstrap script is built (v2.4.0); v2.5.0, with the fixes for end-to-end run 1, is tagged (2026-10-26); its publish to the bootstrapper is still to be verified.
 
 ## Current focus
-Getting the bootstrapper through Adam's end-to-end runs, which must pass before acuteping, the first real project, is created. v2.5.0 fixes all eleven findings of run 1 (`docs/NEXT_SESSION.md`, Adam's to-do 2).
+Getting the bootstrapper through Adam's end-to-end runs, which must pass before acuteping, the first real project, is created. v2.5.0 carries the fixes for all eleven findings of run 1; the repeated run shows whether they hold (`docs/NEXT_SESSION.md`, Adam's to-do 2).
 
 ## Next step
 Clead verifies the v2.5.0 release: the tag run green including `publish`, and the bootstrapper's `main` and tag at the new commit. Then Adam repeats end-to-end run 1 on v2.5.0 and gives Clead the output of `bootstrap/e2e-check.sh`.
