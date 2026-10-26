@@ -185,17 +185,18 @@ Project for this repo, add the repo to that Claude Project (give it
 access when asked), and start a chat inside the Claude Project;
 `CLAUDE.md` loads from the repo. Before the first task, ask Clead to
 summarise `memory/context.md`: if it can describe the project, the
-decisions made and the open questions, it is oriented. In VS Code, open your clone and
-use a Claude Code tab if you want to run Crog yourself.
+decisions made and the open questions, it is oriented. In VS Code, open
+your clone and use a Claude Code tab if you want to run Crog yourself.
 
-Keep one Claude project per repo, so what Clead learns in one project
+Keep one Claude Project per repo, so what Clead learns in one project
 never mixes with another (`docs/decisions/0001-rebuild-workflow.md`,
 §6, "Cowork project setup"; written for Cowork, the reasoning is the
 same).
 
 ### Starting later sessions
-Start a new chat and give it the repo. Clead follows the session
-startup steps in `CLAUDE.md`. The first thing you say is the first thing
+In the Claude app, start a new chat inside the project's Claude Project
+(it already has the repo). Clead follows the session startup steps in
+`CLAUDE.md`. The first thing you say is the first thing
 that matters.
 
 ## The team

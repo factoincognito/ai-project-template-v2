@@ -8884,7 +8884,10 @@ test_template_readme_lists_the_readme_only_steps() {
 test_readmes_say_to_chat_inside_a_claude_project_as_the_script_does() {
   # End-to-end run 1, finding 10: the README's "After the script" and both
   # READMEs' "Working setup" say what the script's last step says: create
-  # a Claude Project, give it the project, chat inside it.
+  # a Claude Project, give it the project, chat inside it. Both READMEs'
+  # "Starting later sessions" start the chat inside that Claude Project
+  # (review of #206, N2), and none of these sections writes "Claude
+  # project" in lower case (N3).
   local body f t
   body="$(section_of "$TEMPLATE_README" '### Creating a project from the template' '^##' | tr '\n' ' ' | sed 's/  */ /g')"
   body="${body#*After the script: }"
@@ -8898,6 +8901,10 @@ test_readmes_say_to_chat_inside_a_claude_project_as_the_script_does() {
     for t in 'create a Claude Project' 'to that Claude Project' 'start a chat inside the Claude Project'; do
       grep -qF -- "$t" <<<"$body" || die "$f: Working setup lacks: $t"
     done
+    ! grep -qF 'Claude project' <<<"$body" || die "$f: Working setup writes Claude project in lower case"
+    body="$(section_of "$f" '### Starting later sessions' '^##' | tr '\n' ' ' | sed 's/  */ /g')"
+    grep -qF "start a new chat inside the project's Claude Project" <<<"$body" \
+      || die "$f: Starting later sessions does not start the chat inside the project's Claude Project"
   done
 }
 
