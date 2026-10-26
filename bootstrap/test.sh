@@ -316,7 +316,7 @@ test_real_build_ships_the_stub_ci_unchanged() {
 }
 
 test_template_ci_is_not_in_the_manifest() {
-  ! grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -qxF '.github/workflows/ci.yml' \
+  ! grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -xF '.github/workflows/ci.yml' >/dev/null \
     || die "the template's own ci.yml is listed in the manifest, so it would ship"
 }
 
@@ -782,7 +782,7 @@ wf_needs() {
   local line
   line="$(wf_job "$1" | grep -E '^    needs:' || true)"
   [ -n "$line" ] || return 0
-  printf '%s\n' "$line" | grep -qE '^    needs: \[[A-Za-z0-9_, -]+\][[:space:]]*$' \
+  grep -qE '^    needs: \[[A-Za-z0-9_, -]+\][[:space:]]*$' <<<"$line" \
     || die "needs of $1 is not in the form needs: [a, b]: $line"
   printf '%s\n' "$line" | sed -E 's/^    needs: \[//; s/\][[:space:]]*$//' | tr ',' '\n' | sed -E 's/^ +//; s/ +$//'
 }
@@ -793,7 +793,7 @@ wf_jobs_running() {
   local id re
   re="^ *(run: )?(/bin/)?bash $(printf '%s' "$1" | sed 's/[./]/\\&/g') *$"
   for id in $(wf_job_ids); do
-    if wf_job "$id" | grep -qE "$re"; then echo "$id"; fi
+    if wf_job "$id" | grep -E "$re" >/dev/null; then echo "$id"; fi
   done
 }
 
@@ -823,7 +823,7 @@ assert_gated() {
   n="$(printf '%s' "$jobs" | grep -c . || true)"
   [ "$n" -eq 1 ] || die "$1 runs in $n jobs, expected 1: $jobs"
   [ "$jobs" != bootstrapper-test ] || die "$1 runs in bootstrapper-test itself, not in a job it needs"
-  wf_needs bootstrapper-test | grep -qxF "$jobs" || die "bootstrapper-test does not need $jobs, which runs $1"
+  wf_needs bootstrapper-test | grep -xF "$jobs" >/dev/null || die "bootstrapper-test does not need $jobs, which runs $1"
 }
 
 # The job that runs the bootstrap script's tests (the OS matrix).
@@ -860,9 +860,9 @@ test_workflow_bootstrapper_cancels_superseded_pr_runs_but_never_a_tag_run() {
   local top pub
   top="$(awk '/^concurrency:/ { p = 1; print; next } /^[^ #]/ { p = 0 } p' "$BWF")"
   [ -n "$top" ] || die "no workflow-level concurrency"
-  printf '%s\n' "$top" | grep -qxF '  group: bootstrapper-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}' \
+  grep -qxF '  group: bootstrapper-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}' <<<"$top" \
     || { printf '%s\n' "$top" >&2; die "concurrency group is not per pull request (or per ref for a tag)"; }
-  printf '%s\n' "$top" | grep -qxF "  cancel-in-progress: \${{ github.event_name == 'pull_request' }}" \
+  grep -qxF "  cancel-in-progress: \${{ github.event_name == 'pull_request' }}" <<<"$top" \
     || { printf '%s\n' "$top" >&2; die "cancel-in-progress is not limited to pull_request runs"; }
   [ "$(printf '%s\n' "$top" | grep -vE '^[[:space:]]*(#|$)' | wc -l | tr -d ' ')" = 3 ] \
     || { printf '%s\n' "$top" >&2; die "unexpected keys in the workflow-level concurrency"; }
@@ -897,7 +897,7 @@ test_workflow_no_continue_on_error_in_the_required_check_or_its_needs() {
   ids="$CHECKED_IDS"; n="$CHECKED_N"
   [ "$n" -ge 3 ] || die "expected bootstrapper-test and at least two needs, got: $ids"
   for id in scripts-test bootstrap-project-test; do
-    printf ' %s ' "$ids" | grep -qF " $id " || die "$id is not checked (not needed by bootstrapper-test)"
+    grep -qF " $id " <<<" $ids " || die "$id is not checked (not needed by bootstrapper-test)"
   done
 }
 
@@ -932,7 +932,7 @@ test_workflow_matrix_cannot_drop_an_os() {
   j="$(matrix_job)"; job="$(wf_job "$j")"
   ! printf '%s\n' "$job" | grep -nE '^[[:space:]]+exclude[[:space:]]*:' >&2 || die "$j has a matrix exclude"
   for o in ubuntu-latest macos-latest windows-latest; do
-    printf '%s\n' "$job" | grep -E '^        os: \[' | grep -qE "(\[|, *)$o *(,|\])" || die "$o missing from the matrix os list"
+    printf '%s\n' "$job" | grep -E '^        os: \[' | grep -E "(\[|, *)$o *(,|\])" >/dev/null || die "$o missing from the matrix os list"
   done
 }
 
@@ -975,11 +975,11 @@ LN
     case "$v" in
       3.2.*)
         [ "$rc" -eq 0 ] || { printf '%s\n' "$out" >&2; die "check failed on bash $v"; }
-        printf '%s\n' "$out" | grep -qxF 'STUB TESTS RAN' || { printf '%s\n' "$out" >&2; die "tests not run on bash $v"; } ;;
+        grep -qxF 'STUB TESTS RAN' <<<"$out" || { printf '%s\n' "$out" >&2; die "tests not run on bash $v"; } ;;
       *)
         [ "$rc" -ne 0 ] || { printf '%s\n' "$out" >&2; die "check passed on bash $v"; }
-        printf '%s\n' "$out" | grep -qF '::error::' || { printf '%s\n' "$out" >&2; die "no ::error:: on bash $v"; }
-        ! printf '%s\n' "$out" | grep -qxF 'STUB TESTS RAN' || die "tests ran on bash $v" ;;
+        grep -qF '::error::' <<<"$out" || { printf '%s\n' "$out" >&2; die "no ::error:: on bash $v"; }
+        ! grep -qxF 'STUB TESTS RAN' <<<"$out" || die "tests ran on bash $v" ;;
     esac
   done
 }
@@ -989,12 +989,12 @@ test_workflow_bootstrapper_test_is_one_job_that_always_runs() {
   job="$(wf_job bootstrapper-test)"
   [ -n "$job" ] || die "no bootstrapper-test job"
   # A matrix or a job name would rename the required check.
-  ! printf '%s\n' "$job" | grep -qE '^    (strategy|name):' || die "bootstrapper-test has a matrix or a name; the check would be renamed"
-  ! printf '%s\n' "$job" | grep -qF 'matrix' || die "bootstrapper-test uses a matrix"
-  printf '%s\n' "$job" | grep -qxE '    runs-on: ubuntu-latest' || die "bootstrapper-test does not run on ubuntu-latest"
+  ! grep -qE '^    (strategy|name):' <<<"$job" || die "bootstrapper-test has a matrix or a name; the check would be renamed"
+  ! grep -qF 'matrix' <<<"$job" || die "bootstrapper-test uses a matrix"
+  grep -qxE '    runs-on: ubuntu-latest' <<<"$job" || die "bootstrapper-test does not run on ubuntu-latest"
   # Without always(), a failed or cancelled need skips it, and a skipped
   # required check counts as passed.
-  printf '%s\n' "$job" | grep -qxE '    if: always\(\)' || die "bootstrapper-test lacks if: always()"
+  grep -qxE '    if: always\(\)' <<<"$job" || die "bootstrapper-test lacks if: always()"
   [ -n "$(wf_needs bootstrapper-test)" ] || die "bootstrapper-test needs nothing"
 }
 
@@ -1307,7 +1307,7 @@ test_workflow_bootstrapper_test_fails_unless_every_need_succeeded() {
   [ -n "$step" ] || die "bootstrapper-test has no run: | step"
   [ "$(printf '%s\n' "$step" | grep -cE '^ *run:')" = 1 ] || die "expected one run step in bootstrapper-test"
   # Every need's result, by construction: a need added later is covered.
-  printf '%s\n' "$step" | grep -qxF "          RESULTS: \${{ join(needs.*.result, ' ') }}" \
+  grep -qxF "          RESULTS: \${{ join(needs.*.result, ' ') }}" <<<"$step" \
     || die "the step does not get every need's result in RESULTS"
   script="$WORK/gate.$RANDOM.sh"
   printf '%s\n' "$step" | wf_run_block >"$script"
@@ -1357,22 +1357,22 @@ test_workflow_every_os_leg_is_sharded_and_records_what_it_ran() {
   n="$(printf '%s\n' "$list" | tr ',' '\n' | grep -c .)"
   [ "$list" = "$(seq -s, 1 "$n")" ] || die "the shard list is not 1..$n: $list"
   [ "$n" -ge 2 ] || die "the legs are not sharded (n = $n)"
-  printf '%s\n' "$job" | grep -qxF "      BOOTSTRAP_TEST_SHARD: \${{ matrix.shard }}/$n" \
+  grep -qxF "      BOOTSTRAP_TEST_SHARD: \${{ matrix.shard }}/$n" <<<"$job" \
     || die "the shard setting is not matrix.shard/$n"
-  printf '%s\n' "$job" | grep -qxF "      BOOTSTRAP_TEST_MANIFEST: shard-list/\${{ matrix.os }}-\${{ matrix.shard }}-of-$n.txt" \
+  grep -qxF "      BOOTSTRAP_TEST_MANIFEST: shard-list/\${{ matrix.os }}-\${{ matrix.shard }}-of-$n.txt" <<<"$job" \
     || die "the shards do not record what they ran as shard-list/<os>-<i>-of-$n.txt"
-  printf '%s\n' "$job" | grep -qE '^        uses: actions/upload-artifact@v[0-9]+$|^      - uses: actions/upload-artifact@v[0-9]+$' \
+  grep -qE '^        uses: actions/upload-artifact@v[0-9]+$|^      - uses: actions/upload-artifact@v[0-9]+$' <<<"$job" \
     || die "the shards do not upload what they ran"
-  printf '%s\n' "$job" | grep -qxF '          name: bootstrap-tests-${{ matrix.os }}-${{ matrix.shard }}' || die "unexpected artifact name"
-  printf '%s\n' "$job" | grep -qxF '          path: shard-list/' || die "the upload is not shard-list/"
-  printf '%s\n' "$job" | grep -qxF '          if-no-files-found: error' || die "an upload with no manifest does not fail"
+  grep -qxF '          name: bootstrap-tests-${{ matrix.os }}-${{ matrix.shard }}' <<<"$job" || die "unexpected artifact name"
+  grep -qxF '          path: shard-list/' <<<"$job" || die "the upload is not shard-list/"
+  grep -qxF '          if-no-files-found: error' <<<"$job" || die "an upload with no manifest does not fail"
   agg="$(wf_job bootstrapper-test)"
-  printf '%s\n' "$agg" | grep -qE 'uses: actions/download-artifact@v[0-9]+$' || die "bootstrapper-test does not download the manifests"
-  printf '%s\n' "$agg" | grep -qxF '          pattern: bootstrap-tests-*' || die "the download pattern is not bootstrap-tests-*"
-  printf '%s\n' "$agg" | grep -qxF '          path: shard-list' || die "the manifests are not downloaded to shard-list"
-  printf '%s\n' "$agg" | grep -qxF '          merge-multiple: true' || die "the manifests are not merged into one folder"
+  grep -qE 'uses: actions/download-artifact@v[0-9]+$' <<<"$agg" || die "bootstrapper-test does not download the manifests"
+  grep -qxF '          pattern: bootstrap-tests-*' <<<"$agg" || die "the download pattern is not bootstrap-tests-*"
+  grep -qxF '          path: shard-list' <<<"$agg" || die "the manifests are not downloaded to shard-list"
+  grep -qxF '          merge-multiple: true' <<<"$agg" || die "the manifests are not merged into one folder"
   # The gate runs even when the download fails (no artifact at all).
-  wf_step bootstrapper-test '^ *run: [|]' | grep -qxF '        if: always()' || die "the gate step does not run when the download fails"
+  wf_step bootstrapper-test '^ *run: [|]' | grep -xF '        if: always()' >/dev/null || die "the gate step does not run when the download fails"
 }
 
 test_workflow_bootstrapper_test_gates_the_build_and_publish_tests() {
@@ -1381,7 +1381,7 @@ test_workflow_bootstrapper_test_gates_the_build_and_publish_tests() {
   local job
   assert_gated bootstrap/test.sh
   job="$(wf_jobs_running bootstrap/test.sh)"
-  wf_job "$job" | grep -qxE '    runs-on: ubuntu-latest' || die "$job does not run on ubuntu-latest only"
+  wf_job "$job" | grep -xE '    runs-on: ubuntu-latest' >/dev/null || die "$job does not run on ubuntu-latest only"
 }
 
 test_workflow_bootstrapper_test_gates_the_require_test_change_tests() {
@@ -1403,18 +1403,18 @@ test_workflow_bootstrapper_test_gates_the_e2e_check_tests() {
   [ -f "$HERE/test-e2e-check.sh" ] || die "no bootstrap/test-e2e-check.sh"
   assert_gated bootstrap/test-e2e-check.sh
   job="$(wf_jobs_running bootstrap/test-e2e-check.sh)"
-  wf_job "$job" | grep -qxE '    runs-on: ubuntu-latest' || die "$job does not run on ubuntu-latest"
+  wf_job "$job" | grep -xE '    runs-on: ubuntu-latest' >/dev/null || die "$job does not run on ubuntu-latest"
 }
 
 test_workflow_bootstrap_project_tests_run_on_ubuntu_macos_and_windows() {
   local j job oses
   j="$(matrix_job)"; job="$(wf_job "$j")"
-  printf '%s\n' "$job" | grep -qxF '    runs-on: ${{ matrix.os }}' || die "$j does not run on matrix.os"
+  grep -qxF '    runs-on: ${{ matrix.os }}' <<<"$job" || die "$j does not run on matrix.os"
   oses="$(printf '%s\n' "$job" | grep -E '^        os: \[' | sed -E 's/^        os: \[//; s/\][[:space:]]*$//' \
     | tr ',' '\n' | sed -E 's/^ +//; s/ +$//' | LC_ALL=C sort | tr '\n' ' ')"
   [ "$oses" = "macos-latest ubuntu-latest windows-latest " ] || die "matrix os is '$oses'"
   # All three results show, even when one leg fails first.
-  printf '%s\n' "$job" | grep -qxF '      fail-fast: false' || die "$j does not set fail-fast: false"
+  grep -qxF '      fail-fast: false' <<<"$job" || die "$j does not set fail-fast: false"
 }
 
 test_workflow_windows_leg_runs_the_tests_in_git_bash() {
@@ -1434,14 +1434,14 @@ test_workflow_macos_leg_runs_the_tests_with_bin_bash_3_2() {
   j="$(matrix_job)"
   mac="$(wf_step "$j" "^        if: runner[.]os == 'macOS'\$")"
   [ -n "$mac" ] || die "no step with if: runner.os == 'macOS' in $j"
-  printf '%s\n' "$mac" | grep -qE '^ +/bin/bash bootstrap/test-bootstrap-project\.sh *$' \
+  grep -qE '^ +/bin/bash bootstrap/test-bootstrap-project\.sh *$' <<<"$mac" \
     || die "the macOS step does not run the tests with /bin/bash"
-  printf '%s\n' "$mac" | grep -qE 'ln -sf? /bin/bash ' || die "the macOS step does not link bash to /bin/bash"
-  printf '%s\n' "$mac" | grep -qE 'PATH=' || die "the macOS step does not put that link first on PATH"
-  printf '%s\n' "$mac" | grep -qF 'BASH_VERSINFO' && printf '%s\n' "$mac" | grep -qF '3.2' \
+  grep -qE 'ln -sf? /bin/bash ' <<<"$mac" || die "the macOS step does not link bash to /bin/bash"
+  grep -qE 'PATH=' <<<"$mac" || die "the macOS step does not put that link first on PATH"
+  grep -qF 'BASH_VERSINFO' <<<"$mac" && grep -qF '3.2' <<<"$mac" \
     || die "the macOS step does not check that bash is 3.2"
   other="$(wf_step "$j" "^        if: runner[.]os != 'macOS'\$")"
-  printf '%s\n' "$other" | grep -qE '^ +run: bash bootstrap/test-bootstrap-project\.sh *$' \
+  grep -qE '^ +run: bash bootstrap/test-bootstrap-project\.sh *$' <<<"$other" \
     || die "no step runs the tests with bash on the other legs"
 }
 
@@ -1451,7 +1451,7 @@ test_real_build_does_not_ship_the_bootstrap_project_tests() {
   local out="$WORK/real.$RANDOM"
   bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
   [ -z "$(cd "$out" && find . -name 'test-bootstrap-project*')" ] || die "the script's tests shipped"
-  ! grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -qE '^bootstrap(/|$)' \
+  ! grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -E '^bootstrap(/|$)' >/dev/null \
     || die "bootstrap/ is listed in the manifest"
 }
 
@@ -1462,7 +1462,7 @@ test_real_build_does_not_ship_the_e2e_checker() {
   [ -f "$HERE/e2e-check.sh" ] || die "no bootstrap/e2e-check.sh"
   bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
   [ -z "$(cd "$out" && find . -name '*e2e-check*')" ] || die "the end-to-end checker or its tests shipped"
-  ! grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -qE '(^|/)(test-)?e2e-check\.sh$' \
+  ! grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -E '(^|/)(test-)?e2e-check\.sh$' >/dev/null \
     || die "the end-to-end checker is listed in the manifest"
 }
 
@@ -1545,7 +1545,7 @@ test_real_build_ships_the_project_script_at_the_root() {
   [ -f "$out/$f" ] || die "$f not shipped at the root"
   [ -x "$out/$f" ] || die "$f shipped without the executable bit"
   ! grep -q $'\r' "$out/$f" || die "$f has CR line endings"
-  head -n1 "$out/$f" | grep -qxF '#!/usr/bin/env bash' || die "$f has no bash shebang"
+  head -n1 "$out/$f" | grep -xF '#!/usr/bin/env bash' >/dev/null || die "$f has no bash shebang"
 }
 
 test_shipped_project_script_lays_out_from_its_own_languages_dir() {
@@ -1621,10 +1621,41 @@ test_project_script_avoids_listed_bash4_constructs() {
   grep -nvE '^[[:space:]]*#' "$f" >"$code" || true
   [ "$(wc -l <"$code")" -ge 20 ] || die "found almost no code lines; the filter is broken"
   for i in "${!pats[@]}"; do
-    printf '%s\n' "${samples[$i]}" | grep -qE -- "${pats[$i]}" \
+    grep -qE -- "${pats[$i]}" <<<"${samples[$i]}" \
       || die "pattern ${pats[$i]} misses its sample: ${samples[$i]}"
     ! grep -E -- "${pats[$i]}" "$code" >&2 || die "bash 4+ construct (${pats[$i]}) in $f"
   done
+}
+
+# A pipe that ends in grep -q fails at random under pipefail: grep -q
+# exits at the first match, the command writing into the pipe can then
+# die of SIGPIPE, and pipefail reports that as the result of the pipe
+# although the text matched (seen once in four runs of this file on a
+# loaded machine, 2026-10-26). Give grep -q a here-string or a file
+# instead, or drop -q and send grep's output to /dev/null: then grep
+# reads all of its input and the writer finishes.
+test_no_grep_q_at_the_end_of_a_pipe() {
+  local f g=grep code="$WORK/code.$RANDOM" big="$WORK/big.$RANDOM" s hits=""
+  local pat='(^|[^|])\|[[:space:]]*grep[[:space:]]+(-[A-Za-z]+[[:space:]]+)*(-[A-Za-z]*q|--quiet|--silent)'
+  # The pattern catches every form and leaves the safe ones alone.
+  for s in "x | $g -q y" "x |$g -qxF y" "x | $g -F -vq y" "! x | $g --quiet y"; do
+    grep -qE -- "$pat" <<<"$s" || die "the pattern misses: $s"
+  done
+  for s in "x || $g -q y" "$g -q y <<<\"\$x\"" "x | $g -xF y >/dev/null" "$g -q y file"; do
+    ! grep -qE -- "$pat" <<<"$s" || die "the pattern flags the safe form: $s"
+  done
+  # The /dev/null form is safe only if grep then reads all of its input.
+  awk 'BEGIN { print "match"; for (i = 0; i < 200000; i++) print "filler line" }' >"$big"
+  cat "$big" | grep -xF match >/dev/null \
+    || die "with its output to /dev/null, grep stopped reading at the first match: the /dev/null form is not safe"
+  for f in bootstrap/test.sh bootstrap/test-bootstrap-project.sh bootstrap/test-e2e-check.sh \
+           tools/test-layout-pack.sh bootstrap/check-shards.sh; do
+    [ -f "$REPO/$f" ] || die "no $f"
+    grep -q 'pipefail' "$REPO/$f" || die "$f no longer sets pipefail; update this test"
+    grep -nvE '^[[:space:]]*#' "$REPO/$f" >"$code" || true
+    if grep -E -- "$pat" "$code" | sed "s|^|$f:|" >&2; then hits="$hits $f"; fi
+  done
+  [ -z "$hits" ] || die "grep -q at the end of a pipe in:$hits (lines above)"
 }
 
 test_project_script_mentions_no_template_only_path() {
