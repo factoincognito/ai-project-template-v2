@@ -320,6 +320,95 @@ test_template_ci_is_not_in_the_manifest() {
     || die "the template's own ci.yml is listed in the manifest, so it would ship"
 }
 
+# ---------- changelog.yml: the reminder after a merge (shipped) ----------
+# After a merge, changelog.yml asks Crog for a CHANGELOG.md PR. A PR that
+# already changed CHANGELOG.md (such as a project's setup PR) gets no
+# reminder. The tests run the step's own run: script with a stub gh on
+# PATH that logs its calls and answers `gh api` with a list of files.
+
+CWF="$REPO/.github/workflows/changelog.yml"
+CHANGELOG_REMINDER="<!-- clead-changelog-step --> PR merged. Crog: open a PR updating CHANGELOG.md."
+
+# changelog_step_script <out>: write the step's run: | script to <out>.
+changelog_step_script() {
+  [ "$(grep -cE '^ *run:' "$CWF")" = 1 ] || die "changelog.yml must have exactly one run: step"
+  wf_run_block <"$CWF" >"$1"
+  [ -s "$1" ] || die "changelog.yml has no run: | script"
+}
+
+# run_changelog_step <dir> [file ...]: run the step for PR 7 of o/r with
+# a stub gh whose `gh api` prints the given file names, one per line (or
+# fails when GH_API_FAIL is set). Leaves the gh calls in <dir>/gh.log,
+# the output in <dir>/out and the exit code in <dir>/rc.
+run_changelog_step() {
+  local d="$1" rc=0; shift
+  mkdir -p "$d/bin"
+  : >"$d/gh.log"
+  if [ "$#" -gt 0 ]; then printf '%s\n' "$@" >"$d/files"; else : >"$d/files"; fi
+  cat >"$d/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$STUB_GH_LOG"
+case "$1" in
+  api) if [ -n "${GH_API_FAIL:-}" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi; cat "$STUB_GH_FILES" ;;
+  pr) exit 0 ;;
+  *) echo "stub gh: unexpected call: $*" >&2; exit 64 ;;
+esac
+STUB
+  chmod 755 "$d/bin/gh"
+  changelog_step_script "$d/step.sh"
+  PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" STUB_GH_FILES="$d/files" \
+    PR_NUMBER=7 REPO=o/r GH_TOKEN=t bash "$d/step.sh" >"$d/out" 2>&1 || rc=$?
+  echo "$rc" >"$d/rc"
+}
+
+# The two calls the step may make, as the stub logs them.
+CHANGELOG_API_CALL="api repos/o/r/pulls/7/files --paginate --jq .[].filename"
+CHANGELOG_COMMENT_CALL="pr comment 7 --body $CHANGELOG_REMINDER --repo o/r"
+
+test_changelog_reminder_is_posted_when_the_merged_pr_did_not_change_the_changelog() {
+  local d="$WORK/step"
+  run_changelog_step "$d" src/app.ts README.md docs/CHANGELOG.md
+  [ "$(cat "$d/rc")" = 0 ] || { cat "$d/out" >&2; die "the step failed"; }
+  printf '%s\n' "$CHANGELOG_API_CALL" "$CHANGELOG_COMMENT_CALL" >"$d/want"
+  diff "$d/want" "$d/gh.log" >&2 || die "the step did not read the PR's files and then post the reminder"
+}
+
+test_changelog_reminder_is_skipped_when_the_merged_pr_changed_the_changelog() {
+  # CHANGELOG.md anywhere in the list (the API pages are joined), and
+  # as the only file.
+  local d files
+  for files in "README.md CHANGELOG.md src/app.ts" "CHANGELOG.md"; do
+    d="$WORK/step.$RANDOM"
+    # shellcheck disable=SC2086 # split the list into file names
+    run_changelog_step "$d" $files
+    [ "$(cat "$d/rc")" = 0 ] || { cat "$d/out" >&2; die "the step failed for: $files"; }
+    printf '%s\n' "$CHANGELOG_API_CALL" >"$d/want"
+    diff "$d/want" "$d/gh.log" >&2 || die "the step posted a comment although the PR changed CHANGELOG.md: $files"
+    grep -qF "already changes CHANGELOG.md" "$d/out" || { cat "$d/out" >&2; die "no log line says why the reminder was skipped"; }
+  done
+}
+
+test_changelog_reminder_step_fails_and_posts_nothing_when_the_file_list_cannot_be_read() {
+  local d="$WORK/step"
+  GH_API_FAIL=1 run_changelog_step "$d" src/app.ts
+  [ "$(cat "$d/rc")" != 0 ] || die "the step passed although gh api failed"
+  printf '%s\n' "$CHANGELOG_API_CALL" >"$d/want"
+  diff "$d/want" "$d/gh.log" >&2 || die "the step posted a comment although it could not read the PR's files"
+}
+
+test_changelog_workflow_runs_on_merged_prs_with_the_token_it_needs() {
+  grep -qE '^    types: \[closed\]$' "$CWF" || die "changelog.yml no longer runs on closed PRs"
+  grep -qxF '    if: github.event.pull_request.merged == true' "$CWF" || die "the job is not limited to merged PRs"
+  grep -qxF '      pull-requests: write' "$CWF" || die "the job cannot comment on the PR"
+  grep -qxF '      contents: read' "$CWF" || die "the job lacks contents: read"
+  grep -qxF '          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}' "$CWF" || die "the step does not get the job's token"
+  grep -qxF '          PR_NUMBER: ${{ github.event.pull_request.number }}' "$CWF" || die "the step does not get the PR number"
+  grep -qxF '          REPO: ${{ github.repository }}' "$CWF" || die "the step does not get the repo"
+  local s="$WORK/step.sh"
+  changelog_step_script "$s"
+  ! grep -nF '${{' "$s" >&2 || die "the run: script uses an expression; pass it in env instead"
+}
+
 # ---------- build.sh: argument errors ----------
 
 test_wrong_arg_count_fails_with_usage() {
