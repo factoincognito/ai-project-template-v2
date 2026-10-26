@@ -348,6 +348,8 @@ case "${1:-}" in
     # STUB_GH_USER_FAIL, STUB_GH_CHANGELOG_FAIL and STUB_GH_REPO_FAIL make
     # those calls fail as <mode> (see emit_failure): always, or while the
     # counter file user-fails, changelog-fails or repo-fails is above 0.
+    # With STUB_GH_REPO_FAIL_LATER set too, the project call fails as that
+    # mode once repo-fails runs out.
     # After a project is made, three more calls are emulated:
     #   - api -i repos/OWNER/NAME/branches/main and .../contents/CHANGELOG.md:
     #     404 while the counter file main-missing (or changelog-missing) is
@@ -501,6 +503,7 @@ case "${1:-}" in
       printf '%s\n' "${3#licenses/}"
     elif [ "$#" -eq 3 ] && [ "$2" = -i ] && [ "${3#repos/}" != "$3" ]; then
       if [ -n "${STUB_GH_REPO_FAIL:-}" ] && should_fail repo-fails; then emit_failure "$STUB_GH_REPO_FAIL"; fi
+      if [ -n "${STUB_GH_REPO_FAIL:-}" ] && [ -n "${STUB_GH_REPO_FAIL_LATER:-}" ]; then emit_failure "$STUB_GH_REPO_FAIL_LATER"; fi
       if [ -f "${STUB_GH_LOG%/*}/created" ] && grep -qxF -- "${3#repos/}" "${STUB_GH_LOG%/*}/created"; then
         respond 200 OK 'application/json; charset=utf-8'
         printf '{"full_name":"%s","private":false}\n' "${3#repos/}"
@@ -7946,6 +7949,52 @@ test_resume_with_no_project_on_github_creates_nothing() {
   expect_out "$d" "There is no project named octo-user/my-app on GitHub to continue."
   grep -A1 -xF 'To start again, run this command:' "$d/out" | sed -n 2p >"$d/cmd"
   grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "no command to start again without --resume"; }
+  expect_nothing_created "$d"
+}
+
+test_resume_continues_with_resume_once_the_project_missing_at_first_is_found() {
+  # #203 review: --resume, the project not found at the first check (a
+  # typing mistake, or not made yet), found after Enter at the guide. The
+  # run goes on, and a later stop shows the command to continue with
+  # --resume: the guide's "start again" choice is not kept.
+  local d
+  built_bootstrapper
+  d="$(tmpdir)"
+  seed_existing "$d" octo-user/my-app "$BUILT"
+  export STUB_GH_EXISTING="octo-user/my-app" STUB_GH_REPO_FAIL=not-found STUB_GH_PROTECT_FAIL=token
+  echo 1 >"$d/repo-fails"
+  printf '\nyes\n' >"$d/in"
+  setup_run "$d" --resume --allow-unprotected
+  unset STUB_GH_EXISTING STUB_GH_REPO_FAIL STUB_GH_PROTECT_FAIL
+  expect_rc 3 "$d"
+  expect_out "$d" "There is no project named octo-user/my-app on GitHub to continue."
+  expect_out "$d" "    Done. The project octo-user/my-app exists on GitHub, which --resume allows."
+  expect_out "$d" "==> Protecting"
+  expect_continue_command "$d" " --resume"
+  # --allow-unprotected, given, is carried too (the same choice gates it).
+  expect_continue_command "$d" " --allow-unprotected"
+}
+
+test_resume_keeps_resume_when_the_check_after_the_project_missing_guide_fails() {
+  # #207 review, N1: --resume, the project not found at the first check;
+  # after Enter at the guide, GitHub has a problem of its own. Whether the
+  # project exists is not known, so the stop keeps --resume as given: only
+  # the latest answer counts, not the guide's "start again" choice.
+  local d line
+  d="$(tmpdir)"
+  export STUB_GH_REPO_FAIL=not-found STUB_GH_REPO_FAIL_LATER=server
+  echo 1 >"$d/repo-fails"
+  printf '\n' >"$d/in"
+  setup_run "$d" --resume
+  unset STUB_GH_REPO_FAIL STUB_GH_REPO_FAIL_LATER
+  expect_rc 1 "$d"
+  expect_out "$d" "There is no project named octo-user/my-app on GitHub to continue."
+  expect_err_shape "$d" "GitHub had a problem of its own"
+  line="$(grep -A1 -xE 'To continue the setup, run this command:|To start again, run this command:' "$d/out" | tail -1)"
+  case "$line " in
+    "    bash "*" --resume "*) ;;
+    *) cat "$d/out" "$d/err" >&2; die "the command shown after the failed check has no --resume (got: $line)" ;;
+  esac
   expect_nothing_created "$d"
 }
 
