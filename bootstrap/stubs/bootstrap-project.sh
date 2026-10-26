@@ -4248,6 +4248,14 @@ finish_copy() {
   step_end "The copy in $IN_DIR is on the main version, with the setup's changes, and nothing is left unsaved.${KEPT_LINE_OF_WORK:+ Its line of work $SETUP_BRANCH was kept: it holds changes that are not in the main version.}"
 }
 
+# say_what_next: the one next step and then, as the very last line the
+# script prints, where to go when stuck (end-to-end run 1, finding 10).
+# One text for every ending of report, so the endings cannot drift.
+say_what_next() {
+  say "What to do next: in the Claude app, create a Claude Project for this project, add the project on GitHub, https://github.com/$IN_OWNER/$IN_NAME, to that Claude Project, and start a chat inside the Claude Project. The file CLAUDE.md in the project tells Claude the rest."
+  say "If you ever feel stuck and do not know how to go on, Clead (Claude, the project's Tech Owner) is always there to help: just ask Clead for help, a recommendation or advice in the chat."
+}
+
 # HAVE_COPY: the copy of the project is on this computer (--resume found
 # the setup already added and no copy, and does not make one).
 HAVE_COPY=1
@@ -4290,12 +4298,8 @@ report() {
     say "    - these rules apply to the project's admins too"
     say "    - nobody may overwrite the history of the main version or delete it"
   fi
-  if [ -n "$CHANGE_ADDED" ]; then
-    say "What to do next: open the Claude app, give it the project, https://github.com/$IN_OWNER/$IN_NAME, and start a chat. The file CLAUDE.md in the project tells Claude the rest."
-  else
-    say_left_for_clead
-    say "What to do next: open the Claude app, give it the new project, https://github.com/$IN_OWNER/$IN_NAME, and start a chat. The file CLAUDE.md in the project tells Claude the rest."
-  fi
+  [ -n "$CHANGE_ADDED" ] || say_left_for_clead
+  say_what_next
 }
 
 # ---------- stops nobody planned for ----------
