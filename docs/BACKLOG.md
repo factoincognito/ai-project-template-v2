@@ -746,6 +746,22 @@ get a working project in any supported language.
 
   **Rules that apply.**
   Script, workflow and release changes are code and config: test-first, reviewed by the role that did not write it. README and first-session changes are process: reviewed by Crog. The design needs Adam's intent approval, because it changes what every user does.
+
+- **[LATER] PBI-1.21** (Clead, 2026-10-26, agreed with Adam in chat; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — The release tag is created by merging the release prep PR, not by hand.
+
+  **Why.** Today Adam creates every `v*` tag from the Releases page, because the access proxy refuses tag and release writes from a Clead session (checked again 2026-10-26: `POST git/refs` and `POST releases` both return 403 from the proxy, nothing created). Adam does not want a release to depend on him being at his computer or on its browser (2026-10-26).
+
+  **Candidate HOW (not decided).** A workflow on `main` creates the `v*` tag at the merge commit when a merged PR from a `release/*` branch adds a new version heading to `CHANGELOG.md`, using the existing publish token (a tag pushed with the default `GITHUB_TOKEN` does not start the tag run). The tag run then tests and publishes as today. The trigger stays narrow, so a stray CHANGELOG edit can never release; the token's added scope is checked in the design.
+
+  **Scope (Adam, 2026-10-26).** Built for every bootstrapped project, not only for the template: the workflow and a short release section in the shipped docs go into `bootstrap/manifest.txt`, so a new project releases the same way from day one. The template's own extra steps (publishing to `ai-project-bootstrap`, stamping the script) stay template-only. Existing projects get it only through NEXT_SESSION item 1 (applying v2 workflows to other projects), which is still open. The product office does not hold the procedure; at most it asks each project whether a release waits for Adam's go (NEXT_SESSION item 15).
+
+  **Conditions (Adam, 2026-10-26).**
+  - Adam's go stays the gate: a release prep PR merges only with his explicit yes in chat, recorded on the PR. It replaces his click on Publish.
+  - Built after NEXT_SESSION item 18 (rolling back by re-tagging) has been tried once, because releasing on merge makes a known way back more important.
+
+  **Done when.** Merging a release prep PR, with Adam's recorded yes, creates the tag at its merge commit, the tag run is green including `publish`, and a PR without that branch name or heading creates no tag (tested in the workflow tests). A freshly bootstrapped project has the same workflow and doc, and a release prep PR there creates its tag (checked in an end-to-end run).
+
+  **Rules that apply.** A release-process change: the workflow is code (test-first, reviewed by Crog), the process change needs Adam's intent approval, and CLAUDE.md, `docs/DEV_INFRASTRUCTURE.md` and the release decision rows are updated with it.
 ---
 
 ## Phase 2 — Validate unproven pieces
