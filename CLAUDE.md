@@ -257,6 +257,21 @@ work is done, without asking (Adam, 2026-10-24). The session that created
 it does this when it is still running; otherwise the session the task
 started deletes its own task before ending.
 
+### Parallel sessions
+- **Parallel sessions** (product office rule, 2026-10-27). More than one
+  session may work in this repo at once; they coordinate through the repo,
+  never through the product owner.
+  - Before changing files, claim the work: open a draft PR (an empty commit
+    is enough) whose description names the area and the files you expect
+    to change.
+  - At startup, and before opening or updating each PR, list the open PRs
+    and non-main branches.
+  - If another open PR claims files you need, do not edit them: comment on
+    that PR and settle the overlap there (who goes first, or who waits for
+    the other's merge).
+  - On a conflict, merge `main` into your branch and keep both sides'
+    content where possible; never rebase or force-push a pushed branch.
+
 ### Memory rule
 Canonical state is always in Git. Do not store derivable state
 (current PBI, PR status) in memory files — derive it from the repo.
