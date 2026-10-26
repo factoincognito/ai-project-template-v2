@@ -21,4 +21,4 @@ Getting the bootstrapper through Adam's end-to-end runs, which must pass before 
 Adam repeats end-to-end run 1 on v2.5.0, as written in `docs/NEXT_SESSION.md` (Adam's to-do 2), and gives Clead the output of `bootstrap/e2e-check.sh`; Clead reads it and records the findings.
 
 ## Blockers
-Adam: the end-to-end runs (run 1 repeated on v2.5.0, then runs 2 to 4, and run 5 with someone new to the terminal). PBI-1.17 stays `[NEXT]` and acuteping waits until they pass.
+Product Owner: the end-to-end runs (run 1 repeated on v2.5.0, then runs 2 to 4, and run 5 with someone new to the terminal). PBI-1.17 stays `[NEXT]` and acuteping waits until they pass.

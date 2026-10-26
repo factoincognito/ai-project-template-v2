@@ -308,7 +308,7 @@ The next concrete step and who takes it.
 
 ## Blockers
 What stops progress, and who can unblock it. "None" when nothing does.
-A blocker that waits on Adam starts with "Adam:".
+A blocker that waits on the product owner starts with "Product Owner:".
 TEXT
   diff "$want" "$body" >&2 || die "STATUS.md after its comment is not the fixed format (diff above)"
 }
