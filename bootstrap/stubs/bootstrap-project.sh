@@ -2362,6 +2362,69 @@ pause_for() {
   "${BOOTSTRAP_SLEEP:-sleep}" "$1"
 }
 
+# plan_steps [state]: the six steps of the setup, in the words of the
+# plan. A new setup (no state) shows them as they are, under the heading
+# show_plan gives; --resume shows the
+# same list, each step marked from RESUME_STATE (end-to-end run 1,
+# finding 7), so the two lists cannot drift apart. (next) is the first
+# step run_steps carries out in that state: template and fresh go on at
+# the protection (fresh has its copy already); saved, sent and proposed go
+# on in step 5, but sent and proposed first make a new copy when there is
+# none (resume_copy); added only re-checks the protection, brings a copy
+# that is there up to date, and reports (resume_added makes no copy).
+plan_steps() {
+  local state="${1:-}" marks="- - - - - -" m1 m2 m3 m4 m5 m6
+  case "$state" in
+    template) marks="done next - - - -" ;;
+    fresh) marks="done next done - - -" ;;
+    saved) marks="done done done done next -" ;;
+    sent | proposed)
+      if [ -n "$COPY_PRESENT" ]; then marks="done done done done next -"; else marks="done done next done - -"; fi
+      ;;
+    added)
+      if [ -n "$COPY_PRESENT" ]; then marks="done done done done done next"; else marks="done done skipped done done next"; fi
+      ;;
+  esac
+  # shellcheck disable=SC2086 # the marks are split into the six words on purpose
+  set -- $marks
+  step_mark "$1"; m1="$STEP_MARK"
+  step_mark "$2"; m2="$STEP_MARK"
+  # Past the protection with --allow-unprotected, the run that stopped may
+  # have gone on without it.
+  if [ "$2" = done ] && [ -n "$OPT_ALLOW_UNPROTECTED" ]; then m2=" (done, or skipped with --allow-unprotected)"; fi
+  step_mark "$3"; m3="$STEP_MARK"
+  step_mark "$4"; m4="$STEP_MARK"
+  step_mark "$5"; m5="$STEP_MARK"
+  step_mark "$6"; m6="$STEP_MARK"
+  # show_plan gives a new setup's heading itself.
+  [ -z "$state" ] || say "The steps, in this order: (done) marks a step that is done already, and (next) the step the setup continues with."
+  say "  1. Create the project on GitHub, with the bootstrapper's files in it.$m1"
+  say "  2. Protect its main version, so that from then on every change comes as a proposed change, not straight into it.$m2"
+  say "  3. Make a copy of the project on this computer, in $IN_DIR.$m3"
+  if [ "$4" = done ]; then
+    # Done in the run that stopped, with the licence chosen then, which
+    # this run's answer need not be.
+    say "  4. Add the language pack's files, fill in the project's names and description, and add the licence that was chosen, if one was.$m4"
+  elif [ "$IN_LICENSE" = none ]; then
+    say "  4. Add the language pack's files and fill in the project's names and description; no licence file is added, because you chose none.$m4"
+  else
+    say "  4. Add the language pack's files, fill in the project's names and description, and add the licence $IN_LICENSE.$m4"
+  fi
+  say "  5. Send these changes to GitHub as one proposed change, wait for the project's checks to pass, then add the change to the main version.$m5"
+  say "  6. Show what was made, and the one thing to do next.$m6"
+}
+
+# step_mark <done|next|skipped|->: STEP_MARK is the text put after a step.
+STEP_MARK=""
+step_mark() {
+  case "$1" in
+    done) STEP_MARK=" (done)" ;;
+    next) STEP_MARK=" (next)" ;;
+    skipped) STEP_MARK=" (skipped: the script makes no copy of a project that is set up already)" ;;
+    *) STEP_MARK="" ;;
+  esac
+}
+
 show_plan() {
   local vis licence deploy=""
   if [ "$IN_VISIBILITY" = private ]; then
@@ -2388,16 +2451,7 @@ show_plan() {
   say "    Your name and email for git: $IN_GIT_NAME, $IN_GIT_EMAIL"
   say "    Waiting for the project's checks: up to $IN_CI_TIMEOUT minutes"
   say "The steps, in this order:"
-  say "  1. Create the project on GitHub, with the bootstrapper's files in it."
-  say "  2. Protect its main version, so that from then on every change comes as a proposed change, not straight into it."
-  say "  3. Make a copy of the project on this computer, in $IN_DIR."
-  if [ "$IN_LICENSE" = none ]; then
-    say "  4. Add the language pack's files and fill in the project's names and description; no licence file is added, because you chose none."
-  else
-    say "  4. Add the language pack's files, fill in the project's names and description, and add the licence $IN_LICENSE."
-  fi
-  say "  5. Send these changes to GitHub as one proposed change, wait for the project's checks to pass, then add the change to the main version."
-  say "  6. Show what was made, and the one thing to do next."
+  plan_steps
   # Step 4 adds no licence: the warning step 10 gives, before anything
   # is created.
   if [ "$IN_LICENSE" = none ] && [ "$IN_VISIBILITY" != private ]; then
@@ -4781,6 +4835,7 @@ cmd_setup() {
   preflight_license
   if [ -n "$OPT_RESUME" ]; then
     resume_plan
+    plan_steps "$RESUME_STATE"
     if [ -n "$OPT_DRY_RUN" ]; then
       say "This was a dry run (--dry-run): the checks passed, and nothing was changed."
       exit 0

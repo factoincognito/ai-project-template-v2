@@ -4319,6 +4319,8 @@ test_the_plan_is_shown_after_the_checks_and_a_dry_run_creates_nothing() {
   expect_out "$d" "This was a dry run (--dry-run): the checks passed, and nothing was created."
   expect_no_out "$d" "Proceed?"
   expect_no_out "$d" "needs a paid GitHub plan"
+  # A new setup marks no step (finding 7 marks them only on --resume).
+  [ "$(plan_section "$d/out" | step_marks)" = "- - - - - -" ] || { cat "$d/out" >&2; die "a step of a new setup's plan is marked"; }
   grep -n 'Done. No project named octo-user/my-app exists on GitHub yet.' "$d/out" | cut -d: -f1 >"$d/a"
   grep -n 'Here is the plan' "$d/out" | cut -d: -f1 >"$d/p"
   [ -s "$d/a" ] && [ "$(cat "$d/a")" -lt "$(cat "$d/p")" ] || { cat "$d/out" >&2; die "the plan came before the checks"; }
@@ -4332,6 +4334,97 @@ test_the_plan_is_shown_after_the_checks_and_a_dry_run_creates_nothing() {
   expect_rc 0 "$d"
   expect_out "$d" "needs a paid GitHub plan"
   expect_nothing_created "$d"
+}
+
+# plan_section <file>: the lines of the output from the plan's list of
+# steps on (a new setup's heading and a resumed one's both start so).
+plan_section() { sed -n '/^The steps, in this order/,$p' "$1"; }
+
+# step_marks: reads output on stdin; prints the mark at the end of each of
+# the first six numbered steps, one word each: done, next, skipped, or -
+# for none.
+step_marks() {
+  grep -E '^  [1-6]\. ' | head -6 | awk '
+    / \(done\)$/ { m = "done" }
+    / \(next\)$/ { m = "next" }
+    / \(skipped: [^)]*\)$/ { m = "skipped" }
+    { printf "%s%s", sep, (m == "" ? "-" : m); sep = " "; m = "" }
+    END { print "" }'
+}
+
+# RESUME_STEPS_HEADING: the heading of the steps on a --resume run.
+RESUME_STEPS_HEADING='The steps, in this order: (done) marks a step that is done already, and (next) the step the setup continues with.'
+
+# expect_resume_steps <dir> <marks>: a --resume run showed the six steps,
+# under their heading, after it said where the setup stopped, with these
+# marks (as step_marks prints them).
+expect_resume_steps() {
+  local d="$1" h w got
+  h="$(grep -n -xF "$RESUME_STEPS_HEADING" "$d/out" | head -1 | cut -d: -f1 || true)"
+  w="$(grep -n -xF '==> Working out where the setup stopped, from GitHub and from the copy on this computer' "$d/out" | head -1 | cut -d: -f1 || true)"
+  [ -n "$h" ] && [ -n "$w" ] && [ "$w" -lt "$h" ] || { cat "$d/out" >&2; die "no marked steps after working out where the setup stopped"; }
+  got="$(plan_section "$d/out" | step_marks)"
+  [ "$got" = "$2" ] || { cat "$d/out" >&2; die "the steps are marked $got, want $2"; }
+}
+
+test_the_steps_of_the_plan_are_marked_from_the_resume_state() {
+  # End-to-end run 1, finding 7: --resume shows the same six steps as the
+  # plan of a new setup, from the same function, each marked from the
+  # state. (next) is the first step the run carries out, as run_steps
+  # does it: template and fresh go on at the protection (fresh has its
+  # copy already); saved, sent and proposed go on in step 5, but sent and
+  # proposed first make a new copy when there is none (resume_copy); added
+  # only re-checks the protection and reports, and makes no copy.
+  local d c state copy want got
+  d="$(tmpdir)"
+  ( load_script; IN_DIR=./my-app IN_LICENSE=mit; plan_steps ) >"$d/new"
+  [ "$(sed -n 1p "$d/new")" = "  1. Create the project on GitHub, with the bootstrapper's files in it." ] || { cat "$d/new" >&2; die "a new setup's steps do not start with step 1 (show_plan gives their heading)"; }
+  [ "$(step_marks <"$d/new")" = "- - - - - -" ] || { cat "$d/new" >&2; die "the steps of a new setup are marked"; }
+  grep '^  [1-6]\. ' "$d/new" >"$d/new-steps"
+  grep -v '^  4\. ' "$d/new-steps" >"$d/new-but-4"
+  for c in "template|-|done next - - - -" "fresh|1|done next done - - -" \
+    "saved|1|done done done done next -" \
+    "sent|1|done done done done next -" "sent|-|done done next done - -" \
+    "proposed|1|done done done done next -" "proposed|-|done done next done - -" \
+    "added|1|done done done done done next" "added|-|done done skipped done done next"; do
+    state="${c%%|*}"
+    copy="${c#*|}"
+    copy="${copy%%|*}"
+    want="${c##*|}"
+    [ "$copy" != - ] || copy=""
+    ( load_script; IN_DIR=./my-app IN_LICENSE=mit COPY_PRESENT="$copy"; plan_steps "$state" ) >"$d/$state$copy"
+    [ "$(sed -n 1p "$d/$state$copy")" = "$RESUME_STEPS_HEADING" ] || { cat "$d/$state$copy" >&2; die "$state: not the heading of a resumed setup"; }
+    got="$(step_marks <"$d/$state$copy")"
+    [ "$got" = "$want" ] || { cat "$d/$state$copy" >&2; die "$state (copy: ${copy:-none}): marks $got, want $want"; }
+    # The same words as a new setup's steps, the mark aside. A step 4 done
+    # already does not name this run's licence: the change was made with
+    # the licence chosen then.
+    sed -E 's/ \((done|next|skipped: [^)]*)\)$//' "$d/$state$copy" | grep '^  [1-6]\. ' >"$d/bare"
+    case "$state" in
+      template | fresh) expect_same "$state: the steps" "$d/new-steps" "$d/bare" ;;
+      *)
+        grep -v '^  4\. ' "$d/bare" >"$d/bare-but-4"
+        expect_same "$state: steps 1 to 3, 5 and 6" "$d/new-but-4" "$d/bare-but-4"
+        ! grep -q '^  4\. .*mit' "$d/bare" || { cat "$d/bare" >&2; die "$state: step 4 names this run's licence"; }
+        ;;
+    esac
+  done
+  # The skipped mark says why, in plain words.
+  grep -qxF "  3. Make a copy of the project on this computer, in ./my-app. (skipped: the script makes no copy of a project that is set up already)" "$d/added" \
+    || { cat "$d/added" >&2; die "added with no copy: step 3 does not say why it is skipped"; }
+  # With --allow-unprotected the protection may have been left out, so a
+  # step 2 that is past is not said to be simply done; one still to come
+  # is (next) as before.
+  ( load_script; IN_DIR=./my-app IN_LICENSE=mit COPY_PRESENT=1 OPT_ALLOW_UNPROTECTED=1; plan_steps sent ) >"$d/allow"
+  grep -qxF "  2. Protect its main version, so that from then on every change comes as a proposed change, not straight into it. (done, or skipped with --allow-unprotected)" "$d/allow" \
+    || { cat "$d/allow" >&2; die "sent with --allow-unprotected: step 2 is said to be done"; }
+  ( load_script; IN_DIR=./my-app IN_LICENSE=mit COPY_PRESENT="" OPT_ALLOW_UNPROTECTED=1; plan_steps template ) >"$d/allow2"
+  [ "$(step_marks <"$d/allow2")" = "done next - - - -" ] || { cat "$d/allow2" >&2; die "template with --allow-unprotected: marks changed"; }
+  # With --license none a step 4 done already does not say none was chosen.
+  ( load_script; IN_DIR=./my-app IN_LICENSE=none COPY_PRESENT=1; plan_steps saved ) >"$d/none"
+  ! grep -qF 'you chose none' "$d/none" || { cat "$d/none" >&2; die "saved: step 4 speaks of this run's licence none"; }
+  # Every word of every list passes the plain-language check.
+  [ -z "$(cat "$d"/* | awk '{print NR ": " $0}' | banned_hits)" ] || die "banned word in the steps"
 }
 
 test_proceed_is_asked_with_no_as_its_default() {
@@ -7409,6 +7502,7 @@ test_resume_continues_a_project_with_only_the_template_from_step_3() {
   again "$d"
   expect_rc 0 "$d"
   expect_out "$d" "    Done. The project has only the bootstrapper's files, and there is no copy of it on this computer yet: the setup continues by protecting its main version."
+  expect_resume_steps "$d" "done next - - - -"
   ! calls_since "$d" "$n" | grep -q '^repo create ' || die "a second project was created"
   calls_since "$d" "$n" | grep -qxF "$PROTECT_CALL" || die "the protection was not asked for again"
   calls_since "$d" "$n" | grep -qxF "$CLONE_CALL" || die "no copy was made"
@@ -7447,6 +7541,7 @@ test_resume_redoes_the_copys_steps_in_a_copy_with_nothing_saved_and_takes_anothe
   again "$d" --license mit
   expect_rc 0 "$d"
   expect_out "$d" "    Done. The project has only the bootstrapper's files, and its copy on this computer has none of the setup's changes: the setup continues by protecting its main version, then uses that copy."
+  expect_resume_steps "$d" "done next done - - -"
   [ "$(grep -c '	repo	clone	' "$d/gh.log")" -eq 1 ] || die "a second copy was made"
   expect_one_of_each "$d"
   c="$(copy_of "$d")"
@@ -7467,6 +7562,7 @@ test_resume_sends_a_saved_change_that_was_not_sent() {
   again "$d"
   expect_rc 0 "$d"
   expect_out "$d" "    Done. The setup's changes are saved in the copy on this computer but not sent to GitHub: the setup continues by sending them."
+  expect_resume_steps "$d" "done done done done next -"
   [ "$(saved_changes "$d")" -eq 1 ] || die "the change was saved again"
   [ "$(cat "$d/merged-head")" = "$sha" ] || die "what was added is not the change saved before"
   ! calls_since "$d" "$n" | grep -qE '^repo (create|clone) ' || die "the project or the copy was made again"
@@ -7486,6 +7582,7 @@ test_resume_proposes_a_sent_change_that_was_not_proposed() {
   again "$d"
   expect_rc 0 "$d"
   expect_out "$d" "    Done. The setup's changes are on GitHub, on the line of work bootstrap-setup, but not proposed: the setup continues by proposing them."
+  expect_resume_steps "$d" "done done done done next -"
   [ "$(calls_since "$d" "$n" | grep -c '^pr create ')" -eq 1 ] || die "not proposed once"
   [ "$(saved_changes "$d")" -eq 1 ] || die "the change was saved again"
   [ "$(grep -c ' push origin bootstrap-setup$' "$d/tools.log")" -eq 1 ] || die "the change was sent again"
@@ -7513,6 +7610,10 @@ test_resume_waits_for_build_on_the_proposed_change_that_is_there() {
     esac
     expect_rc 0 "$d"
     expect_out "$d" "    Done. The setup's changes are proposed on GitHub, at https://github.com/octo-user/my-app/pull/1: the setup continues by waiting for the check build."
+    case "$how" in
+      moved) expect_resume_steps "$d" "done done next done - -" ;;
+      *) expect_resume_steps "$d" "done done done done next -" ;;
+    esac
     ! calls_since "$d" "$n" | grep -q '^pr create ' || die "$how: a second proposed change"
     calls_since "$d" "$n" | grep -qxF "$CHECKS_CALL" || die "$how: build was not looked at"
     case "$how" in
@@ -7665,6 +7766,7 @@ test_resume_of_a_finished_setup_only_checks_the_protection_and_reports() {
   setup_run "$d" --non-interactive --yes --resume
   expect_rc 0 "$d"
   expect_out "$d" "    Done. The project is set up already: the script only checks its protection, brings the copy on this computer up to date if there is one, and shows the report."
+  expect_resume_steps "$d" "done done done done done next"
   ! calls_since "$d" "$n" | grep -qE '^(repo create|repo clone|repo edit|pr create|pr merge) |-X PUT' || { calls_since "$d" "$n" >&2; die "something was changed"; }
   calls_since "$d" "$n" | grep -qxF "$READBACK_CALL" || die "the protection was not read back"
   grep -qxF '    The proposed change with the setup: https://github.com/octo-user/my-app/pull/1' "$d/out" || { cat "$d/out" >&2; die "the report lacks the proposed change"; }
@@ -7815,6 +7917,7 @@ test_resume_dry_run_says_where_it_continues_and_changes_nothing() {
   expect_rc 0 "$d"
   expect_out "$d" "    Done. The setup's changes are proposed on GitHub, at https://github.com/octo-user/my-app/pull/1: the setup continues by waiting for the check build."
   expect_out "$d" "This was a dry run (--dry-run): the checks passed, and nothing was changed."
+  expect_resume_steps "$d" "done done done done next -"
   ! calls_since "$d" "$n" | grep -qE '^(repo|pr) |-X PUT' || { calls_since "$d" "$n" >&2; die "something was changed or looked at past the plan"; }
 }
 
@@ -8298,6 +8401,7 @@ test_a_hand_made_project_that_is_set_up_already_is_only_checked_and_changes_noth
   expect_rc 0 "$d"
   expect_out "$d" "    Done. The project is set up already:"
   grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "no report"; }
+  expect_resume_steps "$d" "done done skipped done done next"
   cmp -s "$d/protected" "$d/protected.before" || die "the protection changed"
   nothing_changed_on_github "$d"
   [ "$(in_git --git-dir="$(bare_of "$d")" rev-list --count main)" -eq 1 ] || die "main changed"
