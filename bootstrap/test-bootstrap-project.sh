@@ -1629,7 +1629,7 @@ test_user_facing_strings_are_collected() {
     'Why this is needed: ' 'When it has worked: ' 'If you see something else: ' \
     'How the script checks it: ' 'To start again, run this command' 'git is not installed' \
     'Your name for git' 'Your email address for git' 'Proceed? (yes or no)' 'Here is the plan' \
-    'needs a paid GitHub plan' 'The setup is finished' 'open the Claude app' \
+    'needs a paid GitHub plan' 'The setup is finished' 'create a Claude Project' 'is always there to help' \
     "Waiting for the project's check build" 'Making the check build required' \
     'To continue the setup, run this command' 'Making a copy of the project on this computer' \
     'line of work' 'already has' 'is inside another project that git keeps track of' \
@@ -4172,6 +4172,11 @@ ALLOWED_CALL='api -i repos/octo-user/my-app/actions/permissions --jq .allowed_ac
 END_CALLS=("$CHECKS_CALL" "$PROTECT_CALL" "$READBACK_CALL" "$MERGE_CALL" "$MERGED_CALL")
 # The first line of the report at the end: the run went through.
 FINISHED='The setup is finished.'
+# The last two lines of every report (end-to-end run 1, finding 10): the
+# one next step, the same after a new setup and after --resume, and then
+# where to go when stuck, as the very last line.
+WHAT_NEXT='What to do next: in the Claude app, create a Claude Project for this project, add the project on GitHub, https://github.com/octo-user/my-app, to that Claude Project, and start a chat inside the Claude Project. The file CLAUDE.md in the project tells Claude the rest.'
+ASK_CLEAD="If you ever feel stuck and do not know how to go on, Clead (Claude, the project's Tech Owner) is always there to help: just ask Clead for help, a recommendation or advice in the chat."
 
 # built_bootstrapper: BUILT is a bootstrapper made by bootstrap/build.sh
 # from this template, stamped BUILT_VERSION; built once per harness run.
@@ -7101,8 +7106,8 @@ These parts of the project are left for your first session with Clead (Claude, t
   - the goals, [Goal], and the rest of memory/project.md;
   - the questions in square brackets in the sections of docs/SPEC.md;
   - memory/context.md.
-What to do next: open the Claude app, give it the new project, https://github.com/octo-user/my-app, and start a chat. The file CLAUDE.md in the project tells Claude the rest.
 TEXT
+  printf '%s\n' "$WHAT_NEXT" "$ASK_CLEAD" >>"$d/want"
   expect_same "the report" "$d/want" "$d/report"
   [ -z "$(awk '{print NR ": " $0}' "$d/report" | banned_hits)" ] || { cat "$d/report" >&2; die "banned word in the report"; }
   [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "a run that went through wrote to stderr"; }
@@ -7113,6 +7118,65 @@ TEXT
   expect_rc 0 "$d"
   grep -qxF '    Licence: none, so no licence file' "$d/out" || { cat "$d/out" >&2; die "none: the licence line"; }
   grep -qxF '    Language pack: web, with the files that publish the website' "$d/out" || { cat "$d/out" >&2; die "web: the pack line"; }
+}
+
+# last_two <dir>: the last two lines of its out, as "<line>|<line>".
+last_two() { tail -n 2 "$1/out" | tr -d '\r' | paste -sd '|' -; }
+
+test_every_report_ends_with_the_next_step_and_then_the_line_on_asking_clead() {
+  # End-to-end run 1, finding 10: the next step says to create a Claude
+  # Project and chat inside it, and the very last line printed says Clead
+  # is there to help. The same two lines end a new setup, a --resume of a
+  # project the script set up, and a --resume of a project set up by hand
+  # (the "set up already" ending), with nothing on stderr after them.
+  local d want
+  want="$WHAT_NEXT|$ASK_CLEAD"
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 0 "$d"
+  [ "$(last_two "$d")" = "$want" ] || { cat "$d/out" >&2; die "new setup: the report does not end with the next step and the line on asking Clead"; }
+  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "new setup: stderr after the report"; }
+  setup_run "$d" --non-interactive --yes --resume
+  expect_rc 0 "$d"
+  [ "$(last_two "$d")" = "$want" ] || { cat "$d/out" >&2; die "resumed, set up already: the report does not end with the two lines"; }
+  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "resumed: stderr after the report"; }
+  d="$(tmpdir)"
+  hand_made_project "$d"
+  export STUB_GH_EXISTING=octo-user/my-app
+  setup_run "$d" --non-interactive --yes --resume
+  unset STUB_GH_EXISTING
+  expect_rc 0 "$d"
+  [ "$(last_two "$d")" = "$want" ] || { cat "$d/out" >&2; die "hand-made, set up already: the report does not end with the two lines"; }
+  [ "$(grep -cxF "$ASK_CLEAD" "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "the line on asking Clead is not printed once"; }
+  [ -z "$(printf '%s\n' "$WHAT_NEXT" "$ASK_CLEAD" | banned_hits)" ] || die "a banned word in the last two lines"
+}
+
+test_a_run_that_stops_does_not_print_the_next_step_or_the_line_on_asking_clead() {
+  # Error path: the two closing lines belong to a finished setup only; a
+  # stop has its own "What to do next".
+  local d
+  d="$(tmpdir)"
+  export STUB_GH_PROTECT_FAIL=plan
+  setup_run "$d" --non-interactive --yes --private
+  unset STUB_GH_PROTECT_FAIL
+  expect_rc 3 "$d"
+  expect_no_out "$d" "$ASK_CLEAD"
+  expect_no_out "$d" "create a Claude Project"
+  ! grep -qF "$ASK_CLEAD" "$d/err" || { cat "$d/err" >&2; die "the stop printed the line on asking Clead"; }
+}
+
+test_the_next_step_is_one_text_for_both_endings() {
+  # The new-setup and the set-up-already endings print the next step from
+  # one function, so the two cannot drift apart again.
+  local a b n
+  a="$( load_script; IN_OWNER=octo-user IN_NAME=my-app CHANGE_ADDED=""; say_what_next )"
+  b="$( load_script; IN_OWNER=octo-user IN_NAME=my-app CHANGE_ADDED=1; say_what_next )"
+  [ "$a" = "$(printf '%s\n%s' "$WHAT_NEXT" "$ASK_CLEAD")" ] || { printf '%s\n' "$a" >&2; die "say_what_next does not print the next step and then the line on asking Clead"; }
+  [ "$a" = "$b" ] || die "the next step differs between the two endings"
+  n="$(grep -c 'What to do next: in the Claude app' "$SCRIPT" || true)"
+  [ "$n" -eq 1 ] || die "the next step is written $n times in the script, want 1"
+  n="$(grep -c 'say_what_next$' "$SCRIPT" || true)"
+  [ "$n" -eq 1 ] || die "say_what_next is called $n times, want once, at the end of report"
 }
 
 test_the_jq_expressions_read_githubs_documented_answers() {
@@ -8582,7 +8646,7 @@ test_the_words_for_a_project_set_up_already_are_not_those_for_one_the_script_jus
   for p in 'left for your first session with Clead' 'give it the new project' 'as the script set' "the setup's changes"; do
     expect_no_out "$d" "$p"
   done
-  expect_out "$d" "give it the project, https://github.com/octo-user/my-app, and start a chat."
+  expect_out "$d" "$WHAT_NEXT"
   # A project the script set up, resumed.
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
@@ -8814,6 +8878,26 @@ test_template_readme_lists_the_readme_only_steps() {
   body="$(section_of "$TEMPLATE_README" '### Creating a project from the template' '^##' | tr '\n' ' ' | sed 's/  */ /g')"
   for t in 'Claude app' 'gh repo delete' 'delete_repo' 'Billing and plans' 'Member privileges'; do
     grep -qF -- "$t" <<<"$body" || die "the README-only part does not mention: $t"
+  done
+}
+
+test_readmes_say_to_chat_inside_a_claude_project_as_the_script_does() {
+  # End-to-end run 1, finding 10: the README's "After the script" and both
+  # READMEs' "Working setup" say what the script's last step says: create
+  # a Claude Project, give it the project, chat inside it.
+  local body f t
+  body="$(section_of "$TEMPLATE_README" '### Creating a project from the template' '^##' | tr '\n' ' ' | sed 's/  */ /g')"
+  body="${body#*After the script: }"
+  body="${body%%. *}"
+  for t in 'create a Claude Project' 'to that Claude Project' 'start a chat inside the Claude Project'; do
+    grep -qF -- "$t" <<<"$WHAT_NEXT" || die "the test's next step lacks: $t (test is stale)"
+    grep -qF -- "$t" <<<"$body" || die "the README's After the script lacks: $t"
+  done
+  for f in "$TEMPLATE_README" "$STUB_README"; do
+    body="$(section_of "$f" '### Working setup' '^##' | tr '\n' ' ' | sed 's/  */ /g')"
+    for t in 'create a Claude Project' 'to that Claude Project' 'start a chat inside the Claude Project'; do
+      grep -qF -- "$t" <<<"$body" || die "$f: Working setup lacks: $t"
+    done
   done
 }
 

@@ -26,11 +26,12 @@ It needs gh installed and signed in first (step 0 in the README of https://githu
 - A GitHub account, and git
 
 ### Working setup
-Run the Claude app next to VS Code. In the Claude app, start a chat for
-this repo and give it access to the repo when asked; `CLAUDE.md` loads
-from the repo. Before the first task, ask Clead to summarise
-`memory/context.md` and `memory/project.md`: if it can describe the
-project and its goals, it is oriented. In VS Code, open your clone and
+Run the Claude app next to VS Code. In the Claude app, create a Claude
+Project for this repo, add the repo to that Claude Project (give it
+access when asked), and start a chat inside the Claude Project;
+`CLAUDE.md` loads from the repo. Before the first task, ask Clead to
+summarise `memory/context.md` and `memory/project.md`: if it can
+describe the project and its goals, it is oriented. In VS Code, open your clone and
 use a Claude Code tab if you want to run Crog yourself.
 
 Keep one Claude project per repo, so what Clead learns in one project

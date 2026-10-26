@@ -153,12 +153,13 @@ here first:
 **What only this README covers.**
 
 - Step 0 above: the script cannot download or start without `gh`.
-- After the script: open the Claude app, start a Claude project for the
-  new GitHub project, give it the project and start a chat; `CLAUDE.md`
-  does the rest. If the Claude GitHub App on your account is limited to
-  selected projects, add the new one on GitHub first: your picture, top
-  right, then Settings, Applications, Configure next to the Claude app,
-  and add the project under the choice
+- After the script: in the Claude app, create a Claude Project for the
+  new GitHub project, add the GitHub project to that Claude Project, and
+  start a chat inside the Claude Project; `CLAUDE.md` does the rest. If
+  the Claude GitHub App on your account is limited to selected projects,
+  add the new one on GitHub first: your picture, top right, then
+  Settings, Applications, Configure next to the Claude app, and add the
+  project under the choice
   Only select repositories (the projects it may read).
   This last part has not been checked yet.
 - Organisation and billing settings: in an organisation, only its
@@ -179,11 +180,12 @@ bootstrapper's GitHub page. Its README then has a short section, near
 the top, that gives the same command with `--resume`, which finishes the setup.
 
 ### Working setup
-Run the Claude app next to VS Code. In the Claude app, start a chat for
-this repo and give it access to the repo when asked; `CLAUDE.md` loads
-from the repo. Before the first task, ask Clead to summarise
-`memory/context.md`: if it can describe the project, the decisions made
-and the open questions, it is oriented. In VS Code, open your clone and
+Run the Claude app next to VS Code. In the Claude app, create a Claude
+Project for this repo, add the repo to that Claude Project (give it
+access when asked), and start a chat inside the Claude Project;
+`CLAUDE.md` loads from the repo. Before the first task, ask Clead to
+summarise `memory/context.md`: if it can describe the project, the
+decisions made and the open questions, it is oriented. In VS Code, open your clone and
 use a Claude Code tab if you want to run Crog yourself.
 
 Keep one Claude project per repo, so what Clead learns in one project
