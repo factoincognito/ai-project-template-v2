@@ -185,6 +185,8 @@ ASK_NEEDED="An answer is needed here."
 OPTIONS_NEXT="To see every option, run the script with --help."
 START_AGAIN_INTRO="To start again, run this command:"
 CONTINUE_INTRO="To continue the setup, run this command:"
+# Shown once, after the yes and before the first change (show_advance_command).
+ADVANCE_INTRO="If the setup stops before it finishes, for any reason, also with Ctrl-C or a closed window, continue it with this command:"
 # The plan and step 10 give it for a public project with no licence.
 NO_LICENCE_WARNING="Warning: the project is public and has no licence: anyone can see its code, but nobody else may copy, change or share it. To add a licence later, see https://choosealicense.com."
 
@@ -2262,7 +2264,7 @@ guide_project_missing() {
   guide_begin "There is no project named $IN_OWNER/$IN_NAME on GitHub to continue." \
     "--resume continues a setup of a project that exists on GitHub, and the script never creates a project when it is asked to continue one."
   guide_step "Check the name and the owner for a typing mistake: they are the values after --name and --owner in the command shown below."
-  guide_step "To set up a new project with this name, start the script again with the command shown below, which has no --resume."
+  guide_step "If the setup stopped before it created the project, or to set up a new project with this name, start the script again with the command shown below, which has no --resume."
   guide_end "the script says \"Done. The project $IN_OWNER/$IN_NAME exists on GitHub, which --resume allows.\" or, without --resume, creates the project." \
     "if the project is private, check that gh is signed in to the account that can see it." \
     "it asks GitHub for a project at that address, and GitHub answers that there is none."
@@ -2418,6 +2420,23 @@ confirm_plan() {
   [ "$CHECKED" != yes ] || return 0
   fail 1 "You answered no, so the script stopped, and nothing was created." \
     "To set up the project, start the script again and answer yes."
+}
+
+# show_advance_command: after the yes (or --yes) and before the first
+# change on GitHub, the command to continue the setup, with --resume and
+# every answer, shown once. A stop that runs no trap (end-to-end run 1,
+# finding 6: Ctrl-C while gh ran, in Git Bash on Windows, showed no stop
+# message at all) still leaves the user this command. Before the project
+# exists, --resume refuses to create it and shows the command to start
+# again (guide_project_missing), so this command is safe at any stop.
+show_advance_command() {
+  local was="$OPT_RESUME"
+  OPT_RESUME=1
+  shown_command
+  OPT_RESUME="$was"
+  say "$ADVANCE_INTRO"
+  say_command "bash $SHOWN_CMD"
+  [ -n "$OPT_RESUME" ] || say "If the project was not created yet, that command says so and shows the command to start again."
 }
 
 # continue_after_create: the project exists now. From here on, the
@@ -4756,6 +4775,7 @@ cmd_setup() {
       exit 0
     fi
     confirm_plan
+    show_advance_command
     run_steps "$RESUME_STATE"
     return 0
   fi
@@ -4765,6 +4785,7 @@ cmd_setup() {
     exit 0
   fi
   confirm_plan
+  show_advance_command
   create_project
   wait_for_files
   run_steps template

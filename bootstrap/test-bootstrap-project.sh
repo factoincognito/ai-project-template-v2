@@ -221,9 +221,19 @@ case "${1:-}" in
       # file create-fails is above 0) as: signed-out (gh's exit 4),
       # taken (GitHub's "name already exists"), refused (no permission),
       # broken (an error with no known cause), broken-but-made (the same,
-      # after the project was made).
+      # after the project was made), killed (the script ends there with
+      # no chance to run its traps, as Ctrl-C in Git Bash seemed to do in
+      # end-to-end run 1, finding 6; nothing made) and killed-after-made
+      # (the same, after the project was made).
+      if [ "${STUB_GH_CREATE_FAIL:-}" = killed-after-made ]; then
+        printf '%s\n' "$3" >>"${STUB_GH_LOG%/*}/created"
+        [ -z "${STUB_GH_TEMPLATE:-}" ] || seed_project "$3"
+        kill -KILL "$PPID"
+        exit 1
+      fi
       if [ -n "${STUB_GH_CREATE_FAIL:-}" ] && should_fail create-fails; then
         case "$STUB_GH_CREATE_FAIL" in
+          killed) kill -KILL "$PPID" ;;
           signed-out) emit_failure signed-out ;;
           taken) echo "GraphQL: Name already exists on this account (cloneTemplateRepository)" >&2 ;;
           refused) echo "GraphQL: Resource not accessible by personal access token (cloneTemplateRepository)" >&2 ;;
@@ -1635,7 +1645,8 @@ test_user_facing_strings_are_collected() {
     'line of work' 'already has' 'is inside another project that git keeps track of' \
     'The script may not write in the folder' 'does not exist' \
     "Filling in the project's name, description and product owner" 'in which the setup fills in' \
-    'left for your first session with Clead'; do
+    'left for your first session with Clead' 'If the setup stops before it finishes, for any reason' \
+    'that command says so and shows the command to start again'; do
     grep -qF -- "$t" "$s" || { cat "$s" >&2; die "collector missed: $t"; }
   done
 }
@@ -4344,6 +4355,67 @@ test_yes_skips_proceed_and_non_interactive_needs_yes_or_dry_run() {
   setup_run "$d" --non-interactive --dry-run --yes
   expect_rc 0 "$d"
   expect_nothing_created "$d"
+}
+
+# The line above the command to continue that the script shows once, after
+# the yes and before its first change (end-to-end run 1, finding 6: a stop
+# that runs no trap shows nothing, so the command comes first).
+ADVANCE_INTRO='If the setup stops before it finishes, for any reason, also with Ctrl-C or a closed window, continue it with this command:'
+
+# advance_command <dir>: the command shown under ADVANCE_INTRO, without
+# its indent; fails unless the intro is there exactly once.
+advance_command() {
+  local n
+  n="$(grep -cxF "$ADVANCE_INTRO" "$1/out" || true)"
+  [ "$n" -eq 1 ] || { cat "$1/out" >&2; die "the command to continue was shown $n times before the first change, want 1"; }
+  grep -A1 -xF "$ADVANCE_INTRO" "$1/out" | sed -n 2p | sed 's/^    //'
+}
+
+# line_of <dir> <fixed text>: the number of the first output line that is
+# exactly the text (0 when there is none).
+line_of() {
+  local n
+  n="$(grep -nxF -- "$2" "$1/out" | head -1 | cut -d: -f1)"
+  echo "${n:-0}"
+}
+
+test_the_command_to_continue_is_shown_after_yes_and_before_the_project_is_created() {
+  local d cmd p a c
+  # Asked, yes: Proceed?, then the command (with --resume and the
+  # options), then the create step.
+  d="$(tmpdir)"
+  printf 'yes\n' >"$d/in"
+  setup_run "$d"
+  expect_rc 0 "$d"
+  cmd="$(advance_command "$d")"
+  case "$cmd " in
+    "bash "*" --owner octo-user "*" --resume "*) ;;
+    *) die "the command shown is not the one to continue with --resume and the answers: $cmd" ;;
+  esac
+  p="$(line_of "$d" 'Proceed? (yes or no) [no]: ')"
+  a="$(line_of "$d" "$ADVANCE_INTRO")"
+  c="$(line_of "$d" '==> Creating the project octo-user/my-app on GitHub')"
+  [ "$p" -gt 0 ] && [ "$p" -lt "$a" ] && [ "$a" -lt "$c" ] || { cat "$d/out" >&2; die "not in the order Proceed? ($p), the command ($a), create ($c)"; }
+  expect_out "$d" "If the project was not created yet, that command says so and shows the command to start again."
+  # --yes: the same, without Proceed?.
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 0 "$d"
+  cmd="$(advance_command "$d")"
+  case "$cmd " in "bash "*" --resume "*) ;; *) die "--yes: no --resume in: $cmd" ;; esac
+  [ "$(line_of "$d" "$ADVANCE_INTRO")" -lt "$(line_of "$d" '==> Creating the project octo-user/my-app on GitHub')" ] || { cat "$d/out" >&2; die "--yes: the command came after create"; }
+  # No, Enter, or a dry run: nothing is changed, so no command to continue.
+  for a in no ""; do
+    d="$(tmpdir)"
+    printf '%s\n' "$a" >"$d/in"
+    setup_run "$d"
+    expect_rc 1 "$d"
+    expect_no_out "$d" "$ADVANCE_INTRO"
+  done
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --dry-run
+  expect_rc 0 "$d"
+  expect_no_out "$d" "$ADVANCE_INTRO"
 }
 
 test_nothing_is_created_when_a_check_fails() {
@@ -7413,6 +7485,110 @@ test_ctrl_c_says_what_exists_and_the_resume_finishes_without_duplicates() {
   expect_one_of_each "$d"
 }
 
+# advance_again <dir> [options...]: runs the command shown before the
+# first change (advance_command), word for word, as again does for the
+# command of a stop. The last run's output is kept in out.prev and err.prev.
+advance_again() {
+  local d="$1" line
+  shift
+  line="$(advance_command "$d")"
+  case "$line" in
+    "bash "*) ;;
+    *) cat "$d/out" "$d/err" >&2; die "no command to continue was shown before the first change" ;;
+  esac
+  eval "CMD_ARGS=(${line#bash })"
+  CMD_ARGS=("${CMD_ARGS[@]:1}")
+  mv "$d/out" "$d/out.prev"
+  mv "$d/err" "$d/err.prev"
+  whole "$d" "${CMD_ARGS[@]}" "$@"
+}
+
+test_a_stop_that_runs_no_trap_still_leaves_the_command_to_continue() {
+  # End-to-end run 1, finding 6: Ctrl-C right after "Creating the project"
+  # in Git Bash ended the script with no stop message, so no command to
+  # continue (finding 7: the --resume typed by hand asked every question
+  # again). The stub ends the script there with SIGKILL, which no trap
+  # sees; the command shown before the first change must be enough.
+  local d cmd
+  # The project was made before the stop: the command continues it and
+  # asks nothing again but Proceed?.
+  d="$(tmpdir)"
+  working_git "$d"
+  use_built "$d"
+  export STUB_GH_CREATE_FAIL=killed-after-made
+  printf '%s\n' "${ANSWERS_IN[@]}" yes >"$d/in"
+  whole "$d"
+  unset STUB_GH_CREATE_FAIL
+  [ "$RC" -ne 0 ] || die "the stub did not stop the script"
+  ! grep -q 'run this command:$' "$d/out" || { cat "$d/out" >&2; die "a stop message was shown (the stop is meant to run no trap)"; }
+  cmd="$(advance_command "$d")"
+  case "$cmd" in
+    "bash "*" --resume$CARRIED") ;;
+    *) die "the command does not continue with every answer: $cmd" ;;
+  esac
+  printf 'yes\n' >"$d/in"
+  advance_again "$d"
+  expect_rc 0 "$d"
+  expect_out "$d" "    Done. The project has only the bootstrapper's files, and there is no copy of it on this computer yet: the setup continues by protecting its main version."
+  [ "$(grep -c 'Proceed? (yes or no) \[no\]: ' "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "Proceed? not asked once"; }
+  ! grep -qE '^(Project name|Description|Language pack|Licence|Folder|Your name for git)' "$d/out" || { cat "$d/out" >&2; die "a question was asked again"; }
+  expect_one_of_each "$d"
+  # The stop came before GitHub made the project: the command says there
+  # is no project to continue and shows the command to start again,
+  # without --resume, which then sets the project up.
+  d="$(tmpdir)"
+  export STUB_GH_CREATE_FAIL=killed
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_CREATE_FAIL
+  [ "$RC" -ne 0 ] || die "killed: the stub did not stop the script"
+  advance_again "$d"
+  expect_rc 3 "$d"
+  expect_out "$d" "There is no project named octo-user/my-app on GitHub to continue."
+  expect_out "$d" "If the setup stopped before it created the project, or to set up a new project with this name, start the script again with the command shown below, which has no --resume."
+  grep -A1 -xF 'To start again, run this command:' "$d/out" | sed -n 2p >"$d/cmd"
+  grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "killed: no command to start again without --resume"; }
+  again "$d"
+  expect_rc 0 "$d"
+  # The stopped run's create call is in gh.log but made nothing (the file
+  # "created" lists what the stub made), so the project is made once.
+  [ "$(grep -cxF octo-user/my-app "$d/created")" -eq 1 ] || die "killed: the project was not made exactly once"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "killed: the new run did not go through"; }
+}
+
+test_a_resume_shows_the_command_to_continue_before_its_first_change() {
+  local d n cmd
+  d="$(tmpdir)"
+  working_git "$d"
+  export STUB_GH_PR_FAIL=broken
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_PR_FAIL
+  expect_rc 1 "$d"
+  n="$(calls_count "$d")"
+  again "$d"
+  expect_rc 0 "$d"
+  cmd="$(advance_command "$d")"
+  case "$cmd " in "bash "*" --owner octo-user "*" --resume "*) ;; *) die "no command to continue with --resume and the options: $cmd" ;; esac
+  # Shown after the step that works out the state, before proposing.
+  [ "$(line_of "$d" "$ADVANCE_INTRO")" -gt "$(line_of "$d" "==> Working out where the setup stopped, from GitHub and from the copy on this computer")" ] \
+    && [ "$(line_of "$d" "$ADVANCE_INTRO")" -lt "$(line_of "$d" "==> Proposing the setup's changes on GitHub, where the project's checks run on them")" ] \
+    || { cat "$d/out" >&2; die "the command is not between the state step and the first change"; }
+  expect_no_out "$d" "If the project was not created yet"
+  # A --resume dry run changes nothing, so it shows no command.
+  d="$(tmpdir)"
+  working_git "$d"
+  export STUB_GH_PR_FAIL=broken
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_PR_FAIL
+  again "$d" --dry-run
+  expect_rc 0 "$d"
+  expect_no_out "$d" "$ADVANCE_INTRO"
+  # A --resume run answered no changes nothing either.
+  printf 'no\n' >"$d/in"
+  setup_run "$d" --resume
+  expect_rc 1 "$d"
+  expect_no_out "$d" "$ADVANCE_INTRO"
+}
+
 test_resume_of_a_finished_setup_only_checks_the_protection_and_reports() {
   local d n
   d="$(tmpdir)"
@@ -8844,6 +9020,23 @@ test_readme_resume_sentence_matches_what_the_script_prints() {
   sed -n '/^### Creating a project from the template$/,/^##[^#]/p' "$TEMPLATE_README" | tr '\n' ' ' | sed 's/  */ /g' \
     | grep -ciF 'once the project exists on GitHub, that command includes `--resume`' >/dev/null \
     || die "the README does not say when the command includes --resume"
+}
+
+test_readme_says_the_command_to_continue_comes_before_the_first_change() {
+  # End-to-end run 1, finding 6: a stop that runs no trap (Ctrl-C in Git
+  # Bash) printed nothing, so "If it stops, it says why and prints the
+  # exact command to run next" was not true. The README says the command
+  # comes before the first change, and at a stop only when the script can.
+  local body
+  body="$(sed -n '/^### Creating a project from the template$/,/^##[^#]/p' "$TEMPLATE_README" | tr '\n' ' ' | sed 's/  */ /g')"
+  ! grep -qF 'If it stops, it says why and prints the exact command to run next:' <<<"$body" \
+    || die "the README still promises the command at every stop"
+  grep -qF 'Right after your yes, before it changes anything on GitHub, it prints the command to continue the setup if it stops before it finishes, for any reason (also Ctrl-C or a closed window).' <<<"$body" \
+    || die "the README does not say the command to continue comes before the first change"
+  grep -qF 'When it stops by itself, it also says why and prints the exact command to run next' <<<"$body" \
+    || die "the README does not say what a stop prints when the script can"
+  ( load_script; [ "$ADVANCE_INTRO" = 'If the setup stops before it finishes, for any reason, also with Ctrl-C or a closed window, continue it with this command:' ] ) \
+    || die "the script's ADVANCE_INTRO is not the line the tests look for"
 }
 
 test_readme_commands_are_the_ones_the_script_prints() {
