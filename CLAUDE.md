@@ -1,6 +1,7 @@
 # [PROJECT NAME] — Agent Entry Point
 
-This file is read by two agents. Read this section and your own.
+This file is read by two agents. Read the two "Both agents" sections
+and your own.
 
 ---
 
@@ -20,6 +21,51 @@ fails a pull request that changes code (in a project, `src/`, and
 code and as a test is listed in that step of `.github/workflows/ci.yml`.
 Details: `docs/CROG_ONBOARDING.md` (TDD rules), `memory/standards.md`
 (review).
+
+---
+
+## Both agents: parallel sessions
+
+(Product owner's rule, 2026-10-27, owned by the product office.) More than
+one session may work in this repo at once. Sessions coordinate through the
+repo: a session never asks the product owner to pass messages between
+sessions. Escalating to the product owner (a decision only they can make,
+three review rounds without agreement) is unchanged.
+
+- Claim before changing files: open a PR at once, with an empty commit if
+  nothing is written yet, whose description names the area and the files
+  you expect to change, and the session (its session link); every comment
+  the session posts on it names the session too. Do not open it as a
+  draft: a session without GraphQL access cannot take a PR out of draft,
+  so a draft can never be merged. Until the change is pushed and ready
+  for review, the PR title starts with `[claim]`, and nobody reviews or
+  merges a `[claim]` PR. The claim PR becomes the PR for the change. When
+  you need a file the description does not name, add it to the
+  description before editing it, unless another open PR already names
+  it: then comment on that PR instead.
+- At startup, and before opening or updating each PR, list the open PRs and
+  the branches other than the default branch. A branch without an open PR
+  is not a claim.
+- If another open PR claims files you need, do not edit them: comment on
+  that PR and settle the overlap there. Without an answer, the later claim
+  (the higher PR number) waits until the earlier one is merged or closed.
+- Files that many sessions add entries to (`docs/NEXT_SESSION.md`,
+  `docs/BACKLOG.md`) are not claimed as a whole: a claim on one covers
+  only the entries or sections it names, and any session may add its own.
+  Before choosing the number of a new entry, check the default branch and
+  the open PRs that change the same file. Before merging a PR that adds a
+  numbered entry, merge the default branch into it once more and renumber
+  the entry if another session took that number.
+- A claim with no new commit or comment from the claiming session for 7
+  days counts as abandoned, unless it waits on a product owner decision: a
+  session may say on it that it takes the files over, and go ahead in its
+  own claim PR. If the first session comes back, it settles the overlap on
+  the new claim, which now goes first.
+- On a conflict, merge the default branch into your branch and keep both
+  sides' content where possible; never rebase or force-push a pushed branch.
+  If the merge resolved conflicts, say so on the PR and name the files.
+- Listing PRs and merging the default branch into your branch are allowed
+  at any time, also while your PR is in a review or fix round.
 
 ---
 
@@ -142,7 +188,8 @@ decision, until stuck"). While he is away:
    through the API. A setting that says "connected" is not proof. If it
    fails, fall back to the Claude-in-Chrome extension as the read/write
    channel and tell Adam.
-4. Check for open PRs — is there a review waiting?
+4. List the open PRs and the branches other than the default branch
+   (see "Both agents: parallel sessions") — is there a review waiting?
 5. Derive current PBI from open PRs and `docs/BACKLOG.md`
 6. Ask Adam what today's work is
 
