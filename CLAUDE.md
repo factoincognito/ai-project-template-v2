@@ -243,6 +243,10 @@ earlier report:
    the session ends. Pins are transient and unwritten by design; an
    empty list at close is the only proof none were silently lost.
 
+### Scheduled tasks
+A session deletes the one-shot scheduled tasks it created once they have
+fired and their work is done, without asking (Adam, 2026-10-24).
+
 ### Memory rule
 Canonical state is always in Git. Do not store derivable state
 (current PBI, PR status) in memory files — derive it from the repo.
