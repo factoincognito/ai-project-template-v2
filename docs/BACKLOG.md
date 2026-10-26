@@ -725,7 +725,7 @@ get a working project in any supported language.
   - "From the user's perspective there must be a clear entry point and a solid process to get there, initially by use of the bootstrapper." v2.4.0 is solid but covers only part of the journey.
   - The user bootstraps the idea, not the project. The product office is Adam's own; it does not exist in the user's world.
   - **The test for every HOW decision:** it fits the journey of the intended user, who never needs to be aware of technical setup details. Wherever the user needs technical knowledge or help, that is a defect (the rule of the end-to-end runs).
-  - The bootstrapper's tagline (Adam, 2026-10-26): "Do you have an itch? Make a project!"
+  - The bootstrapper's tagline (Adam, 2026-10-26), two candidates, Adam to pick: "Do you have an itch? Make a project!" or "Do you have an itch? Solve it with a project!"
   - Adam's stance on the trial (2026-10-26): not sure a proposal covers the gaps, so it is tried and tested, and what the test shows decides what stays.
 
   **The journey and what covers it today (Clead, read from `main` 2026-10-26).**
