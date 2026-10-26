@@ -1,7 +1,7 @@
 # [PROJECT NAME] — Agent Entry Point
 
-This file is read by two agents. Read the two "Both agents" sections
-and your own.
+This file is read by two agents. Read the "Both agents" sections and
+your own.
 
 ---
 
@@ -66,6 +66,17 @@ three review rounds without agreement) is unchanged.
   If the merge resolved conflicts, say so on the PR and name the files.
 - Listing PRs and merging the default branch into your branch are allowed
   at any time, also while your PR is in a review or fix round.
+
+---
+
+## Both agents: `STATUS.md`
+
+(Product office rule, 2026-10-26.) `STATUS.md` at the repo root is read
+by the product owner's dashboard. A session that changes what one of its
+fields says (Phase, Current focus, Next step, Blockers) updates it in the
+same PR and sets "Last update". It holds only what lies ahead; history is
+in Git. A blocker that waits on the product owner starts with
+"Product Owner:".
 
 ---
 
