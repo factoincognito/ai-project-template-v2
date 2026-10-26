@@ -13,7 +13,7 @@
    escalating to Adam after 3 rounds.
 4. Crog merges once CI is green and the review has passed.
 5. `changelog.yml` posts a reminder on every merge to open a CHANGELOG
-   PR.
+   PR, except for a PR that already changed `CHANGELOG.md`.
 
 Adam is not in this loop and never relays messages. How Clead reaches
 Crog today: by starting Crog as a separate agent from its own session,
