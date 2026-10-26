@@ -4324,6 +4324,9 @@ test_the_plan_is_shown_after_the_checks_and_a_dry_run_creates_nothing() {
     "  1. " "  2. " "  3. " "  4. " "  5. "; do
     expect_out "$d" "$v"
   done
+  # Finding 9: the minutes are a limit, and what happens when it is reached.
+  grep -qxF "    Waiting for the project's checks: at most 20 minutes; if build has not passed by then, the script stops, leaves the proposed change open and shows how to continue (--ci-timeout sets a different limit)" "$d/out" \
+    || { cat "$d/out" >&2; die "the plan does not say the wait is a limit"; }
   expect_out "$d" "This was a dry run (--dry-run): the checks passed, and nothing was created."
   expect_no_out "$d" "Proceed?"
   expect_no_out "$d" "needs a paid GitHub plan"
@@ -5218,7 +5221,7 @@ STEPS_AFTER_SETTINGS='==> Checking that GitHub Actions, which runs the project'"
 ==> Saving the setup'"'"'s changes in the copy as one change, "Set up my-app"
 ==> Sending the setup'"'"'s changes to GitHub, on the line of work bootstrap-setup
 ==> Proposing the setup'"'"'s changes on GitHub, where the project'"'"'s checks run on them
-==> Waiting for the project'"'"'s check build to pass on the proposed change, for up to 20 minutes
+==> Waiting for the project'"'"'s check build to pass on the proposed change, for at most 20 minutes
 ==> Making the check build required, so that from now on a change is added to the main version only after build passes
 ==> Adding the proposed change to the main version of the project
 ==> Updating the copy on this computer to the new main version'
@@ -6883,7 +6886,7 @@ test_build_still_running_is_looked_at_again_every_15_seconds_until_it_passes() {
   [ "$(cat "$d/sleep.log")" = "$(printf '15\n15\n15')" ] || { cat "$d/sleep.log" >&2; die "not 3 waits of 15 seconds"; }
   [ "$(grep -cxF 'The check build has not finished yet; the script looks again every 15 seconds.' "$d/out")" -eq 1 ] \
     || { cat "$d/out" >&2; die "the note that build is still running is not shown once"; }
-  grep -A2 -xF "==> Waiting for the project's check build to pass on the proposed change, for up to 20 minutes" "$d/out" | tail -1 >"$d/done"
+  grep -A1 -xF "Checking the build status (45 seconds of at most 20 minutes)" "$d/out" | tail -1 >"$d/done"
   [ "$(cat "$d/done")" = "    Done. The check build passed on the proposed change." ] || { cat "$d/out" >&2; die "no done line for the wait"; }
   grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not go through"; }
   # No check reported yet (gh's "no checks reported", exit 1) is waited
@@ -6903,6 +6906,118 @@ test_build_still_running_is_looked_at_again_every_15_seconds_until_it_passes() {
   expect_rc 1 "$d"
   [ "$(grep -c . "$d/sleep.log")" -eq 4 ] || { cat "$d/sleep.log" >&2; die "no build: not waited for"; }
   grep -qxF '    build: not reported yet' "$d/err" || { cat "$d/err" >&2; die "no build: not said below"; }
+}
+
+# wait_lines <dir>: the lines of the wait for build, from its step line
+# to its done line.
+wait_lines() {
+  sed -n "/^==> Waiting for the project's check build/,/^    Done\. The check build/p" "$1/out"
+}
+WAIT_LIMIT_LINE="That is the limit: if build has not passed after 20 minutes, the script stops, leaves the proposed change open and shows how to continue (--ci-timeout sets a different limit)."
+WAIT_LINK_LINE="You can follow the check here: https://github.com/octo-user/my-app/pull/1/checks"
+STARS_15='***************'
+
+test_the_wait_says_its_limit_where_to_follow_the_check_and_each_check() {
+  # E2E run 1, finding 9: the minutes are a limit, the checks page is
+  # given, and each later look says how long the script has waited of
+  # the limit. Not a terminal (the tests' default): no stars, one line
+  # per look, and the waits stay 15 seconds each.
+  local d want
+  d="$(tmpdir)"
+  echo 2 >"$d/build-pending"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 0 "$d"
+  want="$(printf '%s\n' \
+    "==> Waiting for the project's check build to pass on the proposed change, for at most 20 minutes" \
+    "$WAIT_LIMIT_LINE" "$WAIT_LINK_LINE" \
+    'The check build has not finished yet; the script looks again every 15 seconds.' \
+    'Checking the build status (15 seconds of at most 20 minutes)' \
+    'Checking the build status (30 seconds of at most 20 minutes)' \
+    '    Done. The check build passed on the proposed change.')"
+  [ "$(wait_lines "$d")" = "$want" ] || { printf 'want:\n%s\ngot:\n%s\n' "$want" "$(wait_lines "$d")" >&2; die "the lines of the wait differ"; }
+  [ "$(cat "$d/sleep.log")" = "$(printf '15\n15')" ] || { cat "$d/sleep.log" >&2; die "not 2 waits of 15 seconds"; }
+  expect_no_out "$d" '*'
+  # build passed at the first look: the limit and the link, no wait.
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 0 "$d"
+  want="$(printf '%s\n' \
+    "==> Waiting for the project's check build to pass on the proposed change, for at most 20 minutes" \
+    "$WAIT_LIMIT_LINE" "$WAIT_LINK_LINE" \
+    '    Done. The check build passed on the proposed change.')"
+  [ "$(wait_lines "$d")" = "$want" ] || { printf 'want:\n%s\ngot:\n%s\n' "$want" "$(wait_lines "$d")" >&2; die "a wait with no look again differs"; }
+  [ ! -s "$d/sleep.log" ] || { cat "$d/sleep.log" >&2; die "it waited although build had passed"; }
+}
+
+test_on_a_terminal_the_wait_shows_a_star_a_second_and_each_check_on_a_new_line() {
+  # Adam's indicator (finding 9): one * per second on the line, a new line
+  # at each look. BOOTSTRAP_STDOUT_TERMINAL=yes stands for a terminal.
+  # The seconds come one at a time from the sleep hook; the total is the
+  # same as without a terminal.
+  local d want
+  d="$(tmpdir)"
+  echo 5 >"$d/build-pending"
+  export BOOTSTRAP_STDOUT_TERMINAL=yes
+  setup_run "$d" --non-interactive --yes
+  unset BOOTSTRAP_STDOUT_TERMINAL
+  expect_rc 0 "$d"
+  want="$(printf '%s\n' \
+    "==> Waiting for the project's check build to pass on the proposed change, for at most 20 minutes" \
+    "$WAIT_LIMIT_LINE" "$WAIT_LINK_LINE" \
+    "The check build has not finished yet; the script looks again every 15 seconds. $STARS_15" \
+    "Checking the build status (15 seconds of at most 20 minutes) $STARS_15" \
+    "Checking the build status (30 seconds of at most 20 minutes) $STARS_15" \
+    "Checking the build status (45 seconds of at most 20 minutes) $STARS_15" \
+    "Checking the build status (1 minute of at most 20 minutes) $STARS_15" \
+    'Checking the build status (1 minute 15 seconds of at most 20 minutes)' \
+    '    Done. The check build passed on the proposed change.')"
+  [ "$(wait_lines "$d")" = "$want" ] || { printf 'want:\n%s\ngot:\n%s\n' "$want" "$(wait_lines "$d")" >&2; die "the lines of the wait on a terminal differ"; }
+  [ "$(grep -c . "$d/sleep.log")" -eq 75 ] && [ "$(sort -u "$d/sleep.log")" = 1 ] || { cat "$d/sleep.log" >&2; die "not 75 waits of 1 second"; }
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not go through"; }
+  [ "$(tail -c 1 "$d/out" | od -A n -c | tr -d ' ')" = '\n' ] || die "the output does not end with a line break"
+  # The limit reached on a terminal: the same number of seconds as
+  # without one (60 for 1 minute), and the stop starts on a line of its own.
+  d="$(tmpdir)"
+  echo 9999 >"$d/build-pending"
+  export BOOTSTRAP_STDOUT_TERMINAL=yes
+  setup_run "$d" --non-interactive --yes --ci-timeout 1
+  unset BOOTSTRAP_STDOUT_TERMINAL
+  expect_rc 1 "$d"
+  [ "$(grep -c . "$d/sleep.log")" -eq 60 ] && [ "$(sort -u "$d/sleep.log")" = 1 ] || { cat "$d/sleep.log" >&2; die "timeout: not 60 waits of 1 second"; }
+  [ "$(calls_after_proposing "$d" | grep -cxF "$CHECKS_CALL")" -eq 5 ] || { cat "$d/gh.log" >&2; die "timeout: not 5 looks"; }
+  grep -qxF 'Checking the build status (1 minute of at most 1 minute)' "$d/out" || { cat "$d/out" >&2; die "timeout: the last look is not on a line of its own"; }
+  expect_continue_command "$d" " --resume"
+  expect_err_shape "$d" "The project's check build had not passed on the proposed change after 1 minute, "
+  # build failing after a wait on a terminal: the stop on a line of its own.
+  d="$(tmpdir)"
+  echo 1 >"$d/build-pending"
+  export BOOTSTRAP_STDOUT_TERMINAL=yes STUB_GH_BUILD="pull_request fail"
+  setup_run "$d" --non-interactive --yes
+  unset BOOTSTRAP_STDOUT_TERMINAL STUB_GH_BUILD
+  expect_rc 1 "$d"
+  grep -qxF 'Checking the build status (15 seconds of at most 20 minutes)' "$d/out" || { cat "$d/out" >&2; die "failed: the last look is not on a line of its own"; }
+  expect_continue_command "$d" " --resume"
+  expect_err_shape "$d" "The project's check build failed on the proposed change"
+  # BOOTSTRAP_STDOUT_TERMINAL=no: no stars, 15-second waits.
+  d="$(tmpdir)"
+  echo 1 >"$d/build-pending"
+  export BOOTSTRAP_STDOUT_TERMINAL=no
+  setup_run "$d" --non-interactive --yes
+  unset BOOTSTRAP_STDOUT_TERMINAL
+  expect_rc 0 "$d"
+  expect_no_out "$d" '*'
+  [ "$(cat "$d/sleep.log")" = 15 ] || { cat "$d/sleep.log" >&2; die "no: not one wait of 15 seconds"; }
+}
+
+test_a_wait_in_seconds_is_said_in_minutes_and_seconds() {
+  local s want
+  load_script
+  for s in "15|15 seconds" "1|1 second" "60|1 minute" "61|1 minute 1 second" "75|1 minute 15 seconds" \
+    "120|2 minutes" "135|2 minutes 15 seconds" "1200|20 minutes" "0|0 seconds"; do
+    want="${s#*|}"
+    duration_words "${s%%|*}"
+    [ "$DURATION" = "$want" ] || die "${s%%|*}: want '$want', got '$DURATION'"
+  done
 }
 
 test_the_pull_request_run_of_build_counts_and_else_any_run_of_it() {
@@ -7017,7 +7132,7 @@ test_the_wait_for_build_ends_after_the_ci_timeout_with_the_proposed_change_open(
     [ "$(calls_after_proposing "$d" | grep -cxF "$CHECKS_CALL")" -eq $((m * 4 + 1)) ] || { cat "$d/gh.log" >&2; die "$m: not $((m * 4 + 1)) looks"; }
     if [ "$m" = 1 ]; then
       expect_err_shape "$d" "The project's check build had not passed on the proposed change after 1 minute, so the script did not add the change to the main version\. The proposed change stays open on GitHub\. "
-      expect_out "$d" "for up to 1 minute"
+      expect_out "$d" "for at most 1 minute"
     else
       expect_err_shape "$d" "The project's check build had not passed on the proposed change after 2 minutes, "
     fi
