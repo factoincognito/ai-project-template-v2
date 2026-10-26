@@ -430,7 +430,9 @@ test_wrong_argument_count_exits_2() {
 test_bad_owner_name_exits_2() {
   local d n
   d="$(tmpdir)"; mkdir -p "$d/bin"; make_stub_gh "$d"; make_git_wrapper "$d"
-  for n in noslash a/b/c '/name' 'owner/' 'ow ner/name' 'owner/na;me' '-x/y'; do
+  # The last name is two good names on two lines: only the line count
+  # rejects it, as grep matches its first line.
+  for n in noslash a/b/c '/name' 'owner/' 'ow ner/name' 'owner/na;me' '-x/y' "$(printf 'a/b\nc/d')"; do
     run_check "$d" "$n" "$d"
     expect_rc "$d" 2
   done

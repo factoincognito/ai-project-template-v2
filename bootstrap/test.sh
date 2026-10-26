@@ -1649,7 +1649,8 @@ test_no_grep_q_at_the_end_of_a_pipe() {
   cat "$big" | grep -xF match >/dev/null \
     || die "with its output to /dev/null, grep stopped reading at the first match: the /dev/null form is not safe"
   for f in bootstrap/test.sh bootstrap/test-bootstrap-project.sh bootstrap/test-e2e-check.sh \
-           tools/test-layout-pack.sh bootstrap/check-shards.sh; do
+           tools/test-layout-pack.sh bootstrap/check-shards.sh bootstrap/e2e-check.sh \
+           tools/test-require-test-change.sh; do
     [ -f "$REPO/$f" ] || die "no $f"
     grep -q 'pipefail' "$REPO/$f" || die "$f no longer sets pipefail; update this test"
     grep -nvE '^[[:space:]]*#' "$REPO/$f" >"$code" || true

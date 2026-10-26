@@ -691,7 +691,7 @@ test_template_ci_workflow_is_wired_to_the_check() {
   # Triggers: every push, and pull requests to main.
   grep -qE '^  push:' "$TEMPLATE_CI" || die "ci.yml no longer runs on push"
   grep -qE '^  pull_request:' "$TEMPLATE_CI" || die "ci.yml no longer runs on pull_request"
-  awk '/^  pull_request:/ { f = 1; next } /^  [a-z_]+:/ { f = 0 } f' "$TEMPLATE_CI" | grep -qF 'branches: [main]' \
+  awk '/^  pull_request:/ { f = 1; next } /^  [a-z_]+:/ { f = 0 } f' "$TEMPLATE_CI" | grep -F 'branches: [main]' >/dev/null \
     || die "pull_request no longer targets main"
   [ "$(grep -cE '^  [a-z][a-z-]*:$' <<<"$(sed -n '/^jobs:/,$p' "$TEMPLATE_CI")")" -eq 1 ] || die "template ci.yml must keep a single job, named build"
   grep -qE '^  build:$' "$TEMPLATE_CI" || die "the job is not named build"
