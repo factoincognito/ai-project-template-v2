@@ -362,7 +362,7 @@ STUB
 }
 
 # The two calls the step may make, as the stub logs them.
-CHANGELOG_API_CALL="api repos/o/r/pulls/7/files --paginate --jq .[].filename"
+CHANGELOG_API_CALL="api repos/o/r/pulls/7/files?per_page=100 --paginate --jq .[].filename"
 CHANGELOG_COMMENT_CALL="pr comment 7 --body $CHANGELOG_REMINDER --repo o/r"
 
 test_changelog_reminder_is_posted_when_the_merged_pr_did_not_change_the_changelog() {
@@ -388,6 +388,20 @@ test_changelog_reminder_is_skipped_when_the_merged_pr_changed_the_changelog() {
   done
 }
 
+test_changelog_reminder_is_skipped_when_the_changelog_comes_first_in_a_long_list() {
+  # GitHub lists files in path order, so a root CHANGELOG.md comes early.
+  # A check that stops reading at the match (grep -q at the end of a
+  # pipe) can make the writer die of SIGPIPE; under pipefail that reads
+  # as "not found" and the reminder is posted. About 200 KB of names
+  # after the match make that happen every time.
+  local d="$WORK/step"
+  # shellcheck disable=SC2046 # one argument per generated name
+  run_changelog_step "$d" CHANGELOG.md $(seq -f 'src/components/feature-%04g/index.test.ts' 1 5000)
+  [ "$(cat "$d/rc")" = 0 ] || { tail -n 5 "$d/out" >&2; die "the step failed"; }
+  printf '%s\n' "$CHANGELOG_API_CALL" >"$d/want"
+  diff "$d/want" "$d/gh.log" >&2 || die "the step posted a comment although CHANGELOG.md is first in the list"
+}
+
 test_changelog_reminder_step_fails_and_posts_nothing_when_the_file_list_cannot_be_read() {
   local d="$WORK/step"
   GH_API_FAIL=1 run_changelog_step "$d" src/app.ts
@@ -399,8 +413,10 @@ test_changelog_reminder_step_fails_and_posts_nothing_when_the_file_list_cannot_b
 test_changelog_workflow_runs_on_merged_prs_with_the_token_it_needs() {
   grep -qE '^    types: \[closed\]$' "$CWF" || die "changelog.yml no longer runs on closed PRs"
   grep -qxF '    if: github.event.pull_request.merged == true' "$CWF" || die "the job is not limited to merged PRs"
-  grep -qxF '      pull-requests: write' "$CWF" || die "the job cannot comment on the PR"
-  grep -qxF '      contents: read' "$CWF" || die "the job lacks contents: read"
+  # Least privilege: reading the PR's files needs pull requests read,
+  # which pull-requests: write includes. Nothing else.
+  [ "$(awk '/^    permissions:/ { p = 1; next } p && /^      / { print; next } { p = 0 }' "$CWF")" = '      pull-requests: write' ] \
+    || die "the job's permissions are not exactly pull-requests: write"
   grep -qxF '          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}' "$CWF" || die "the step does not get the job's token"
   grep -qxF '          PR_NUMBER: ${{ github.event.pull_request.number }}' "$CWF" || die "the step does not get the PR number"
   grep -qxF '          REPO: ${{ github.repository }}' "$CWF" || die "the step does not get the repo"
