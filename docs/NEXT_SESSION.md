@@ -59,6 +59,9 @@ Written 2026-10-02 so nothing depends on anyone remembering. **Each Clead sessio
    3. python pack, interactive, on macOS if available (`/bin/bash` 3.2), with PBI-1.17's red-then-`Test-exempt` pull request in that project (PBI-1.17 stays `[NEXT]` until then).
    4. react-native pack, interactive, any OS.
    5. Separately, now: someone who has never used `gh` or a terminal sets up a project from the README alone (PBI-1.14 Done when 7). Where they get stuck is a defect and evidence for PBI-1.19; repeat it if PBI-1.19 changes step 1.
+   - **Rule for every run (Adam, 2026-10-26):** any point where Adam has to ask Claude for help is a failure of the README or the script. It is recorded here with the date and the step, and addressed before release.
+   - **Findings so far:**
+     - 2026-10-26, run 1, before step 0's first command: Adam did not know how to open Git Bash. README step 0 says only "Open Git Bash from the Start menu". Not yet addressed.
 4. **If an agent has to change files in your connected PC folder,** it asks for delete permission once per session (a failed pull left a stale `.git/index.lock` last time). Your PC clone of the template is behind main and its `origin` points at the org; the session fast-forwards it after you grant that.
 
 ---
