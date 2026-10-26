@@ -795,6 +795,23 @@ test_copy_not_clean_fails() {
   run_check "$d"; expect_only_fail "$d" copy
 }
 
+test_copy_with_thousands_of_unsaved_files_fails_with_a_reason() {
+  # A long git status (here 3000 new files, e.g. a node_modules/ left in
+  # the copy) is more than a pipe holds: a reader that stops after five
+  # lines must not kill the checker (exit 141 under pipefail, seen in
+  # review of PR #208) before it reports the copy check.
+  local d c i
+  d="$(tmpdir)"; finished "$d" node mit
+  c="$(COPY "$d")"
+  mkdir "$c/junk"
+  i=0; while [ "$i" -lt 3000 ]; do : >"$c/junk/untracked-file-with-a-long-name-$i.txt"; i=$((i + 1)); done
+  run_check "$d"; expect_only_fail "$d" copy
+  reason_of "$d" copy | grep -F '3000 file(s) changed or not saved: ' >/dev/null \
+    || { tail -n 5 "$d/out" >&2; die "the reason does not count the 3000 files"; }
+  [ "$(reason_of "$d" copy | grep -o 'junk/untracked-file' | wc -l | tr -d ' ')" = 5 ] \
+    || { reason_of "$d" copy | cut -c1-400 >&2; die "the reason does not name exactly the first five files"; }
+}
+
 test_copy_not_on_main_fails() {
   local d
   d="$(tmpdir)"; finished "$d" node mit
