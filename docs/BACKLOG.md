@@ -718,6 +718,33 @@ get a working project in any supported language.
   **Rules that apply.**
   Script, workflow and release-pipeline changes are code and config: test-first, reviewed by the role that did not write it. The spec needs Adam's intent approval, because it adds a public repo and changes the command every user types.
 
+- **[LATER] PBI-1.20** (Clead, 2026-10-26, from Adam's questions after end-to-end run 1; the WHAT is Adam's, the HOW is Clead's; not yet designed, specced or reviewed) — The user journey from an itch to a project being built.
+
+  **Adam's WHAT (2026-10-26).**
+  - "All the user knows is that I want to do something. That something may be more or less crisp, or just an itch. The user has been told there is an AI package you can use to help you do all this, you just need to describe WHAT and it fixes the rest."
+  - "From the user's perspective there must be a clear entry point and a solid process to get there, initially by use of the bootstrapper." v2.4.0 is solid but covers only part of the journey.
+  - The user bootstraps the idea, not the project. The product office is Adam's own; it does not exist in the user's world.
+  - **The test for every HOW decision:** it fits the journey of the intended user, who never needs to be aware of technical setup details. Wherever the user needs technical knowledge or help, that is a defect (the rule of the end-to-end runs).
+  - Adam's stance on the trial (2026-10-26): not sure a proposal covers the gaps, so it is tried and tested, and what the test shows decides what stays.
+
+  **The journey and what covers it today (Clead, read from `main` 2026-10-26).**
+  1. Finding the entry point: not covered; the README starts with installing tools.
+  2. Installing the tools: README step 0 (with the run-1 findings).
+  3. Creating the project: the script, v2.4.0; solid in run 1.
+  4. Turning the itch into a clear WHAT: not covered.
+  5. Design, and the HOW choices (the pack and others): not covered; the script asks the user for the pack up front.
+  6. Starting work with Clead: partly (run-1 finding 10).
+  7. The build loop (specs, PRs, reviews): the template's workflow.
+
+  **Clead's candidate HOW (not decided): bootstrap the idea.** The script asks only WHAT questions (name, the idea in a sentence or two, licence, owner) and creates the project with no pack; the first Clead session in the project shapes the idea into `memory/project.md` and a high-level design in `docs/SPEC.md`, asking one question at a time; when the design settles, Clead picks the pack, explains why in plain words, and adds it through a PR. Known HOW problem, unchecked: protection requires a green `build`, which comes with the pack today, so a project without a pack needs a basic check until then. An earlier candidate (a planning chat outside the project, a planning guide and a `--design-note` file) was dropped the same day: it needs the user to plan before the entry point.
+
+  **Next.** A design draft of the whole journey (CLAUDE.md, "Model and effort": written on Opus, reviewed by Crog), checked stage by stage against the test above; then Adam's intent approval; then the spec. Not part of the run-1 fix batch.
+
+  **Done when.**
+  - Someone with only an itch, who has never used a terminal, goes from the entry point to a project with a first spec and its pack, following only what the journey gives them; every point where they needed technical knowledge or help is recorded as a finding and fixed.
+
+  **Rules that apply.**
+  Script, workflow and release changes are code and config: test-first, reviewed by the role that did not write it. README and first-session changes are process: reviewed by Crog. The design needs Adam's intent approval, because it changes what every user does.
 ---
 
 ## Phase 2 — Validate unproven pieces
