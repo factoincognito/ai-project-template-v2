@@ -37,10 +37,11 @@ three review rounds without agreement) is unchanged.
   you expect to change, and the session (its session link); every comment
   the session posts on it names the session too. Do not open it as a
   draft: a session without GraphQL access cannot take a PR out of draft,
-  so a draft can never be merged. Until the change is pushed and ready for review, the PR title
-  starts with `[claim]`, and nobody reviews or merges a `[claim]` PR. The
-  claim PR becomes the PR for the change. When you need a file the
-  description does not name, add it to the description before editing it.
+  so a draft can never be merged. Until the change is pushed and ready
+  for review, the PR title starts with `[claim]`, and nobody reviews or
+  merges a `[claim]` PR. The claim PR becomes the PR for the change. When
+  you need a file the description does not name, add it to the
+  description before editing it.
 - At startup, and before opening or updating each PR, list the open PRs and
   the branches other than the default branch. A branch without an open PR
   is not a claim.
