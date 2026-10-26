@@ -853,6 +853,9 @@ export BOOTSTRAP_SLEEP="$WORK/refuse/sleep"
 # exist, so no test ever waits on the real terminal and no yes is given
 # unless a test writes one.
 export BOOTSTRAP_TTY="$WORK/no-terminal"
+# Colour (finding 8): off in every test unless a test turns it on with
+# the hook, whatever the shell that starts the harness has set.
+unset BOOTSTRAP_COLOR
 # The bootstrapper's CHANGELOG.md as the stub gh serves it: the template's
 # own, unstamped stub, so the unstamped script under test finds its own
 # version there. Tests that need another version serve a stamped copy.
@@ -1038,7 +1041,7 @@ use_home() {
 # What reaches the terminal some other way is the job of bypass_lines;
 # what it cannot see is listed there.
 
-MSG_HELPERS='say|step_start|step_end|show_error|fail|lp_fail|stop_with_error|ask|ask_terminal|prompt_for|answer|add_problem|guide_begin|guide_step|guide_end'
+MSG_HELPERS='say|say_heading|step_start|step_end|show_error|fail|lp_fail|stop_with_error|ask|ask_terminal|prompt_for|answer|add_problem|guide_begin|guide_step|guide_end'
 
 # user_strings <file>: prints "<line number>: <text>" for each.
 user_strings() {
@@ -1465,6 +1468,179 @@ test_fail_exits_with_the_code_it_is_given() {
   local rc=0
   ( load_script; fail 3 "It stopped." "Run it again." ) 2>/dev/null || rc=$?
   [ "$rc" -eq 3 ] || die "fail exited $rc, want 3"
+}
+
+# ---------- message helpers: blank lines and colour ----------
+# Finding 8 (end-to-end run 1): what the script says to the user (a
+# question, the plan, a guide, a stop, the closing "What to do next") is
+# told apart from its progress log by one blank line before it, never
+# two, and the lines the user must act on are in one colour, only at a
+# terminal that takes colour (BOOTSTRAP_COLOR stands in for the terminal).
+
+COLOUR_ON="$(printf '\033[1;36m')"
+COLOUR_OFF="$(printf '\033[0m')"
+# has_esc <file>: the file holds an escape character (the start of a
+# colour code), read through od -c as has_cr does.
+has_esc() { od -A n -c "$1" | grep -F '033' >/dev/null; }
+
+test_a_question_after_progress_lines_comes_after_one_blank_line() {
+  local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
+  printf '%s\n' '==> Checking your computer' '    Done. git is installed' 'A line of work.' '' \
+    'Why it is asked, in one sentence.' 'Name [x]: ' >"$want"
+  ( load_script; step_start "Checking your computer"; step_end "git is installed"; say "A line of work."
+    ask "Why it is asked, in one sentence." "Name" x ) <<<"y" >"$got" 2>"$got.err"
+  expect_same "a question after progress lines" "$want" "$got"
+  [ ! -s "$got.err" ] || { cat "$got.err" >&2; die "wrote to stderr"; }
+  # The first thing the script prints has no blank line above it.
+  printf '%s\n' 'Why it is asked, in one sentence.' 'Name [x]: ' >"$want"
+  ( load_script; ask "Why it is asked, in one sentence." "Name" x ) <<<"y" >"$got"
+  expect_same "a question printed first" "$want" "$got"
+}
+
+test_blocks_one_after_another_have_one_blank_line_between_never_two() {
+  local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
+  printf '%s\n' 'Working.' '' 'Why the first one.' 'First [a]: ' '' 'Why the second one.' 'Second [b]: ' \
+    '' 'The title.' 'Why this is needed: a reason' '  1. Do it.' 'When it has worked: a' \
+    'If you see something else: b' 'How the script checks it: c' '' \
+    'Press Enter to check again, or type q to stop: ' >"$want"
+  ( load_script; say "Working."; block_start; block_start
+    ask "Why the first one." First a; ask "Why the second one." Second b
+    guide_begin "The title." "a reason"; guide_step "Do it."; guide_end a b c; block_start
+    wait_for_enter || true ) <<<"$(printf '1\n2\nq')" >"$got"
+  expect_same "blocks one after another" "$want" "$got"
+  # An open line of the wait's stars is ended first, then one blank line;
+  # a stop after it puts the blank line on stdout too.
+  printf '%s\n' 'Checking the build status *****' '' 'Why it is asked, in one sentence.' 'Name [x]: ' >"$want"
+  ( load_script; say_open "Checking the build status"; say_open " *****"
+    ask "Why it is asked, in one sentence." "Name" x ) <<<"y" >"$got"
+  expect_same "a question after an open line of stars" "$want" "$got"
+  ( load_script; say_open "Checking the build status ***"; show_error "It broke." "Run it again." ) >"$got" 2>&1
+  printf '%s\n' 'Checking the build status ***' '' 'What happened: It broke.' 'What to do next: Run it again.' >"$want"
+  expect_same "a stop after an open line of stars" "$want" "$got"
+}
+
+test_a_stop_and_the_closing_next_step_come_after_one_blank_line() {
+  local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
+  # The blank line before a stop goes to stdout, after the progress log
+  # it closes, so stderr still begins with "What happened".
+  ( load_script; say "Working."; show_error "It broke." "Run it again." ) >"$got.out" 2>"$got.err"
+  printf '%s\n' 'Working.' '' >"$want"
+  expect_same "stdout before a stop" "$want" "$got.out"
+  printf '%s\n' 'What happened: It broke.' 'What to do next: Run it again.' >"$want"
+  expect_same "the stop" "$want" "$got.err"
+  # As a terminal shows both streams: one blank line between.
+  ( load_script; say "Working."; show_error "It broke." "Run it again." ) >"$got" 2>&1
+  printf '%s\n' 'Working.' '' 'What happened: It broke.' 'What to do next: Run it again.' >"$want"
+  expect_same "the stop, both streams" "$want" "$got"
+  # A stop that shows the command to start again or to continue: the
+  # command opens the block, and the stop follows it after a blank line.
+  ( load_script; IN_NAME=my-app; RESTART_CMD="bootstrap-project.sh --name my-app"
+    step_end "Checked."; stop_with_error "It broke." "Run it again." "" ) >"$got" 2>&1 || true
+  printf '%s\n' '    Done. Checked.' '' 'To start again, run this command:' \
+    '    bash bootstrap-project.sh --name my-app' '' 'What happened: It broke.' 'What to do next: Run it again.' >"$want"
+  expect_same "a stop with its command" "$want" "$got"
+  # The closing "What to do next" said through say, and the plan's heading.
+  ( load_script; say "    Licence: mit"; say "What to do next: open the Claude app."
+    step_end "Checked."; say_heading "Here is the plan."; say "The project:" ) >"$got"
+  printf '%s\n' '    Licence: mit' '' 'What to do next: open the Claude app.' '    Done. Checked.' '' \
+    'Here is the plan.' 'The project:' >"$want"
+  expect_same "the closing next step and the plan heading" "$want" "$got"
+  # The command to continue, shown once before the first change, is a
+  # block of its own, plain; the closing help line follows "What to do
+  # next" straight on, plain.
+  ( load_script; step_end "Checked."; say "$ADVANCE_INTRO"; say_command "bash x.sh --resume"
+    step_start "Creating"; say "What to do next: open it."; say "If you ever feel stuck, ask Clead." ) >"$got"
+  printf '%s\n' '    Done. Checked.' '' "$ADVANCE_INTRO" '    bash x.sh --resume' '==> Creating' '' \
+    'What to do next: open it.' 'If you ever feel stuck, ask Clead.' >"$want"
+  expect_same "the command to continue and the closing lines" "$want" "$got"
+}
+
+test_no_colour_codes_by_default_in_a_file_or_pipe() {
+  local got="$WORK/got.$RANDOM"
+  ( load_script; unset BOOTSTRAP_COLOR NO_COLOR BOOTSTRAP_STDOUT_TERMINAL; export TERM=xterm BOOTSTRAP_TTY="$got.tty"
+    printf 'no\n' >"$got.tty"
+    ask "Why it is asked, in one sentence." "Name" x; ask_terminal "It runs only if you type yes." "Run it now?" || true
+    wait_for_enter || true; say_heading "Here is the plan."; say "What to do next: open it."
+    show_error "It broke." "Run it again." ) <<<"$(printf 'y\nq')" >"$got" 2>"$got.err"
+  ! has_esc "$got" || { od -c "$got" | head >&2; die "colour codes on stdout without a terminal"; }
+  ! has_esc "$got.err" || { od -c "$got.err" | head >&2; die "colour codes on stderr without a terminal"; }
+  ( load_script; unset BOOTSTRAP_COLOR NO_COLOR BOOTSTRAP_STDOUT_TERMINAL; export TERM=xterm; colour_on ) >"$got" \
+    && die "colour_on said yes for a file"
+  return 0
+}
+
+test_the_colour_hook_paints_only_the_lines_the_user_acts_on() {
+  local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
+  printf 'no\n' >"$got.tty"
+  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1 BOOTSTRAP_TTY="$got.tty"
+    step_start "Checking"; step_end "It works."; say "A line of work."; say_command "gh auth status"
+    ask "Why it is asked, in one sentence." "Pack" "" "1) node: the first choice"
+    ask_terminal "It runs only if you type yes." "Run it now? (yes or no)" || true
+    guide_begin "The title." "a reason"; guide_step "Do it."; guide_end a b c
+    wait_for_enter || true
+    say_heading "Here is the plan."; say "    On GitHub: a/b"
+    say "What to do next: open the Claude app." ) <<<"$(printf 'node\nq')" >"$got" 2>"$got.err"
+  {
+    printf '%s\n' '==> Checking' '    Done. It works.' 'A line of work.' '    gh auth status' '' \
+      'Why it is asked, in one sentence.' '  1) node: the first choice'
+    printf '%sPack:%s \n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '\n%s\n' 'It runs only if you type yes.'
+    printf '%sRun it now? (yes or no) [no]:%s \n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '%s\n' '' 'The title.' 'Why this is needed: a reason' '  1. Do it.' 'When it has worked: a' \
+      'If you see something else: b' 'How the script checks it: c' ''
+    printf '%sPress Enter to check again, or type q to stop:%s \n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '\n%sHere is the plan.%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '%s\n' '    On GitHub: a/b' ''
+    printf '%sWhat to do next: open the Claude app.%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+  } >"$want"
+  expect_same "painted lines" "$want" "$got"
+  [ ! -s "$got.err" ] || { cat "$got.err" >&2; die "wrote to stderr"; }
+  # A stop, on stderr: only its "What to do next" line is painted.
+  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
+    show_error "It broke." "Run it again." "raw text" ) 2>"$got"
+  {
+    printf '%s\n' 'What happened: It broke.'
+    printf '%sWhat to do next: Run it again.%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '%s\n' 'Details for support (you can ignore these):' '    raw text'
+  } >"$want"
+  expect_same "a painted stop" "$want" "$got"
+}
+
+test_no_color_and_a_dumb_terminal_win_over_the_colour_hook() {
+  # NO_COLOR (https://no-color.org), when set and not empty, turns colour
+  # off whatever else says on, the hook and a real terminal; so does a
+  # terminal that says it is dumb. An empty NO_COLOR does not count.
+  local got="$WORK/got.$RANDOM"
+  ( load_script; export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1
+    say_heading "Here is the plan."; show_error "It broke." "Run it again." ) >"$got" 2>&1
+  ! has_esc "$got" || { od -c "$got" | head >&2; die "NO_COLOR did not turn colour off"; }
+  ( load_script; unset NO_COLOR; export TERM=dumb BOOTSTRAP_COLOR=1
+    say_heading "Here is the plan."; show_error "It broke." "Run it again." ) >"$got" 2>&1
+  ! has_esc "$got" || { od -c "$got" | head >&2; die "TERM=dumb did not turn colour off"; }
+  ( load_script; export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=
+    say_heading "Here is the plan." ) >"$got"
+  has_esc "$got" || die "an empty NO_COLOR turned colour off"
+}
+
+test_colour_follows_the_terminal_check_of_the_wait() {
+  # Colour on stdout asks stdout_is_terminal (#204), so its hook
+  # BOOTSTRAP_STDOUT_TERMINAL counts as the terminal; NO_COLOR and
+  # TERM=dumb still win. A stop on stderr asks whether stderr is a
+  # terminal, which a file is not.
+  local got="$WORK/got.$RANDOM"
+  ( load_script; unset NO_COLOR BOOTSTRAP_COLOR; export TERM=xterm BOOTSTRAP_STDOUT_TERMINAL=yes
+    say_heading "Here is the plan."; show_error "It broke." "Run it again." ) >"$got" 2>"$got.err"
+  grep -qF "${COLOUR_ON}Here is the plan.${COLOUR_OFF}" "$got" || { od -c "$got" | head >&2; die "no colour with BOOTSTRAP_STDOUT_TERMINAL=yes"; }
+  ! has_esc "$got.err" || { od -c "$got.err" | head >&2; die "colour on stderr that is a file"; }
+  ( load_script; unset NO_COLOR BOOTSTRAP_COLOR; export TERM=xterm BOOTSTRAP_STDOUT_TERMINAL=no
+    say_heading "Here is the plan." ) >"$got"
+  ! has_esc "$got" || die "colour with BOOTSTRAP_STDOUT_TERMINAL=no"
+  ( load_script; unset BOOTSTRAP_COLOR; export TERM=xterm BOOTSTRAP_STDOUT_TERMINAL=yes NO_COLOR=1
+    say_heading "Here is the plan." ) >"$got"
+  ! has_esc "$got" || die "NO_COLOR did not win over BOOTSTRAP_STDOUT_TERMINAL=yes"
+  ( load_script; unset NO_COLOR BOOTSTRAP_COLOR; export TERM=dumb BOOTSTRAP_STDOUT_TERMINAL=yes
+    say_heading "Here is the plan." ) >"$got"
+  ! has_esc "$got" || die "TERM=dumb did not win over BOOTSTRAP_STDOUT_TERMINAL=yes"
 }
 
 test_layout_pack_errors_use_the_error_format() {
@@ -2327,6 +2503,16 @@ test_help_lists_every_option() {
   done
   # S18b: --non-interactive alone is refused, so the help says what it needs.
   grep -qF -- "(needs --yes or --dry-run)" "$d/out" || { cat "$d/out" >&2; die "help does not say --non-interactive needs --yes or --dry-run"; }
+}
+
+test_help_stays_plain_with_the_colour_hook() {
+  local d rc=0
+  d="$(tmpdir)"
+  BOOTSTRAP_COLOR=1 TERM=xterm bash "$SCRIPT" --help </dev/null >"$d/out" 2>"$d/err" || rc=$?
+  [ "$rc" -eq 0 ] || { cat "$d/err" >&2; die "exit $rc, want 0"; }
+  ! has_esc "$d/out" || die "the help has colour codes"
+  bash "$SCRIPT" --help </dev/null >"$d/plain"
+  cmp -s "$d/plain" "$d/out" || { diff "$d/plain" "$d/out" >&2; die "the help changed with the hook"; }
 }
 
 test_name_takes_letters_digits_dots_dashes_and_underscores() {
@@ -7457,7 +7643,10 @@ These parts of the project are left for your first session with Clead (Claude, t
   - the questions in square brackets in the sections of docs/SPEC.md;
   - memory/context.md.
 TEXT
-  printf '%s\n' "$WHAT_NEXT" "$ASK_CLEAD" >>"$d/want"
+  # The blank line above "What to do next" sets it apart from the report
+  # (finding 8: user interaction after one blank line); the line after it
+  # follows straight on.
+  printf '%s\n' "" "$WHAT_NEXT" "$ASK_CLEAD" >>"$d/want"
   expect_same "the report" "$d/want" "$d/report"
   [ -z "$(awk '{print NR ": " $0}' "$d/report" | banned_hits)" ] || { cat "$d/report" >&2; die "banned word in the report"; }
   [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "a run that went through wrote to stderr"; }
