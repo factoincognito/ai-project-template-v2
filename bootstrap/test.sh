@@ -1158,11 +1158,12 @@ test_harness_records_the_tests_it_ran() {
 # ---------- shards split by measured duration (PBI-1.22, part 2) ----------
 # With BOOTSTRAP_TEST_WEIGHTS=<file>:<column>, shard i of n holds the
 # tests a greedy split by duration gives it: longest first, each to the
-# shard with the least total so far (ties: the lower shard number, then
-# the name). <file> has a header line "test <column names...>" and one
-# line per test, its seconds in each column; a test the file does not
-# list weighs the median of the column. The split must still put every
-# test in exactly one shard.
+# shard with the least total so far (ties: the shard with fewer tests,
+# then the lower one; equal weights keep the list's order). <file> has a
+# header line "test <column names...>" and one line per test, its
+# seconds in each column; a test the file does not list, or lists with
+# 0, weighs the median (the lower middle one) of the column's other
+# values. The split must still put every test in exactly one shard.
 
 DURATIONS="$HERE/test-durations.txt"
 
@@ -1225,6 +1226,92 @@ test_harness_shards_by_duration_follow_the_greedy_rule() {
   grep -vxF "$heavy" "$WORK/names" | diff - "$WORK/g2" >&2 || die "shard 2 is not every other test, in the list's order (want, then got)"
 }
 
+# split_of <weights> <column> <n>: the harness's lists of shards 1..n,
+# as "<shard> <test>" lines.
+split_of() {
+  local i=1
+  while [ "$i" -le "$3" ]; do
+    run_harness "$WORK/split.$i" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD="$i/$3" BOOTSTRAP_TEST_WEIGHTS="$1:$2" \
+      || { cat "$WORK/split.$i" >&2; die "list mode failed for shard $i/$3"; }
+    sed "s/^/$i /" "$WORK/split.$i"
+    i=$((i + 1))
+  done
+}
+
+test_harness_shards_by_duration_weigh_unlisted_and_zero_tests_as_the_lower_median() {
+  # Four tests are listed, with 10, 20, 30 and 0 seconds: the 0 counts as
+  # not measured, so the measured ones are 10, 20 and 30 and their median
+  # is 20. Every other test weighs 20 too. With as many shards as tests,
+  # each shard holds one test, in the order of the split: the 30 first,
+  # then the 20s (the listed 20 and the rest, in list order), then the
+  # 10. So the 10 is in the last shard, and a 0 weight for the unlisted
+  # tests (they would come last) or the largest weight (they would come
+  # first) would put other tests there. A second file with an even
+  # count of measured weights (10, 20, 30, 40): the lower middle one,
+  # 20, so the listed 30 and 40 come before every unlisted test.
+  local w="$WORK/w" n t10 t20 t30 t0 t40 last first second
+  harness_tests >"$WORK/names"
+  n="$(grep -c . "$WORK/names")"
+  t10="$(sed -n 3p "$WORK/names")"; t20="$(sed -n 7p "$WORK/names")"
+  t30="$(sed -n 11p "$WORK/names")"; t0="$(sed -n 1p "$WORK/names")"
+  printf 'test a\n%s 10\n%s 20\n%s 30\n%s 0\n' "$t10" "$t20" "$t30" "$t0" >"$w"
+  split_of "$w" a "$n" >"$WORK/got"
+  last="$(awk -v n="$n" '$1 == n { print $2 }' "$WORK/got")"
+  first="$(awk '$1 == 1 { print $2 }' "$WORK/got")"
+  [ "$first" = "$t30" ] || die "shard 1 holds $first, want the 30-second test"
+  [ "$last" = "$t10" ] || die "the last shard holds $last, want the 10-second test (the rest weigh the median 20, the 0 included)"
+  # The tests of weight 20 fill shards 2..n-1 in list order, the listed
+  # one among them.
+  awk -v n="$n" '$1 > 1 && $1 < n { print $2 }' "$WORK/got" >"$WORK/mid"
+  grep -vxF -e "$t10" -e "$t30" "$WORK/names" | diff - "$WORK/mid" >&2 || die "the 20-second tests are not in list order (want, then got)"
+  t40="$(sed -n 13p "$WORK/names")"
+  printf 'test a\n%s 10\n%s 20\n%s 30\n%s 40\n' "$t10" "$t20" "$t30" "$t40" >"$w"
+  split_of "$w" a "$n" >"$WORK/got"
+  first="$(awk '$1 == 1 { print $2 }' "$WORK/got")"; second="$(awk '$1 == 2 { print $2 }' "$WORK/got")"
+  [ "$first $second" = "$t40 $t30" ] || die "shards 1 and 2 hold '$first $second', want the 40 and 30 (the median of four is the lower middle one, 20)"
+}
+
+test_harness_shards_by_duration_break_ties_by_fewer_tests_then_lower_shard() {
+  # Every test weighs 1 except one of 3 (the median of 3 and 1, 1, ...
+  # is 1, so the unlisted tests weigh 1 too). With 2 shards: the 3 goes
+  # to shard 1; then the 1s go to shard 2 until it holds 3 tests and the
+  # totals are equal (3 and 3); the next 1 then goes to the shard with
+  # fewer tests, shard 1, not to the lower-numbered shard by default. On
+  # a tie of totals and counts, the lower shard: the very first 1 after
+  # the 3 cannot show that, so a second file of all-equal weights does:
+  # shard 1 gets the first test, shard 2 the second, shard 1 the third.
+  local w="$WORK/w" heavy fourth first second third
+  harness_tests >"$WORK/names"
+  heavy="$(sed -n 2p "$WORK/names")"
+  { printf 'test x\n'; awk -v h="$heavy" '{ print $0, ($0 == h) ? 3 : 1 }' "$WORK/names"; } >"$w"
+  split_of "$w" x 2 >"$WORK/got"
+  grep -qxF "1 $heavy" "$WORK/got" || die "the 3-second test is not in shard 1"
+  # In list order without the heavy one: the first three go to shard 2,
+  # the fourth to shard 1 (equal totals, fewer tests).
+  fourth="$(grep -vxF "$heavy" "$WORK/names" | sed -n 4p)"
+  for t in $(grep -vxF "$heavy" "$WORK/names" | sed -n 1,3p); do
+    grep -qxF "2 $t" "$WORK/got" || die "$t is not in shard 2"
+  done
+  grep -qxF "1 $fourth" "$WORK/got" || die "on equal totals the next test did not go to the shard with fewer tests"
+  { printf 'test x\n'; awk '{ print $0, 1 }' "$WORK/names"; } >"$w"
+  split_of "$w" x 2 >"$WORK/got"
+  first="$(sed -n 1p "$WORK/names")"; second="$(sed -n 2p "$WORK/names")"; third="$(sed -n 3p "$WORK/names")"
+  grep -qxF "1 $first" "$WORK/got" && grep -qxF "2 $second" "$WORK/got" && grep -qxF "1 $third" "$WORK/got" \
+    || die "equal weights do not alternate from shard 1 in list order"
+}
+
+test_harness_reads_a_weights_file_with_windows_line_endings() {
+  # A durations file saved with CR LF line ends gives the same split as
+  # the LF one, also when the column is the last one.
+  local lf="$WORK/lf" crlf="$WORK/crlf"
+  printf 'test a b c\n' >"$lf"
+  harness_tests | awk '{ printf "%s 1 2 %d\n", $0, (NR * 37) % 101 }' >>"$lf"
+  awk '{ printf "%s\r\n", $0 }' "$lf" >"$crlf"
+  split_of "$lf" c 3 >"$WORK/want"
+  split_of "$crlf" c 3 >"$WORK/got"
+  diff "$WORK/want" "$WORK/got" >&2 || die "CR LF gave another split (LF, then CR LF)"
+}
+
 test_harness_refuses_weights_it_cannot_read() {
   # A weights setting that does not name a readable file and one of its
   # columns, or a file whose numbers are not numbers, stops the harness
@@ -1234,7 +1321,11 @@ test_harness_refuses_weights_it_cannot_read() {
   printf 'test a\ntest_x 1\n' >"$w"
   printf 'test a\ntest_x one\n' >"$WORK/bad-number"
   printf 'nothead a\ntest_x 1\n' >"$WORK/bad-head"
-  for v in "$WORK/missing:a" "$w" "$w:" "$w:b" "$WORK/bad-number:a" "$WORK/bad-head:a"; do
+  : >"$WORK/empty"
+  printf 'test a\n' >"$WORK/header-only"
+  mkdir -p "$WORK/a-folder"
+  for v in "$WORK/missing:a" "$w" "$w:" ":a" "$w:b" "$WORK/bad-number:a" "$WORK/bad-head:a" \
+    "$WORK/empty:a" "$WORK/header-only:a" "$WORK/a-folder:a"; do
     set +e
     run_harness "$out" BOOTSTRAP_TEST_SHARD=1/2 BOOTSTRAP_TEST_WEIGHTS="$v"
     rc=$?
@@ -1272,8 +1363,8 @@ test_workflow_shards_split_by_the_durations_of_their_os() {
 test_durations_from_logs_reads_the_times_between_result_lines() {
   # bootstrap/durations-from-logs.sh <os>=<log>... prints the durations
   # file from Actions job logs: each test's time is its result line's
-  # timestamp minus the line before (the step start for the first),
-  # summed over the logs of one OS, rounded to tenths.
+  # timestamp minus the result line before (the step start for the
+  # first), the mean over the logs of one OS it appears in, in tenths.
   local d="$WORK/logs" tool="$HERE/durations-from-logs.sh"
   [ -f "$tool" ] || die "no bootstrap/durations-from-logs.sh"
   mkdir -p "$d"
@@ -1285,9 +1376,12 @@ test_durations_from_logs_reads_the_times_between_result_lines() {
     '2026-10-26T22:00:04.0000000Z ok   test_c' >"$d/m1.log"
   printf '%s\r\n' '2026-10-26T22:00:00.0000000Z ##[group]Run bash bootstrap/test-bootstrap-project.sh' \
     '2026-10-26T22:01:00.0000000Z ok   test_a' '2026-10-26T22:01:01.0000000Z ok   test_c' >"$d/w1.log"
-  bash "$tool" ubuntu-latest="$d/u1.log" macos-latest="$d/m1.log" windows-latest="$d/w1.log" >"$d/out" 2>"$d/err" \
+  # A second macOS log (another run) where test_c took 6 s: the mean, 5.
+  printf '%s\n' '2026-10-27T01:00:00.0000000Z ##[group]Run /bin/bash bootstrap/test-bootstrap-project.sh' \
+    '2026-10-27T01:00:06.0000000Z ok   test_c' >"$d/m2.log"
+  bash "$tool" ubuntu-latest="$d/u1.log" macos-latest="$d/m1.log" windows-latest="$d/w1.log" macos-latest="$d/m2.log" >"$d/out" 2>"$d/err" \
     || { cat "$d/err" >&2; die "the tool failed"; }
-  printf '%s\n' 'test ubuntu-latest macos-latest windows-latest' 'test_a 2.5 0 60.0' 'test_b 9.5 0 0' 'test_c 0 4.0 1.0' >"$d/want"
+  printf '%s\n' 'test ubuntu-latest macos-latest windows-latest' 'test_a 2.5 0 60.0' 'test_b 9.5 0 0' 'test_c 0 5.0 1.0' >"$d/want"
   diff "$d/want" "$d/out" >&2 || die "unexpected durations (want, then got)"
   # A log with no test step is refused: it would give every test 0.
   printf '%s\n' '2026-10-26T22:00:00.0000000Z ##[group]Run actions/checkout@v7' >"$d/empty.log"

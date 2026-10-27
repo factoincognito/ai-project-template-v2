@@ -12,12 +12,14 @@
 # A test's time is its result line's timestamp ("ok   test_x" or
 # "FAIL test_x") minus the timestamp of the result line before it, or of
 # the start of the test step ("##[group]Run " for a step that is not an
-# action) for the first test of a log. A test runs once per OS in a run,
+# action) for the first test of a log (so the first test's time also
+# holds the harness's start-up). A test runs once per OS in a run,
 # so the logs of several runs can be given: a test's time on one OS is
 # the mean over the logs it appears in. Prints a
 # header "test <os>...", in the order ubuntu-latest, macos-latest,
 # windows-latest, then one line per test, sorted, with tenths of a
-# second (0 where an OS has no time). Exits 1 when a log has no test
+# second (0 where an OS has no time: the harness weighs a 0 as the
+# median). Exits 1 when a log has no test
 # result. Carriage returns are ignored.
 #
 # Template-only: bootstrap/ is not in bootstrap/manifest.txt.
