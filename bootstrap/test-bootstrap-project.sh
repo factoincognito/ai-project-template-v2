@@ -3832,6 +3832,8 @@ with_pack() { IN_PACK="$1"; shift; "$@"; }
 with_dir() { IN_DIR="$1"; shift; "$@"; }
 # path_first <folder>: the folder comes first on the run's PATH.
 path_first() { PATH="$1:$PATH"; shift; "$@"; }
+# in_folder <folder>: the run goes on in that folder.
+in_folder() { cd "$1"; shift; "$@"; }
 # path_last <folder>: the folder comes last on the run's PATH.
 path_last() { PATH="$PATH:$1"; shift; "$@"; }
 # tty_answers: the Nth question asked at the terminal reads line N of
@@ -4410,6 +4412,30 @@ linux_npm_on_enter() {
     [ ! -e "$LATER_DIR/later/npm" ] || { mkdir -p "$LATER_DIR/linux bin"; mv "$LATER_DIR/later/npm" "$LATER_DIR/linux bin/npm"; }
   }
   "$@"
+}
+
+test_in_wsl_a_link_to_the_windows_npm_counts_as_no_npm() {
+  # #255 review, N1: the place npm is found is followed to the file it
+  # leads to. A link in a Linux folder to the Windows npm, and . on PATH
+  # while the current folder is the Windows Node.js folder (command -v
+  # then says ./npm), are the Windows npm too: refused, and not run.
+  local d
+  d="$(tmpdir)"
+  on_wsl "$d"
+  windows_npm "$d"
+  mkdir -p "$d/linux bin"
+  ln -s "$(windows_npm_dir "$d")npm" "$d/linux bin/npm"
+  pre "$d" ni with_pack node path_first "$d/linux bin" preflight_npm
+  expect_rc 3 "$d"
+  expect_out "$d" "The npm this Linux finds is the Windows one"
+  [ ! -e "$d/tools.log" ] || ! grep -q '^windows-npm' "$d/tools.log" || { cat "$d/tools.log" >&2; die "the Windows npm was run through a link"; }
+  d="$(tmpdir)"
+  on_wsl "$d"
+  windows_npm "$d"
+  pre "$d" ni with_pack node in_folder "$(windows_npm_dir "$d")" path_first . preflight_npm
+  expect_rc 3 "$d"
+  expect_out "$d" "The npm this Linux finds is the Windows one"
+  [ ! -e "$d/tools.log" ] || ! grep -q '^windows-npm' "$d/tools.log" || { cat "$d/tools.log" >&2; die "the Windows npm was run through . on PATH"; }
 }
 
 test_in_wsl_a_linux_npm_passes_and_a_missing_one_gets_the_usual_guide() {

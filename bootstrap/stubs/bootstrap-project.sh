@@ -1980,16 +1980,18 @@ preflight_tools() {
 # check_npm: npm runs. In WSL (Linux on Windows), an npm in a Windows
 # drive's folder (/mnt/c/...) is the Windows one, reached through WSL's
 # Windows interop: a project in Linux should not depend on it, so it
-# counts as no npm and is not run (end-to-end run 2, r2e). NPM_PROBLEM
-# says which part failed: missing or windows; NPM_WINDOWS_PATH is where
-# the Windows npm was found.
+# counts as no npm and is not run (end-to-end run 2, r2e). The place is
+# followed to the file it leads to (#255 review, N1), so a link to the
+# Windows npm, or ./npm with . on PATH in a Windows folder, counts too.
+# NPM_PROBLEM says which part failed: missing or windows;
+# NPM_WINDOWS_PATH is where the Windows npm was found.
 NPM_PROBLEM=""
 NPM_WINDOWS_PATH=""
 check_npm() {
   local where=""
   if [ -n "$LINUX_WSL" ]; then
     where="$(command -v npm 2>/dev/null)" || where=""
-    if on_windows_drive "$where"; then
+    if [ -n "$where" ] && on_windows_drive "$where"; then
       NPM_PROBLEM=windows
       NPM_WINDOWS_PATH="$where"
       return 1
@@ -2000,15 +2002,30 @@ check_npm() {
   NPM_PROBLEM=""
 }
 
-# on_windows_drive <path>: the path is in the folder of a Windows drive as
-# WSL shows it: /mnt/<one letter>/... (BOOTSTRAP_WINDOWS_DRIVES for /mnt).
-# Other folders under /mnt (WSL's own /mnt/wsl, a disk mounted at
-# /mnt/data) are not Windows drives.
+# on_windows_drive <path>: the path, or the file it leads to through
+# links (and from the current folder, for a relative path), is in the
+# folder of a Windows drive as WSL shows it: /mnt/<one letter>/...
+# (BOOTSTRAP_WINDOWS_DRIVES for /mnt). Other folders under /mnt (WSL's
+# own /mnt/wsl, a disk mounted at /mnt/data) are not Windows drives.
+# readlink -f is GNU's, always there in WSL, where alone this runs; where
+# it fails, the path is taken as it is. The drives folder is followed
+# too, so both are compared the same way.
 on_windows_drive() {
-  local root="${BOOTSTRAP_WINDOWS_DRIVES:-/mnt}"
+  local root="${BOOTSTRAP_WINDOWS_DRIVES:-/mnt}" real="" real_root=""
   root="${root%/}"
+  in_drive_folder "$1" "$root" && return 0
+  real="$(readlink -f -- "$1" 2>/dev/null)" || real=""
+  [ -n "$real" ] || return 1
+  real_root="$(readlink -f -- "$root" 2>/dev/null)" || real_root=""
+  [ -n "$real_root" ] || real_root="$root"
+  in_drive_folder "$real" "${real_root%/}"
+}
+
+# in_drive_folder <path> <drives folder>: the path is in a one-letter
+# folder of the drives folder.
+in_drive_folder() {
   case "$1" in
-    "$root"/[A-Za-z]/*) return 0 ;;
+    "$2"/[A-Za-z]/*) return 0 ;;
   esac
   return 1
 }
