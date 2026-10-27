@@ -90,6 +90,26 @@ die() { echo "assertion failed: $*" >&2; exit 1; }
 # macOS user folders often do, so paths must be quoted everywhere.
 tmpdir() { mktemp -d "$WORK/t m p.XXXXXX"; }
 
+# The first line of every stand-in the harness writes (stub gh, runner,
+# npm, refusers, fake tools, hooks): the bash running the harness,
+# started directly. Through /usr/bin/env, each call of a stand-in started
+# two processes (env, then bash), and on Windows every process start
+# costs about 30 ms (PBI-1.18, PBI-1.22). A bash whose path has a space
+# cannot be named on that line, so env is kept for it.
+case "${BASH:-}" in
+  "" | *[[:space:]]*) STAND_IN_SHEBANG='#!/usr/bin/env bash' ;;
+  *) STAND_IN_SHEBANG="#!$BASH" ;;
+esac
+
+# write_stand_in <path> <text>: writes the stand-in <path>, its first
+# line STAND_IN_SHEBANG and then <text>, and makes it executable. Only
+# builtins, except chmod (and mkdir when the folder is new).
+write_stand_in() {
+  [ -d "${1%/*}" ] || mkdir -p "${1%/*}"
+  printf '%s\n%s' "$STAND_IN_SHEBANG" "$2" >"$1"
+  chmod +x "$1"
+}
+
 # load_script: source the script with no arguments, defining its
 # functions without running its main part.
 load_script() {
@@ -111,11 +131,7 @@ expect_same() {
 # create, repo clone, api, pr ...). A call with no emulation fails loudly
 # (exit 64), so a test never passes on a gh call nobody emulated.
 
-make_stub_gh() {
-  local path="$1"
-  mkdir -p "$(dirname "$path")"
-  cat >"$path" <<'STUB'
-#!/usr/bin/env bash
+IFS= read -r -d '' STUB_GH_TEXT <<'STUB' || true
 set -euo pipefail
 : "${STUB_GH_LOG:?stub gh: STUB_GH_LOG is not set}"
 {
@@ -129,7 +145,7 @@ set -euo pipefail
 fails_left() {
   local f="${STUB_GH_LOG%/*}/$1" n
   [ -f "$f" ] || return 1
-  n="$(cat "$f")"
+  read -r n <"$f" || true
   [ "$n" -gt 0 ] || return 1
   echo $((n - 1)) >"$f"
 }
@@ -714,8 +730,7 @@ case "${1:-}" in
   *) echo "stub gh: no emulation for: $*" >&2; exit 64 ;;
 esac
 STUB
-  chmod +x "$path"
-}
+make_stub_gh() { write_stand_in "$1" "$STUB_GH_TEXT"; }
 
 # ---------- stub runner ----------
 # A stand-in for the runner of offered commands (installs, logins),
@@ -723,18 +738,13 @@ STUB
 # string it was given to $STUB_RUN_LOG and exits with $STUB_RUN_RC
 # (default 0).
 
-make_stub_run() {
-  local path="$1"
-  mkdir -p "$(dirname "$path")"
-  cat >"$path" <<'STUB'
-#!/usr/bin/env bash
+IFS= read -r -d '' STUB_RUN_TEXT <<'STUB' || true
 set -euo pipefail
 : "${STUB_RUN_LOG:?stub runner: STUB_RUN_LOG is not set}"
 printf '%s\n' "$*" >>"$STUB_RUN_LOG"
 exit "${STUB_RUN_RC:-0}"
 STUB
-  chmod +x "$path"
-}
+make_stub_run() { write_stand_in "$1" "$STUB_RUN_TEXT"; }
 
 # ---------- stub npm ----------
 # A stand-in for npm, selected with BOOTSTRAP_NPM, so CI never reaches
@@ -762,11 +772,7 @@ STUB
 # npm also deletes it (#155 review, finding 1: a changed or deleted file
 # the setup does not change).
 
-make_stub_npm() {
-  local path="$1"
-  mkdir -p "$(dirname "$path")"
-  cat >"$path" <<'STUB'
-#!/usr/bin/env bash
+IFS= read -r -d '' STUB_NPM_TEXT <<'STUB' || true
 set -euo pipefail
 : "${STUB_NPM_LOG:?stub npm: STUB_NPM_LOG is not set}"
 {
@@ -816,8 +822,7 @@ fi
 [ -z "${STUB_NPM_DELETE:-}" ] || rm "$STUB_NPM_DELETE"
 printf '\nup to date in 2s\n'
 STUB
-  chmod +x "$path"
-}
+make_stub_npm() { write_stand_in "$1" "$STUB_NPM_TEXT"; }
 
 # ---------- safe defaults for the hooks ----------
 # Every test runs with the hooks pointing at stubs that refuse: they log
@@ -826,14 +831,13 @@ STUB
 # fails. A test that needs the real default unsets the hook itself.
 
 make_refuser() {
-  local path="$1" hook="$2"
-  cat >"$path" <<STUB
-#!/usr/bin/env bash
+  local path="$1" hook="$2" text
+  IFS= read -r -d '' text <<STUB || true
 printf '%s\\n' "$hook \$*" >>"\${REFUSE_LOG:-$WORK/refused.log}"
 echo "test harness: refused to run '\$*' for real; this test must set $hook" >&2
 exit 70
 STUB
-  chmod +x "$path"
+  write_stand_in "$path" "$text"
 }
 mkdir -p "$WORK/refuse"
 make_refuser "$WORK/refuse/run" BOOTSTRAP_RUN
@@ -843,11 +847,10 @@ export BOOTSTRAP_RUN="$WORK/refuse/run" BOOTSTRAP_GH="$WORK/refuse/gh" BOOTSTRAP
 # The pause between two checks of GitHub (BOOTSTRAP_SLEEP): a stand-in
 # that waits for nothing, so no test waits for real. It appends the
 # seconds it was asked to wait to $STUB_SLEEP_LOG (default $WORK/sleep.log).
-cat >"$WORK/refuse/sleep" <<STUB
-#!/usr/bin/env bash
+IFS= read -r -d '' STUB_SLEEP_TEXT <<STUB || true
 printf '%s\n' "\$*" >>"\${STUB_SLEEP_LOG:-$WORK/sleep.log}"
 STUB
-chmod +x "$WORK/refuse/sleep"
+write_stand_in "$WORK/refuse/sleep" "$STUB_SLEEP_TEXT"
 export BOOTSTRAP_SLEEP="$WORK/refuse/sleep"
 # The terminal an offered command's yes is read from: a file that does not
 # exist, so no test ever waits on the real terminal and no yes is given
@@ -949,14 +952,12 @@ export STUB_GIT="$REAL_GIT"
 # test writes 1 there for "missing, then installed by the user". Otherwise
 # a fake git runs the real git, and any other fake prints [output].
 fake_tool() {
-  local d="$1" name="$2" out="${3:-}"
-  mkdir -p "$d/bin"
-  cat >"$d/bin/$name" <<EOF
-#!/usr/bin/env bash
+  local d="$1" name="$2" out="${3:-}" text
+  IFS= read -r -d '' text <<EOF || true
 printf '%s\n' "$name \$*" >>"$d/tools.log"
 f="$d/$name-fails"
 if [ -f "\$f" ]; then
-  n="\$(cat "\$f")"
+  read -r n <"\$f" || true
   if [ "\$n" -gt 0 ]; then echo \$((n - 1)) >"\$f"; echo "$name: command not found" >&2; exit 127; fi
 fi
 if [ "$name" = git ]; then
@@ -965,7 +966,7 @@ if [ "$name" = git ]; then
 fi
 printf '%s\n' "$out"
 EOF
-  chmod +x "$d/bin/$name"
+  write_stand_in "$d/bin/$name" "$text"
 }
 
 # failing_push <dir> <mode> [times]: the fake git of <dir> fails each git
@@ -982,15 +983,17 @@ EOF
 failing_push() {
   printf '%s\n' "$2" >"$1/push-mode"
   printf '%s\n' "${3:-9999}" >"$1/push-fails"
-  cat >"$1/push-hook" <<'HOOK'
-#!/usr/bin/env bash
-here="$(dirname "$0")"
+  write_stand_in "$1/push-hook" "$PUSH_HOOK_TEXT"
+}
+IFS= read -r -d '' PUSH_HOOK_TEXT <<'HOOK' || true
+here="${0%/*}"
 case " $* " in *" push "*) ;; *) exit 0 ;; esac
 printf '%s\n' "${GIT_TERMINAL_PROMPT-<unset>}" >>"$here/push-prompt"
-n="$(cat "$here/push-fails")"
+read -r n <"$here/push-fails" || true
 [ "$n" -gt 0 ] || exit 0
 echo $((n - 1)) >"$here/push-fails"
-case "$(cat "$here/push-mode")" in
+read -r mode <"$here/push-mode" || true
+case "$mode" in
   auth) echo "fatal: could not read Username for 'https://github.com': terminal prompts disabled" >&2 ;;
   offline) echo "fatal: unable to access 'https://github.com/octo-user/my-app.git/': Could not resolve host: github.com" >&2 ;;
   workflow)
@@ -1003,16 +1006,38 @@ case "$(cat "$here/push-mode")" in
 esac
 exit 128
 HOOK
-  chmod +x "$1/push-hook"
-}
 
 # fake_home <dir> [git name] [git email]: a home folder whose global git
 # settings hold only the name and email given.
+# A name and an email of plain characters are written as git config
+# --file writes them, with no git started; any other value goes through
+# git config, which quotes it.
 fake_home() {
-  mkdir -p "$1"
+  [ -d "$1" ] || mkdir -p "$1"
   : >"$1/.gitconfig"
+  if plain_config_value "${2:-}" && plain_config_value "${3:-}"; then
+    if [ -n "${2:-}" ] || [ -n "${3:-}" ]; then
+      {
+        printf '[user]\n'
+        [ -z "${2:-}" ] || printf '\tname = %s\n' "$2"
+        [ -z "${3:-}" ] || printf '\temail = %s\n' "$3"
+      } >"$1/.gitconfig"
+    fi
+    return 0
+  fi
   [ -z "${2:-}" ] || "$REAL_GIT" config --file "$1/.gitconfig" user.name "$2"
   [ -z "${3:-}" ] || "$REAL_GIT" config --file "$1/.gitconfig" user.email "$3"
+}
+
+# plain_config_value <value>: true when it is empty, or only letters,
+# digits, @ . _ - and spaces with no space at either end: a value git
+# config writes unquoted.
+plain_config_value() {
+  case "$1" in
+    "") return 0 ;;
+    " "* | *" " | *[!A-Za-z0-9@._\ -]*) return 1 ;;
+  esac
+  return 0
 }
 
 # use_home <dir>: in the current (sub)shell, git reads its global settings
@@ -2896,7 +2921,7 @@ prepare() {
   [ -x "$d/run" ] || make_stub_run "$d/run"
   [ -x "$d/npm" ] || make_stub_npm "$d/npm"
   [ -d "$d/home" ] || fake_home "$d/home" "Test Person" test@example.com
-  mkdir -p "$d/cwd" "$d/bin"
+  [ -d "$d/cwd" ] && [ -d "$d/bin" ] || mkdir -p "$d/cwd" "$d/bin"
   : >>"$d/run.log"
   : >>"$d/npm.log"
 }
@@ -2915,7 +2940,7 @@ in_env() {
   [ ! -e "$d/tty" ] || export BOOTSTRAP_TTY="$d/tty"
   [ ! -e "$d/os-release" ] || export BOOTSTRAP_OS_RELEASE="$d/os-release"
   # Temporary files go to <dir>/tmp, so a test can see what is left there.
-  mkdir -p "$d/tmp"
+  [ -d "$d/tmp" ] || mkdir -p "$d/tmp"
   export TMPDIR="$d/tmp"
   # RUN_CWD: a test that runs the script from another folder (such as
   # inside the copy) sets it.
@@ -2973,6 +2998,70 @@ test_the_git_folder_of_a_run_holds_only_git_and_its_helpers() {
   make_git_only_dir "$src" "$d/only2"
   [ ! -e "$d/only2/git-upload-pack" ] || die "a helper that is not there was made"
   [ -e "$d/only2/git" ] || die "git was not made"
+}
+
+test_every_stand_in_starts_the_harness_bash_directly() {
+  # PBI-1.22: a stand-in started through /usr/bin/env costs two process
+  # starts per call (env, then bash); on Windows each start is about
+  # 30 ms. Every stand-in the harness writes names the harness's own bash
+  # on its first line instead (env only for a bash path with a space).
+  local d want f
+  case "$BASH" in *[[:space:]]*) echo "note: bash path has a space; env is expected"; return 0 ;; esac
+  want="#!$BASH"
+  d="$(tmpdir)"
+  make_stub_gh "$d/s/gh"; make_stub_run "$d/s/run"; make_stub_npm "$d/s/npm"
+  make_refuser "$d/s/refuser" BOOTSTRAP_GH
+  fake_tool "$d" git; fake_tool "$d" uname Linux
+  failing_push "$d" auth; cp "$d/push-hook" "$d/s/push-hook"
+  finish_hook "$d" offline; cp "$d/push-hook" "$d/s/finish-hook"
+  use_built "$d"; cp "$d/bin/date" "$d/s/date"
+  cp "$WORK/refuse/sleep" "$WORK/refuse/gh" "$d/s/"
+  for f in "$d/s/"* "$d/bin/git" "$d/bin/uname"; do
+    [ -x "$f" ] || die "${f##*/} is not executable"
+    [ "$(sed -n 1p "$f")" = "$want" ] || die "${f##*/} starts with '$(sed -n 1p "$f")', want '$want'"
+  done
+}
+
+test_fake_home_writes_what_git_config_writes_without_starting_git() {
+  # PBI-1.22: fake_home runs in nearly every test. For a plain name and
+  # email it writes the settings file itself, byte for byte as
+  # git config --file writes it; any other value still goes through git.
+  local d v
+  d="$(tmpdir)"
+  for v in "Test Person|test@example.com" "Grace Hopper|grace@example.com" "Grace Hopper|" "|" \
+    "Ada Lovelace-King 2|a.b_c@x-y.org"; do
+    rm -rf "$d/want" "$d/got"
+    mkdir -p "$d/want"; : >"$d/want/.gitconfig"
+    [ -z "${v%%|*}" ] || "$REAL_GIT" config --file "$d/want/.gitconfig" user.name "${v%%|*}"
+    [ -z "${v#*|}" ] || "$REAL_GIT" config --file "$d/want/.gitconfig" user.email "${v#*|}"
+    ( REAL_GIT="$d/no-git"; fake_home "$d/got" "${v%%|*}" "${v#*|}" ) 2>"$d/err" || true
+    cmp -s "$d/want/.gitconfig" "$d/got/.gitconfig" \
+      || { od -c "$d/want/.gitconfig" "$d/got/.gitconfig" >&2; cat "$d/err" >&2; die "fake_home '$v' differs from git config"; }
+  done
+  # A value git quotes or escapes still goes through git config.
+  for v in 'Ada "the first"' ' lead' 'trail ' 'semi;colon' 'hash#tag' 'back\slash'; do
+    rm -rf "$d/got"
+    fake_home "$d/got" "$v" ada@example.com
+    [ "$("$REAL_GIT" config --file "$d/got/.gitconfig" user.name)" = "$v" ] || die "fake_home lost the name '$v'"
+  done
+}
+
+test_a_failing_push_hook_counts_down_and_names_its_mode() {
+  # The push hook reads its counter and mode with builtins (PBI-1.22):
+  # it fails that many pushes with the mode's text, then lets them run.
+  local d rc
+  d="$(tmpdir)"
+  failing_push "$d" offline 2
+  for want in 128 128 0; do
+    rc=0; "$d/push-hook" -C x push origin main 2>"$d/err" || rc=$?
+    [ "$rc" -eq "$want" ] || die "exit $rc, want $want"
+  done
+  rc=0; "$d/push-hook" -C x status 2>"$d/err" || rc=$?
+  [ "$rc" -eq 0 ] || die "a call without push failed"
+  failing_push "$d" offline 1
+  "$d/push-hook" push 2>"$d/err" || true
+  grep -qF 'Could not resolve host: github.com' "$d/err" || { cat "$d/err" >&2; die "the offline text is missing"; }
+  [ "$(grep -c . "$d/push-prompt")" -eq 4 ] || die "not every push recorded GIT_TERMINAL_PROMPT"
 }
 
 test_a_run_has_no_brew_or_winget_unless_a_test_fakes_them() {
@@ -4431,12 +4520,12 @@ built_bootstrapper() {
 FAKE_TODAY=2031-02-03
 use_built() {
   built_bootstrapper
-  mkdir -p "$1/dl" "$1/bin"
-  cat >"$1/bin/date" <<EOF
-#!/usr/bin/env bash
+  local text
+  [ -d "$1/dl" ] || mkdir -p "$1/dl"
+  IFS= read -r -d '' text <<EOF || true
 if [ "\$*" = +%Y-%m-%d ]; then echo $FAKE_TODAY; else exec "$REAL_DATE" "\$@"; fi
 EOF
-  chmod +x "$1/bin/date"
+  write_stand_in "$1/bin/date" "$text"
   [ -f "$1/dl/bootstrap-project.sh" ] || cp "$BUILT/bootstrap-project.sh" "$1/dl/bootstrap-project.sh"
   RUN_SCRIPT="$1/dl/bootstrap-project.sh"
   if [ -f "$1/changelog" ]; then STUB_GH_CHANGELOG="$1/changelog"; else STUB_GH_CHANGELOG="$BUILT/CHANGELOG.md"; fi
@@ -7529,15 +7618,15 @@ test_a_copy_not_at_the_new_main_version_stops_with_both_versions_below() {
 # does when GitHub cannot be reached (offline), or it leaves a new file
 # in the copy and lets the update run (stray).
 finish_hook() {
-  cat >"$1/push-hook" <<HOOK
-#!/usr/bin/env bash
+  local text
+  IFS= read -r -d '' text <<HOOK || true
 case " \$* " in *" pull "*) ;; *) exit 0 ;; esac
 case "$2" in
   offline) echo "fatal: unable to access 'https://github.com/octo-user/my-app.git/': Could not resolve host: github.com" >&2; exit 128 ;;
   stray) echo "left here" >"$1/cwd/my-app/stray.txt" ;;
 esac
 HOOK
-  chmod +x "$1/push-hook"
+  write_stand_in "$1/push-hook" "$text"
 }
 
 test_a_failed_update_of_the_copy_stops_with_gits_text_below() {
