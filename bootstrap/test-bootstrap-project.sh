@@ -12,6 +12,18 @@
 #                              of tests (interleaved, so the slow tests
 #                              spread over the shards). CI runs each OS
 #                              leg as n shards (PBI-1.18).
+#   BOOTSTRAP_TEST_WEIGHTS=f:c with BOOTSTRAP_TEST_SHARD: split by
+#                              measured duration instead (PBI-1.22).
+#                              File f has a header "test <columns...>"
+#                              and one line per test, its seconds in each
+#                              column; c names the column (CI: the OS).
+#                              Longest test first, each to the shard with
+#                              the least total so far (ties: fewer tests,
+#                              then the lower shard); a test f does not
+#                              list, or lists with 0, weighs the median
+#                              of the column. bootstrap/
+#                              test-durations.txt holds the measured
+#                              times (bootstrap/durations-from-logs.sh).
 #   BOOTSTRAP_TEST_LIST=1      print the names of the tests that would
 #                              run, one per line, and run none.
 #   BOOTSTRAP_TEST_MANIFEST=f  write the name of each test run to file f
@@ -46,6 +58,23 @@ if [ -n "${BOOTSTRAP_TEST_SHARD:-}" ]; then
     echo "BOOTSTRAP_TEST_SHARD must be i/n, whole numbers of up to 6 digits with 1 <= i <= n and no leading zeros; got '$BOOTSTRAP_TEST_SHARD'." >&2
     exit 2
   fi
+fi
+# The weights setting, read before anything else too: a shard that
+# cannot read it would run a wrong set of tests. The file's content is
+# checked where it is read, before any test runs (by_duration).
+WEIGHTS_FILE=""
+WEIGHTS_COL=""
+weights_refused() {
+  echo "BOOTSTRAP_TEST_WEIGHTS must be <file>:<column> of a durations file; '$BOOTSTRAP_TEST_WEIGHTS': $1." >&2
+  exit 2
+}
+if [ -n "${BOOTSTRAP_TEST_WEIGHTS:-}" ]; then
+  case "$BOOTSTRAP_TEST_WEIGHTS" in *?:?*) ;; *) weights_refused "it is not <file>:<column>" ;; esac
+  WEIGHTS_FILE="${BOOTSTRAP_TEST_WEIGHTS%:*}"
+  WEIGHTS_COL="${BOOTSTRAP_TEST_WEIGHTS##*:}"
+  case "$WEIGHTS_FILE" in /*) ;; *) WEIGHTS_FILE="$PWD/$WEIGHTS_FILE" ;; esac
+  [ -f "$WEIGHTS_FILE" ] && [ -r "$WEIGHTS_FILE" ] || weights_refused "no readable file $WEIGHTS_FILE"
+  [ -s "$WEIGHTS_FILE" ] || weights_refused "it is empty"
 fi
 MANIFEST="${BOOTSTRAP_TEST_MANIFEST:-}"
 case "$MANIFEST" in
@@ -94,20 +123,27 @@ tmpdir() { mktemp -d "$WORK/t m p.XXXXXX"; }
 # npm, refusers, fake tools, hooks): the bash running the harness,
 # started directly. Through /usr/bin/env, each call of a stand-in started
 # two processes (env, then bash), and on Windows every process start
-# costs about 30 ms (PBI-1.18, PBI-1.22). A bash whose path has a space
-# cannot be named on that line, so env is kept for it.
-case "${BASH:-}" in
-  "" | *[[:space:]]*) STAND_IN_SHEBANG='#!/usr/bin/env bash' ;;
-  *) STAND_IN_SHEBANG="#!$BASH" ;;
-esac
+# costs about 30 ms (PBI-1.18, PBI-1.22). A bash path that is empty, not
+# absolute or has a space cannot be named on that line, so env is kept
+# for it.
+# stand_in_shebang <bash path>: prints that first line for the path.
+stand_in_shebang() {
+  case "$1" in
+    "" | [!/]* | *[[:space:]]*) printf '%s\n' '#!/usr/bin/env bash' ;;
+    *) printf '#!%s\n' "$1" ;;
+  esac
+}
+STAND_IN_SHEBANG="$(stand_in_shebang "${BASH:-}")"
 
 # write_stand_in <path> <text>: writes the stand-in <path>, its first
 # line STAND_IN_SHEBANG and then <text>, and makes it executable. Only
-# builtins, except chmod (and mkdir when the folder is new).
+# builtins, except chmod, and mkdir when the folder is new (as the
+# helpers it replaces did: make_stub_gh "$d/stub bin/gh" makes the
+# folder).
 write_stand_in() {
+  case "$1" in */*) ;; *) die "write_stand_in: '$1' has no folder" ;; esac
   [ -d "${1%/*}" ] || mkdir -p "${1%/*}"
-  printf '%s\n%s' "$STAND_IN_SHEBANG" "$2" >"$1"
-  chmod +x "$1"
+  printf '%s\n%s' "$STAND_IN_SHEBANG" "$2" >"$1" && chmod +x "$1"
 }
 
 # load_script: source the script with no arguments, defining its
@@ -986,7 +1022,7 @@ failing_push() {
   write_stand_in "$1/push-hook" "$PUSH_HOOK_TEXT"
 }
 IFS= read -r -d '' PUSH_HOOK_TEXT <<'HOOK' || true
-here="${0%/*}"
+case "$0" in */*) here="${0%/*}" ;; *) here=. ;; esac
 case " $* " in *" push "*) ;; *) exit 0 ;; esac
 printf '%s\n' "${GIT_TERMINAL_PROMPT-<unset>}" >>"$here/push-prompt"
 read -r n <"$here/push-fails" || true
@@ -1732,7 +1768,7 @@ test_gh_hook_set_means_gh_on_the_path_is_not_called() {
   local d
   d="$(tmpdir)"
   mkdir -p "$d/bin"
-  printf '#!/usr/bin/env bash\ntouch "%s/path-gh-ran"\n' "$d" >"$d/bin/gh"
+  printf '%s\ntouch "%s/path-gh-ran"\n' "$STAND_IN_SHEBANG" "$d" >"$d/bin/gh"
   chmod +x "$d/bin/gh"
   make_stub_gh "$d/hook/gh"
   ( load_script; PATH="$d/bin:$PATH" STUB_GH_LOG="$d/hook.log" BOOTSTRAP_GH="$d/hook/gh" run_gh --version ) >/dev/null
@@ -1787,7 +1823,7 @@ test_run_offered_runs_with_gh_prompts_enabled() {
           run_offered 'printf "%s" "${GH_PROMPT_DISABLED-unset}"' )"
   [ "$got" = unset ] || die "the offered command saw GH_PROMPT_DISABLED=$got"
   make_stub_run "$d/run"
-  printf '%s\n' '#!/usr/bin/env bash' 'printf "%s\n" "${GH_PROMPT_DISABLED-unset}" >>"$STUB_RUN_LOG"' >"$d/run"
+  printf '%s\n' "$STAND_IN_SHEBANG" 'printf "%s\n" "${GH_PROMPT_DISABLED-unset}" >>"$STUB_RUN_LOG"' >"$d/run"
   ( load_script; export GH_PROMPT_DISABLED=1 STUB_RUN_LOG="$d/run.log"; BOOTSTRAP_RUN="$d/run" run_offered "x" )
   [ "$(cat "$d/run.log")" = unset ] || die "the BOOTSTRAP_RUN runner saw GH_PROMPT_DISABLED=$(cat "$d/run.log")"
 }
@@ -1799,7 +1835,7 @@ test_a_test_that_forgets_the_hooks_runs_nothing_real() {
   # refuses loudly (non-zero exit), so the forgetful test fails.
   local d rc
   d="$(tmpdir)"; mkdir -p "$d/bin"
-  printf '#!/usr/bin/env bash\ntouch "%s/real-gh-ran"\n' "$d" >"$d/bin/gh"
+  printf '%s\ntouch "%s/real-gh-ran"\n' "$STAND_IN_SHEBANG" "$d" >"$d/bin/gh"
   chmod +x "$d/bin/gh"
   rc=0
   ( load_script; export REFUSE_LOG="$d/refused.log" PATH="$d/bin:$PATH"; run_offered "touch '$d/real-run-ran'" ) \
@@ -1813,7 +1849,7 @@ test_a_test_that_forgets_the_hooks_runs_nothing_real() {
   grep -qF 'BOOTSTRAP_RUN' "$d/err" && grep -qF 'BOOTSTRAP_GH' "$d/err" \
     || { cat "$d/err" >&2; die "the refusals do not name the hook to set"; }
   # The lockfile step's npm (BOOTSTRAP_NPM), likewise.
-  printf '#!/usr/bin/env bash\ntouch "%s/real-npm-ran"\n' "$d" >"$d/bin/npm"
+  printf '%s\ntouch "%s/real-npm-ran"\n' "$STAND_IN_SHEBANG" "$d" >"$d/bin/npm"
   chmod +x "$d/bin/npm"
   rc=0
   ( load_script; export REFUSE_LOG="$d/refused.log" PATH="$d/bin:$PATH"; run_npm --version ) 2>>"$d/err" || rc=$?
@@ -3005,21 +3041,56 @@ test_every_stand_in_starts_the_harness_bash_directly() {
   # starts per call (env, then bash); on Windows each start is about
   # 30 ms. Every stand-in the harness writes names the harness's own bash
   # on its first line instead (env only for a bash path with a space).
-  local d want f
-  case "$BASH" in *[[:space:]]*) echo "note: bash path has a space; env is expected"; return 0 ;; esac
-  want="#!$BASH"
+  local d want f hits
+  # The choice, for this bash and for paths env is kept for.
+  [ "$(stand_in_shebang /usr/bin/bash)" = '#!/usr/bin/bash' ] || die "an absolute path is not named"
+  [ "$(stand_in_shebang '/c/Program Files/Git/usr/bin/bash')" = '#!/usr/bin/env bash' ] || die "a path with a space is named"
+  [ "$(stand_in_shebang bash)" = '#!/usr/bin/env bash' ] || die "a path that is not absolute is named"
+  [ "$(stand_in_shebang '')" = '#!/usr/bin/env bash' ] || die "an empty path is named"
+  want="$(stand_in_shebang "$BASH")"
+  [ "$STAND_IN_SHEBANG" = "$want" ] || die "STAND_IN_SHEBANG is '$STAND_IN_SHEBANG', want '$want'"
+  # Every stand-in in this file takes its first line from
+  # STAND_IN_SHEBANG: apart from the file's own first line and
+  # stand_in_shebang, no line writes a bash shebang of its own.
+  # Read with awk, which skips this test and stand_in_shebang.
+  hits="$(awk -v me="${FUNCNAME[0]}" '
+    $0 ~ "^(" me "|stand_in_shebang)\\(\\) \\{" { skip = 1 }
+    skip && /^}/ { skip = 0; next }
+    skip || NR == 1 { next }
+    /#!\/usr\/bin\/env bash|#!\/bin\/bash/ { print NR ": " $0 }
+  ' "$HERE/test-bootstrap-project.sh")"
+  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "a stand-in writes its own bash shebang"; }
   d="$(tmpdir)"
-  make_stub_gh "$d/s/gh"; make_stub_run "$d/s/run"; make_stub_npm "$d/s/npm"
-  make_refuser "$d/s/refuser" BOOTSTRAP_GH
-  fake_tool "$d" git; fake_tool "$d" uname Linux
-  failing_push "$d" auth; cp "$d/push-hook" "$d/s/push-hook"
-  finish_hook "$d" offline; cp "$d/push-hook" "$d/s/finish-hook"
-  use_built "$d"; cp "$d/bin/date" "$d/s/date"
-  cp "$WORK/refuse/sleep" "$WORK/refuse/gh" "$d/s/"
-  for f in "$d/s/"* "$d/bin/git" "$d/bin/uname"; do
-    [ -x "$f" ] || die "${f##*/} is not executable"
-    [ "$(sed -n 1p "$f")" = "$want" ] || die "${f##*/} starts with '$(sed -n 1p "$f")', want '$want'"
-  done
+  # Each file as the harness wrote it, checked where it was written.
+  first_line_is() {
+    [ -x "$1" ] || die "$2 is not executable"
+    [ "$(sed -n 1p "$1")" = "$want" ] || die "$2 starts with '$(sed -n 1p "$1")', want '$want'"
+  }
+  make_stub_gh "$d/s/gh"; first_line_is "$d/s/gh" "the stub gh"
+  make_stub_run "$d/s/run"; first_line_is "$d/s/run" "the stub runner"
+  make_stub_npm "$d/s/npm"; first_line_is "$d/s/npm" "the stub npm"
+  make_refuser "$d/s/refuser" BOOTSTRAP_GH; first_line_is "$d/s/refuser" "a refuser"
+  first_line_is "$WORK/refuse/gh" "the gh refuser"; first_line_is "$WORK/refuse/sleep" "the sleep stand-in"
+  fake_tool "$d" git; first_line_is "$d/bin/git" "the fake git"
+  fake_tool "$d" uname Linux; first_line_is "$d/bin/uname" "a fake tool"
+  failing_push "$d" auth; first_line_is "$d/push-hook" "the failing-push hook"
+  finish_hook "$d" offline; first_line_is "$d/push-hook" "the finish hook"
+  use_built "$d"; first_line_is "$d/bin/date" "the fake date"
+}
+
+test_write_stand_in_refuses_a_path_with_no_folder_and_makes_its_folder() {
+  # Error path of write_stand_in (#224 review): a path with no folder
+  # would make a folder named like the file, so it stops instead and
+  # writes nothing; a folder that is missing is made, as make_stub_gh
+  # "$d/stub bin/gh" needs.
+  local d rc=0
+  d="$(tmpdir)"
+  ( cd "$d" && write_stand_in no-folder 'exit 0' ) 2>"$d/err" || rc=$?
+  [ "$rc" -ne 0 ] || die "a path with no folder was accepted"
+  grep -qF "write_stand_in: 'no-folder' has no folder" "$d/err" || { cat "$d/err" >&2; die "the refusal does not say why"; }
+  [ ! -e "$d/no-folder" ] || die "something was made for a path with no folder"
+  write_stand_in "$d/new folder/tool" 'echo ran'
+  [ "$("$d/new folder/tool")" = ran ] || die "the stand-in in a new folder did not run"
 }
 
 test_fake_home_writes_what_git_config_writes_without_starting_git() {
@@ -3028,7 +3099,7 @@ test_fake_home_writes_what_git_config_writes_without_starting_git() {
   # git config --file writes it; any other value still goes through git.
   local d v
   d="$(tmpdir)"
-  for v in "Test Person|test@example.com" "Grace Hopper|grace@example.com" "Grace Hopper|" "|" \
+  for v in "Test Person|test@example.com" "Grace Hopper|grace@example.com" "Grace Hopper|" "|grace@example.com" "|" \
     "Ada Lovelace-King 2|a.b_c@x-y.org"; do
     rm -rf "$d/want" "$d/got"
     mkdir -p "$d/want"; : >"$d/want/.gitconfig"
@@ -3049,7 +3120,7 @@ test_fake_home_writes_what_git_config_writes_without_starting_git() {
 test_a_failing_push_hook_counts_down_and_names_its_mode() {
   # The push hook reads its counter and mode with builtins (PBI-1.22):
   # it fails that many pushes with the mode's text, then lets them run.
-  local d rc
+  local d rc want
   d="$(tmpdir)"
   failing_push "$d" offline 2
   for want in 128 128 0; do
@@ -4291,11 +4362,11 @@ test_a_missing_workflow_permission_offers_the_refresh_and_checks_again() {
   echo 1 >"$d/scopes-old"
   printf 'yes\n' >"$d/tty"
   prepare "$d"
-  cat >"$d/run" <<'RUN'
-#!/usr/bin/env bash
+  local run_text
+  IFS= read -r -d '' run_text <<'RUN' || true
 printf '%s|%s\n' "$*" "${GH_PROMPT_DISABLED-<unset>}" >>"$STUB_RUN_LOG"
 RUN
-  chmod +x "$d/run"
+  write_stand_in "$d/run" "$run_text"
   pre "$d" with_vis public preflight_github_permissions
   expect_rc 0 "$d"
   expect_out "$d" "does not have every permission on GitHub that the setup needs."
@@ -6253,7 +6324,7 @@ test_the_fill_keeps_cr_lf_with_an_awk_that_drops_the_cr_as_it_reads() {
   d="$(tmpdir)"
   real_awk="$(command -v awk)"
   mkdir -p "$d/bin"
-  printf '%s\n' '#!/usr/bin/env bash' "LC_ALL=C sed 's/\\r\$//' | exec '$real_awk' \"\$@\"" >"$d/bin/awk"
+  printf '%s\n' "$STAND_IN_SHEBANG" "LC_ALL=C sed 's/\\r\$//' | exec '$real_awk' \"\$@\"" >"$d/bin/awk"
   chmod +x "$d/bin/awk"
   printf '%s' "# [PROJECT NAME]$cr$nl**Owner:** [PO NAME]$cr${nl}last [PROJECT NAME]$cr$nl" >"$d/crlf.md"
   # The fake does drop the CR, so the test would see the bug.
@@ -8178,7 +8249,7 @@ test_ctrl_c_says_what_exists_and_the_resume_finishes_without_duplicates() {
   [ "$("$BASH" -c 'trap "echo caught" INT; kill -INT $$; sleep 1' 2>/dev/null)" = caught ] \
     || { echo "note: Ctrl-C is ignored in this shell; the Ctrl-C case was not run"; return 0; }
   d="$(tmpdir)"
-  printf '%s\n' '#!/usr/bin/env bash' 'kill -INT "$PPID"' >"$d/interrupt"
+  printf '%s\n' "$STAND_IN_SHEBANG" 'kill -INT "$PPID"' >"$d/interrupt"
   chmod +x "$d/interrupt"
   echo 1 >"$d/build-pending"
   export BOOTSTRAP_SLEEP="$d/interrupt"
@@ -8552,7 +8623,7 @@ test_an_unexpected_failure_says_what_exists_and_leaves_no_temporary_files() {
   local d
   d="$(tmpdir)"
   working_git "$d"
-  printf '%s\n' '#!/usr/bin/env bash' 'if [ -n "${FILL_N:-}" ]; then echo "awk: out of memory" >&2; exit 2; fi' \
+  printf '%s\n' "$STAND_IN_SHEBANG" 'if [ -n "${FILL_N:-}" ]; then echo "awk: out of memory" >&2; exit 2; fi' \
     "exec $(command -v awk) \"\$@\"" >"$d/bin/awk"
   chmod +x "$d/bin/awk"
   setup_run "$d" --non-interactive --yes
@@ -9889,13 +9960,71 @@ test_dev_infrastructure_says_the_script_turns_protection_on() {
 # ---------- run ----------
 
 TESTS=$(declare -F | awk '{print $3}' | grep '^test_')
+# by_duration <file> <column> <i> <n>: reads the tests on stdin, in the
+# list's order, and prints those of shard i of n by measured duration
+# (see BOOTSTRAP_TEST_WEIGHTS above), in the list's order. A carriage
+# return at the end of any line of the file is ignored. Weights are
+# compared in hundredths of a second; a weight of 0 means no time was
+# measured, and it and every test the file does not list weigh the
+# median of the measured ones (the lower middle one). Total ties go to
+# the shard with fewer tests, then the lower shard. Prints "refused:
+# <why>" instead, and nothing else, when the file has no header naming
+# the column, no data line or a value that is not a number (an empty
+# file is refused before, where the setting is read).
+by_duration() {
+  LC_ALL=C awk -v col="$2" -v want="$3" -v n="$4" '
+    NR == FNR {
+      sub(/\r$/, "")
+      if (FNR == 1) {
+        if ($1 != "test") { bad = "its first line is not a header starting with test"; next }
+        for (k = 2; k <= NF; k++) if ($k == col) c = k
+        if (!c) bad = "it has no column " col
+        next
+      }
+      if (bad || NF == 0) next
+      if ($c !~ /^[0-9]+(\.[0-9]+)?$/) { bad = "line " FNR " has no number in column " col; next }
+      rows++
+      x = int($c * 100 + 0.5)
+      if (x > 0) { w[$1] = x; v[++nv] = x }
+      next
+    }
+    { name[++m] = $0 }
+    END {
+      if (!bad && !rows) bad = "it has no line of times"
+      if (bad) { print "refused: " bad; exit }
+      for (i = 2; i <= nv; i++) { x = v[i]; j = i - 1; while (j > 0 && v[j] > x) { v[j + 1] = v[j]; j-- } v[j + 1] = x }
+      med = nv ? v[int((nv + 1) / 2)] : 1
+      for (i = 1; i <= m; i++) { wt[i] = (name[i] in w) ? w[name[i]] : med; ord[i] = i }
+      # Longest first; equal weights in the order of the list.
+      for (i = 2; i <= m; i++) {
+        x = ord[i]; j = i - 1
+        while (j > 0 && (wt[ord[j]] < wt[x] || (wt[ord[j]] == wt[x] && ord[j] > x))) { ord[j + 1] = ord[j]; j-- }
+        ord[j + 1] = x
+      }
+      for (k = 1; k <= n; k++) { tot[k] = 0; cnt[k] = 0 }
+      for (i = 1; i <= m; i++) {
+        best = 1
+        for (k = 2; k <= n; k++) if (tot[k] < tot[best] || (tot[k] == tot[best] && cnt[k] < cnt[best])) best = k
+        tot[best] += wt[ord[i]]; cnt[best]++; shard[ord[i]] = best
+      }
+      for (i = 1; i <= m; i++) if (shard[i] == want) print name[i]
+    }' "$1" -
+}
+ALL_COUNT=0
+for t in $TESTS; do ALL_COUNT=$((ALL_COUNT + 1)); done
+if [ -n "$WEIGHTS_FILE" ]; then
+  TESTS="$(printf '%s\n' $TESTS | by_duration "$WEIGHTS_FILE" "$WEIGHTS_COL" "$SHARD_I" "$SHARD_N")" \
+    || weights_refused "the split failed"
+  case "$TESTS" in "refused: "*) weights_refused "${TESTS#refused: }" ;; esac
+fi
 if [ -n "$MANIFEST" ]; then
   mkdir -p "$(dirname "$MANIFEST")"
   : >"$MANIFEST"
 fi
 k=0
 for t in $TESTS; do
-  if [ $((k % SHARD_N)) -eq $((SHARD_I - 1)) ]; then
+  # Split by duration: TESTS holds this shard's tests only.
+  if [ -n "$WEIGHTS_FILE" ] || [ $((k % SHARD_N)) -eq $((SHARD_I - 1)) ]; then
     if [ "${BOOTSTRAP_TEST_LIST:-}" = 1 ]; then
       printf '%s\n' "$t"
     else
@@ -9907,7 +10036,7 @@ for t in $TESTS; do
 done
 [ "${BOOTSTRAP_TEST_LIST:-}" != 1 ] || exit 0
 if [ $((PASSED + FAILED)) -eq 0 ]; then
-  echo "This run ran no test: shard $SHARD_I of $SHARD_N selects none of the $k tests." >&2
+  echo "This run ran no test: shard $SHARD_I of $SHARD_N selects none of the $ALL_COUNT tests." >&2
   exit 1
 fi
 
