@@ -7701,7 +7701,7 @@ test_with_colour_a_whole_run_starts_with_the_colour_key_and_the_stars_end_their_
   [ "$(sed -n '5p' "$d/out")" = "${LOG_ON}==> Checking that bash (the program that runs this script) is new enough${COLOUR_OFF}" ] \
     || { sed -n '1,8p' "$d/out" | od -c | head -20 >&2; die "the first check does not come right after the colour key, dim"; }
   ! grep -qE '^==> |^    Done\. ' "$d/out" || { grep -E '^==> |^    Done\. ' "$d/out" >&2; die "a step line is not dim"; }
-  ! grep -F '*' "$d/out" | grep -qE "$esc\\[1;3[26]m" || { cat "$d/out" >&2; die "a line of stars goes on with a coloured line"; }
+  ! grep -F '*' "$d/out" | grep -E "$esc\\[1;3[26]m" >/dev/null || { cat "$d/out" >&2; die "a line of stars goes on with a coloured line"; }
   sed "s/$esc\\[[0-9;]*m//g" "$d/out" >"$d/plain"
   want="$(printf '%s\n' \
     "==> Waiting for the project's check build to pass on the proposed change, for at most 20 minutes" \
