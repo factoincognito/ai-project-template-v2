@@ -158,7 +158,7 @@ show_version() {
 # on the same line (the signs of life of the wait for build). The next
 # message of any helper below ends that line first (end_line).
 LINE_OPEN=""
-say_open() { printf '%s' "$*"; LINE_OPEN=1; OUT_BLANK=""; }
+say_open() { paint 2 "$*"; LINE_OPEN=1; }
 end_line() {
   [ -z "$LINE_OPEN" ] || printf '\n'
   LINE_OPEN=""
@@ -180,20 +180,34 @@ end_line() {
 # does not go through the helpers (an offered command's own) is not seen;
 # at worst a blank line is then left out, never doubled.
 OUT_BLANK=1
+IN_LOG=""
 block_start() {
   end_line
   [ -n "$OUT_BLANK" ] || printf '\n'
   OUT_BLANK=1
+  IN_LOG=""
 }
 
 # The lines the user acts on or reads first (a question with its default,
-# the plan's heading, "Proceed?", "What to do next") are in one colour,
-# bold cyan, and nothing else is. colour_on [err]: colour is used when the
-# stream the line goes to is a terminal (stdout_is_terminal, whose hook
-# BOOTSTRAP_STDOUT_TERMINAL counts too; [ -t 2 ] for a line on stderr),
-# or BOOTSTRAP_COLOR is set (a test hook that forces colour); never when
-# NO_COLOR is set and not empty (https://no-color.org), which wins over
-# all of these, or when TERM is dumb.
+# the plan's heading, "Proceed?", "What to do next", and the instruction
+# line above a command: the texts *_INTRO and a guide step that ends with
+# a colon) are in one colour, bold cyan. A command for the user to copy,
+# or that the script offers to run, is in a second colour, bold green
+# (end-to-end run 1 repeated, finding r1d): green rather than yellow,
+# which is hard to read on a light background, while green reads on both
+# light and dark ones. The progress log is dim (SGR 2), which follows the
+# terminal's own text colour on any background: a step's first and last
+# line, the wait's open line, and a say line inside a step (IN_LOG, from
+# step_start until step_end or a block the user reads starts), except a
+# warning and a line the user may act on (say_note). A terminal that has no dim shows it as plain text. Nothing
+# else is in colour. show_colour_key, at the start of a run, says in
+# words what each colour marks.
+# colour_on [err]: colour is used when the stream the line goes to is a
+# terminal (stdout_is_terminal, whose hook BOOTSTRAP_STDOUT_TERMINAL
+# counts too; [ -t 2 ] for a line on stderr), or BOOTSTRAP_COLOR is set
+# (a test hook that forces colour); never when NO_COLOR is set and not
+# empty (https://no-color.org), which wins over all of these, or when
+# TERM is dumb.
 colour_on() {
   [ -z "${NO_COLOR:-}" ] || return 1
   [ "${TERM:-}" != dumb ] || return 1
@@ -201,16 +215,32 @@ colour_on() {
   if [ "${1:-}" = err ]; then [ -t 2 ]; else stdout_is_terminal; fi
 }
 
-# painted <text> [err]: the text, in colour when colour_on (err: for a
-# line on stderr), with the colour reset straight after it; no line
-# break, so what the user types after a question is not coloured.
-painted() {
-  if colour_on "${2:-}"; then
-    printf '\033[1;36m%s\033[0m' "$1"
+# paint <colour code> <text> [err]: the text, in that colour when
+# colour_on (err: for a line on stderr), with the colour reset straight
+# after it; no line break, so what the user types after a question is
+# not coloured. painted <text> [err]: the text in the first colour.
+paint() {
+  if colour_on "${3:-}"; then
+    printf '\033[%sm%s\033[0m' "$1" "$2"
   else
-    printf '%s' "$1"
+    printf '%s' "$2"
   fi
   OUT_BLANK=""
+}
+painted() { paint '1;36' "$1" "${2:-}"; }
+
+# show_colour_key: one line per colour, each in its own colour and saying
+# in words what it marks, then a blank line; nothing when colour is off.
+# Shown once, at the start of a run, before the first check.
+show_colour_key() {
+  colour_on || return 0
+  painted "Colour key: questions, and what to do next"
+  printf '\n'
+  paint '1;32' "Colour key: commands to copy or to run"
+  printf '\n'
+  paint 2 "Colour key: the progress log of what the script does"
+  printf '\n\n'
+  OUT_BLANK=1
 }
 
 # say_heading <text>: the first line of a block the user reads (the
@@ -224,22 +254,61 @@ say_heading() {
 # say <text>: one line of information. A line that tells the user what
 # to do next (the closing one of the report) is a block of its own, in
 # colour; the line above a command to start again or to continue opens a
-# block of its own, plain.
+# block of its own, and the line above an offered command does not; both
+# are in colour, as instructions.
 say() {
   case "$*" in
     "What to do next: "*) say_heading "$*" ;;
-    "$START_AGAIN_INTRO" | "$CONTINUE_INTRO" | "$ADVANCE_INTRO") block_start; printf '%s\n' "$*"; OUT_BLANK="" ;;
+    "$START_AGAIN_INTRO" | "$CONTINUE_INTRO" | "$ADVANCE_INTRO") block_start; painted "$*"; printf '\n' ;;
+    "$OFFER_INTRO") end_line; painted "$*"; printf '\n' ;;
     "") end_line; printf '\n'; OUT_BLANK=1 ;;
-    *) end_line; printf '%s\n' "$*"; OUT_BLANK="" ;;
+    "Warning: "*) end_line; printf '%s\n' "$*"; OUT_BLANK="" ;;
+    *)
+      end_line
+      if [ -n "$IN_LOG" ]; then paint 2 "$*"; printf '\n'; else printf '%s\n' "$*"; fi
+      OUT_BLANK=""
+      ;;
   esac
 }
 
-# say_command <command>: a command for the user to copy, indented.
-say_command() { end_line; printf '    %s\n' "$*"; OUT_BLANK=""; }
+# say_note <text>: one line inside a step that the user may act on (a
+# link to open, an option, a permission to set): plain, never dim like
+# the progress log around it (#237 review, N2). The lines after it are
+# log again.
+say_note() { end_line; printf '%s\n' "$*"; OUT_BLANK=""; }
 
-# step_start <what>, step_end <result>: the first and last line of a step.
-step_start() { end_line; CURRENT_STEP="$*"; printf '==> %s\n' "$*"; OUT_BLANK=""; }
-step_end() { end_line; printf '    Done. %s\n' "$*"; OUT_BLANK=""; }
+# say_command <command> [err]: a command for the user to copy, indented,
+# with only the command in the command colour, not the indent (err: on
+# stderr, in colour only when stderr is a terminal).
+say_command() {
+  end_line
+  if [ "${2:-}" = err ]; then
+    { printf '    '; paint '1;32' "$1" err; printf '\n'; } >&2
+  else
+    printf '    '
+    paint '1;32' "$1"
+    printf '\n'
+  fi
+  OUT_BLANK=""
+}
+
+# step_start <what>, step_end <result>: the first and last line of a step,
+# dim, as the say lines between them (the indent of the last line stays
+# outside the colour).
+step_start() {
+  end_line
+  CURRENT_STEP="$*"
+  paint 2 "==> $*"
+  printf '\n'
+  IN_LOG=1
+}
+step_end() {
+  end_line
+  printf '    '
+  paint 2 "Done. $*"
+  printf '\n'
+  IN_LOG=""
+}
 
 # show_error <what happened> <what to do next> [raw text]: an error in
 # plain words with the next action, on stderr. Raw text (an error from a
@@ -291,6 +360,8 @@ START_AGAIN_INTRO="To start again, run this command:"
 CONTINUE_INTRO="To continue the setup, run this command:"
 # Shown once, after the yes and before the first change (show_advance_command).
 ADVANCE_INTRO="If the setup stops before it finishes, for any reason, also with Ctrl-C or a closed window, continue it with the command below. Copy it now and keep it until the setup has finished:"
+# The line above a command the script offers to run (offer_command).
+OFFER_INTRO="The script can run this command for you:"
 # The plan and step 10 give it for a public project with no licence.
 NO_LICENCE_WARNING="Warning: the project is public and has no licence: anyone can see its code, but nobody else may copy, change or share it. To add a licence later, see https://choosealicense.com."
 
@@ -374,7 +445,12 @@ ask_terminal() {
 # A guide: guide_begin <title> <why>, then guide_step <text> for each
 # numbered step (with say_command for a command to copy), then guide_end
 # <what the user sees when it worked> <what to do otherwise> <how the
-# script checks it>.
+# script checks it>. A step that ends with a colon introduces the command
+# printed right below it, so it is in colour as an instruction (the tests
+# hold every such step to a command below it, and every command in a
+# guide to such a step above it). A step that points to "the command
+# shown below" (the command of the stop) stays plain: that command comes
+# with an instruction line of its own.
 GUIDE_TITLE=""
 GUIDE_N=0
 guide_begin() {
@@ -386,7 +462,10 @@ guide_begin() {
 }
 guide_step() {
   GUIDE_N=$((GUIDE_N + 1))
-  printf '  %s. %s\n' "$GUIDE_N" "$*"
+  case "$*" in
+    *:) printf '  '; painted "$GUIDE_N. $*"; printf '\n' ;;
+    *) printf '  %s. %s\n' "$GUIDE_N" "$*" ;;
+  esac
   OUT_BLANK=""
 }
 guide_end() {
@@ -997,11 +1076,11 @@ prompt_for() {
     ask "$@" || fail 2 "The script stopped because a question got no answer." \
       "Run the script again and type an answer to each question, or give every answer as an option with --non-interactive. $OPTIONS_NEXT"
     if [ -z "$ANSWER" ]; then
-      say "$ASK_NEEDED $ASK_RETRY"
+      say_note "$ASK_NEEDED $ASK_RETRY"
     elif "$check" "$ANSWER"; then
       return 0
     else
-      say "$PROBLEM $ASK_RETRY"
+      say_note "$PROBLEM $ASK_RETRY"
     fi
   done
 }
@@ -1457,7 +1536,7 @@ offered() {
 # Returns 0 when it ran (the check runs again straight away), 1 when the
 # user did not say yes.
 offer_command() {
-  say "The script can run this command for you:"
+  say "$OFFER_INTRO"
   offered "$OFFER" show
   if ask_terminal "It runs only if you type yes; Enter or any other answer skips it, and you can run it yourself." \
     "Run it now? (yes or no)"; then
@@ -2379,9 +2458,9 @@ preflight_github_permissions() {
     step_end "gh has the permissions on GitHub that the setup needs."
     return 0
   fi
-  say "GitHub does not say which permissions this sign-in has, as with a fine-grained token (a key made on GitHub with chosen permissions)."
-  say "The setup needs these permissions, each set to \"Read and write\": Administration, Contents, Workflows and Pull requests; and your account must be allowed to create repositories (new projects on GitHub)."
-  say "If one of them is missing, a later step stops and says so."
+  say_note "GitHub does not say which permissions this sign-in has, as with a fine-grained token (a key made on GitHub with chosen permissions)."
+  say_note "The setup needs these permissions, each set to \"Read and write\": Administration, Contents, Workflows and Pull requests; and your account must be allowed to create repositories (new projects on GitHub)."
+  say_note "If one of them is missing, a later step stops and says so."
   step_end "Carrying on without checking the permissions."
 }
 
@@ -2502,7 +2581,7 @@ preflight_license() {
       add_problem --license "$problem"
       stop_if_problems
     fi
-    say "$problem $ASK_RETRY"
+    say_note "$problem $ASK_RETRY"
     ask_license
     case "$IN_LICENSE" in
       none | "$POLYFORM_KEY")
@@ -2899,9 +2978,9 @@ protect_main() {
       if [ -n "$OPT_ALLOW_UNPROTECTED" ] && [ "$PROTECT_PROBLEM" = plan ]; then
         UNPROTECTED=1
         api_raw
-        say "GitHub does not protect the main version of this project on its plan; its answer is below."
+        say_note "GitHub does not protect the main version of this project on its plan; its answer is below."
         guide_details "$API_RAW"
-        say "You chose to go on without protection with --allow-unprotected, so the script goes on, and writes that decision into the project's memory/decisions.md."
+        say_note "You chose to go on without protection with --allow-unprotected, so the script goes on, and writes that decision into the project's memory/decisions.md."
         step_end "Carrying on without protection: changes could go straight into the main version."
         return 0
       fi
@@ -2940,11 +3019,11 @@ offer_public() {
   rm -f "$out" "$err"
   if [ "$rc" -eq 0 ]; then
     IN_VISIBILITY=public
-    say "The project $IN_OWNER/$IN_NAME is public now. Continue the setup with the command shown below."
+    say_note "The project $IN_OWNER/$IN_NAME is public now. Continue the setup with the command shown below."
     return 0
   fi
   [ -n "$raw" ] || raw="gh stopped with exit code $rc and no message."
-  say "GitHub did not make the project public; its answer is below. Check on https://github.com/$IN_OWNER/$IN_NAME/settings that your account is one of the project's admins (who may change its settings), or run the command shown above that starts with gh yourself."
+  say_note "GitHub did not make the project public; its answer is below. Check on https://github.com/$IN_OWNER/$IN_NAME/settings that your account is one of the project's admins (who may change its settings), or run the command shown above that starts with gh yourself."
   guide_details "$raw"
 }
 
@@ -3095,7 +3174,7 @@ check_actions() {
   step_start "Checking that GitHub Actions, which runs the project's checks, is turned on for it"
   guided_check check_actions_on guide_actions_off
   if [ -n "$ACTIONS_UNCHECKED" ]; then
-    say "The script could not check whether GitHub Actions is turned on for the project: GitHub did not say (its answer is below). This check only warns early, so the setup goes on."
+    say_note "The script could not check whether GitHub Actions is turned on for the project: GitHub did not say (its answer is below). This check only warns early, so the setup goes on."
     guide_details "$ACTIONS_UNCHECKED"
     step_end "Carrying on without this check. If GitHub Actions is off, the project's checks will not run on the proposed change."
     return 0
@@ -3727,7 +3806,7 @@ git_sign_in_failed() {
 guide_git_sign_in() {
   guide_begin "git could not sign in to GitHub to $SIGN_IN_FOR." \
     "git (the tool that keeps the project's history) needs your GitHub sign-in for this. The script lends it the sign-in of gh (the GitHub command-line tool) for this one step, and git still could not sign in."
-  guide_step "Let gh sign git in to GitHub with this command. It changes your global git settings (the settings git uses for every project on this computer): from then on, git signs in to GitHub through gh in every project, not only this one."
+  guide_step "Let gh sign git in to GitHub. This changes your global git settings (the settings git uses for every project on this computer): from then on, git signs in to GitHub through gh in every project, not only this one. This command does it:"
   say_command "gh auth setup-git"
   guide_step "Then come back here and press Enter: the script tries again."
   guide_end "the script says \"Done.\" after it tries again." \
@@ -4268,8 +4347,8 @@ wait_for_build() {
   duration_words $((IN_CI_TIMEOUT * 60))
   limit="$DURATION"
   step_start "Waiting for the project's check build to pass on the proposed change, for at most $limit"
-  say "That is the limit: if build has not passed after $limit, the script stops, leaves the proposed change open and shows how to continue (--ci-timeout sets a different limit)."
-  say "You can follow the check here: $PR_URL/checks"
+  say_note "That is the limit: if build has not passed after $limit, the script stops, leaves the proposed change open and shows how to continue (--ci-timeout sets a different limit)."
+  say_note "You can follow the check here: $PR_URL/checks"
   max=$((IN_CI_TIMEOUT * 60 / CHECKS_DELAY))
   while :; do
     look_at_build
@@ -5106,6 +5185,7 @@ cmd_setup() {
     add_problem --yes "With --non-interactive the script asks nothing, so it cannot ask \"Proceed?\" before it creates the project: add --yes to go ahead, or --dry-run to only see the plan."
   fi
   check_options
+  show_colour_key
   preflight_tools
   preflight_github_account
   preflight_published_version
