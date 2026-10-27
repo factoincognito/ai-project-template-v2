@@ -12,6 +12,9 @@ A bootstrapped project records the tag it was built from.
 - Added PBI-1.21: the release tag created by merging the release prep, for the template and every bootstrapped project (PR #213)
 - An empty `STATUS.md` stub ships with every bootstrapped project (PR #214)
 - Recorded in NEXT_SESSION that v2.5.0 is released and verified (PR #217)
+- Added PBI-1.22: make the template's CI faster without losing coverage (PR #220)
+- PBI-1.22: the bootstrap test shards of each OS leg are split by measured test duration (`bootstrap/test-durations.txt`, made by `bootstrap/durations-from-logs.sh`); `bootstrapper-test` still fails unless every test ran exactly once (PR #227)
+- Parked two PBI-1.22 questions for the product owner in NEXT_SESSION and STATUS.md, and the lesson to batch doc-only changes (PR #226)
 
 ## [2.5.0] — 2026-10-26
 
