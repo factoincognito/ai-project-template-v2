@@ -1906,8 +1906,19 @@ preflight_target_dir() {
 # support (exit 1).
 
 BOOTSTRAPPER=factoincognito/ai-project-bootstrap
-SIGN_IN_COMMAND_NEXT="Sign in to GitHub with gh as in step 0 of the README, with the command gh auth login -h github.com -p https -w -s workflow, then start the script again."
-SIGN_IN_CONTINUE_NEXT="Sign in to GitHub with gh as in step 0 of the README, with the command gh auth login -h github.com -p https -w -s workflow, then continue the setup with the command shown above."
+
+# GH_GIT_QUESTION_TEXT: gh's question, written once. gh auth login and
+# gh auth refresh both ask it (default Yes) before the one-time code,
+# unless gh already signs git in to GitHub (gh v2.93.0,
+# pkg/cmd/auth/shared/git_credential.go); Yes makes gh git's sign-in for
+# GitHub. GH_GIT_QUESTION_STEP is the step every guide that has the user
+# run one of them gives right after the command, so the guides cannot
+# drift apart; a stop message that names one gives the answer in a
+# clause built from GH_GIT_QUESTION_TEXT.
+GH_GIT_QUESTION_TEXT='Authenticate Git with your GitHub credentials?'
+GH_GIT_QUESTION_STEP="If gh asks \"$GH_GIT_QUESTION_TEXT\", answer Yes: type y and press Enter, or just press Enter."
+SIGN_IN_COMMAND_NEXT="Sign in to GitHub with gh as in step 0 of the README, with the command gh auth login -h github.com -p https -w -s workflow (if gh asks \"$GH_GIT_QUESTION_TEXT\", answer Yes), then start the script again."
+SIGN_IN_CONTINUE_NEXT="Sign in to GitHub with gh as in step 0 of the README, with the command gh auth login -h github.com -p https -w -s workflow (if gh asks \"$GH_GIT_QUESTION_TEXT\", answer Yes), then continue the setup with the command shown above."
 
 API_RC=0 API_STATUS="" API_HEADERS="" API_BODY="" API_BODY_CR="" API_MESSAGE="" API_ERR="" API_RAW=""
 
@@ -2090,17 +2101,6 @@ check_github_account() {
     fi
   done <<<"$API_HEADERS"
 }
-
-# GH_GIT_QUESTION_STEP: the step every guide that has the user run gh auth
-# login or gh auth refresh gives, right after the command, in one text so
-# the guides cannot drift apart. Both commands ask this question (default
-# Yes) before the one-time code, unless gh already signs git in to GitHub
-# (gh v2.93.0, pkg/cmd/auth/shared/git_credential.go). Yes makes gh
-# git's sign-in for GitHub, as step 0 of the README says. A stop message
-# that names gh auth refresh gives the same answer through
-# GH_GIT_QUESTION_TEXT.
-GH_GIT_QUESTION_TEXT='Authenticate Git with your GitHub credentials?'
-GH_GIT_QUESTION_STEP="If gh asks \"$GH_GIT_QUESTION_TEXT\", answer Yes (type y or press Enter)."
 
 guide_github_account() {
   case "$ACCOUNT_PROBLEM" in
