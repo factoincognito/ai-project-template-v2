@@ -1982,14 +1982,12 @@ preflight_tools() {
 # Windows interop: a project in Linux should not depend on it, so it
 # counts as no npm and is not run (end-to-end run 2, r2e). NPM_PROBLEM
 # says which part failed: missing or windows; NPM_WINDOWS_PATH is where
-# the Windows npm was found. The cache of command paths is cleared first,
-# so an npm installed in Linux since the last round is found.
+# the Windows npm was found.
 NPM_PROBLEM=""
 NPM_WINDOWS_PATH=""
 check_npm() {
   local where=""
   if [ -n "$LINUX_WSL" ]; then
-    hash -r
     where="$(command -v npm 2>/dev/null)" || where=""
     if on_windows_drive "$where"; then
       NPM_PROBLEM=windows
