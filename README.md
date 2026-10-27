@@ -54,10 +54,10 @@ Windows.
    gh auth login -h github.com -p https -w -s workflow
    ```
 
-   gh shows a one-time code and opens your browser (press Enter if it
-   asks first). Enter the code on the GitHub page and approve. When gh
-   asks "Authenticate Git with your GitHub credentials?", answer Yes.
-   When it has worked, gh says "Logged in as" and your GitHub name, and
+   If gh asks "Authenticate Git with your GitHub credentials?", answer
+   Yes: type y and press Enter, or just press Enter. Then gh shows a
+   one-time code and opens your browser (press Enter if it asks first).
+   Enter the code on the GitHub page and approve. When it has worked, gh says "Logged in as" and your GitHub name, and
    `gh auth status` shows your account. If you see something else, run
    the line again.
 
@@ -182,7 +182,8 @@ here first:
   Settings, then at the bottom the button
   Delete this repository (GitHub's word for a project).
   Or in the same window, run
-  `gh auth refresh -h github.com -s delete_repo` once, then
+  `gh auth refresh -h github.com -s delete_repo` once (if gh asks
+  "Authenticate Git with your GitHub credentials?", answer Yes), then
   `gh repo delete OWNER/NAME --yes`. The script never deletes a
   project.
 

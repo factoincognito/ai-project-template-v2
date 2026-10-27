@@ -530,6 +530,12 @@ test_delete_command_is_printed_and_never_run() {
   abs="$(CDPATH='' cd "$(COPY "$d")" && pwd)"
   grep -qxF "    gh auth refresh -h github.com -s delete_repo" "$d/out" || { cat "$d/out" >&2; die "no refresh line"; }
   grep -qxF "    gh repo delete $OWNER/$NAME --yes" "$d/out" || die "no delete line"
+  # The refresh can ask gh's question (#235, review N4): the answer is
+  # given right after the two commands.
+  local n
+  n="$(grep -n -xF "    gh repo delete $OWNER/$NAME --yes" "$d/out" | cut -d: -f1)"
+  [ "$(sed -n "$((n + 1))p" "$d/out")" = 'If gh auth refresh asks "Authenticate Git with your GitHub credentials?", answer Yes: type y and press Enter, or just press Enter.' ] \
+    || { cat "$d/out" >&2; die "the answer to gh's Authenticate Git question does not follow the delete commands"; }
   grep -qxF "    rm -rf -- '$abs'" "$d/out" || { cat "$d/out" >&2; die "no folder removal line for '$abs'"; }
   # The delete hint comes after every check.
   [ "$(grep -nF 'gh repo delete' "$d/out" | cut -d: -f1)" -gt "$(grep -nE '^Result: ' "$d/out" | cut -d: -f1)" ] || die "delete hint before the result"
