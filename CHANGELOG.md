@@ -6,6 +6,15 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Added
+- PBI-1.22: the harness's stand-ins start with fewer processes (PR #224)
+- PBI-1.22: the every-guide test runs with far fewer processes (PR #225)
+- PBI-1.22: the OS matrix runs only when a PR touches what the tests read (PR #228)
+- Recorded the product owner's answers on #224, #225 and #228 (PR #231)
+- PBI-1.22: refreshed the measured test durations after #224 and #225 (PR #233)
+- Fixed a flaky test: the failing fake awk reads its input before it fails (PR #234)
+- PBI-1.22 marked done with the measured result (PR #241)
+
 ## [2.6.0] — 2026-10-27
 
 ### Added
