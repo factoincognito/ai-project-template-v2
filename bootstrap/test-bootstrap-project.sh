@@ -8652,6 +8652,39 @@ test_resume_keeps_a_folder_only_when_it_is_this_projects_own_copy() {
   expect_out "$d" "is inside another project that git keeps track of"
 }
 
+# failing_fill_awk <dir>: a fake awk in <dir>/bin that fails as awk does
+# when it runs out of memory, but only in the fill (FILL_N set), and
+# runs the real awk otherwise. It reads all of its input first, as a
+# real awk does before it fails: one that exits unread makes the writer
+# before it in the pipe (tr in fill_file) fail with "Broken pipe" when
+# SIGPIPE is ignored, a race seen on the macOS leg (run 40469146376).
+failing_fill_awk() {
+  local text
+  IFS= read -r -d '' text <<EOF || true
+if [ -n "\${FILL_N:-}" ]; then cat >/dev/null; echo "awk: out of memory" >&2; exit 2; fi
+exec $(command -v awk) "\$@"
+EOF
+  write_stand_in "$1/bin/awk" "$text"
+}
+
+test_the_failing_fill_awk_reads_its_input_so_the_writer_never_sees_a_broken_pipe() {
+  # More than a pipe holds (64 KB) goes into the fake awk, with SIGPIPE
+  # ignored: the writer must finish without an error, every time. A fake
+  # that exits without reading makes it fail with "Broken pipe".
+  local d rc
+  d="$(tmpdir)"
+  failing_fill_awk "$d"
+  rc=0
+  ( trap '' PIPE
+    awk 'BEGIN { for (i = 0; i < 20000; i++) print "0123456789 line of fill text" }' >"$d/big"
+    FILL_N=1 bash -c 'cat "$1" | "$2" "{ print }"; exit "${PIPESTATUS[0]}"' _ "$d/big" "$d/bin/awk" ) 2>"$d/err" || rc=$?
+  [ "$rc" -eq 0 ] || { cat "$d/err" >&2; die "the writer before the fake awk failed (exit $rc)"; }
+  ! grep -qi 'broken pipe' "$d/err" || { cat "$d/err" >&2; die "Broken pipe"; }
+  grep -qxF 'awk: out of memory' "$d/err" || { cat "$d/err" >&2; die "the fake awk did not fail as awk"; }
+  # Outside the fill it is the real awk.
+  [ "$(printf 'a b\n' | "$d/bin/awk" '{ print $2 }')" = b ] || die "outside the fill the fake is not the real awk"
+}
+
 test_an_unexpected_failure_says_what_exists_and_leaves_no_temporary_files() {
   # The ERR trap of the spec ("Failure midway"): a command that fails
   # where the script has no message of its own (here awk in the fill,
@@ -8660,9 +8693,7 @@ test_an_unexpected_failure_says_what_exists_and_leaves_no_temporary_files() {
   local d
   d="$(tmpdir)"
   working_git "$d"
-  printf '%s\n' "$STAND_IN_SHEBANG" 'if [ -n "${FILL_N:-}" ]; then echo "awk: out of memory" >&2; exit 2; fi' \
-    "exec $(command -v awk) \"\$@\"" >"$d/bin/awk"
-  chmod +x "$d/bin/awk"
+  failing_fill_awk "$d"
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
   expect_err_shape "$d" "Something unexpected happened, so the script stopped while: Filling in the project's name, description and product owner in its files\. The project octo-user/my-app exists on GitHub"
