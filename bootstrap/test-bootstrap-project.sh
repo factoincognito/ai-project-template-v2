@@ -3445,41 +3445,97 @@ test_answering_no_every_time_reads_input_on_every_round() {
 }
 
 test_a_command_that_ran_is_offered_again_only_after_enter() {
-  # A yes on every round and a command that never fixes it: between two
-  # runs there is always an Enter, so the end of the input stops it.
+  # A yes to each offer and a command that never fixes it: between two
+  # runs there is always an Enter, so the end of the input stops it. The
+  # terminal has 5 yeses, then no answer: without the Enter between two
+  # runs this fails (5 runs) instead of going round for ever.
   local d
   d="$(tmpdir)"
   on_os "$d" macos
   missing "$d" git
-  printf 'yes\n' >"$d/tty"
+  : >"$d/tty"
+  printf '%s\n' yes yes yes yes yes >"$d/tty-answers"
   printf '\n\n' >"$d/in"
-  pre "$d" preflight_git
+  pre "$d" tty_answers preflight_git
   expect_rc 3 "$d"
   [ "$(grep -c . "$d/run.log")" -eq 3 ] || { cat "$d/run.log" >&2; die "not run 3 times (one more than the Enters)"; }
   [ "$(grep -c 'Run it now?' "$d/out")" -eq 3 ] || { cat "$d/out" >&2; die "not offered 3 times"; }
   [ "$(grep -c 'Press Enter to check again' "$d/out")" -eq 3 ] || { cat "$d/out" >&2; die "not a wait after each run"; }
 }
 
+# The "Not run." lines: the offers whose guide says to come back to this
+# window, and the winget installs, whose guide says to start the script
+# again in a new Git Bash window (this window does not see the install).
+NOT_RUN_TERMINAL="Not run. To run it yourself, open another terminal window (this one is waiting), run the command there, then come back here and press Enter to check again."
+NOT_RUN_GIT_BASH="Not run. To run it yourself, open another Git Bash window (this one is waiting), run the command there, then come back here and press Enter to check again."
+NOT_RUN_WINGET="Not run. To run it yourself, run it in another Git Bash window. When it has finished, type q here and copy the command the script shows to start again. Then close both windows, open Git Bash again from the Start menu, and run that command there."
+NEW_WINDOW_NEEDED="The script cannot check again in this window, because a program installed with winget is found only in a Git Bash window opened after the install. Type q here and copy the command the script shows to start again. Then close this window, open Git Bash again from the Start menu, and run that command there."
+
 test_not_run_says_where_to_run_the_command() {
-  # This window waits for Enter, so the command runs in another one:
-  # Git Bash on Windows, a terminal window elsewhere.
-  local d os want
-  for os in macos windows; do
+  # This window waits for Enter, so the command runs in another one: a
+  # terminal window on macOS, Git Bash on Windows for the gh refresh
+  # (its guide says to come back to this window). A winget install is
+  # found only in a new Git Bash window, as its guide says: its line
+  # says to start again there, never to press Enter here.
+  local d c want
+  for c in macos-git windows-refresh windows-gh windows-gh-old windows-git; do
     d="$(tmpdir)"
-    on_os "$d" "$os"
+    on_os "$d" "${c%%-*}"
     fake_tool "$d" winget
-    missing "$d" git
     printf 'no\n' >"$d/tty"
     printf 'q\n' >"$d/in"
-    pre "$d" preflight_git
-    expect_rc 3 "$d"
-    case "$os" in
-      windows) want="Not run. To run it yourself, open another Git Bash window (this one is waiting), run the command there, then come back here and press Enter to check again." ;;
-      *) want="Not run. To run it yourself, open another terminal window (this one is waiting), run the command there, then come back here and press Enter to check again." ;;
+    case "$c" in
+      macos-git) missing "$d" git; pre "$d" preflight_git; want="$NOT_RUN_TERMINAL" ;;
+      windows-refresh)
+        export STUB_GH_SCOPES="repo"
+        pre "$d" with_vis public preflight_github_permissions
+        unset STUB_GH_SCOPES
+        want="$NOT_RUN_GIT_BASH"
+        ;;
+      windows-gh) make_stub_gh "$d/gh"; echo 9999 >"$d/gh-missing"; working_git "$d"; pre "$d" preflight_gh; want="$NOT_RUN_WINGET" ;;
+      windows-gh-old) make_stub_gh "$d/gh"; echo 9999 >"$d/gh-old"; working_git "$d"; pre "$d" preflight_gh; want="$NOT_RUN_WINGET" ;;
+      windows-git) missing "$d" git; pre "$d" preflight_git; want="$NOT_RUN_WINGET" ;;
     esac
-    grep -qxF "$want" "$d/out" || { cat "$d/out" >&2; die "$os: the Not run line is not: $want"; }
+    expect_rc 3 "$d"
+    expect_out "$d" "Run it now?"
+    grep -qxF "$want" "$d/out" || { cat "$d/out" >&2; die "$c: the Not run line is not: $want"; }
     expect_no_out "$d" "Follow the steps above yourself."
+    if [ "$want" = "$NOT_RUN_WINGET" ]; then expect_no_out "$d" "come back here and press Enter"; fi
   done
+}
+
+test_a_winget_install_that_ran_is_not_offered_again_in_this_window() {
+  # Windows: after a yes to a winget install the check still fails (this
+  # window does not see the install). Each round after it says to start
+  # again in a new Git Bash window instead of offering the install again.
+  local d c
+  for c in gh-missing gh-old git; do
+    d="$(tmpdir)"
+    on_os "$d" windows
+    fake_tool "$d" winget
+    printf 'yes\n' >"$d/tty"
+    printf '\n\n' >"$d/in"
+    case "$c" in
+      git) missing "$d" git; pre "$d" preflight_git ;;
+      *) make_stub_gh "$d/gh"; echo 9999 >"$d/$c"; working_git "$d"; pre "$d" preflight_gh ;;
+    esac
+    expect_rc 3 "$d"
+    [ "$(grep -c . "$d/run.log")" -eq 1 ] || { cat "$d/run.log" >&2; die "$c: the install ran other than once"; }
+    [ "$(grep -c 'Run it now?' "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "$c: offered again in this window"; }
+    [ "$(grep -cxF "$NEW_WINDOW_NEEDED" "$d/out")" -eq 3 ] || { cat "$d/out" >&2; die "$c: not told on each of the 3 rounds after the install to start again in a new window"; }
+    [ "$(grep -c 'Press Enter to check again' "$d/out")" -eq 3 ] || { cat "$d/out" >&2; die "$c: not a wait on each round"; }
+  done
+  # The gh refresh is not a winget install: after a yes that did not fix
+  # it, the round after the Enter offers it again.
+  d="$(tmpdir)"
+  on_os "$d" windows
+  export STUB_GH_SCOPES="repo"
+  printf 'yes\n' >"$d/tty"
+  printf '\n' >"$d/in"
+  pre "$d" with_vis public preflight_github_permissions
+  expect_rc 3 "$d"
+  [ "$(grep -c 'Run it now?' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "refresh: not offered again after Enter"; }
+  expect_no_out "$d" "$NEW_WINDOW_NEEDED"
 }
 
 test_each_offered_command_is_the_one_shown_in_the_guide() {

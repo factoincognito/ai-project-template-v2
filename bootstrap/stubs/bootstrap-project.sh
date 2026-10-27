@@ -1432,9 +1432,25 @@ offer_command() {
     return 0
   fi
   # This window waits for Enter, so the user's own run is in another one.
+  # A winget install is found only in a Git Bash window opened after it,
+  # so its guide says to start the script again there: this line too.
+  if offer_needs_new_window; then
+    say "Not run. To run it yourself, run it in another Git Bash window. When it has finished, type q here and copy the command the script shows to start again. Then close both windows, open Git Bash again from the Start menu, and run that command there."
+    return 1
+  fi
   case "$OS_KIND" in
     windows) say "Not run. To run it yourself, open another Git Bash window (this one is waiting), run the command there, then come back here and press Enter to check again." ;;
     *) say "Not run. To run it yourself, open another terminal window (this one is waiting), run the command there, then come back here and press Enter to check again." ;;
+  esac
+  return 1
+}
+
+# offer_needs_new_window: the offer (OFFER) is a winget install, which
+# this window cannot see (its PATH was read when it opened); its guide
+# says to start the script again in a new Git Bash window.
+offer_needs_new_window() {
+  case "$OFFER" in
+    winget-*) return 0 ;;
   esac
   return 1
 }
@@ -1450,16 +1466,22 @@ offer_command() {
 # installer goes on in its own window) or need a new window. So every
 # round reads a line, from the terminal or from stdin, and between two
 # runs there is always an Enter: the loop never goes round on its own.
+# Once a winget install has run, no winget install is offered again in
+# this window, which cannot see it: each round says to start again in a
+# new Git Bash window instead.
 guided_check() {
-  local check="$1" guide="$2" just_ran=""
+  local check="$1" guide="$2" just_ran="" ran_winget=""
   while ! "$check"; do
     OFFER=""
     NO_RECHECK=""
     "$guide"
     [ -z "$OPT_NON_INTERACTIVE" ] && [ -z "$NO_RECHECK" ] || stop_at_guide
-    if [ -n "$OFFER" ] && [ -z "$just_ran" ]; then
+    if [ -n "$ran_winget" ] && offer_needs_new_window; then
+      say "The script cannot check again in this window, because a program installed with winget is found only in a Git Bash window opened after the install. Type q here and copy the command the script shows to start again. Then close this window, open Git Bash again from the Start menu, and run that command there."
+    elif [ -n "$OFFER" ] && [ -z "$just_ran" ]; then
       if offer_command; then
         just_ran=1
+        if offer_needs_new_window; then ran_winget=1; fi
         continue
       fi
     fi
