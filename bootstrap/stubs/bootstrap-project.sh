@@ -170,13 +170,19 @@ block_start() {
 }
 
 # The lines the user acts on or reads first (a question with its default,
-# the plan's heading, "Proceed?", "What to do next") are in one colour,
-# bold cyan, and nothing else is. colour_on [err]: colour is used when the
-# stream the line goes to is a terminal (stdout_is_terminal, whose hook
-# BOOTSTRAP_STDOUT_TERMINAL counts too; [ -t 2 ] for a line on stderr),
-# or BOOTSTRAP_COLOR is set (a test hook that forces colour); never when
-# NO_COLOR is set and not empty (https://no-color.org), which wins over
-# all of these, or when TERM is dumb.
+# the plan's heading, "Proceed?", "What to do next", and the instruction
+# line above a command: the texts *_INTRO and a guide step that ends with
+# a colon) are in one colour, bold cyan. A command for the user to copy,
+# or that the script offers to run, is in a second colour, bold green
+# (end-to-end run 1 repeated, finding r1d): green rather than yellow,
+# which is hard to read on a light background, while green reads on both
+# light and dark ones. Nothing else is in colour.
+# colour_on [err]: colour is used when the stream the line goes to is a
+# terminal (stdout_is_terminal, whose hook BOOTSTRAP_STDOUT_TERMINAL
+# counts too; [ -t 2 ] for a line on stderr), or BOOTSTRAP_COLOR is set
+# (a test hook that forces colour); never when NO_COLOR is set and not
+# empty (https://no-color.org), which wins over all of these, or when
+# TERM is dumb.
 colour_on() {
   [ -z "${NO_COLOR:-}" ] || return 1
   [ "${TERM:-}" != dumb ] || return 1
@@ -184,17 +190,19 @@ colour_on() {
   if [ "${1:-}" = err ]; then [ -t 2 ]; else stdout_is_terminal; fi
 }
 
-# painted <text> [err]: the text, in colour when colour_on (err: for a
-# line on stderr), with the colour reset straight after it; no line
-# break, so what the user types after a question is not coloured.
-painted() {
-  if colour_on "${2:-}"; then
-    printf '\033[1;36m%s\033[0m' "$1"
+# paint <colour code> <text> [err]: the text, in that colour when
+# colour_on (err: for a line on stderr), with the colour reset straight
+# after it; no line break, so what the user types after a question is
+# not coloured. painted <text> [err]: the text in the first colour.
+paint() {
+  if colour_on "${3:-}"; then
+    printf '\033[%sm%s\033[0m' "$1" "$2"
   else
-    printf '%s' "$1"
+    printf '%s' "$2"
   fi
   OUT_BLANK=""
 }
+painted() { paint '1;36' "$1" "${2:-}"; }
 
 # say_heading <text>: the first line of a block the user reads (the
 # plan), after a blank line, in colour.
@@ -207,18 +215,32 @@ say_heading() {
 # say <text>: one line of information. A line that tells the user what
 # to do next (the closing one of the report) is a block of its own, in
 # colour; the line above a command to start again or to continue opens a
-# block of its own, plain.
+# block of its own, and the line above an offered command does not; both
+# are in colour, as instructions.
 say() {
   case "$*" in
     "What to do next: "*) say_heading "$*" ;;
-    "$START_AGAIN_INTRO" | "$CONTINUE_INTRO" | "$ADVANCE_INTRO") block_start; printf '%s\n' "$*"; OUT_BLANK="" ;;
+    "$START_AGAIN_INTRO" | "$CONTINUE_INTRO" | "$ADVANCE_INTRO") block_start; painted "$*"; printf '\n' ;;
+    "$OFFER_INTRO") end_line; painted "$*"; printf '\n' ;;
     "") end_line; printf '\n'; OUT_BLANK=1 ;;
     *) end_line; printf '%s\n' "$*"; OUT_BLANK="" ;;
   esac
 }
 
-# say_command <command>: a command for the user to copy, indented.
-say_command() { end_line; printf '    %s\n' "$*"; OUT_BLANK=""; }
+# say_command <command> [err]: a command for the user to copy, indented,
+# with only the command in the command colour, not the indent (err: on
+# stderr, in colour only when stderr is a terminal).
+say_command() {
+  end_line
+  if [ "${2:-}" = err ]; then
+    { printf '    '; paint '1;32' "$1" err; printf '\n'; } >&2
+  else
+    printf '    '
+    paint '1;32' "$1"
+    printf '\n'
+  fi
+  OUT_BLANK=""
+}
 
 # step_start <what>, step_end <result>: the first and last line of a step.
 step_start() { end_line; CURRENT_STEP="$*"; printf '==> %s\n' "$*"; OUT_BLANK=""; }
@@ -274,6 +296,8 @@ START_AGAIN_INTRO="To start again, run this command:"
 CONTINUE_INTRO="To continue the setup, run this command:"
 # Shown once, after the yes and before the first change (show_advance_command).
 ADVANCE_INTRO="If the setup stops before it finishes, for any reason, also with Ctrl-C or a closed window, continue it with the command below. Copy it now and keep it until the setup has finished:"
+# The line above a command the script offers to run (offer_command).
+OFFER_INTRO="The script can run this command for you:"
 # The plan and step 10 give it for a public project with no licence.
 NO_LICENCE_WARNING="Warning: the project is public and has no licence: anyone can see its code, but nobody else may copy, change or share it. To add a licence later, see https://choosealicense.com."
 
@@ -357,7 +381,12 @@ ask_terminal() {
 # A guide: guide_begin <title> <why>, then guide_step <text> for each
 # numbered step (with say_command for a command to copy), then guide_end
 # <what the user sees when it worked> <what to do otherwise> <how the
-# script checks it>.
+# script checks it>. A step that ends with a colon introduces the command
+# printed right below it, so it is in colour as an instruction (the tests
+# hold every such step to a command below it, and every command in a
+# guide to such a step above it). A step that points to "the command
+# shown below" (the command of the stop) stays plain: that command comes
+# with an instruction line of its own.
 GUIDE_TITLE=""
 GUIDE_N=0
 guide_begin() {
@@ -369,7 +398,10 @@ guide_begin() {
 }
 guide_step() {
   GUIDE_N=$((GUIDE_N + 1))
-  printf '  %s. %s\n' "$GUIDE_N" "$*"
+  case "$*" in
+    *:) printf '  '; painted "$GUIDE_N. $*"; printf '\n' ;;
+    *) printf '  %s. %s\n' "$GUIDE_N" "$*" ;;
+  esac
   OUT_BLANK=""
 }
 guide_end() {
@@ -1419,7 +1451,7 @@ offered() {
 # Returns 0 when it ran (the check runs again straight away), 1 when the
 # user did not say yes.
 offer_command() {
-  say "The script can run this command for you:"
+  say "$OFFER_INTRO"
   offered "$OFFER" show
   if ask_terminal "It runs only if you type yes; Enter or any other answer skips it, and you can run it yourself." \
     "Run it now? (yes or no)"; then
@@ -3653,7 +3685,7 @@ git_sign_in_failed() {
 guide_git_sign_in() {
   guide_begin "git could not sign in to GitHub to $SIGN_IN_FOR." \
     "git (the tool that keeps the project's history) needs your GitHub sign-in for this. The script lends it the sign-in of gh (the GitHub command-line tool) for this one step, and git still could not sign in."
-  guide_step "Let gh sign git in to GitHub with this command. It changes your global git settings (the settings git uses for every project on this computer): from then on, git signs in to GitHub through gh in every project, not only this one."
+  guide_step "Let gh sign git in to GitHub. This changes your global git settings (the settings git uses for every project on this computer): from then on, git signs in to GitHub through gh in every project, not only this one. This command does it:"
   say_command "gh auth setup-git"
   guide_step "Then come back here and press Enter: the script tries again."
   guide_end "the script says \"Done.\" after it tries again." \

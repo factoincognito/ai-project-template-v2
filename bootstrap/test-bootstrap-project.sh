@@ -1540,6 +1540,10 @@ test_fail_exits_with_the_code_it_is_given() {
 
 COLOUR_ON="$(printf '\033[1;36m')"
 COLOUR_OFF="$(printf '\033[0m')"
+# The second colour, for a command the user is to copy or that the
+# script offers to run (end-to-end run 1 repeated, finding r1d): its
+# instruction line is in COLOUR_ON, the command itself in COMMAND_ON.
+COMMAND_ON="$(printf '\033[1;32m')"
 # has_esc <file>: the file holds an escape character (the start of a
 # colour code), read through od -c as has_cr does.
 has_esc() { od -A n -c "$1" | grep -F '033' >/dev/null; }
@@ -1622,6 +1626,9 @@ test_no_colour_codes_by_default_in_a_file_or_pipe() {
     printf 'no\n' >"$got.tty"
     ask "Why it is asked, in one sentence." "Name" x; ask_terminal "It runs only if you type yes." "Run it now?" || true
     wait_for_enter || true; say_heading "Here is the plan."; say "What to do next: open it."
+    say "$CONTINUE_INTRO"; say_command "bash x.sh --resume"
+    guide_begin "The title." "a reason"; guide_step "Run this command:"; say_command "gh auth status"; guide_end a b c
+    OFFER=gh-setup-git; offer_command || true; say_command "gh auth status" err
     show_error "It broke." "Run it again." ) <<<"$(printf 'y\nq')" >"$got" 2>"$got.err"
   ! has_esc "$got" || { od -c "$got" | head >&2; die "colour codes on stdout without a terminal"; }
   ! has_esc "$got.err" || { od -c "$got.err" | head >&2; die "colour codes on stderr without a terminal"; }
@@ -1642,8 +1649,9 @@ test_the_colour_hook_paints_only_the_lines_the_user_acts_on() {
     say_heading "Here is the plan."; say "    On GitHub: a/b"
     say "What to do next: open the Claude app." ) <<<"$(printf 'node\nq')" >"$got" 2>"$got.err"
   {
-    printf '%s\n' '==> Checking' '    Done. It works.' 'A line of work.' '    gh auth status' '' \
-      'Why it is asked, in one sentence.' '  1) node: the first choice'
+    printf '%s\n' '==> Checking' '    Done. It works.' 'A line of work.'
+    printf '    %sgh auth status%s\n' "$COMMAND_ON" "$COLOUR_OFF"
+    printf '%s\n' '' 'Why it is asked, in one sentence.' '  1) node: the first choice'
     printf '%sPack:%s \n' "$COLOUR_ON" "$COLOUR_OFF"
     printf '\n%s\n' 'It runs only if you type yes.'
     printf '%sRun it now? (yes or no) [no]:%s \n' "$COLOUR_ON" "$COLOUR_OFF"
@@ -1673,10 +1681,14 @@ test_no_color_and_a_dumb_terminal_win_over_the_colour_hook() {
   # terminal that says it is dumb. An empty NO_COLOR does not count.
   local got="$WORK/got.$RANDOM"
   ( load_script; export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1
-    say_heading "Here is the plan."; show_error "It broke." "Run it again." ) >"$got" 2>&1
+    say_heading "Here is the plan."; say "$CONTINUE_INTRO"; say_command "bash x.sh --resume"
+    guide_begin "The title." "a reason"; guide_step "Run this command:"; say_command "gh auth status"
+    say_command "gh auth status" err; show_error "It broke." "Run it again." ) >"$got" 2>&1
   ! has_esc "$got" || { od -c "$got" | head >&2; die "NO_COLOR did not turn colour off"; }
   ( load_script; unset NO_COLOR; export TERM=dumb BOOTSTRAP_COLOR=1
-    say_heading "Here is the plan."; show_error "It broke." "Run it again." ) >"$got" 2>&1
+    say_heading "Here is the plan."; say "$CONTINUE_INTRO"; say_command "bash x.sh --resume"
+    guide_begin "The title." "a reason"; guide_step "Run this command:"; say_command "gh auth status"
+    say_command "gh auth status" err; show_error "It broke." "Run it again." ) >"$got" 2>&1
   ! has_esc "$got" || { od -c "$got" | head >&2; die "TERM=dumb did not turn colour off"; }
   ( load_script; export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=
     say_heading "Here is the plan." ) >"$got"
@@ -1702,6 +1714,120 @@ test_colour_follows_the_terminal_check_of_the_wait() {
   ( load_script; unset NO_COLOR BOOTSTRAP_COLOR; export TERM=dumb BOOTSTRAP_STDOUT_TERMINAL=yes
     say_heading "Here is the plan." ) >"$got"
   ! has_esc "$got" || die "TERM=dumb did not win over BOOTSTRAP_STDOUT_TERMINAL=yes"
+}
+
+# End-to-end run 1 repeated, finding r1d (Adam): "When the user is
+# instructed to execute a prompt it should be color coded for easy
+# identification. One color for the instruction [...], another color for
+# the command". The instruction is in the colour of the other lines the
+# user acts on; the command in a second one, around its text only, not
+# the indent in front of it.
+test_an_instruction_and_the_command_below_it_are_in_two_colours() {
+  local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM" n advance
+  [ "$COMMAND_ON" != "$COLOUR_ON" ] || die "the command colour is the instruction colour"
+  advance="$(load_script; printf '%s' "$ADVANCE_INTRO")"
+  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
+    step_end "Checked."; say "$CONTINUE_INTRO"; say_command "bash x.sh --resume"
+    say "$START_AGAIN_INTRO"; say_command "bash x.sh"
+    say "$ADVANCE_INTRO"; say_command "bash x.sh --resume"
+    guide_begin "The title." "a reason"; guide_step "Run this command; it does a thing:"
+    say_command "gh auth status"; guide_step "Come back to this window."; guide_end a b c ) >"$got" 2>"$got.err"
+  {
+    printf '%s\n' '    Done. Checked.' ''
+    printf '%sTo continue the setup, run this command:%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '    %sbash x.sh --resume%s\n' "$COMMAND_ON" "$COLOUR_OFF"
+    printf '\n%sTo start again, run this command:%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '    %sbash x.sh%s\n' "$COMMAND_ON" "$COLOUR_OFF"
+    printf '\n%s%s%s\n' "$COLOUR_ON" "$advance" "$COLOUR_OFF"
+    printf '    %sbash x.sh --resume%s\n' "$COMMAND_ON" "$COLOUR_OFF"
+    printf '%s\n' '' 'The title.' 'Why this is needed: a reason'
+    printf '  %s1. Run this command; it does a thing:%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '    %sgh auth status%s\n' "$COMMAND_ON" "$COLOUR_OFF"
+    printf '%s\n' '  2. Come back to this window.' 'When it has worked: a' \
+      'If you see something else: b' 'How the script checks it: c'
+  } >"$want"
+  expect_same "an instruction and its command" "$want" "$got"
+  [ ! -s "$got.err" ] || { cat "$got.err" >&2; die "wrote to stderr"; }
+  # The command the script offers to run: its line in the instruction
+  # colour, the command right below it in the command colour.
+  printf 'no\n' >"$got.tty"
+  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1 BOOTSTRAP_TTY="$got.tty"
+    OFFER=gh-setup-git; offer_command || true ) >"$got" 2>"$got.err"
+  n="$(grep -nxF -- "${COLOUR_ON}The script can run this command for you:${COLOUR_OFF}" "$got" | cut -d: -f1)"
+  [ -n "$n" ] || { od -c "$got" | head -20 >&2; die "the line before the offered command is not in the instruction colour"; }
+  [ "$(sed -n "$((n + 1))p" "$got")" = "    ${COMMAND_ON}gh auth setup-git${COLOUR_OFF}" ] \
+    || { od -c "$got" | head -20 >&2; die "the offered command is not right below its line, in the command colour"; }
+}
+
+test_a_command_on_stderr_follows_the_terminal_check_of_stderr() {
+  # A command printed on stderr asks whether stderr is a terminal ([ -t 2 ],
+  # which a file is not), as the stop does, even when stdout counts as one;
+  # the hook forces colour there too, and NO_COLOR still wins.
+  local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
+  ( load_script; unset NO_COLOR BOOTSTRAP_COLOR; export TERM=xterm BOOTSTRAP_STDOUT_TERMINAL=yes
+    say_command "gh auth status"; say_command "gh auth status" err ) >"$got" 2>"$got.err"
+  printf '    %sgh auth status%s\n' "$COMMAND_ON" "$COLOUR_OFF" >"$want"
+  expect_same "a command on stdout that counts as a terminal" "$want" "$got"
+  printf '%s\n' '    gh auth status' >"$want"
+  expect_same "a command on stderr that is a file" "$want" "$got.err"
+  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
+    say_command "gh auth status" err ) >"$got" 2>"$got.err"
+  [ ! -s "$got" ] || { cat "$got" >&2; die "a command for stderr went to stdout"; }
+  printf '    %sgh auth status%s\n' "$COMMAND_ON" "$COLOUR_OFF" >"$want"
+  expect_same "a command on stderr with the colour hook" "$want" "$got.err"
+  ( load_script; export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1
+    say_command "gh auth status" err ) 2>"$got"
+  printf '%s\n' '    gh auth status' >"$want"
+  expect_same "a command on stderr with NO_COLOR" "$want" "$got"
+}
+
+# The instruction colour of a guide step goes by its text: a step that
+# ends with a colon introduces the command printed right below it. So
+# every such step must be followed by a command, and every command
+# printed outside the messages block must come right after such a step
+# or after one of the instruction lines (the texts *_INTRO). Read from
+# the script's source, so a guide added later is held to it too.
+command_intro_faults() {
+  awk '
+    /^[[:space:]]*# ---------- messages ----------/ { inblk = 1; next }
+    /^[[:space:]]*# ---------- end of messages ----------/ { inblk = 0; next }
+    inblk || /^[[:space:]]*#/ { next }
+    /^offered\(\) \{/ { inoffered = 1 }
+    inoffered { if ($0 ~ /^}/) inoffered = 0; next }
+    /(^|[^A-Za-z0-9_])say_command[[:space:]]/ || /(^|[^A-Za-z0-9_])offered [^ ;]+ show/ {
+      if (!intro) print NR ": a command with no instruction line right above it: " $0
+      pending = 0
+      next
+    }
+    /(^|[^A-Za-z0-9_])guide_step[[:space:]]/ {
+      if (pending) print pending ": a step that ends with a colon, with no command below it"
+      intro = ($0 ~ /:"[[:space:]]*$/)
+      pending = intro ? NR : 0
+      next
+    }
+    /(^|[^A-Za-z0-9_])(say|say_heading|guide_begin|guide_end|show_error|fail|stop_with_error|ask|ask_terminal|step_start|step_end)[[:space:]]/ {
+      if (pending) print pending ": a step that ends with a colon, with no command below it"
+      pending = 0
+      intro = ($0 ~ /say "\$[A-Z_]*_INTRO"/)
+    }
+  ' "$1"
+}
+
+test_every_command_comes_right_after_its_instruction_line() {
+  local hits bad="$WORK/bad.$RANDOM"
+  hits="$(command_intro_faults "$SCRIPT")"
+  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "a command and its instruction line are not together"; }
+  # The check itself sees each fault: a step with a colon and no command
+  # below it, a command below a step with no colon, a command below a
+  # plain line; an intro line and a step with a colon (also through a
+  # case) are not faults.
+  printf '%s\n' 'g() {' '  guide_step "Run this command:"' '  guide_end a b c' \
+    '  guide_step "Run it."' '  say_command "gh auth status"' '  say "Something."' \
+    '  offered gh-setup-git show' '  say "$CONTINUE_INTRO"' '  say_command "bash x.sh"' \
+    '  guide_step "Run this command:"' '  case "$X" in' '    a) say_command "gh a" ;;' \
+    '    b) offered brew-gh show ;;' '  esac' '}' >"$bad"
+  hits="$(command_intro_faults "$bad" | cut -d: -f1 | tr '\n' ' ')"
+  [ "$hits" = "2 5 7 " ] || die "the check on a broken guide found lines: $hits (want 2 5 7)"
 }
 
 test_layout_pack_errors_use_the_error_format() {
