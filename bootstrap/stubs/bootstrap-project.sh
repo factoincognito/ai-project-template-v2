@@ -4892,7 +4892,7 @@ resume_deploy_choice() {
       ;;
     saved | sent | proposed)
       if [ -n "$COPY_PRESENT" ]; then
-        if git -C "$IN_DIR" cat-file -e "refs/heads/$SETUP_BRANCH:$DEPLOY_WORKFLOW" 2>/dev/null; then laid=yes; else laid=no; fi
+        if git -C "$IN_DIR" cat-file -e "refs/heads/$SETUP_BRANCH:$DEPLOY_WORKFLOW" >/dev/null 2>&1; then laid=yes; else laid=no; fi
       else
         api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/$DEPLOY_WORKFLOW?ref=$SETUP_BRANCH"
         case "$API_STATUS" in
