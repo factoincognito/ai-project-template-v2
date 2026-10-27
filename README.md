@@ -65,8 +65,15 @@ Windows.
    something else, run the line again.
 
 **Step 1: run the setup.** In the same window, go to the folder that
-should hold the new project (for example `cd ~/Documents`), then copy
-this line and press Enter:
+should hold the new project. If you have no such folder yet, this line
+makes one named projects in your home folder and goes there; copy it
+and press Enter:
+
+```
+mkdir -p ~/projects && cd ~/projects
+```
+
+Then copy this line and press Enter:
 
 ```
 gh api repos/factoincognito/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh && bash bootstrap-project.sh
