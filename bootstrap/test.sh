@@ -1034,6 +1034,237 @@ test_workflow_bootstrapper_test_is_one_job_that_always_runs() {
   [ -n "$(wf_needs bootstrapper-test)" ] || die "bootstrapper-test needs nothing"
 }
 
+# ---------- the test jobs run only when a change can affect them ----------
+# (PBI-1.22, part 1.) bootstrap/not-read-by-tests.txt lists the files no
+# test reads; bootstrap/changed-inputs.sh needed <base> <head> says
+# whether a change touches anything else, and remove deletes the listed
+# files before the tests run in CI.
+
+CHANGED_INPUTS="$HERE/changed-inputs.sh"
+NOT_READ="$HERE/not-read-by-tests.txt"
+
+# inputs_repo <dir>: a git repo with a few files, one commit (base).
+inputs_repo() {
+  mkdir -p "$1/docs" "$1/bootstrap"
+  git -C "$1" init -q -b main
+  printf 'x\n' >"$1/README.md"; printf 'x\n' >"$1/docs/BACKLOG.md"; printf 'x\n' >"$1/docs/SPEC.md"
+  printf 'x\n' >"$1/bootstrap/build.sh"; printf 'x\n' >"$1/STATUS.md"
+  printf '%s\n' '# comment' '' docs/BACKLOG.md STATUS.md >"$1/list"
+  git -C "$1" add -A
+  git -C "$1" -c user.name=T -c user.email=t@example.com commit -q -m base
+}
+
+# needed_in <dir> <change...>: makes the changes (shell commands run in
+# <dir>), commits them, and prints the tool's answer for base..HEAD.
+needed_in() {
+  local d="$1"; shift
+  ( cd "$d" && eval "$@" && git add -A && git -c user.name=T -c user.email=t@example.com commit -q --allow-empty -m change ) \
+    || die "the change '$*' could not be made"
+  ( cd "$d" && LIST="$d/list" bash "$CHANGED_INPUTS" needed HEAD~1 HEAD 2>/dev/null )
+}
+
+test_changed_inputs_says_the_tests_are_needed_unless_only_unread_files_changed() {
+  local d
+  [ -f "$CHANGED_INPUTS" ] || die "no bootstrap/changed-inputs.sh"
+  d="$WORK/r1"; inputs_repo "$d"
+  [ "$(needed_in "$d" 'printf y >>docs/BACKLOG.md')" = false ] || die "a change to a listed file alone needs the tests"
+  [ "$(needed_in "$d" 'printf y >>docs/BACKLOG.md; printf y >>STATUS.md')" = false ] || die "two listed files need the tests"
+  [ "$(needed_in "$d" 'printf y >>docs/BACKLOG.md; printf y >>README.md')" = true ] || die "a listed and an unlisted file do not need the tests"
+  [ "$(needed_in "$d" 'printf y >>docs/SPEC.md')" = true ] || die "an unlisted doc does not need the tests"
+  [ "$(needed_in "$d" 'printf y >new-file.md')" = true ] || die "a new file does not need the tests"
+  # Deleting a listed file needs the tests: the list must keep naming
+  # tracked files only, so that pull request also edits the list.
+  [ "$(needed_in "$d" 'git rm -q STATUS.md')" = true ] || die "deleting a listed file does not need the tests"
+  [ "$(needed_in "$d" 'printf x >STATUS.md')" = true ] || die "adding a listed file does not need the tests"
+  [ "$(needed_in "$d" 'git rm -q bootstrap/build.sh')" = true ] || die "deleting an unlisted file does not need the tests"
+  [ "$(needed_in "$d" 'git mv docs/BACKLOG.md docs/OTHER.md')" = true ] || die "renaming a listed file to an unlisted name does not need the tests"
+  [ "$(needed_in "$d" 'true')" = true ] || die "an empty change does not need the tests"
+  # The changed files are named on stderr, each with its side.
+  d="$WORK/r1b"; inputs_repo "$d"
+  ( cd "$d" && printf y >>README.md && git add -A && git -c user.name=T -c user.email=t@example.com commit -q -m c \
+    && LIST="$d/list" bash "$CHANGED_INPUTS" needed HEAD~1 HEAD ) >"$WORK/out" 2>"$WORK/err"
+  grep -qF 'read by the tests:     README.md' "$WORK/err" || { cat "$WORK/err" >&2; die "the changed file is not named"; }
+  ( cd "$d" && printf y >>docs/BACKLOG.md && git add -A && git -c user.name=T -c user.email=t@example.com commit -q -m c \
+    && LIST="$d/list" bash "$CHANGED_INPUTS" needed HEAD~1 HEAD ) >"$WORK/out" 2>"$WORK/err"
+  grep -qF 'not read by the tests: docs/BACKLOG.md' "$WORK/err" || { cat "$WORK/err" >&2; die "the listed file is not named"; }
+}
+
+test_changed_inputs_refuses_what_it_cannot_judge() {
+  # A commit it cannot read, a list it cannot read or a list entry that
+  # is not a plain repo path: exit 2, so the workflow's step fails and
+  # the gate does not pass on it.
+  local d bad rc
+  d="$WORK/r2"; inputs_repo "$d"
+  set +e
+  ( cd "$d" && LIST="$d/list" bash "$CHANGED_INPUTS" needed nosuchref HEAD ) >/dev/null 2>&1; rc=$?
+  set -e
+  [ "$rc" -eq 2 ] || die "an unknown commit: exit $rc, want 2"
+  set +e
+  ( cd "$d" && LIST="$d/missing" bash "$CHANGED_INPUTS" needed HEAD HEAD ) >/dev/null 2>&1; rc=$?
+  set -e
+  [ "$rc" -eq 2 ] || die "a missing list: exit $rc, want 2"
+  for bad in '/etc/passwd' '../outside' 'docs/../README.md' 'docs/' 'docs/*.md' 'with space'; do
+    printf '%s\n' "$bad" >"$d/badlist"
+    set +e
+    ( cd "$d" && LIST="$d/badlist" bash "$CHANGED_INPUTS" needed HEAD HEAD ) >/dev/null 2>"$WORK/err"; rc=$?
+    set -e
+    [ "$rc" -eq 2 ] || die "list entry '$bad': exit $rc, want 2"
+    grep -qF 'not a plain repo path' "$WORK/err" || { cat "$WORK/err" >&2; die "list entry '$bad': not refused for its path"; }
+  done
+  set +e
+  ( cd "$d" && LIST="$d/list" bash "$CHANGED_INPUTS" ) >/dev/null 2>&1; rc=$?
+  set -e
+  [ "$rc" -eq 2 ] || die "no subcommand: exit $rc, want 2"
+}
+
+test_changed_inputs_remove_deletes_only_the_listed_files() {
+  local d rc
+  d="$WORK/r3"; inputs_repo "$d"
+  ( cd "$d" && LIST="$d/list" bash "$CHANGED_INPUTS" remove ) >"$WORK/out" 2>&1 || { cat "$WORK/out" >&2; die "remove failed"; }
+  [ ! -e "$d/docs/BACKLOG.md" ] && [ ! -e "$d/STATUS.md" ] || die "a listed file is still there"
+  [ -f "$d/README.md" ] && [ -f "$d/docs/SPEC.md" ] && [ -f "$d/bootstrap/build.sh" ] || die "an unlisted file was deleted"
+  # A list saved with CR LF line ends works the same (Git Bash).
+  printf 'x\n' >"$d/STATUS.md"
+  printf '%s\r\n' '# c' STATUS.md >"$d/crlf"
+  ( cd "$d" && LIST="$d/crlf" bash "$CHANGED_INPUTS" remove ) >/dev/null 2>&1 || die "remove with a CR LF list failed"
+  [ ! -e "$d/STATUS.md" ] || die "a CR LF list did not delete its file"
+  # Again, with the files gone: still fine.
+  ( cd "$d" && LIST="$d/list" bash "$CHANGED_INPUTS" remove ) >/dev/null 2>&1 || die "remove failed when the files were already gone"
+  # A listed folder is refused before anything is deleted.
+  printf '%s\n' README.md docs >"$d/dirlist"
+  set +e
+  ( cd "$d" && LIST="$d/dirlist" bash "$CHANGED_INPUTS" remove ) >/dev/null 2>&1; rc=$?
+  set -e
+  [ "$rc" -eq 2 ] || die "a listed folder: exit $rc, want 2"
+  [ -f "$d/README.md" ] || die "a file was deleted before the folder was refused"
+}
+
+test_not_read_list_holds_only_tracked_files_and_every_test_job_deletes_them() {
+  # The real list: plain paths of files this repo tracks (a stale or
+  # mistyped entry would let a pull request skip the tests for a file
+  # that does not exist under that name), never a file the build or a
+  # suite is named as reading here, and every job that runs tests
+  # deletes the listed files first, so a test that starts reading one
+  # fails in CI.
+  local f j job
+  [ -f "$NOT_READ" ] || die "no bootstrap/not-read-by-tests.txt"
+  ( cd "$REPO" && LIST="$NOT_READ" bash "$CHANGED_INPUTS" needed HEAD HEAD ) >/dev/null 2>"$WORK/err" \
+    || { cat "$WORK/err" >&2; die "the list does not pass the tool's own checks"; }
+  grep -vE '^(#|$)' "$NOT_READ" >"$WORK/listed"
+  [ -s "$WORK/listed" ] || die "the list is empty"
+  while IFS= read -r f; do
+    git -C "$REPO" ls-files --error-unmatch -- "$f" >/dev/null 2>&1 || die "listed but not tracked: $f"
+    case "$f" in
+      bootstrap/* | tools/* | languages/* | .github/* | README.md | CLAUDE.md | docs/SPEC.md | docs/DEV_INFRASTRUCTURE.md)
+        die "listed, but the tests or the build read it: $f" ;;
+    esac
+    ! grep -qxF -- "$f" "$HERE/manifest.txt" || die "listed, but the build ships it: $f"
+  done <"$WORK/listed"
+  # tools/test-layout-pack.sh runs in packs.yml, which this PR does not
+  # change: it runs on every pull request, so it is not skipped, and a
+  # listed file it read would only show there. It reads none (measured).
+  for j in $(wf_jobs_running bootstrap/test.sh) $(wf_jobs_running tools/test-require-test-change.sh) \
+    $(wf_jobs_running bootstrap/test-e2e-check.sh) "$(matrix_job)"; do
+    job="$(wf_job "$j")"
+    grep -qxF '        run: bash bootstrap/changed-inputs.sh remove' <<<"$job" \
+      || die "job $j runs tests without deleting the files no test reads first"
+    # Before the first step that runs a suite.
+    awk '/run: bash bootstrap\/changed-inputs.sh remove/ { r = NR } /(\/bin\/)?bash (bootstrap|tools)\/test/ && !f { f = NR } END { exit !(r && f && r < f) }' <<<"$job" \
+      || die "job $j deletes the files after a suite has run"
+  done
+}
+
+test_workflow_test_jobs_run_only_when_the_changes_job_says_so() {
+  # The changes job decides from the base branch's copy of the script and
+  # the list; both test jobs need it and run only on "true"; the gate
+  # needs it too.
+  local j job ch
+  ch="$(wf_job changes)"
+  [ -n "$ch" ] || die "no changes job"
+  grep -qF 'git show HEAD^1:bootstrap/changed-inputs.sh' <<<"$ch" || die "the changes job does not use the base branch's script"
+  grep -qF 'git show HEAD^1:bootstrap/not-read-by-tests.txt' <<<"$ch" || die "the changes job does not use the base branch's list"
+  grep -qF 'needed HEAD^1 HEAD' <<<"$ch" || die "the changes job does not compare the base with the merge commit"
+  grep -qxF '          fetch-depth: 2' <<<"$ch" || die "the changes job does not fetch the base parent"
+  grep -qxF '      needed: ${{ steps.judge.outputs.needed }}' <<<"$ch" || die "the changes job does not output needed"
+  for j in scripts-test "$(matrix_job)"; do
+    job="$(wf_job "$j")"
+    [ "$(wf_needs "$j")" = changes ] || die "$j does not need changes (only)"
+    grep -qxF "    if: needs.changes.outputs.needed == 'true'" <<<"$job" || die "$j does not run only when the tests are needed"
+  done
+  wf_needs bootstrapper-test | grep -xF changes >/dev/null || die "bootstrapper-test does not need changes"
+}
+
+test_workflow_changes_job_answers_true_unless_only_unread_files_changed() {
+  # Runs the changes job's script in a repo whose HEAD is a merge commit
+  # of a base and a branch, as GitHub checks out a pull request.
+  local step script d out
+  step="$(wf_step changes '^ *run: [|]')"
+  script="$WORK/judge.sh"
+  printf '%s\n' "$step" | wf_run_block >"$script"
+  [ -s "$script" ] || die "no run script in the changes job"
+  merge_case() { # <name> <event> <change in the branch> [broken] -> prints needed
+    d="$WORK/m.$1"; mkdir -p "$d/bootstrap" "$d/docs"
+    git -C "$d" init -q -b main
+    cp "$CHANGED_INPUTS" "$d/bootstrap/changed-inputs.sh"; cp "$NOT_READ" "$d/bootstrap/not-read-by-tests.txt"
+    [ -z "${4:-}" ] || printf '%s\n' '#!/usr/bin/env bash' 'exit 3' >"$d/bootstrap/changed-inputs.sh"
+    printf 'x\n' >"$d/README.md"; printf 'x\n' >"$d/docs/BACKLOG.md"
+    git -C "$d" add -A; git -C "$d" -c user.name=T -c user.email=t@example.com commit -q -m base
+    git -C "$d" checkout -q -b pr
+    ( cd "$d" && eval "$3" && git add -A && git -c user.name=T -c user.email=t@example.com commit -q -m pr )
+    git -C "$d" checkout -q main
+    git -C "$d" -c user.name=T -c user.email=t@example.com merge -q --no-ff -m merge pr
+    : >"$WORK/out.$1"
+    ( cd "$d" && EVENT="$2" GITHUB_OUTPUT="$WORK/out.$1" RUNNER_TEMP="$WORK" bash "$script" ) >/dev/null 2>&1 \
+      || die "$1: the changes job failed"
+    sed -n 's/^needed=//p' "$WORK/out.$1"
+  }
+  [ "$(merge_case docs pull_request 'printf y >>docs/BACKLOG.md')" = false ] || die "a pull request changing only docs/BACKLOG.md needs the tests"
+  [ "$(merge_case readme pull_request 'printf y >>README.md')" = true ] || die "a pull request changing README.md does not need the tests"
+  [ "$(merge_case list pull_request 'printf "README.md\n" >>bootstrap/not-read-by-tests.txt; printf y >>README.md')" = true ] \
+    || die "a pull request that lists README.md itself skipped its own tests (the base's list must decide)"
+  # A pull request cannot switch off its own tests through the list or
+  # the script: the base branch's copies decide.
+  [ "$(merge_case list2 pull_request 'printf "README.md\nbootstrap/not-read-by-tests.txt\n" >>bootstrap/not-read-by-tests.txt; printf y >>README.md')" = true ] \
+    || die "a pull request listing README.md and the list itself skipped its own tests"
+  [ "$(merge_case script pull_request 'printf "%s\n" "#!/usr/bin/env bash" "echo false" >bootstrap/changed-inputs.sh; printf y >>docs/BACKLOG.md')" = true ] \
+    || die "a pull request that replaced the script skipped its own tests"
+  [ "$(merge_case script2 pull_request 'printf "%s\n" "#!/usr/bin/env bash" "echo false" >bootstrap/changed-inputs.sh; printf "bootstrap/changed-inputs.sh\n" >>bootstrap/not-read-by-tests.txt; printf y >>docs/BACKLOG.md')" = true ] \
+    || die "a pull request that replaced and listed the script skipped its own tests"
+  # A judge that fails runs the tests (and does not block the pull request).
+  [ "$(merge_case broken pull_request 'printf y >>docs/BACKLOG.md' broken)" = true ] || die "a failing judge did not run the tests"
+  [ "$(merge_case tag push 'printf y >>docs/BACKLOG.md')" = true ] || die "a tag run does not run the tests"
+  # A base branch without the script (the first pull request): the tests run.
+  d="$WORK/m.nobase"; mkdir -p "$d/docs"
+  git -C "$d" init -q -b main; printf 'x\n' >"$d/docs/BACKLOG.md"
+  git -C "$d" add -A; git -C "$d" -c user.name=T -c user.email=t@example.com commit -q -m base
+  git -C "$d" checkout -q -b pr; printf y >>"$d/docs/BACKLOG.md"; git -C "$d" -c user.name=T -c user.email=t@example.com commit -q -am pr
+  git -C "$d" checkout -q main; git -C "$d" -c user.name=T -c user.email=t@example.com merge -q --no-ff -m merge pr
+  : >"$WORK/out.nobase"
+  ( cd "$d" && EVENT=pull_request GITHUB_OUTPUT="$WORK/out.nobase" RUNNER_TEMP="$WORK" bash "$script" ) >/dev/null 2>&1 || die "nobase: failed"
+  [ "$(sed -n 's/^needed=//p' "$WORK/out.nobase")" = true ] || die "with no script on the base, the tests were skipped"
+}
+
+test_workflow_bootstrapper_test_passes_a_skip_only_when_the_changes_job_said_so() {
+  # The gate's step with the results GitHub would pass when the test jobs
+  # were skipped: it passes only for changes=success, needed=false and
+  # both test jobs skipped; every other mix is judged in full and fails
+  # (no shard reported).
+  local step script d r
+  step="$(wf_step bootstrapper-test '^ *run: [|]')"
+  script="$WORK/gate.skip.sh"
+  printf '%s\n' "$step" | wf_run_block >"$script"
+  d="$WORK/gate.skip"; gate_fixture "$d"; rm -f "$d/shard-list/"*
+  ( cd "$d" && RESULTS="success skipped skipped" CHANGES_RESULT=success TESTS_NEEDED=false TEST_RESULTS="skipped skipped" bash "$script" ) \
+    >"$WORK/out" 2>&1 || { cat "$WORK/out" >&2; die "a pull request with only unread files did not pass"; }
+  for r in "success|true|skipped skipped" "failure|false|skipped skipped" "success||skipped skipped" \
+           "success|false|success skipped" "success|false|skipped success" "success|false|failure skipped" \
+           "skipped|false|skipped skipped" "cancelled|false|skipped skipped" "success|False|skipped skipped"; do
+    IFS='|' read -r c n t <<<"$r"
+    ! ( cd "$d" && RESULTS="$c $t" CHANGES_RESULT="$c" TESTS_NEEDED="$n" TEST_RESULTS="$t" bash "$script" ) >/dev/null 2>&1 \
+      || die "the gate passed: changes=$c needed='$n' tests='$t'"
+  done
+}
+
 # ---------- bootstrapper-test: the shards of the OS legs ----------
 # Each OS leg of the bootstrap script's tests runs as several shards
 # (BOOTSTRAP_TEST_SHARD=i/n): shard i runs the tests at index i-1, i-1+n,
