@@ -29,7 +29,9 @@
 #   (bootstrap/check-shards.sh).
 # - A pull request that changes only files no test reads
 #   (bootstrap/not-read-by-tests.txt, judged by the base branch's copy
-#   of bootstrap/changed-inputs.sh and of that list) skips the test jobs
+#   of bootstrap/changed-inputs.sh and of that list, so an accidental
+#   edit of either cannot skip its own tests; an edit of this workflow
+#   can, and is reviewed as any workflow change) skips the test jobs
 #   (PBI-1.22, part 1). bootstrapper-test still reports: it passes only
 #   when the changes job succeeded and said the tests are not needed and
 #   both test jobs were skipped. Each test job deletes the listed files
@@ -82,9 +84,15 @@ jobs:
           if [ "$EVENT" = pull_request ] \
             && git show HEAD^1:bootstrap/changed-inputs.sh >"$RUNNER_TEMP/changed-inputs.sh" 2>/dev/null \
             && git show HEAD^1:bootstrap/not-read-by-tests.txt >"$RUNNER_TEMP/not-read-by-tests.txt" 2>/dev/null; then
-            needed="$(LIST="$RUNNER_TEMP/not-read-by-tests.txt" bash "$RUNNER_TEMP/changed-inputs.sh" needed HEAD^1 HEAD)"
+            needed="$(LIST="$RUNNER_TEMP/not-read-by-tests.txt" bash "$RUNNER_TEMP/changed-inputs.sh" needed HEAD^1 HEAD)" \
+              || needed=error
           fi
-          case "$needed" in true | false) ;; *) echo "::error::unexpected answer: $needed"; exit 1 ;; esac
+          # Anything but a clear false runs the tests: a broken judge never
+          # skips them, and never blocks a pull request either.
+          case "$needed" in
+            true | false) ;;
+            *) echo "::warning::could not judge whether the tests are needed ($needed); they run"; needed=true ;;
+          esac
           echo "Tests needed: $needed"
           echo "needed=$needed" >>"$GITHUB_OUTPUT"
 

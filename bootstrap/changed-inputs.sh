@@ -5,10 +5,13 @@
 #
 # Usage:
 #   bash bootstrap/changed-inputs.sh needed <base> <head>
-#     Prints "true" when the change from <base> to <head> touches a file
-#     that is not listed (added, changed, deleted or renamed, on either
-#     side), else "false"; each changed file is named on stderr. An empty
-#     change prints "true". Exits 2 when a commit cannot be read.
+#     Prints "false" when every file the change from <base> to <head>
+#     touches is listed and is only changed (not added or deleted; a
+#     rename counts as a delete and an add), else "true"; each changed
+#     file is named on stderr. Deleting a listed file needs the tests: the
+#     list must only name tracked files, so the pull request that deletes
+#     one also edits the list, which the tests read. An empty change
+#     prints "true". Exits 2 when a commit cannot be read.
 #   bash bootstrap/changed-inputs.sh remove
 #     Deletes the listed files from the working tree (run from the repo
 #     root), so a test that reads one fails. A listed path that is
@@ -46,16 +49,19 @@ case "${1:-}" in
     git rev-parse -q --verify "$2^{commit}" >/dev/null || die "no commit $2"
     git rev-parse -q --verify "$3^{commit}" >/dev/null || die "no commit $3"
     paths="$(listed)"
-    changed="$(git diff --name-only --no-renames "$2" "$3")"
+    changed="$(git diff --name-status --no-renames "$2" "$3")"
     if [ -z "$changed" ]; then
       echo "No file changed: the tests run." >&2
       echo true
       exit 0
     fi
     need=false
-    while IFS= read -r f; do
-      if printf '%s\n' "$paths" | grep -qxF -- "$f"; then
+    while IFS=$'\t' read -r st f; do
+      if [ "$st" = M ] && printf '%s\n' "$paths" | grep -xF -- "$f" >/dev/null; then
         echo "  not read by the tests: $f" >&2
+      elif [ "$st" != M ] && printf '%s\n' "$paths" | grep -xF -- "$f" >/dev/null; then
+        echo "  a listed file added or deleted ($st): $f" >&2
+        need=true
       else
         echo "  read by the tests:     $f" >&2
         need=true
