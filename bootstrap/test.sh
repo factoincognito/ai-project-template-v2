@@ -1175,7 +1175,7 @@ test_workflow_test_jobs_run_only_when_the_changes_job_says_so() {
     [ "$(wf_needs "$j")" = changes ] || die "$j does not need changes (only)"
     grep -qxF "    if: needs.changes.outputs.needed == 'true'" <<<"$job" || die "$j does not run only when the tests are needed"
   done
-  wf_needs bootstrapper-test | grep -qxF changes || die "bootstrapper-test does not need changes"
+  wf_needs bootstrapper-test | grep -xF changes >/dev/null || die "bootstrapper-test does not need changes"
 }
 
 test_workflow_changes_job_answers_true_unless_only_unread_files_changed() {
