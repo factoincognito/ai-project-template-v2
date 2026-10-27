@@ -3974,32 +3974,148 @@ gg_protect_plan() { gg_protect plan "Upgrade to GitHub Pro or make this reposito
 gg_protect_token() { gg_protect token "Resource not accessible by personal access token"; }
 gg_protect_unknown() { gg_protect unknown "Something about this request was refused."; }
 
+# guide_shape_problem <file>: checks a guide's output as the every-guide
+# test needs it, line by line with bash's own regular expressions (the
+# extended ones grep -E uses), so no process is started: a one-line title
+# first, then somewhere a why, a numbered step, the result, the fallback
+# and the check. Prints the first part missing ("" when none is).
+GUIDE_RE_TITLE='^[A-Za-z].{10,}\.$'
+GUIDE_RE_WHY='^Why this is needed: ([^ ]+ ){5,}'
+GUIDE_RE_STEP='^  1\. .{10,}'
+GUIDE_RE_WORKED='^When it has worked: .{10,}'
+GUIDE_RE_ELSE='^If you see something else: .{10,}'
+GUIDE_RE_HOW='^How the script checks it: .{10,}'
+guide_shape_problem() {
+  local line n=0 title="" why="" step="" worked="" other="" how=""
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1))
+    if [ "$n" -eq 1 ] && [[ $line =~ $GUIDE_RE_TITLE ]]; then title=1; fi
+    if [[ $line =~ $GUIDE_RE_WHY ]]; then why=1; fi
+    if [[ $line =~ $GUIDE_RE_STEP ]]; then step=1; fi
+    if [[ $line =~ $GUIDE_RE_WORKED ]]; then worked=1; fi
+    if [[ $line =~ $GUIDE_RE_ELSE ]]; then other=1; fi
+    if [[ $line =~ $GUIDE_RE_HOW ]]; then how=1; fi
+  done <"$1"
+  if [ -z "$title" ]; then echo "no one-line title first"
+  elif [ -z "$why" ]; then echo "no why"
+  elif [ -z "$step" ]; then echo "no numbered step"
+  elif [ -z "$worked" ]; then echo "no result"
+  elif [ -z "$other" ]; then echo "no fallback"
+  elif [ -z "$how" ]; then echo "no check named"
+  fi
+}
+
+# numbered_prose <file> <label>: prints the lines of a guide's output
+# that are not indented by four spaces (the commands) as "<N>: <line>",
+# N counting on over every call (PROSE_N), as awk's NR did for one case:
+# that is what banned_hits reads, so no label is in it. PROSE_LABEL[N]
+# keeps "<label> <n>", n counting within this call; PROSE_CASE_LINES is
+# the number of lines this call printed. Run it in the current shell
+# (with a redirect, not in $( )), so the counters carry over.
+PROSE_N=0
+PROSE_CASE_LINES=0
+PROSE_LABEL=()
+numbered_prose() {
+  local line n=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in "    "*) continue ;; esac
+    n=$((n + 1))
+    PROSE_N=$((PROSE_N + 1))
+    PROSE_LABEL[PROSE_N]="$2 $n"
+    printf '%s: %s\n' "$PROSE_N" "$line"
+  done <"$1"
+  PROSE_CASE_LINES=$n
+}
+
+# labelled_hits: reads banned_hits' lines ("<N>: <text>") on stdin and
+# prints each as "<label> <n>: <text>" (from PROSE_LABEL).
+labelled_hits() {
+  local hit
+  while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    printf '%s: %s\n' "${PROSE_LABEL[${hit%%:*}]}" "${hit#*: }"
+  done
+}
+
 test_every_guide_says_why_how_what_you_see_and_how_it_is_checked() {
   # Ease-of-use requirements: every guide says why the step is needed,
   # gives numbered steps, what the user sees when it worked, what to do
   # otherwise, and how the script checks it; on every OS, with and without
   # brew or winget. Its output has no banned word.
-  local d os g with label hits
+  # PBI-1.22: the 234 cases ran 8,973 processes on Linux. The guides of
+  # one OS and tool share a folder (a guide only prints; its output is
+  # the same as in a fresh folder), the shape is read with bash's own
+  # regular expressions, and the banned words are looked for once, in
+  # the prose of every case, each line labelled with its case.
+  local d os g with label problem hits prose cases=0
+  prose="$(tmpdir)/prose"
+  : >"$prose"
+  PROSE_N=0; PROSE_LABEL=()
   for os in macos linux windows; do
     for with in "" brew winget; do
+      d="$(tmpdir)"
+      on_os "$d" "$os"
+      [ -z "$with" ] || fake_tool "$d" "$with"
       for g in $(guide_cases); do
-        d="$(tmpdir)"
-        on_os "$d" "$os"
-        [ -z "$with" ] || fake_tool "$d" "$with"
         pre "$d" with_pack web with_dir "$d/f" "$g"
         label="$os/${with:-none}/$g"
         [ "$RC" -eq 0 ] || { cat "$d/err" >&2; die "$label failed"; }
-        sed -n 1p "$d/out" | grep -E '^[A-Za-z].{10,}\.$' >/dev/null || { cat "$d/out" >&2; die "$label: no one-line title first"; }
-        grep -qE '^Why this is needed: ([^ ]+ ){5,}' "$d/out" || { cat "$d/out" >&2; die "$label: no why"; }
-        grep -qE '^  1\. .{10,}' "$d/out" || { cat "$d/out" >&2; die "$label: no numbered step"; }
-        grep -qE '^When it has worked: .{10,}' "$d/out" || { cat "$d/out" >&2; die "$label: no result"; }
-        grep -qE '^If you see something else: .{10,}' "$d/out" || { cat "$d/out" >&2; die "$label: no fallback"; }
-        grep -qE '^How the script checks it: .{10,}' "$d/out" || { cat "$d/out" >&2; die "$label: no check named"; }
-        hits="$(grep -v '^    ' "$d/out" | awk '{print NR ": " $0}' | banned_hits)"
-        [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "$label: banned word in the guide"; }
+        problem="$(guide_shape_problem "$d/out")"
+        [ -z "$problem" ] || { cat "$d/out" >&2; die "$label: $problem"; }
+        numbered_prose "$d/out" "$label" >>"$prose"
+        [ "$PROSE_CASE_LINES" -gt 0 ] || die "$label: no prose collected"
+        cases=$((cases + 1))
       done
     done
   done
+  [ "$cases" -eq $((3 * 3 * $(guide_cases | grep -c .))) ] || die "only $cases cases were checked"
+  hits="$(banned_hits <"$prose")"
+  [ -z "$hits" ] || { printf '%s\n' "$hits" | labelled_hits >&2; die "banned word in a guide (cases above)"; }
+}
+
+test_the_every_guide_checks_catch_what_they_look_for() {
+  # Guards the checks above (PBI-1.22): each missing part is named, a
+  # banned word in prose is caught with its case, and one in an indented
+  # command line is not.
+  local d good f
+  d="$(tmpdir)"
+  good="$d/good"
+  printf '%s\n' 'Something is missing on this computer.' \
+    'Why this is needed: the script needs it for every one of its steps.' \
+    '  1. Open the page and do what it says.' '    gh auth login' \
+    'When it has worked: the page says you are done.' \
+    'If you see something else: ask for help in the chat.' \
+    'How the script checks it: it runs the tool once more.' >"$good"
+  [ -z "$(guide_shape_problem "$good")" ] || die "a good guide was refused: $(guide_shape_problem "$good")"
+  for f in 'no one-line title first|1s/.*/no full stop at the end/' 'no why|/^Why/d' 'no numbered step|/^  1\./d' \
+    'no result|/^When it/d' 'no fallback|/^If you see/d' 'no check named|/^How the script/d' \
+    'no one-line title first|1s/.*/Short./' 'no one-line title first|1s/^/  /' \
+    'no why|s/^Why this is needed: .*/Why this is needed: too short./' 'no numbered step|s/^  1\. /1. /'; do
+    sed "${f#*|}" "$good" >"$d/bad"
+    [ "$(guide_shape_problem "$d/bad")" = "${f%%|*}" ] \
+      || die "'${f#*|}': got '$(guide_shape_problem "$d/bad")', want '${f%%|*}'"
+  done
+  # The last line counts even without a line break after it.
+  printf '%s' "$(cat "$good")" >"$d/last"
+  [ -z "$(guide_shape_problem "$d/last")" ] || die "a last line with no line break was not read"
+  # Command lines (4-space indent) are left out and not counted: one
+  # with a banned word comes first here. Two cases in a row: the second
+  # case's line is number 2 overall and number 1 within its case.
+  printf '%s\n' '    open the repo page' 'Open the repo page.' >"$d/words"
+  printf '%s\n' 'All is well here.' >"$d/clean"
+  PROSE_N=0; PROSE_LABEL=()
+  numbered_prose "$d/clean" linux/none/guide_npm >"$d/prose"
+  numbered_prose "$d/words" macos/none/guide_git >>"$d/prose"
+  [ "$PROSE_CASE_LINES" -eq 1 ] || die "numbered_prose counted $PROSE_CASE_LINES lines for one prose line"
+  [ "$(sed -n 2p "$d/prose")" = "2: Open the repo page." ] || die "numbered_prose read the command line or counted it"
+  [ "$(banned_hits <"$d/prose" | labelled_hits)" = "macos/none/guide_git 1: Open the repo page." ] \
+    || die "the banned word in prose was not caught with its case, or the command line was read"
+  # The why needs at least 6 words (5 words, each followed by a space,
+  # then more): 5 in all is refused, 6 accepted.
+  sed 's/^Why this is needed: .*/Why this is needed: one two three four five/' "$good" >"$d/bad"
+  [ "$(guide_shape_problem "$d/bad")" = "no why" ] || die "a why of 5 words was accepted"
+  sed 's/^Why this is needed: .*/Why this is needed: one two three four five six/' "$good" >"$d/ok6"
+  [ -z "$(guide_shape_problem "$d/ok6")" ] || die "a why of 6 words was refused"
 }
 
 test_the_os_is_read_from_uname_and_the_linux_release_file() {
