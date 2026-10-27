@@ -4045,8 +4045,11 @@ test_every_guide_says_why_how_what_you_see_and_how_it_is_checked() {
       done
     done
   done
-  # The labels themselves hold no banned word, so a hit is the guide's.
-  [ -z "$(guide_cases | banned_hits)" ] || die "a guide's name holds a banned word (test is stale)"
+  # Every case's prose was collected, and no part of a label holds a
+  # banned word, so a hit is the guide's own.
+  [ "$(grep -c . "$prose")" -ge 234 ] || die "the prose of some cases was not collected"
+  [ -z "$( { guide_cases; printf '%s\n' macos linux windows none brew winget; } | banned_hits)" ] \
+    || die "a part of a case label holds a banned word (test is stale)"
   hits="$(banned_hits <"$prose")"
   [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "banned word in a guide (labels above)"; }
 }
@@ -4076,9 +4079,19 @@ test_the_every_guide_checks_catch_what_they_look_for() {
   # The last line counts even without a line break after it.
   printf '%s' "$(cat "$good")" >"$d/last"
   [ -z "$(guide_shape_problem "$d/last")" ] || die "a last line with no line break was not read"
-  printf '%s\n' 'Open the repo page.' '    git clone x' >"$d/words"
+  # Command lines (4-space indent) are left out and not counted: one
+  # with a banned word comes first here.
+  printf '%s\n' '    open the repo page' 'Open the repo page.' >"$d/words"
+  [ "$(numbered_prose "$d/words" macos/none/guide_git)" = "macos/none/guide_git 1: Open the repo page." ] \
+    || die "numbered_prose read the command line or counted it"
   [ "$(numbered_prose "$d/words" macos/none/guide_git | banned_hits)" = "macos/none/guide_git 1: Open the repo page." ] \
     || die "the banned word in prose was not caught with its case, or the command line was read"
+  # The why needs at least 6 words (5 words, each followed by a space,
+  # then more): 5 in all is refused, 6 accepted.
+  sed 's/^Why this is needed: .*/Why this is needed: one two three four five/' "$good" >"$d/bad"
+  [ "$(guide_shape_problem "$d/bad")" = "no why" ] || die "a why of 5 words was accepted"
+  sed 's/^Why this is needed: .*/Why this is needed: one two three four five six/' "$good" >"$d/ok6"
+  [ -z "$(guide_shape_problem "$d/ok6")" ] || die "a why of 6 words was refused"
 }
 
 test_the_os_is_read_from_uname_and_the_linux_release_file() {
