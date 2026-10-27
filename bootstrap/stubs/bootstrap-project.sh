@@ -162,26 +162,31 @@ say_open() { printf '%s' "$*"; OUT_BLANK=""; LINE_OPEN=1; }
 end_line() {
   [ -z "$LINE_OPEN" ] || printf '\n'
   LINE_OPEN=""
-  AFTER_ANSWER=""
+  LOG_GAP=""
 }
 
-# AFTER_ANSWER: the last thing printed is a question with its answer (ask,
-# ask_terminal, wait_for_enter). A line of the progress log (step_start,
-# step_end, say_log) that comes straight after it gets one blank line
-# above it first (log_resumes), as #202 sets the user's part apart from
-# the log (r1i). Any other line printed in between clears it (end_line).
-AFTER_ANSWER=""
+# LOG_GAP: the last thing printed is the user's part: a question with its
+# answer (ask, ask_terminal, wait_for_enter), or the command to continue
+# shown before the first change (show_advance_command; #248 review, N3).
+# A line of the progress log (step_start, step_end, say_log) that comes
+# straight after it gets one blank line above it first (log_resumes), as
+# #202 sets the user's part apart from the log (r1i). Any other line
+# printed in between clears it (end_line). Before output that no helper
+# sees (an offered command's own), log_resumes is called at once, so the
+# blank line follows the answer and is never doubled (#248 review, B1).
+LOG_GAP=""
 log_resumes() {
-  if [ -n "$AFTER_ANSWER" ] && [ -z "$OUT_BLANK" ]; then
+  if [ -n "$LOG_GAP" ] && [ -z "$OUT_BLANK" ]; then
     printf '\n'
     OUT_BLANK=1
   fi
-  AFTER_ANSWER=""
+  LOG_GAP=""
 }
 
 # Two kinds of output (finding 8 of the first end-to-end run): the
 # progress log (step_start, step_end, and say while the script works),
-# plain; and what the script says to the user: a question (ask,
+# dim when colour is on (see LOG_COLOUR below); and what the script says
+# to the user: a question (ask,
 # prompt_for, ask_terminal, wait_for_enter), the plan (say_heading), a
 # guide (guide_begin to guide_end), a stop (show_error, and the command
 # shown above it), the command to continue shown before the first change
@@ -231,6 +236,13 @@ block_start() {
 # in words what each colour marks. Setting READ_COLOUR to ANSWER_COLOUR
 # gives Adam's fallback (r1g): the two kinds in one colour, and the key
 # shows them as one line.
+# Yellow for READ_COLOUR is pending Adam's choice (#248 review, N1): r1d
+# chose green over yellow for commands because yellow is hard to read on
+# a light background (bold yellow is about 1.1:1 to 1.35:1 against white
+# in xterm and macOS Terminal), and the read colour carries the most
+# important text. Changing it is this one value: '1;36' gives the fallback
+# above; bold with no colour ('1') or bold magenta ('1;35') read on light
+# and dark backgrounds alike.
 ANSWER_COLOUR='1;36'
 READ_COLOUR='1;33'
 COMMAND_COLOUR='1;32'
@@ -442,7 +454,7 @@ ask() {
     return 1
   fi
   [ -t 0 ] || printf '\n'
-  AFTER_ANSWER=1
+  LOG_GAP=1
   trim_into "$got"
   ANSWER="${TRIMMED:-$default}"
 }
@@ -459,7 +471,7 @@ wait_for_enter() {
     return 1
   fi
   [ -t 0 ] || printf '\n'
-  AFTER_ANSWER=1
+  LOG_GAP=1
   trim_into "$got"
   case "$(lower "$TRIMMED")" in
     q | quit | stop) return 1 ;;
@@ -483,16 +495,16 @@ ask_terminal() {
   printf ' '
   if [ ! -r "$tty" ]; then
     printf '\n'
-    AFTER_ANSWER=1
+    LOG_GAP=1
     return 1
   fi
   if ! { IFS= read -r got; } 2>/dev/null <"$tty" && [ -z "$got" ]; then
     printf '\n'
-    AFTER_ANSWER=1
+    LOG_GAP=1
     return 1
   fi
   [ -c "$tty" ] || printf '\n'
-  AFTER_ANSWER=1
+  LOG_GAP=1
   trim_into "$got"
   case "$(lower "$TRIMMED")" in
     y | yes) return 0 ;;
@@ -1597,6 +1609,9 @@ offer_command() {
   offered "$OFFER" show
   if ask_terminal "It runs only if you type yes; Enter or any other answer skips it, and you can run it yourself." \
     "Run it now? (yes or no)"; then
+    # The blank line after the answer now, before the command's own
+    # output, which no helper sees (#248 review, B1).
+    log_resumes
     if offered "$OFFER" run; then
       say_log "The command finished. Checking again."
     else
@@ -2852,6 +2867,8 @@ show_advance_command() {
   say "$ADVANCE_INTRO"
   say_command "bash $SHOWN_CMD"
   [ -n "$OPT_RESUME" ] || say_note "If the project was not created yet, that command says so and shows the command to start again."
+  # The log that follows comes after one blank line (#248 review, N3).
+  LOG_GAP=1
 }
 
 # continue_after_create: the project exists now. From here on, the

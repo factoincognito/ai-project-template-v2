@@ -1651,6 +1651,57 @@ test_the_log_after_a_question_comes_after_one_blank_line() {
   [ ! -s "$got.err" ] || { cat "$got.err" >&2; die "wrote to stderr"; }
 }
 
+test_an_offered_command_run_after_yes_never_doubles_a_blank_line() {
+  # #248 review, B1: after yes to "Run it now?", the blank line of r1i
+  # comes right after the answer, before the command's own output, which
+  # no helper sees; so output that ends in a blank line is not followed
+  # by a second one before "The command finished".
+  local d want
+  d="$(tmpdir)"
+  printf 'yes\n' >"$d/tty"
+  printf '%s\n' '#!/bin/sh' 'printf "output of the command: %s\n\n" "$1"' >"$d/run"
+  chmod +x "$d/run"
+  ( load_script; export BOOTSTRAP_TTY="$d/tty" BOOTSTRAP_RUN="$d/run"; OFFER=gh-setup-git; offer_command ) >"$d/out" 2>"$d/err"
+  want="$(printf '%s\n' 'The script can run this command for you:' '    gh auth setup-git' '' \
+    'It runs only if you type yes; Enter or any other answer skips it, and you can run it yourself.' \
+    'Run it now? (yes or no) [no]: ' '' 'output of the command: gh auth setup-git' '' \
+    'The command finished. Checking again.')"
+  [ "$(cat "$d/out")" = "$want" ] || { printf 'want:\n%s\ngot:\n' "$want" >&2; cat "$d/out" >&2; die "the lines around an offered command differ"; }
+  ! awk 'prev == "" && NR > 1 && $0 == "" { bad = 1 } { prev = $0 } END { exit !bad }' "$d/out" \
+    || { cat "$d/out" >&2; die "two blank lines in a row"; }
+}
+
+test_the_log_after_the_command_to_continue_comes_after_one_blank_line() {
+  # #248 review, N3: the block with the command to continue, shown after
+  # "Proceed?" and before the first change, is set apart from the log that
+  # follows it by one blank line, as after a question (r1i): in a new
+  # setup before "==> Creating the project", and in a continued one before
+  # its next step.
+  local d n
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 0 "$d"
+  n="$(grep -nxF "$(load_script; printf '%s' "$ADVANCE_INTRO")" "$d/out" | cut -d: -f1)"
+  [ -n "$n" ] || { cat "$d/out" >&2; die "no command to continue"; }
+  [ "$(sed -n "$((n + 2)),$((n + 4))p" "$d/out")" = "$(printf '%s\n\n%s' \
+    'If the project was not created yet, that command says so and shows the command to start again.' \
+    '==> Creating the project octo-user/my-app on GitHub')" ] \
+    || { sed -n "$n,$((n + 5))p" "$d/out" >&2; die "no blank line between the command to continue and the log"; }
+  # Continued with --resume after the limit of the wait: the command, one
+  # blank line, the next step.
+  d="$(tmpdir)"
+  echo 9999 >"$d/build-pending"
+  setup_run "$d" --non-interactive --yes --ci-timeout 1
+  expect_rc 1 "$d"
+  echo 0 >"$d/build-pending"
+  again "$d"
+  expect_rc 0 "$d"
+  n="$(grep -nxF "$(load_script; printf '%s' "$ADVANCE_INTRO")" "$d/out" | cut -d: -f1)"
+  [ -n "$n" ] || { cat "$d/out" >&2; die "resume: no command to continue"; }
+  [ -z "$(sed -n "$((n + 2))p" "$d/out")" ] && sed -n "$((n + 3))p" "$d/out" | grep '^==> ' >/dev/null \
+    || { sed -n "$n,$((n + 4))p" "$d/out" >&2; die "resume: no blank line between the command to continue and the next step"; }
+}
+
 test_blocks_one_after_another_have_one_blank_line_between_never_two() {
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
   printf '%s\n' 'Working.' '' 'Why the first one.' 'First [a]: ' '' 'Why the second one.' 'Second [b]: ' \
