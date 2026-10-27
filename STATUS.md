@@ -21,5 +21,6 @@ Getting the bootstrapper through Adam's end-to-end runs, which must pass before 
 Adam repeats end-to-end run 1 on v2.5.0, as written in `docs/NEXT_SESSION.md` (Adam's to-do 2), and gives Clead the output of `bootstrap/e2e-check.sh`; Clead reads it and records the findings.
 
 ## Blockers
+Product Owner: intent approval for `bootstrapper-test` to pass a pull request that changes only files no test reads without running the suites (PBI-1.22 part 1, #228, reviewed and green; `docs/NEXT_SESSION.md`, Adam's to-do 6).
 Product Owner: whether tests of the test harness's own helpers may be added to `bootstrap/test-bootstrap-project.sh` by the CI speed-up (PBI-1.22, escalated on #224 after 3 review rounds; `docs/NEXT_SESSION.md`, Adam's to-do 5). #224 and #225 wait for the answer.
 Product Owner: the end-to-end runs (run 1 repeated on v2.5.0, then runs 2 to 4, and run 5 with someone new to the terminal). PBI-1.17 stays `[NEXT]` and acuteping waits until they pass.
