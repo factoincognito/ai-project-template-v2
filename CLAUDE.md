@@ -79,7 +79,8 @@ with no PR of its own, such as an escalation, gets a PR that updates only
 `STATUS.md`. It holds only what lies ahead; history is in Git. Keep the
 file's headings and format as they are: the dashboard reads them. A
 blocker that waits on the product owner starts with "Product Owner:",
-written exactly so.
+written exactly so. A session that finds a blocker already resolved
+removes it the same way.
 
 ---
 
