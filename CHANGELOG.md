@@ -17,6 +17,7 @@ A bootstrapped project records the tag it was built from.
 - Run 1 is not repeated again; run 2 is interactive and checks the fixes for r1f to r1i (PR #250)
 - End-to-end run 1, r1f: keys typed while the script works are dropped before the run offer, "Proceed?" and the guide pause, so a stray Enter no longer answers them; a Ctrl-C there leaves the terminal as it was (PR #247)
 - End-to-end run 1, r1g to r1i: questions, the lines that explain them, commands and the log each have their own colour, with a four-line colour key; the stars of the wait are not dim and stand on a line of their own; a blank line separates questions from the log that follows (PR #248)
+- End-to-end run 1, r1g: the lines that explain a question are bold magenta, not yellow, which is hard to read on a light background (Adam's choice) (PR #252)
 
 ## [2.7.0] — 2026-10-27
 
