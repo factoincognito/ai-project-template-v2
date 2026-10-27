@@ -2028,7 +2028,7 @@ guide_npm_windows() {
   guide_step "Close this window, open a new window of this Linux, and start the script there, so that it finds the new npm before the Windows one."
   guide_end "the script says \"Done. npm is installed.\"" \
     "if the script still says that the npm it finds is the Windows one, check that the commands from the page ended without an error, then open a new window of this Linux and start the script there." \
-    "it looks where the npm it finds is: one under /mnt/, where this Linux shows the Windows drives, is the Windows one. Otherwise it runs npm --version, which works only when npm is installed."
+    "it looks where the npm it finds is, following links: one in the folder of a Windows drive (/mnt/c/, /mnt/d/ and so on, where this Linux shows the Windows drives) is the Windows one. Otherwise it runs npm --version, which works only when npm is installed."
 }
 
 guide_npm_missing() {

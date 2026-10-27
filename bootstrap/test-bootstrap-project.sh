@@ -4367,7 +4367,7 @@ test_in_wsl_the_windows_npm_counts_as_no_npm_and_its_guide_says_why() {
     expect_out "$d" "A project in this Linux should use a Node.js installed in Linux"
     expect_out "$d" "https://nodejs.org/en/download"
     expect_out "$d" "choose Linux"
-    expect_out "$d" "How the script checks it: it looks where the npm it finds is: one under /mnt/, where this Linux shows the Windows drives, is the Windows one."
+    expect_out "$d" "How the script checks it: it looks where the npm it finds is, following links: one in the folder of a Windows drive (/mnt/c/, /mnt/d/ and so on, where this Linux shows the Windows drives) is the Windows one."
     expect_out "$d" "To start again, run this command:"
     expect_no_out "$d" "    Done. npm is installed."
     expect_no_out "$d" "npm (part of Node.js) is not installed."
