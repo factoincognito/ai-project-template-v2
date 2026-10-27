@@ -4439,6 +4439,19 @@ test_in_wsl_dot_on_path_in_a_windows_folder_counts_as_no_npm() {
   # #255 review, N1: with . on PATH while the current folder is the
   # Windows Node.js folder, command -v says ./npm; followed from the
   # current folder, that is the Windows npm: refused, and not run.
+  # Not on Git Bash (MSYS, Cygwin): there readlink -f builds ./npm from
+  # the current folder as MSYS turns it back from its Windows path, which
+  # can be spelled otherwise than the same folder given as a path (on the
+  # CI runner most likely the temp folder, C:\Users\RUNNER~1\... read
+  # back as /c/Users/runneradmin/... rather than /tmp/...; inferred from
+  # the failing run, not seen), so the two do not compare equal. WSL, where alone this check runs, has no such
+  # translation: its readlink is GNU's on Linux paths.
+  case "$(uname -s)" in
+    MINGW* | MSYS* | CYGWIN*)
+      skip_test "Git Bash spells the current folder otherwise than its path, which cannot happen in WSL, where this check runs"
+      return 0
+      ;;
+  esac
   local d
   d="$(tmpdir)"
   on_wsl "$d"
