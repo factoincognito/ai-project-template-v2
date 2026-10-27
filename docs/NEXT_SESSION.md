@@ -84,8 +84,6 @@ Written 2026-10-02 so nothing depends on anyone remembering. **Each Clead sessio
      - r1d. Adam (2026-10-27): when the user is told to run a command, the instruction line ("To continue the setup, run this command:") and the command itself should each have their own colour, for easy identification. Fix: #237.
      - r1e. The continue command does not carry a "no" to "Add the publishing files?" (there is no option for it; known since S18), so `--resume` asked it again, although the README says the command carries every answer. Fix: the PR from branch `fix/e2e-r1e-resume-deploy-answer` (opening).
    - **Learned on the way:** "Re-run failed jobs" on a `bootstrapper-test` run works with the shard gate (#199 and #204: a macOS shard was cancelled by the runner, its re-run made the gate green).
-5. **Answered 2026-10-27 (Adam, in chat, 07:00): "I approve template #224 and #225 adding tests of the harness's own helpers in test-bootstrap-project.sh."** Recorded on #224 and #225. Remove this line once both have merged.
-6. **Answered 2026-10-27 (Adam, in chat, 07:00): "I give intent approval for template #228."** Recorded on #228. Remove this line once #228 has merged.
 4. **If an agent has to change files in your connected PC folder,** it asks for delete permission once per session (a failed pull left a stale `.git/index.lock` last time). Your PC clone of the template is behind main and its `origin` points at the org; the session fast-forwards it after you grant that.
 
 ---

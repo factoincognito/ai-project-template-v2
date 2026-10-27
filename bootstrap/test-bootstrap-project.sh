@@ -2842,6 +2842,93 @@ test_help_stays_plain_with_the_colour_hook() {
   cmp -s "$d/plain" "$d/out" || { diff "$d/plain" "$d/out" >&2; die "the help changed with the hook"; }
 }
 
+# --version (product owner, 2026-10-27): one line with the version and
+# the template commit the script was built from, exit 0, before any
+# check, question, network or gh call. The unstamped script in the
+# template says it is not a release.
+UNSTAMPED_VERSION_LINE='bootstrap-project.sh, not a release: the copy in factoincognito/ai-project-template-v2 that releases are built from'
+
+# version_run <dir> <script> <options...>: runs the script with the
+# options and stdin empty; gh, git, npm, curl, wget and the runner of
+# offered commands are stand-ins that log each call (gh.log, tools.log,
+# npm.log, run.log). RC is the exit code.
+version_run() {
+  local d="$1" s="$2" t
+  shift 2
+  make_stub_gh "$d/gh"
+  make_stub_run "$d/run"
+  make_stub_npm "$d/npm"
+  for t in git npm curl wget; do fake_tool "$d" "$t"; done
+  RC=0
+  ( export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" STUB_RUN_LOG="$d/run.log" \
+      BOOTSTRAP_RUN="$d/run" STUB_NPM_LOG="$d/npm.log" BOOTSTRAP_NPM="$d/npm"
+    bash "$s" "$@" ) </dev/null >"$d/out" 2>"$d/err" || RC=$?
+}
+
+# expect_version_line <dir> <line>: exit 0, exactly that line on stdout,
+# nothing on stderr, and no tool was called.
+expect_version_line() {
+  local d="$1" f
+  [ "$RC" -eq 0 ] || { cat "$d/out" "$d/err" >&2; die "exit $RC, want 0"; }
+  [ "$(cat "$d/out")" = "$2" ] && [ "$(wc -l <"$d/out" | tr -d ' ')" -eq 1 ] \
+    || { cat "$d/out" >&2; die "stdout is not the one line: $2"; }
+  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "wrote to stderr"; }
+  for f in gh.log tools.log npm.log run.log; do
+    [ ! -s "$d/$f" ] || { cat "$d/$f" >&2; die "a tool was called ($f)"; }
+  done
+}
+
+test_version_prints_one_line_and_calls_nothing() {
+  local d
+  d="$(tmpdir)"
+  version_run "$d" "$SCRIPT" --version
+  expect_version_line "$d" "$UNSTAMPED_VERSION_LINE"
+  # Plain, also where colour is forced, as the help is.
+  BOOTSTRAP_COLOR=1 TERM=xterm bash "$SCRIPT" --version </dev/null >"$d/colour" 2>&1
+  cmp -s "$d/out" "$d/colour" || { diff "$d/out" "$d/colour" >&2; die "the line changed with the colour hook"; }
+  # The built script, as a user gets it: its stamped version and commit.
+  built_bootstrapper
+  d="$(tmpdir)"
+  version_run "$d" "$BUILT/bootstrap-project.sh" --version
+  expect_version_line "$d" "bootstrap-project.sh $BUILT_VERSION, built from factoincognito/ai-project-template-v2@0123456789abcdef0123456789abcdef01234567"
+}
+
+test_version_with_other_options_is_read_where_it_stands_as_help_is() {
+  # Like --help: the options are read in order; the first of --version
+  # and --help ends the run there, so the options after it are not read,
+  # and a wrong option before it is refused as in any run.
+  local d
+  d="$(tmpdir)"
+  version_run "$d" "$SCRIPT" --non-interactive --yes --resume --name my-app --version --pack nope --nmae x
+  expect_version_line "$d" "$UNSTAMPED_VERSION_LINE"
+  d="$(tmpdir)"
+  version_run "$d" "$SCRIPT" --version --help
+  expect_version_line "$d" "$UNSTAMPED_VERSION_LINE"
+  d="$(tmpdir)"
+  version_run "$d" "$SCRIPT" --help --version
+  [ "$RC" -eq 0 ] || { cat "$d/err" >&2; die "--help --version: exit $RC, want 0"; }
+  [ "$(sed -n 1p "$d/out")" = "usage: bootstrap-project.sh [options]" ] || { cat "$d/out" >&2; die "--help --version: not the help"; }
+  ! grep -qF 'not a release' "$d/out" || { cat "$d/out" >&2; die "--help --version: the version line was shown too"; }
+  d="$(tmpdir)"
+  version_run "$d" "$SCRIPT" --nmae x --version
+  [ "$RC" -eq 2 ] || { cat "$d/out" "$d/err" >&2; die "--nmae x --version: exit $RC, want 2"; }
+  sed -n 1p "$d/err" | grep -E '^What happened: .*--nmae' >/dev/null || { cat "$d/err" >&2; die "--nmae x --version: not refused"; }
+  [ ! -s "$d/out" ] || { cat "$d/out" >&2; die "--nmae x --version: something on stdout"; }
+  d="$(tmpdir)"
+  version_run "$d" "$SCRIPT" --version=yes
+  [ "$RC" -eq 2 ] || { cat "$d/out" "$d/err" >&2; die "--version=yes: exit $RC, want 2"; }
+  sed -n 1p "$d/err" | grep -E '^What happened: The option --version does not take a value\.$' >/dev/null \
+    || { cat "$d/err" >&2; die "--version=yes: not refused"; }
+}
+
+test_help_lists_the_version_option() {
+  local d rc=0
+  d="$(tmpdir)"
+  bash "$SCRIPT" --help </dev/null >"$d/out" 2>"$d/err" || rc=$?
+  [ "$rc" -eq 0 ] || { cat "$d/err" >&2; die "exit $rc, want 0"; }
+  grep -qE '^  --version +[a-z]' "$d/out" || { cat "$d/out" >&2; die "help lacks --version"; }
+}
+
 test_name_takes_letters_digits_dots_dashes_and_underscores() {
   accepts --name a NAME=a
   accepts --name 9lives NAME=9lives

@@ -27,6 +27,7 @@
 #   bash bootstrap-project.sh [options]
 #     Asks for each answer not given as an option, then checks them all.
 #     --help lists the options; --non-interactive asks nothing.
+#     --version prints the version and the commit it was built from.
 #   bash bootstrap-project.sh layout-pack <node|web|python|react-native> <target-dir>
 #     Lays out a language pack in <target-dir>, which must be empty or
 #     absent. The packs are read from PACKS_DIR, by default the
@@ -133,8 +134,23 @@ show_help() {
     "                             version, when a private project cannot be protected" \
     "                             on the GitHub plan" \
     "  --help                     show this text" \
+    "  --version                  show the version of this script" \
     "" \
     "An option takes its value after a space or after =, as in --name=my-app."
+}
+
+# show_version: one line on stdout, the version and the template commit
+# the build stamped in. The unstamped script in the template (the build
+# only stamps a vMAJOR.MINOR.PATCH version) says it is not a release.
+show_version() {
+  case "$SCRIPT_VERSION" in
+    v[0-9]*.[0-9]*.[0-9]*)
+      printf '%s\n' "bootstrap-project.sh $SCRIPT_VERSION, built from factoincognito/ai-project-template-v2@$SCRIPT_COMMIT"
+      ;;
+    *)
+      printf '%s\n' "bootstrap-project.sh, not a release: the copy in factoincognito/ai-project-template-v2 that releases are built from"
+      ;;
+  esac
 }
 
 # say_open <text>: text with no line break after it, so more can follow
@@ -810,6 +826,13 @@ parse_args() {
           --allow-unprotected) OPT_ALLOW_UNPROTECTED=1 ;;
           --help) show_help; exit 0 ;;
         esac
+        ;;
+      --version)
+        # Read where it stands, as --help is: the options after it are not read.
+        [ -z "$has_val" ] || fail 2 "The option $arg does not take a value." \
+          "Remove the = and what follows it, and run the script again. $OPTIONS_NEXT"
+        show_version
+        exit 0
         ;;
       -*)
         fail 2 "The option $arg is not one this script knows." \
