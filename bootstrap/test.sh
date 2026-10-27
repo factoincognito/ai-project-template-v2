@@ -2022,6 +2022,21 @@ test_real_build_ships_the_project_script_stamped() {
   ! grep -q $'\r' "$f" || die "shipped script has CR line endings"
 }
 
+test_real_build_project_script_reports_its_stamp_with_version() {
+  # --version prints the stamped version and commit, exits 0, and calls
+  # no gh (BOOTSTRAP_GH is a stand-in that logs every call).
+  local out="$WORK/real.$RANDOM" f got rc=0 gh="$WORK/gh.$RANDOM"
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  f="$out/bootstrap-project.sh"
+  printf '#!/usr/bin/env bash\necho "$*" >>"%s.log"\n' "$gh" >"$gh"
+  chmod +x "$gh"
+  got="$(BOOTSTRAP_GH="$gh" bash "$f" --version </dev/null)" || rc=$?
+  [ "$rc" -eq 0 ] || die "--version: exit $rc, want 0"
+  [ "$got" = "bootstrap-project.sh v2.1.0, built from factoincognito/ai-project-template-v2@$SHA" ] \
+    || die "--version printed: $got"
+  [ ! -e "$gh.log" ] || { cat "$gh.log" >&2; die "--version called gh"; }
+}
+
 test_project_script_holds_only_the_two_placeholder_assignments() {
   # The build fails on any {{TEMPLATE_ left in the output, and stamps
   # every one in this file. So the two assignments are the only place

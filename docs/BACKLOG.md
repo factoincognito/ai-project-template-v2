@@ -308,6 +308,7 @@ get a working project in any supported language.
   - `--yes` skips the final "Proceed?" confirmation.
   - `--dry-run` runs the preflight and prints the plan.
   - `--resume` continues an existing repo (see re-runs).
+  - `--version` (Adam, 2026-10-27) prints one line, the stamped version and the template commit the script was built from (`bootstrap-project.sh vX.Y.Z, built from factoincognito/ai-project-template-v2@<commit>`; the unstamped script in the template says it is not a release), and exits 0 before any check, prompt, network or gh call. Like `--help`, it is read where it stands: the options after it are not read, and a wrong option before it is refused as in any run. `--help` lists it.
   - Name values may not contain control characters, `"`, `\`, `<`, `>`, `&` or backtick, because they go into JSON and HTML. The description must be one line. A `|` in the PO name or display name is rejected (it breaks the README table). A `.` in the repo name becomes `-` in the `[project-name]`/`[project-slug]` values, which must be valid npm and Expo slugs.
 
   **Steps.**
@@ -767,7 +768,9 @@ get a working project in any supported language.
 
   **Rules that apply.** A release-process change: the workflow is code (test-first, reviewed by Crog), the process change needs Adam's intent approval, and CLAUDE.md, `docs/DEV_INFRASTRUCTURE.md` and the release decision rows are updated with it.
 
-- **[NOW] PBI-1.22** (Clead, 2026-10-27, on Adam's request of 2026-10-26, from the product office (PO-58); the WHAT is Adam's, the HOW is Clead's) — Make the template's CI faster without losing coverage.
+- **[DONE] PBI-1.22** (2026-10-27: #227 shards by duration, #228 matrix only when a PR touches what the tests read (Adam's intent approval 2026-10-27), #224 and #225 fewer processes in the harness (Adam allowed the helper tests 2026-10-27), #233 refreshed durations, #234 a flake fix; measured below. Earlier note: Clead, 2026-10-27, on Adam's request of 2026-10-26, from the product office (PO-58); the WHAT is Adam's, the HOW is Clead's) — Make the template's CI faster without losing coverage.
+
+  **Result (job timestamps, minutes; merged-state runs 40466996231, 40469146376, 40480220727 against the baseline above).** A pull request that changes only files no test reads now finishes `bootstrapper-test` in under half a minute (run 40466863089: 17 s), instead of 18 to 37 min and 120 to 135 runner-minutes. For a code pull request: wall time 19.8 / 19.8 / 40.4 (the last with 26 min of queue behind other PRs); longest shard ubuntu 5.8 / 5.4 / 5.8 (was 6.3 to 7.5), macOS 9.0 / 8.3 / 9.0 (was 9.9 to 13.0), Windows 17.9 / 19.2 / 19.0 (was 17.2 to 23.2); Windows shard sums 60.1 / 65.1 / 70.2 (was 64.3 to 75.7). On Windows the gain is within the run-to-run spread of about ±7 min, so it is not shown; ubuntu and macOS shards are even. On Linux the harness starts 22,120 fewer processes (130,906 to 108,786) plus 8,564 fewer in the every-guide test, which on Windows went from about 170 s to 22 s. Next lever, not done: forks in the script under test (`api_call`'s `mktemp`/`tr`/`rm`), which a fit of the Windows times puts at about 36 ms each.
 
   **Why.** A Bootstrapper run takes 18 to 37 min wall time; the Windows shards take 13 to 23 min each and are split unevenly; queue waits reach 15 min when several PRs run; doc-only PRs (#215, #216) ran the full three-OS matrix. PBI-1.18's option 2 (cut process launches in the harness) was never done, only the sharding of #178.
 
