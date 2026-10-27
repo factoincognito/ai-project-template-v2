@@ -219,7 +219,7 @@ block_start() {
 #   question with its default (ask, prompt_for, "Proceed?"), ask_terminal's
 #   question and wait_for_enter's line; the colour ends before the space
 #   where the answer goes.
-# - READ_COLOUR, bold yellow: the text the user reads to act on: the
+# - READ_COLOUR, bold magenta: the text the user reads to act on: the
 #   explanation above a question, the plan's heading, a guide's title,
 #   "Why this is needed", every step, "When it has worked" and "If you see
 #   something else", "What to do next" (of a stop and of the report), the
@@ -240,15 +240,15 @@ block_start() {
 # in words what each colour marks. Setting READ_COLOUR to ANSWER_COLOUR
 # gives Adam's fallback (r1g): the two kinds in one colour, and the key
 # shows them as one line.
-# Yellow for READ_COLOUR is pending Adam's choice (#248 review, N1): r1d
-# chose green over yellow for commands because yellow is hard to read on
-# a light background (bold yellow is about 1.1:1 to 1.35:1 against white
-# in xterm and macOS Terminal), and the read colour carries the most
-# important text. Changing it is this one value: '1;36' gives the fallback
-# above; bold with no colour ('1') or bold magenta ('1;35') read on light
-# and dark backgrounds alike.
+# Magenta for READ_COLOUR is Adam's choice (2026-10-27, #248 review, N1),
+# not yellow: yellow is hard to read on a light background (bold yellow is
+# about 1.1:1 to 1.35:1 against white in xterm and macOS Terminal), the
+# reason r1d chose green over yellow for commands, and the read colour
+# carries the most important text. Bold magenta reads on light and dark
+# backgrounds alike. Changing it is this one value: '1;36' gives the
+# fallback above.
 ANSWER_COLOUR='1;36'
-READ_COLOUR='1;33'
+READ_COLOUR='1;35'
 COMMAND_COLOUR='1;32'
 LOG_COLOUR='2'
 # colour_on [err]: colour is used when the stream the line goes to is a

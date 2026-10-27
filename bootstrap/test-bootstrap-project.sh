@@ -1614,7 +1614,7 @@ test_fail_exits_with_the_code_it_is_given() {
 # next", the instruction line above a command).
 COLOUR_ON="$(printf '\033[1;36m')"
 COLOUR_OFF="$(printf '\033[0m')"
-READ_ON="$(printf '\033[1;33m')"
+READ_ON="$(printf '\033[1;35m')"
 # The command colour, for a command the user is to copy or that the
 # script offers to run (end-to-end run 1 repeated, finding r1d): its
 # instruction line is in READ_ON, the command itself in COMMAND_ON.
