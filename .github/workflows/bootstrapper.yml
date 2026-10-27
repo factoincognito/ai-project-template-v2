@@ -22,8 +22,9 @@
 #   macOS (Apple's /bin/bash 3.2) and Windows (Git for Windows bash).
 #   bootstrapper-test, a required check, passes only if all of them did.
 #   Each OS leg runs as 4 shards (PBI-1.18; one leg took up to 76 min
-#   on Windows): shard i runs every 4th test from index i-1 and records
-#   the tests it ran; bootstrapper-test also fails unless, for every OS,
+#   on Windows), split by the measured time of each test on that OS
+#   (bootstrap/test-durations.txt, PBI-1.22); each shard records the
+#   tests it ran; bootstrapper-test also fails unless, for every OS,
 #   the 4 shards together ran every test exactly once
 #   (bootstrap/check-shards.sh).
 # - A pushed v* tag: run the tests and the pack chain test (packs.yml:
@@ -76,6 +77,8 @@ jobs:
     env:
       BOOTSTRAP_TEST_SHARD: ${{ matrix.shard }}/4
       BOOTSTRAP_TEST_MANIFEST: shard-list/${{ matrix.os }}-${{ matrix.shard }}-of-4.txt
+      # Split by the measured time of each test on this OS (PBI-1.22).
+      BOOTSTRAP_TEST_WEIGHTS: bootstrap/test-durations.txt:${{ matrix.os }}
     defaults:
       run:
         # On Windows this is Git for Windows' bash.
