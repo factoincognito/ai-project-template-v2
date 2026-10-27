@@ -4499,6 +4499,8 @@ test_the_authenticate_git_step_is_one_shared_text_in_every_gh_sign_in_guide() {
   local g body found=""
   ( load_script; [ "$GH_GIT_QUESTION_STEP" = "$GH_GIT_QUESTION" ] ) \
     || die "the script's GH_GIT_QUESTION_STEP is not the step this test expects"
+  ( load_script; [ "$GH_GIT_QUESTION_TEXT" = 'Authenticate Git with your GitHub credentials?' ] ) \
+    || die "the script's GH_GIT_QUESTION_TEXT is not gh's question"
   [ "$(grep -cF 'Authenticate Git with your GitHub credentials' "$SCRIPT")" -eq 1 ] \
     || { grep -nF 'Authenticate Git with your GitHub credentials' "$SCRIPT" >&2; die "gh's question is written more than once in the script"; }
   for g in $(grep -oE '^guide_[a-z_]+\(\)' "$SCRIPT" | sed 's/()//'); do
@@ -4514,6 +4516,24 @@ test_the_authenticate_git_step_is_one_shared_text_in_every_gh_sign_in_guide() {
   # The search itself works: it finds the two guides known to have one.
   case "$found " in *" guide_github_account "*) ;; *) die "the search did not find guide_github_account (found:$found)" ;; esac
   case "$found " in *" guide_github_permissions "*) ;; *) die "the search did not find guide_github_permissions (found:$found)" ;; esac
+  # Stop messages too: every line that tells the user to run gh auth
+  # refresh in words (not a comment, not an exact command to show or
+  # run) names gh's question through GH_GIT_QUESTION_TEXT.
+  local line n=0
+  while IFS= read -r line; do
+    case "$line" in
+      *[![:space:]]*) ;;
+      *) continue ;;
+    esac
+    case "${line#"${line%%[![:space:]]*}"}" in '#'*) continue ;; esac
+    case "$line" in *say_command*|*run_offered*) continue ;; esac
+    n=$((n + 1))
+    case "$line" in
+      *'$GH_GIT_QUESTION_TEXT'*) ;;
+      *) die "a message names gh auth refresh without GH_GIT_QUESTION_TEXT: $line" ;;
+    esac
+  done <<<"$(grep -F 'gh auth refresh' "$SCRIPT")"
+  [ "$n" -ge 1 ] || die "the search found no message that names gh auth refresh (the push refusal for workflow files has one)"
 }
 
 test_the_refresh_never_runs_without_a_yes_typed_at_the_terminal() {
@@ -6972,6 +6992,9 @@ test_other_push_failures_are_explained_with_the_continue_command() {
       workflow)
         expect_err_shape "$d" "GitHub refused the setup's changes, because the sign-in that gh lends to git may not change the project's workflow files"
         sed -n 2p "$d/err" | grep -F 'gh auth refresh -h github.com -s workflow' >/dev/null || { cat "$d/err" >&2; die "workflow: the refresh command is not given"; }
+        # r1b: the refresh asks gh's question; the answer comes with it.
+        sed -n 2p "$d/err" | grep -F 'gh auth refresh -h github.com -s workflow (if gh asks "Authenticate Git with your GitHub credentials?", answer Yes), then continue the setup' >/dev/null \
+          || { cat "$d/err" >&2; die "workflow: the next action does not say what to answer when gh asks to authenticate Git"; }
         ;;
       other)
         expect_err_shape "$d" "git could not send the setup's changes to GitHub\. "

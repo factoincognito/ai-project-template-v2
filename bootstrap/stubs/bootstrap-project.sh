@@ -2096,8 +2096,11 @@ check_github_account() {
 # the guides cannot drift apart. Both commands ask this question (default
 # Yes) before the one-time code, unless gh already signs git in to GitHub
 # (gh v2.93.0, pkg/cmd/auth/shared/git_credential.go). Yes makes gh
-# git's sign-in for GitHub, as step 0 of the README says.
-GH_GIT_QUESTION_STEP='If gh asks "Authenticate Git with your GitHub credentials?", answer Yes (type y or press Enter).'
+# git's sign-in for GitHub, as step 0 of the README says. A stop message
+# that names gh auth refresh gives the same answer through
+# GH_GIT_QUESTION_TEXT.
+GH_GIT_QUESTION_TEXT='Authenticate Git with your GitHub credentials?'
+GH_GIT_QUESTION_STEP="If gh asks \"$GH_GIT_QUESTION_TEXT\", answer Yes (type y or press Enter)."
 
 guide_github_account() {
   case "$ACCOUNT_PROBLEM" in
@@ -3967,7 +3970,7 @@ try_push() {
   case "$raw" in
     *"refusing to allow"*workflow*)
       stop_with_error "GitHub refused the setup's changes, because the sign-in that gh lends to git may not change the project's workflow files (the files that run its checks on GitHub)." \
-        "Give gh that permission with the command gh auth refresh -h github.com -s workflow, then continue the setup with the command shown above." \
+        "Give gh that permission with the command gh auth refresh -h github.com -s workflow (if gh asks \"$GH_GIT_QUESTION_TEXT\", answer Yes), then continue the setup with the command shown above." \
         "$raw"
       ;;
     *"Could not resolve host"* | *"Failed to connect"* | *"Connection timed out"* | *"Could not connect"*)
