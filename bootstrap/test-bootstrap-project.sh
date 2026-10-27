@@ -105,6 +105,7 @@ esac
 # line STAND_IN_SHEBANG and then <text>, and makes it executable. Only
 # builtins, except chmod (and mkdir when the folder is new).
 write_stand_in() {
+  case "$1" in */*) ;; *) die "write_stand_in: '$1' has no folder" ;; esac
   [ -d "${1%/*}" ] || mkdir -p "${1%/*}"
   printf '%s\n%s' "$STAND_IN_SHEBANG" "$2" >"$1"
   chmod +x "$1"
@@ -1732,7 +1733,7 @@ test_gh_hook_set_means_gh_on_the_path_is_not_called() {
   local d
   d="$(tmpdir)"
   mkdir -p "$d/bin"
-  printf '#!/usr/bin/env bash\ntouch "%s/path-gh-ran"\n' "$d" >"$d/bin/gh"
+  printf '%s\ntouch "%s/path-gh-ran"\n' "$STAND_IN_SHEBANG" "$d" >"$d/bin/gh"
   chmod +x "$d/bin/gh"
   make_stub_gh "$d/hook/gh"
   ( load_script; PATH="$d/bin:$PATH" STUB_GH_LOG="$d/hook.log" BOOTSTRAP_GH="$d/hook/gh" run_gh --version ) >/dev/null
@@ -1787,7 +1788,7 @@ test_run_offered_runs_with_gh_prompts_enabled() {
           run_offered 'printf "%s" "${GH_PROMPT_DISABLED-unset}"' )"
   [ "$got" = unset ] || die "the offered command saw GH_PROMPT_DISABLED=$got"
   make_stub_run "$d/run"
-  printf '%s\n' '#!/usr/bin/env bash' 'printf "%s\n" "${GH_PROMPT_DISABLED-unset}" >>"$STUB_RUN_LOG"' >"$d/run"
+  printf '%s\n' "$STAND_IN_SHEBANG" 'printf "%s\n" "${GH_PROMPT_DISABLED-unset}" >>"$STUB_RUN_LOG"' >"$d/run"
   ( load_script; export GH_PROMPT_DISABLED=1 STUB_RUN_LOG="$d/run.log"; BOOTSTRAP_RUN="$d/run" run_offered "x" )
   [ "$(cat "$d/run.log")" = unset ] || die "the BOOTSTRAP_RUN runner saw GH_PROMPT_DISABLED=$(cat "$d/run.log")"
 }
@@ -1799,7 +1800,7 @@ test_a_test_that_forgets_the_hooks_runs_nothing_real() {
   # refuses loudly (non-zero exit), so the forgetful test fails.
   local d rc
   d="$(tmpdir)"; mkdir -p "$d/bin"
-  printf '#!/usr/bin/env bash\ntouch "%s/real-gh-ran"\n' "$d" >"$d/bin/gh"
+  printf '%s\ntouch "%s/real-gh-ran"\n' "$STAND_IN_SHEBANG" "$d" >"$d/bin/gh"
   chmod +x "$d/bin/gh"
   rc=0
   ( load_script; export REFUSE_LOG="$d/refused.log" PATH="$d/bin:$PATH"; run_offered "touch '$d/real-run-ran'" ) \
@@ -1813,7 +1814,7 @@ test_a_test_that_forgets_the_hooks_runs_nothing_real() {
   grep -qF 'BOOTSTRAP_RUN' "$d/err" && grep -qF 'BOOTSTRAP_GH' "$d/err" \
     || { cat "$d/err" >&2; die "the refusals do not name the hook to set"; }
   # The lockfile step's npm (BOOTSTRAP_NPM), likewise.
-  printf '#!/usr/bin/env bash\ntouch "%s/real-npm-ran"\n' "$d" >"$d/bin/npm"
+  printf '%s\ntouch "%s/real-npm-ran"\n' "$STAND_IN_SHEBANG" "$d" >"$d/bin/npm"
   chmod +x "$d/bin/npm"
   rc=0
   ( load_script; export REFUSE_LOG="$d/refused.log" PATH="$d/bin:$PATH"; run_npm --version ) 2>>"$d/err" || rc=$?
@@ -3005,9 +3006,23 @@ test_every_stand_in_starts_the_harness_bash_directly() {
   # starts per call (env, then bash); on Windows each start is about
   # 30 ms. Every stand-in the harness writes names the harness's own bash
   # on its first line instead (env only for a bash path with a space).
-  local d want f
-  case "$BASH" in *[[:space:]]*) echo "note: bash path has a space; env is expected"; return 0 ;; esac
-  want="#!$BASH"
+  local d want f hits
+  case "$BASH" in
+    "" | *[[:space:]]*) want='#!/usr/bin/env bash' ;;
+    *) want="#!$BASH" ;;
+  esac
+  [ "$STAND_IN_SHEBANG" = "$want" ] || die "STAND_IN_SHEBANG is '$STAND_IN_SHEBANG', want '$want'"
+  # Every stand-in in this file takes its first line from
+  # STAND_IN_SHEBANG: apart from the file's own first line and the
+  # fallback, no line writes a bash shebang of its own.
+  # Read with awk, which skips this test's own lines.
+  hits="$(awk -v me="${FUNCNAME[0]}" '
+    $0 ~ "^" me "\\(\\) \\{" { skip = 1 }
+    skip && /^}/ { skip = 0; next }
+    skip || NR == 1 || index($0, "STAND_IN_SHEBANG=") { next }
+    /#!\/usr\/bin\/env bash|#!\/bin\/bash/ { print NR ": " $0 }
+  ' "$HERE/test-bootstrap-project.sh")"
+  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "a stand-in writes its own bash shebang"; }
   d="$(tmpdir)"
   make_stub_gh "$d/s/gh"; make_stub_run "$d/s/run"; make_stub_npm "$d/s/npm"
   make_refuser "$d/s/refuser" BOOTSTRAP_GH
@@ -3028,7 +3043,7 @@ test_fake_home_writes_what_git_config_writes_without_starting_git() {
   # git config --file writes it; any other value still goes through git.
   local d v
   d="$(tmpdir)"
-  for v in "Test Person|test@example.com" "Grace Hopper|grace@example.com" "Grace Hopper|" "|" \
+  for v in "Test Person|test@example.com" "Grace Hopper|grace@example.com" "Grace Hopper|" "|grace@example.com" "|" \
     "Ada Lovelace-King 2|a.b_c@x-y.org"; do
     rm -rf "$d/want" "$d/got"
     mkdir -p "$d/want"; : >"$d/want/.gitconfig"
@@ -3049,7 +3064,7 @@ test_fake_home_writes_what_git_config_writes_without_starting_git() {
 test_a_failing_push_hook_counts_down_and_names_its_mode() {
   # The push hook reads its counter and mode with builtins (PBI-1.22):
   # it fails that many pushes with the mode's text, then lets them run.
-  local d rc
+  local d rc want
   d="$(tmpdir)"
   failing_push "$d" offline 2
   for want in 128 128 0; do
@@ -4212,11 +4227,8 @@ test_a_missing_workflow_permission_offers_the_refresh_and_checks_again() {
   echo 1 >"$d/scopes-old"
   printf 'yes\n' >"$d/tty"
   prepare "$d"
-  cat >"$d/run" <<'RUN'
-#!/usr/bin/env bash
-printf '%s|%s\n' "$*" "${GH_PROMPT_DISABLED-<unset>}" >>"$STUB_RUN_LOG"
-RUN
-  chmod +x "$d/run"
+  write_stand_in "$d/run" 'printf '"'"'%s|%s\n'"'"' "$*" "${GH_PROMPT_DISABLED-<unset>}" >>"$STUB_RUN_LOG"
+'
   pre "$d" with_vis public preflight_github_permissions
   expect_rc 0 "$d"
   expect_out "$d" "does not have every permission on GitHub that the setup needs."
@@ -6174,7 +6186,7 @@ test_the_fill_keeps_cr_lf_with_an_awk_that_drops_the_cr_as_it_reads() {
   d="$(tmpdir)"
   real_awk="$(command -v awk)"
   mkdir -p "$d/bin"
-  printf '%s\n' '#!/usr/bin/env bash' "LC_ALL=C sed 's/\\r\$//' | exec '$real_awk' \"\$@\"" >"$d/bin/awk"
+  printf '%s\n' "$STAND_IN_SHEBANG" "LC_ALL=C sed 's/\\r\$//' | exec '$real_awk' \"\$@\"" >"$d/bin/awk"
   chmod +x "$d/bin/awk"
   printf '%s' "# [PROJECT NAME]$cr$nl**Owner:** [PO NAME]$cr${nl}last [PROJECT NAME]$cr$nl" >"$d/crlf.md"
   # The fake does drop the CR, so the test would see the bug.
@@ -8099,7 +8111,7 @@ test_ctrl_c_says_what_exists_and_the_resume_finishes_without_duplicates() {
   [ "$("$BASH" -c 'trap "echo caught" INT; kill -INT $$; sleep 1' 2>/dev/null)" = caught ] \
     || { echo "note: Ctrl-C is ignored in this shell; the Ctrl-C case was not run"; return 0; }
   d="$(tmpdir)"
-  printf '%s\n' '#!/usr/bin/env bash' 'kill -INT "$PPID"' >"$d/interrupt"
+  printf '%s\n' "$STAND_IN_SHEBANG" 'kill -INT "$PPID"' >"$d/interrupt"
   chmod +x "$d/interrupt"
   echo 1 >"$d/build-pending"
   export BOOTSTRAP_SLEEP="$d/interrupt"
@@ -8473,7 +8485,7 @@ test_an_unexpected_failure_says_what_exists_and_leaves_no_temporary_files() {
   local d
   d="$(tmpdir)"
   working_git "$d"
-  printf '%s\n' '#!/usr/bin/env bash' 'if [ -n "${FILL_N:-}" ]; then echo "awk: out of memory" >&2; exit 2; fi' \
+  printf '%s\n' "$STAND_IN_SHEBANG" 'if [ -n "${FILL_N:-}" ]; then echo "awk: out of memory" >&2; exit 2; fi' \
     "exec $(command -v awk) \"\$@\"" >"$d/bin/awk"
   chmod +x "$d/bin/awk"
   setup_run "$d" --non-interactive --yes
