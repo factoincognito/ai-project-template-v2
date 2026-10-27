@@ -6,14 +6,25 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.7.0] — 2026-10-27
+
 ### Added
 - PBI-1.22: the harness's stand-ins start with fewer processes (PR #224)
 - PBI-1.22: the every-guide test runs with far fewer processes (PR #225)
 - PBI-1.22: the OS matrix runs only when a PR touches what the tests read (PR #228)
 - Recorded the product owner's answers on #224, #225 and #228 (PR #231)
+- Recorded in NEXT_SESSION and `STATUS.md` that v2.6.0 is released and verified (PR #232)
 - PBI-1.22: refreshed the measured test durations after #224 and #225 (PR #233)
 - Fixed a flaky test: the failing fake awk reads its input before it fails (PR #234)
+- Recorded the repeated end-to-end run 1 on v2.6.0, its result and findings, in NEXT_SESSION (PR #238)
 - PBI-1.22 marked done with the measured result (PR #241)
+- `bootstrap-project.sh --version` prints the version of the script and the commit it was built from (PR #240)
+- End-to-end run 1, r1c: after a no at a guided check, the script offers the command again (PR #236)
+- Added CHANGELOG entries for PRs #224, #225, #228, #231, #233, #234 and #241 (PR #242)
+- End-to-end run 1, r1d: the instruction and the command to run are in two colours, the progress log is dim, and a colour key opens a run with colour (PR #237)
+- Recorded the v2.7.0 handoff in NEXT_SESSION (PR #243)
+- End-to-end run 1, r1b: every guide, stop message and README step that has the user run `gh auth login` or `gh auth refresh` says to answer Yes when gh asks "Authenticate Git with your GitHub credentials?" (PR #235)
+- End-to-end run 1, r1e: `--without-deploy` carries a no to "Add the publishing files?" in the continue command; a resumed run past the pack step takes the choice from the setup's change, and the copy's check works in Git Bash on Windows (PR #239)
 
 ## [2.6.0] — 2026-10-27
 
