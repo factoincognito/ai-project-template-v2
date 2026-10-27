@@ -6,12 +6,24 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.6.0] — 2026-10-27
+
 ### Added
 - Tests: no `grep -q` at the end of a pipe under pipefail, which made tests flaky through SIGPIPE; a lint keeps it out (PR #208)
 - Release prep for v2.5.0 (PR #212)
 - Added PBI-1.21: the release tag created by merging the release prep, for the template and every bootstrapped project (PR #213)
 - An empty `STATUS.md` stub ships with every bootstrapped project (PR #214)
+- Added the template's own `STATUS.md` (PR #215)
+- Recorded NEXT_SESSION item 15's status: `STATUS.md` as the contract the product office reads, and its follow-ups (PR #216)
 - Recorded in NEXT_SESSION that v2.5.0 is released and verified (PR #217)
+- Added CHANGELOG entries for PRs #208, #212-#214, #217 (PR #218)
+- `STATUS.md`: a blocker that waits on the product owner starts with "Product Owner:", in the shipped stub and the template's own file (PR #219)
+- Added PBI-1.22: make the template's CI faster without losing coverage (PR #220)
+- CLAUDE.md: parallel sessions coordinate through the repo (claim PRs, listing open PRs, merging instead of rebasing) (PR #222)
+- CLAUDE.md: the `STATUS.md` rule for both agents (PR #223)
+- Parked two PBI-1.22 questions for the product owner in NEXT_SESSION and STATUS.md, and the lesson to batch doc-only changes (PR #226)
+- PBI-1.22: the bootstrap test shards of each OS leg are split by measured test duration (`bootstrap/test-durations.txt`, made by `bootstrap/durations-from-logs.sh`); `bootstrapper-test` still fails unless every test ran exactly once (PR #227)
+- Added CHANGELOG entries for PRs #220, #226 and #227 (PR #229)
 
 ## [2.5.0] — 2026-10-26
 
