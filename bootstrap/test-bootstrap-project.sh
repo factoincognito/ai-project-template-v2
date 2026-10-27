@@ -94,16 +94,23 @@ tmpdir() { mktemp -d "$WORK/t m p.XXXXXX"; }
 # npm, refusers, fake tools, hooks): the bash running the harness,
 # started directly. Through /usr/bin/env, each call of a stand-in started
 # two processes (env, then bash), and on Windows every process start
-# costs about 30 ms (PBI-1.18, PBI-1.22). A bash whose path has a space
-# cannot be named on that line, so env is kept for it.
-case "${BASH:-}" in
-  "" | *[[:space:]]*) STAND_IN_SHEBANG='#!/usr/bin/env bash' ;;
-  *) STAND_IN_SHEBANG="#!$BASH" ;;
-esac
+# costs about 30 ms (PBI-1.18, PBI-1.22). A bash path that is empty, not
+# absolute or has a space cannot be named on that line, so env is kept
+# for it.
+# stand_in_shebang <bash path>: prints that first line for the path.
+stand_in_shebang() {
+  case "$1" in
+    "" | [!/]* | *[[:space:]]*) printf '%s\n' '#!/usr/bin/env bash' ;;
+    *) printf '#!%s\n' "$1" ;;
+  esac
+}
+STAND_IN_SHEBANG="$(stand_in_shebang "${BASH:-}")"
 
 # write_stand_in <path> <text>: writes the stand-in <path>, its first
 # line STAND_IN_SHEBANG and then <text>, and makes it executable. Only
-# builtins, except chmod (and mkdir when the folder is new).
+# builtins, except chmod, and mkdir when the folder is new (as the
+# helpers it replaces did: make_stub_gh "$d/stub bin/gh" makes the
+# folder).
 write_stand_in() {
   case "$1" in */*) ;; *) die "write_stand_in: '$1' has no folder" ;; esac
   [ -d "${1%/*}" ] || mkdir -p "${1%/*}"
@@ -987,7 +994,7 @@ failing_push() {
   write_stand_in "$1/push-hook" "$PUSH_HOOK_TEXT"
 }
 IFS= read -r -d '' PUSH_HOOK_TEXT <<'HOOK' || true
-here="${0%/*}"
+case "$0" in */*) here="${0%/*}" ;; *) here=. ;; esac
 case " $* " in *" push "*) ;; *) exit 0 ;; esac
 printf '%s\n' "${GIT_TERMINAL_PROMPT-<unset>}" >>"$here/push-prompt"
 read -r n <"$here/push-fails" || true
@@ -3007,19 +3014,21 @@ test_every_stand_in_starts_the_harness_bash_directly() {
   # 30 ms. Every stand-in the harness writes names the harness's own bash
   # on its first line instead (env only for a bash path with a space).
   local d want f hits
-  case "$BASH" in
-    "" | *[[:space:]]*) want='#!/usr/bin/env bash' ;;
-    *) want="#!$BASH" ;;
-  esac
+  # The choice, for this bash and for paths env is kept for.
+  [ "$(stand_in_shebang /usr/bin/bash)" = '#!/usr/bin/bash' ] || die "an absolute path is not named"
+  [ "$(stand_in_shebang '/c/Program Files/Git/usr/bin/bash')" = '#!/usr/bin/env bash' ] || die "a path with a space is named"
+  [ "$(stand_in_shebang bash)" = '#!/usr/bin/env bash' ] || die "a path that is not absolute is named"
+  [ "$(stand_in_shebang '')" = '#!/usr/bin/env bash' ] || die "an empty path is named"
+  want="$(stand_in_shebang "$BASH")"
   [ "$STAND_IN_SHEBANG" = "$want" ] || die "STAND_IN_SHEBANG is '$STAND_IN_SHEBANG', want '$want'"
   # Every stand-in in this file takes its first line from
-  # STAND_IN_SHEBANG: apart from the file's own first line and the
-  # fallback, no line writes a bash shebang of its own.
-  # Read with awk, which skips this test's own lines.
+  # STAND_IN_SHEBANG: apart from the file's own first line and
+  # stand_in_shebang, no line writes a bash shebang of its own.
+  # Read with awk, which skips this test and stand_in_shebang.
   hits="$(awk -v me="${FUNCNAME[0]}" '
-    $0 ~ "^" me "\\(\\) \\{" { skip = 1 }
+    $0 ~ "^(" me "|stand_in_shebang)\\(\\) \\{" { skip = 1 }
     skip && /^}/ { skip = 0; next }
-    skip || NR == 1 || index($0, "STAND_IN_SHEBANG=") { next }
+    skip || NR == 1 { next }
     /#!\/usr\/bin\/env bash|#!\/bin\/bash/ { print NR ": " $0 }
   ' "$HERE/test-bootstrap-project.sh")"
   [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "a stand-in writes its own bash shebang"; }
@@ -3035,6 +3044,21 @@ test_every_stand_in_starts_the_harness_bash_directly() {
     [ -x "$f" ] || die "${f##*/} is not executable"
     [ "$(sed -n 1p "$f")" = "$want" ] || die "${f##*/} starts with '$(sed -n 1p "$f")', want '$want'"
   done
+}
+
+test_write_stand_in_refuses_a_path_with_no_folder_and_makes_its_folder() {
+  # Error path of write_stand_in (#224 review): a path with no folder
+  # would make a folder named like the file, so it stops instead and
+  # writes nothing; a folder that is missing is made, as make_stub_gh
+  # "$d/stub bin/gh" needs.
+  local d rc=0
+  d="$(tmpdir)"
+  ( cd "$d" && write_stand_in no-folder 'exit 0' ) 2>"$d/err" || rc=$?
+  [ "$rc" -ne 0 ] || die "a path with no folder was accepted"
+  grep -qF "write_stand_in: 'no-folder' has no folder" "$d/err" || { cat "$d/err" >&2; die "the refusal does not say why"; }
+  [ ! -e "$d/no-folder" ] || die "something was made for a path with no folder"
+  write_stand_in "$d/new folder/tool" 'echo ran'
+  [ "$("$d/new folder/tool")" = ran ] || die "the stand-in in a new folder did not run"
 }
 
 test_fake_home_writes_what_git_config_writes_without_starting_git() {
