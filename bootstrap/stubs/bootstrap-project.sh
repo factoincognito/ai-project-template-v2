@@ -112,6 +112,7 @@ show_help() {
     "                             profile name, or your account name)" \
     "  --pack <pack>              node, web, python or react-native (needed)" \
     "  --with-deploy              web only: also add the files that publish the website" \
+    "  --without-deploy           web only: leave those files out (the default)" \
     "  --public, --private        who can see the project (default: public)" \
     "  --license <licence>        none, mit, apache-2.0, gpl-3.0, bsd-3-clause," \
     "                             polyform-noncommercial-1.0.0, or another licence" \
@@ -752,7 +753,7 @@ IN_NAME="" IN_OWNER="" IN_PROJECT_NAME="" IN_DESCRIPTION="" IN_PO_NAME=""
 IN_PACK="" IN_WITH_DEPLOY="" IN_VISIBILITY="" IN_LICENSE="" IN_COPYRIGHT_HOLDER=""
 IN_DIR="" IN_CI_TIMEOUT="" IN_SLUG="" IN_GIT_NAME="" IN_GIT_EMAIL=""
 OPT_NON_INTERACTIVE="" OPT_YES="" OPT_DRY_RUN="" OPT_RESUME="" OPT_ALLOW_UNPROTECTED=""
-SEEN_PUBLIC="" SEEN_PRIVATE=""
+SEEN_PUBLIC="" SEEN_PRIVATE="" SEEN_WITH_DEPLOY="" SEEN_WITHOUT_DEPLOY=""
 PROBLEMS=""
 CR="$(printf '\r')"
 NL='
@@ -812,11 +813,12 @@ parse_args() {
           --git-email) IN_GIT_EMAIL="$val" ;;
         esac
         ;;
-      --with-deploy | --public | --private | --non-interactive | --yes | --dry-run | --resume | --allow-unprotected | --help)
+      --with-deploy | --without-deploy | --public | --private | --non-interactive | --yes | --dry-run | --resume | --allow-unprotected | --help)
         [ -z "$has_val" ] || fail 2 "The option $arg does not take a value." \
           "Remove the = and what follows it, and run the script again. $OPTIONS_NEXT"
         case "$arg" in
-          --with-deploy) IN_WITH_DEPLOY=yes ;;
+          --with-deploy) SEEN_WITH_DEPLOY=1; IN_WITH_DEPLOY=yes ;;
+          --without-deploy) SEEN_WITHOUT_DEPLOY=1; IN_WITH_DEPLOY=no ;;
           --public) SEEN_PUBLIC=1; IN_VISIBILITY=public ;;
           --private) SEEN_PRIVATE=1; IN_VISIBILITY=private ;;
           --non-interactive) OPT_NON_INTERACTIVE=1 ;;
@@ -1135,6 +1137,9 @@ check_options() {
   if [ -n "$SEEN_PUBLIC" ] && [ -n "$SEEN_PRIVATE" ]; then
     add_problem --private "Give either --public or --private, not both."
   fi
+  if [ -n "$SEEN_WITH_DEPLOY" ] && [ -n "$SEEN_WITHOUT_DEPLOY" ]; then
+    add_problem --without-deploy "Give either --with-deploy or --without-deploy, not both."
+  fi
   check_deploy_pack
   if [ -n "$OPT_ALLOW_UNPROTECTED" ] && [ -z "$OPT_RESUME" ]; then
     add_problem --allow-unprotected "It goes with --resume: the script offers it, with the command to run, when a private project cannot be protected on the GitHub plan, and it applies to a project that exists already."
@@ -1219,13 +1224,12 @@ collect_inputs() {
     check_deploy_pack
     stop_if_problems
   fi
-  if [ "$IN_PACK" = web ] && [ -z "$IN_WITH_DEPLOY" ]; then
-    answer --with-deploy check_yes_no no \
-      "Also add the files that publish the website on Cloudflare (a hosting service); you can add them later." \
-      "Add the publishing files? (yes or no)" || true
-    IN_WITH_DEPLOY="$CHECKED"
+  # With --resume the publishing files may be laid out already: for the web
+  # pack the choice waits until the state is known (resume_deploy_choice).
+  if [ "$IN_PACK" = web ] && [ -z "$IN_WITH_DEPLOY" ] && [ -z "$OPT_RESUME" ]; then
+    ask_deploy
   fi
-  [ -n "$IN_WITH_DEPLOY" ] || IN_WITH_DEPLOY=no
+  if [ -z "$IN_WITH_DEPLOY" ] && { [ "$IN_PACK" != web ] || [ -z "$OPT_RESUME" ]; }; then IN_WITH_DEPLOY=no; fi
   if [ -z "$IN_VISIBILITY" ]; then
     answer --public check_visibility_answer public \
       "Who can see the project on GitHub; the protection this setup turns on is free for public projects, but needs a paid GitHub plan for private ones." \
@@ -1269,6 +1273,16 @@ collect_inputs() {
   fi
   [ -n "$IN_CI_TIMEOUT" ] || IN_CI_TIMEOUT=20
   stop_if_problems
+}
+
+# ask_deploy: the question about the web pack's publishing files (or,
+# with --non-interactive, its default no). A no is carried in the
+# commands shown as --without-deploy (carried_options).
+ask_deploy() {
+  answer --with-deploy check_yes_no no \
+    "Also add the files that publish the website on Cloudflare (a hosting service); you can add them later." \
+    "Add the publishing files? (yes or no)" || true
+  IN_WITH_DEPLOY="$CHECKED"
 }
 
 # ask_license: the licence question (or, with --non-interactive, the
@@ -1436,7 +1450,7 @@ carried_options() {
     [ -n "$value" ] || continue
     case "$opt" in
       --with-deploy)
-        if [ "$value" = yes ]; then CARRIED_OPTS="$CARRIED_OPTS --with-deploy"; fi
+        if [ "$value" = yes ]; then CARRIED_OPTS="$CARRIED_OPTS --with-deploy"; else CARRIED_OPTS="$CARRIED_OPTS --without-deploy"; fi
         ;;
       --public) CARRIED_OPTS="$CARRIED_OPTS --$value" ;;
       *)
@@ -5010,6 +5024,49 @@ resume_plan() {
   esac
 }
 
+# resume_deploy_choice: with --resume, the web pack's publishing files
+# (end-to-end run 1, r1e). Before the pack is laid out (template, fresh)
+# the choice is still open: the option given, else the question, asked
+# only now that the state is known. Once the setup's change is saved
+# (saved, sent, proposed), the files are in it or not: the choice is read
+# from that change, in the copy (resume_decide has checked that it matches
+# GitHub's), or on GitHub when there is no copy; an option that says
+# otherwise is refused before anything changes. A project set up already
+# (added) takes it from main with the pack and the licence (resume_added).
+DEPLOY_WORKFLOW=.github/workflows/deploy.yml
+resume_deploy_choice() {
+  local laid
+  [ "$IN_PACK" = web ] || return 0
+  case "$RESUME_STATE" in
+    template | fresh)
+      [ -n "$IN_WITH_DEPLOY" ] || ask_deploy
+      ;;
+    saved | sent | proposed)
+      if [ -n "$COPY_PRESENT" ]; then
+        # Not <rev>:<path>: Git Bash rewrites a <rev>:.github/... as a path
+        # list before git sees it (#239).
+        if [ -n "$(git -C "$IN_DIR" ls-tree --name-only "refs/heads/$SETUP_BRANCH" -- "$DEPLOY_WORKFLOW" 2>/dev/null)" ]; then laid=yes; else laid=no; fi
+      else
+        api_call -H "Accept: application/vnd.github.raw+json" "repos/$IN_OWNER/$IN_NAME/contents/$DEPLOY_WORKFLOW?ref=$SETUP_BRANCH"
+        case "$API_STATUS" in
+          200) laid=yes ;;
+          404) laid=no ;;
+          *) api_fail "look for the files that publish the website in the setup's changes on GitHub" ;;
+        esac
+      fi
+      if [ -n "$IN_WITH_DEPLOY" ] && [ "$IN_WITH_DEPLOY" != "$laid" ]; then
+        if [ "$laid" = yes ]; then
+          add_problem --without-deploy "The setup's changes already have the files that publish the website, so this setup cannot leave them out now. Remove this option, or put --with-deploy in its place."
+        else
+          add_problem --with-deploy "The setup's changes do not have the files that publish the website, so this setup cannot add them now; you can add them to the project later. Remove this option, or put --without-deploy in its place."
+        fi
+        stop_if_problems
+      fi
+      IN_WITH_DEPLOY="$laid"
+      ;;
+  esac
+}
+
 # use_setup_branch: a copy with none of the setup's changes goes on in its
 # line of work bootstrap-setup if it has one, else starts it.
 use_setup_branch() {
@@ -5152,6 +5209,7 @@ cmd_setup() {
   preflight_license
   if [ -n "$OPT_RESUME" ]; then
     resume_plan
+    resume_deploy_choice
     plan_steps "$RESUME_STATE"
     if [ -n "$OPT_DRY_RUN" ]; then
       say "This was a dry run (--dry-run): the checks passed, and nothing was changed."
