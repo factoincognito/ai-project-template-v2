@@ -18,7 +18,7 @@ Build and release: the turn-key bootstrap script is built (v2.4.0); the fixes fo
 Getting the bootstrapper through Adam's end-to-end runs, which must pass before acuteping, the first real project, is created. Run 1 on v2.7.0 (2026-10-27) passed `e2e-check.sh` but had four findings: input typed ahead answered the run offer, two colour wishes and a missing blank line (`docs/NEXT_SESSION.md`, Adam's to-do 2). Their fixes are #247 (in review) and #248 (being built).
 
 ## Next step
-Clead merges #247 and #248 after review and CI, prepares v2.8.0, and Adam tags it; then Adam repeats run 1 on v2.8.0.
+Clead merges #247 and #248 after review and CI, prepares v2.8.0, and Adam tags it; then Adam checks r1f in Git Bash (2 minutes) and does run 2 (WSL, node pack, interactive) on v2.8.0.
 
 ## Blockers
-Product Owner: the end-to-end runs (run 1 once more on v2.8.0, then runs 2 to 4, and run 5 with someone new to the terminal). PBI-1.17 stays `[NEXT]` and acuteping waits until they pass.
+Product Owner: the end-to-end runs (runs 2 to 4, run 2 next on v2.8.0, and run 5 with someone new to the terminal). PBI-1.17 stays `[NEXT]` and acuteping waits until they pass.
