@@ -162,6 +162,21 @@ say_open() { printf '%s' "$*"; OUT_BLANK=""; LINE_OPEN=1; }
 end_line() {
   [ -z "$LINE_OPEN" ] || printf '\n'
   LINE_OPEN=""
+  AFTER_ANSWER=""
+}
+
+# AFTER_ANSWER: the last thing printed is a question with its answer (ask,
+# ask_terminal, wait_for_enter). A line of the progress log (step_start,
+# step_end, say_log) that comes straight after it gets one blank line
+# above it first (log_resumes), as #202 sets the user's part apart from
+# the log (r1i). Any other line printed in between clears it (end_line).
+AFTER_ANSWER=""
+log_resumes() {
+  if [ -n "$AFTER_ANSWER" ] && [ -z "$OUT_BLANK" ]; then
+    printf '\n'
+    OUT_BLANK=1
+  fi
+  AFTER_ANSWER=""
 }
 
 # Two kinds of output (finding 8 of the first end-to-end run): the
@@ -307,7 +322,7 @@ say_note() { end_line; read_line "$*"; }
 # say_log <text>: one line of the progress log, dim, also where a block
 # the user reads has ended the step's log (what the script did after an
 # answer at the terminal, r1g).
-say_log() { end_line; paint "$LOG_COLOUR" "$*"; printf '\n'; }
+say_log() { log_resumes; end_line; paint "$LOG_COLOUR" "$*"; printf '\n'; }
 
 # say_sign <text>: a line of the signs of life of the wait for build,
 # plain, never dim (r1h: dim, they were hard to see).
@@ -332,6 +347,7 @@ say_command() {
 # dim, as the say lines between them (the indent of the last line stays
 # outside the colour).
 step_start() {
+  log_resumes
   end_line
   CURRENT_STEP="$*"
   paint "$LOG_COLOUR" "==> $*"
@@ -339,6 +355,7 @@ step_start() {
   IN_LOG=1
 }
 step_end() {
+  log_resumes
   end_line
   printf '    '
   paint "$LOG_COLOUR" "Done. $*"
@@ -425,6 +442,7 @@ ask() {
     return 1
   fi
   [ -t 0 ] || printf '\n'
+  AFTER_ANSWER=1
   trim_into "$got"
   ANSWER="${TRIMMED:-$default}"
 }
@@ -441,6 +459,7 @@ wait_for_enter() {
     return 1
   fi
   [ -t 0 ] || printf '\n'
+  AFTER_ANSWER=1
   trim_into "$got"
   case "$(lower "$TRIMMED")" in
     q | quit | stop) return 1 ;;
@@ -464,13 +483,16 @@ ask_terminal() {
   printf ' '
   if [ ! -r "$tty" ]; then
     printf '\n'
+    AFTER_ANSWER=1
     return 1
   fi
   if ! { IFS= read -r got; } 2>/dev/null <"$tty" && [ -z "$got" ]; then
     printf '\n'
+    AFTER_ANSWER=1
     return 1
   fi
   [ -c "$tty" ] || printf '\n'
+  AFTER_ANSWER=1
   trim_into "$got"
   case "$(lower "$TRIMMED")" in
     y | yes) return 0 ;;

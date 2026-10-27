@@ -1627,6 +1627,30 @@ test_a_question_after_progress_lines_comes_after_one_blank_line() {
   expect_same "a question printed first" "$want" "$got"
 }
 
+test_the_log_after_a_question_comes_after_one_blank_line() {
+  # r1i (run 1 on v2.7.0; Adam: fold it into #248): the progress log that
+  # follows the last answer is set apart by one blank line, as under #202,
+  # after any question or prompt: a question, a question asked at the
+  # terminal, the pause of a guide. Never two blank lines, and a question
+  # right after another still has one blank line between.
+  local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
+  printf 'no\n' >"$got.tty"
+  ( load_script; export BOOTSTRAP_TTY="$got.tty"
+    ask "Why it is asked, in one sentence." "Your email address for git" a@b.c
+    step_start "Checking that npm is installed"; say "A line of work."
+    ask_terminal "It runs only if you type yes." "Run it now? (yes or no)" || true; step_end "It works."
+    wait_for_enter || true; say_log "Checking again."; step_end "It works now."
+    ask "Why the first one." First a; ask "Why the second one." Second b; step_start "Next"
+  ) <<<"$(printf 'x@y.z\n\n1\n2')" >"$got" 2>"$got.err"
+  printf '%s\n' 'Why it is asked, in one sentence.' 'Your email address for git [a@b.c]: ' \
+    '' '==> Checking that npm is installed' 'A line of work.' \
+    '' 'It runs only if you type yes.' 'Run it now? (yes or no) [no]: ' '' '    Done. It works.' \
+    '' 'Press Enter to check again, or type q to stop: ' '' 'Checking again.' '    Done. It works now.' \
+    '' 'Why the first one.' 'First [a]: ' '' 'Why the second one.' 'Second [b]: ' '' '==> Next' >"$want"
+  expect_same "the log after a question" "$want" "$got"
+  [ ! -s "$got.err" ] || { cat "$got.err" >&2; die "wrote to stderr"; }
+}
+
 test_blocks_one_after_another_have_one_blank_line_between_never_two() {
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
   printf '%s\n' 'Working.' '' 'Why the first one.' 'First [a]: ' '' 'Why the second one.' 'Second [b]: ' \
@@ -6268,7 +6292,8 @@ test_an_unknown_licence_typed_at_the_question_is_asked_again() {
   # S6's rule for an answer that cannot be used: explained, then the
   # question again. The new answer is checked too; none (1) and PolyForm
   # Noncommercial (6) need no check, and the step ends with its own done
-  # line straight after the question (#156 review).
+  # line right after the question (#156 review), one blank line below it
+  # (r1i: the log after a question comes after a blank line).
   local d again want lic
   for again in mit 1 6; do
     d="$(tmpdir)"
@@ -6296,8 +6321,8 @@ test_an_unknown_licence_typed_at_the_question_is_asked_again() {
         lic=polyform-noncommercial-1.0.0
         expect_out "$d" "    Licence: polyform-noncommercial-1.0.0, in the name of"
       fi
-      grep -A1 -F 'Licence (type the number or the name): ' "$d/out" | tail -1 >"$d/done"
-      [ "$(cat "$d/done")" = "    Done. Nothing to check with GitHub for the licence $lic." ] \
+      grep -A2 -F 'Licence (type the number or the name): ' "$d/out" | tail -2 >"$d/done"
+      [ "$(cat "$d/done")" = "$(printf '\n    Done. Nothing to check with GitHub for the licence %s.' "$lic")" ] \
         || { cat "$d/out" >&2; die "[$again] the step does not end with its done line after the question"; }
     fi
     [ "$(grep -F "$(printf '\tlicenses/')" "$d/gh.log" | cut -f2-)" = "$want" ] || { cat "$d/gh.log" >&2; die "[$again] the licence checks were not as expected"; }
