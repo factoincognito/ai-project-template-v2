@@ -182,7 +182,7 @@ block_start() {
 # terminal's own text colour on any background: a step's first and last
 # line, the wait's open line, and a say line inside a step (IN_LOG, from
 # step_start until step_end or a block the user reads starts), except a
-# warning. A terminal that has no dim shows it as plain text. Nothing
+# warning and a line the user may act on (say_note). A terminal that has no dim shows it as plain text. Nothing
 # else is in colour. show_colour_key, at the start of a run, says in
 # words what each colour marks.
 # colour_on [err]: colour is used when the stream the line goes to is a
@@ -253,6 +253,12 @@ say() {
       ;;
   esac
 }
+
+# say_note <text>: one line inside a step that the user may act on (a
+# link to open, an option, a permission to set): plain, never dim like
+# the progress log around it (#237 review, N2). The lines after it are
+# log again.
+say_note() { end_line; printf '%s\n' "$*"; OUT_BLANK=""; }
 
 # say_command <command> [err]: a command for the user to copy, indented,
 # with only the command in the command colour, not the indent (err: on
@@ -2378,9 +2384,9 @@ preflight_github_permissions() {
     step_end "gh has the permissions on GitHub that the setup needs."
     return 0
   fi
-  say "GitHub does not say which permissions this sign-in has, as with a fine-grained token (a key made on GitHub with chosen permissions)."
-  say "The setup needs these permissions, each set to \"Read and write\": Administration, Contents, Workflows and Pull requests; and your account must be allowed to create repositories (new projects on GitHub)."
-  say "If one of them is missing, a later step stops and says so."
+  say_note "GitHub does not say which permissions this sign-in has, as with a fine-grained token (a key made on GitHub with chosen permissions)."
+  say_note "The setup needs these permissions, each set to \"Read and write\": Administration, Contents, Workflows and Pull requests; and your account must be allowed to create repositories (new projects on GitHub)."
+  say_note "If one of them is missing, a later step stops and says so."
   step_end "Carrying on without checking the permissions."
 }
 
@@ -2898,9 +2904,9 @@ protect_main() {
       if [ -n "$OPT_ALLOW_UNPROTECTED" ] && [ "$PROTECT_PROBLEM" = plan ]; then
         UNPROTECTED=1
         api_raw
-        say "GitHub does not protect the main version of this project on its plan; its answer is below."
+        say_note "GitHub does not protect the main version of this project on its plan; its answer is below."
         guide_details "$API_RAW"
-        say "You chose to go on without protection with --allow-unprotected, so the script goes on, and writes that decision into the project's memory/decisions.md."
+        say_note "You chose to go on without protection with --allow-unprotected, so the script goes on, and writes that decision into the project's memory/decisions.md."
         step_end "Carrying on without protection: changes could go straight into the main version."
         return 0
       fi
@@ -2939,11 +2945,11 @@ offer_public() {
   rm -f "$out" "$err"
   if [ "$rc" -eq 0 ]; then
     IN_VISIBILITY=public
-    say "The project $IN_OWNER/$IN_NAME is public now. Continue the setup with the command shown below."
+    say_note "The project $IN_OWNER/$IN_NAME is public now. Continue the setup with the command shown below."
     return 0
   fi
   [ -n "$raw" ] || raw="gh stopped with exit code $rc and no message."
-  say "GitHub did not make the project public; its answer is below. Check on https://github.com/$IN_OWNER/$IN_NAME/settings that your account is one of the project's admins (who may change its settings), or run the command shown above that starts with gh yourself."
+  say_note "GitHub did not make the project public; its answer is below. Check on https://github.com/$IN_OWNER/$IN_NAME/settings that your account is one of the project's admins (who may change its settings), or run the command shown above that starts with gh yourself."
   guide_details "$raw"
 }
 
@@ -3094,7 +3100,7 @@ check_actions() {
   step_start "Checking that GitHub Actions, which runs the project's checks, is turned on for it"
   guided_check check_actions_on guide_actions_off
   if [ -n "$ACTIONS_UNCHECKED" ]; then
-    say "The script could not check whether GitHub Actions is turned on for the project: GitHub did not say (its answer is below). This check only warns early, so the setup goes on."
+    say_note "The script could not check whether GitHub Actions is turned on for the project: GitHub did not say (its answer is below). This check only warns early, so the setup goes on."
     guide_details "$ACTIONS_UNCHECKED"
     step_end "Carrying on without this check. If GitHub Actions is off, the project's checks will not run on the proposed change."
     return 0
@@ -4267,8 +4273,8 @@ wait_for_build() {
   duration_words $((IN_CI_TIMEOUT * 60))
   limit="$DURATION"
   step_start "Waiting for the project's check build to pass on the proposed change, for at most $limit"
-  say "That is the limit: if build has not passed after $limit, the script stops, leaves the proposed change open and shows how to continue (--ci-timeout sets a different limit)."
-  say "You can follow the check here: $PR_URL/checks"
+  say_note "That is the limit: if build has not passed after $limit, the script stops, leaves the proposed change open and shows how to continue (--ci-timeout sets a different limit)."
+  say_note "You can follow the check here: $PR_URL/checks"
   max=$((IN_CI_TIMEOUT * 60 / CHECKS_DELAY))
   while :; do
     look_at_build

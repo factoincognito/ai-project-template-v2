@@ -1102,7 +1102,7 @@ use_home() {
 # What reaches the terminal some other way is the job of bypass_lines;
 # what it cannot see is listed there.
 
-MSG_HELPERS='say|say_heading|step_start|step_end|show_error|fail|lp_fail|stop_with_error|ask|ask_terminal|prompt_for|answer|add_problem|guide_begin|guide_step|guide_end'
+MSG_HELPERS='say|say_note|say_heading|step_start|step_end|show_error|fail|lp_fail|stop_with_error|ask|ask_terminal|prompt_for|answer|add_problem|guide_begin|guide_step|guide_end'
 
 # user_strings <file>: prints "<line number>: <text>" for each.
 user_strings() {
@@ -1765,6 +1765,58 @@ test_the_progress_log_is_dim_only_when_colour_is_on() {
   expect_same "the progress log with TERM=dumb" "$want" "$got"
 }
 
+test_lines_inside_a_step_the_user_may_act_on_are_not_dim() {
+  # #237 review, N2: a line inside a step that gives the user a link, an
+  # option or something to set is said with say_note, never dim; the
+  # progress lines around it stay dim.
+  local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM" d l
+  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
+    step_start "Checking"; say "Working."; say_note "You can follow the check here: x"
+    say "More work."; step_end "It works." ) >"$got"
+  {
+    printf '%s==> Checking%s\n' "$LOG_ON" "$COLOUR_OFF"
+    printf '%sWorking.%s\n' "$LOG_ON" "$COLOUR_OFF"
+    printf '%s\n' 'You can follow the check here: x'
+    printf '%sMore work.%s\n' "$LOG_ON" "$COLOUR_OFF"
+    printf '    %sDone. It works.%s\n' "$LOG_ON" "$COLOUR_OFF"
+  } >"$want"
+  expect_same "a note inside a step" "$want" "$got"
+  # The permissions the setup needs, when GitHub does not say which ones
+  # gh has (a fine-grained token).
+  d="$(tmpdir)"
+  export TERM=xterm BOOTSTRAP_COLOR=1 STUB_GH_SCOPES=-
+  unset NO_COLOR
+  pre "$d" ni with_vis private preflight_github_permissions
+  unset STUB_GH_SCOPES
+  expect_rc 0 "$d"
+  grep -qxF "${LOG_ON}==> Checking that gh has the permissions on GitHub that the setup needs${COLOUR_OFF}" "$d/out" \
+    || { od -c "$d/out" | head -20 >&2; die "permissions: the step line is not dim"; }
+  for l in "GitHub does not say which permissions this sign-in has, as with a fine-grained token (a key made on GitHub with chosen permissions)." \
+    "The setup needs these permissions, each set to \"Read and write\": Administration, Contents, Workflows and Pull requests; and your account must be allowed to create repositories (new projects on GitHub)." \
+    "If one of them is missing, a later step stops and says so."; do
+    grep -qxF -- "$l" "$d/out" || { od -c "$d/out" | head -40 >&2; die "permissions: not plain: $l"; }
+  done
+  # Going on without protection (--allow-unprotected), GitHub Actions not
+  # checked, and the wait's limit and link to the checks, in one run.
+  d="$(tmpdir)"
+  unset BOOTSTRAP_COLOR
+  export STUB_GH_PROTECT_FAIL=plan
+  setup_run "$d" --non-interactive --yes --private
+  expect_rc 3 "$d"
+  export BOOTSTRAP_COLOR=1 STUB_GH_ACTIONS_FAIL=forbidden
+  again "$d" --allow-unprotected
+  unset STUB_GH_PROTECT_FAIL STUB_GH_ACTIONS_FAIL BOOTSTRAP_COLOR
+  expect_rc 0 "$d"
+  grep -qxF "${LOG_ON}==> Protecting the main version of the project${COLOUR_OFF}" "$d/out" \
+    || { od -c "$d/out" | head -20 >&2; die "the protection step line is not dim"; }
+  for l in "GitHub does not protect the main version of this project on its plan; its answer is below." \
+    "You chose to go on without protection with --allow-unprotected, so the script goes on, and writes that decision into the project's memory/decisions.md." \
+    "The script could not check whether GitHub Actions is turned on for the project: GitHub did not say (its answer is below). This check only warns early, so the setup goes on." \
+    "$WAIT_LIMIT_LINE" "$WAIT_LINK_LINE"; do
+    grep -qxF -- "$l" "$d/out" || { cat "$d/out" >&2; die "not plain: $l"; }
+  done
+}
+
 test_the_colour_key_says_in_words_what_each_colour_marks() {
   # At most 4 short lines, one per colour, each in its own colour and
   # saying in words what it marks, then a blank line; nothing at all when
@@ -1879,7 +1931,7 @@ command_intro_faults() {
       pending = intro ? NR : 0
       next
     }
-    /(^|[^A-Za-z0-9_])(say|say_heading|guide_begin|guide_end|show_error|fail|stop_with_error|ask|ask_terminal|step_start|step_end)[[:space:]]/ {
+    /(^|[^A-Za-z0-9_])(say|say_note|say_heading|guide_begin|guide_end|show_error|fail|stop_with_error|ask|ask_terminal|step_start|step_end)[[:space:]]/ {
       if (pending) print pending ": a step that ends with a colon, with no command below it"
       pending = 0
       intro = ($0 ~ /say "\$[A-Z_]*_INTRO"/)
