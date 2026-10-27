@@ -297,7 +297,7 @@ get a working project in any supported language.
   | One-line description | `--description` | none; required (one line, not empty), so no placeholder is left |
   | Product owner name | `--po-name` | gh profile name, else the login |
   | Language pack | `--pack node\|web\|python\|react-native` | none |
-  | Web deploy files laid out | `--with-deploy` (web only) | off |
+  | Web deploy files laid out | `--with-deploy` / `--without-deploy` (web only) | off |
   | Visibility | `--public` / `--private` | public |
   | Project licence | `--license none\|mit\|apache-2.0\|gpl-3.0\|bsd-3-clause\|polyform-noncommercial-1.0.0\|<any GitHub licence key>` | none offered as a default |
   | Copyright holder | `--copyright-holder` | PO name |
@@ -384,6 +384,7 @@ get a working project in any supported language.
     - a `bootstrap-setup` branch pushed with no PR: continue from step 14;
     - an open `bootstrap-setup` PR: continue from step 15;
     - with no clone in the target directory, the branch and PR cases above first clone the repo and check out GitHub's `bootstrap-setup`;
+    - the web deploy files: in the two step 3 cases the choice is still open, so the deploy question (unless `--with-deploy` or `--without-deploy` is given) is asked once the state is worked out; in the commit, branch and PR cases the setup commit decides (whether it has `.github/workflows/deploy.yml`, read from the clone, or from GitHub's `bootstrap-setup` when there is no clone), and a `--with-deploy` or `--without-deploy` that contradicts it is refused (exit 2) before anything changes. The command to continue carries a no as `--without-deploy`, so it never asks again;
     - already set up (the CHANGELOG line "Set up by bootstrap-project.sh", a merged `bootstrap-setup` PR, or no setup section and no script): only read protection back (it stops, changing nothing, when protection is missing or differs from the step 16 body; the only exception is no protection at all on a private repo with `--allow-unprotected`), bring a clone in the target directory up to date (step 18), and report. Protection is never set on such a repo, so a project set up by hand from the current release keeps its own;
     - a repo that is not set up, still has the script, and whose README no longer has the setup section heading: refused before anything is written;
     - a local clone with uncommitted changes: refused, with steps to move the folder away or make it match GitHub (the script never discards work);

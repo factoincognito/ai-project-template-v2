@@ -466,15 +466,19 @@ case "${1:-}" in
       respond 200 OK 'application/vnd.github.raw'
       cat "$STUB_GH_CHANGELOG"
     elif [ "$#" -eq 5 ] && [ "$3 $4" = '-H Accept: application/vnd.github.raw+json' ] && [ "${5#repos/}" != "$5" ] && [ "${5#*/contents/}" != "$5" ]; then
-      # --resume: the raw text of a file on a project's main, read from its
-      # bare repo; 404 when main lacks it. STUB_GH_CONTENTS_FAIL fails it.
+      # --resume: the raw text of a file on a project's main (or on the
+      # line of work named by ?ref=), read from its bare repo; 404 when it
+      # lacks the file. STUB_GH_CONTENTS_FAIL fails it.
       if [ -n "${STUB_GH_CONTENTS_FAIL:-}" ]; then emit_failure "$STUB_GH_CONTENTS_FAIL"; fi
       rest="${5#repos/}"
       bare="${STUB_GH_LOG%/*}/remotes/${rest%%/contents/*}.git"
       p="${rest#*/contents/}"
-      if [ -d "$bare" ] && "${STUB_GIT:-git}" --git-dir="$bare" cat-file -e "refs/heads/main:$p" 2>/dev/null; then
+      ref=main
+      q='?ref='
+      case "$p" in *"$q"*) ref="${p#*"$q"}"; p="${p%%"$q"*}" ;; esac
+      if [ -d "$bare" ] && "${STUB_GIT:-git}" --git-dir="$bare" cat-file -e "refs/heads/$ref:$p" 2>/dev/null; then
         respond 200 OK 'application/vnd.github.raw'
-        "${STUB_GIT:-git}" --git-dir="$bare" show "refs/heads/main:$p"
+        "${STUB_GIT:-git}" --git-dir="$bare" show "refs/heads/$ref:$p"
       else
         http_error 404 'Not Found' 'Not Found'
       fi
@@ -2557,7 +2561,7 @@ test_help_lists_every_option() {
   d="$(tmpdir)"
   bash "$SCRIPT" --help </dev/null >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 0 ] || { cat "$d/err" >&2; die "exit $rc, want 0"; }
-  for o in --name --owner --project-name --description --po-name --pack --with-deploy \
+  for o in --name --owner --project-name --description --po-name --pack --with-deploy --without-deploy \
     --public --private --license --copyright-holder --dir --ci-timeout --non-interactive \
     --yes --dry-run --resume --help --git-name --git-email layout-pack; do
     grep -qF -- "$o" "$d/out" || { cat "$d/out" >&2; die "help lacks $o"; }
@@ -2646,6 +2650,34 @@ test_with_deploy_is_only_for_the_web_pack() {
   d="$(tmpdir)"
   inputs "$d" --non-interactive --name x --description "x y." --pack web --license mit --owner a --po-name b --with-deploy
   expect_inputs "$d" PACK=web WITH_DEPLOY=yes
+}
+
+test_without_deploy_gives_the_answer_no_to_the_publishing_files() {
+  # End-to-end run 1 (repeat), r1e: a no to the publishing files could not
+  # be given as an option, so the command to continue could not carry it
+  # and the resumed run asked again. --without-deploy is that no.
+  local d
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive --name x --description "x y." --pack web --license mit --owner a --po-name b --without-deploy
+  expect_inputs "$d" PACK=web WITH_DEPLOY=no
+  # Given, it is not asked.
+  d="$(tmpdir)"
+  printf '%s\n' "" "" "" "" "" "" "" "" >"$d/in"
+  inputs "$d" --name x --description "x y." --pack web --license mit --without-deploy
+  expect_inputs "$d" PACK=web WITH_DEPLOY=no
+  ! grep -qF 'Add the publishing files' "$d/out" || { cat "$d/out" >&2; die "the publishing question was asked although --without-deploy was given"; }
+  # Another pack has no publishing files, so the no does no harm.
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner a --po-name b --without-deploy
+  expect_inputs "$d" PACK=node WITH_DEPLOY=no
+  # Not with --with-deploy, and it takes no value.
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive --name x --description "x y." --pack web --license mit --owner a --po-name b --with-deploy --without-deploy
+  expect_refused "$d" --without-deploy
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive --name x --description "x y." --pack web --license mit --owner a --po-name b --without-deploy=yes
+  [ "$RC" -eq 2 ] || { cat "$d/err" >&2; die "--without-deploy=yes: exit $RC, want 2"; }
+  sed -n 1p "$d/err" | grep -F 'What happened: The option --without-deploy does not take a value.' >/dev/null || { cat "$d/err" >&2; die "--without-deploy=yes is not refused as an option without a value"; }
 }
 
 test_public_and_private_cannot_both_be_given() {
@@ -5256,6 +5288,68 @@ test_the_continue_command_carries_every_answer_given_at_the_questions() {
     *) cat "$d/out" >&2; die "the command to start again does not carry the answers: $line" ;;
   esac
   case "$line" in *" --resume"*) die "the command to start again has --resume" ;; esac
+}
+
+# The web pack's answers, with no (Enter) to the publishing files.
+WEB_ANSWERS_IN=(my-app "" "Lends tools." "" "" web "" "" none "" "" "")
+
+test_the_commands_shown_carry_a_no_to_the_publishing_files() {
+  # End-to-end run 1 (repeat), r1e: Enter (no) at "Add the publishing
+  # files?", Ctrl-C later, and the command to continue asked it again,
+  # because a no could not be written as an option.
+  local d line
+  d="$(tmpdir)"
+  working_git "$d"
+  use_built "$d"
+  fake_tool "$d" npm 10.0.0
+  export STUB_GH_PROTECT_FAIL=plan
+  printf '%s\n' "${WEB_ANSWERS_IN[@]}" >"$d/in"
+  whole "$d" --yes
+  unset STUB_GH_PROTECT_FAIL
+  expect_rc 3 "$d"
+  expect_continue_command "$d" " --without-deploy"
+  case " $(advance_command "$d") " in
+    *" --resume "*" --without-deploy "*) ;;
+    *) cat "$d/out" >&2; die "the command shown before the first change does not carry the no: $(advance_command "$d")" ;;
+  esac
+  # Run as shown, with no answers at all on stdin, it asks nothing and
+  # goes through without the publishing files.
+  : >"$d/in"
+  again "$d"
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "the continued run did not go through"; }
+  ! grep -qF 'Add the publishing files' "$d/out" || { cat "$d/out" >&2; die "the publishing question was asked again"; }
+  [ ! -e "$(copy_of "$d")/.github/workflows/deploy.yml" ] || die "the publishing files were added after a no"
+  # The command to start again carries it too.
+  d="$(tmpdir)"
+  working_git "$d"
+  use_built "$d"
+  fake_tool "$d" npm 10.0.0
+  export STUB_GH_EXISTING="octo-user/my-app"
+  printf '%s\n' "${WEB_ANSWERS_IN[@]}" q >"$d/in"
+  whole "$d"
+  unset STUB_GH_EXISTING
+  expect_rc 3 "$d"
+  line="$(grep -A1 -xF 'To start again, run this command:' "$d/out" | sed -n 2p)"
+  case "$line " in
+    "    bash "*" --without-deploy "*) ;;
+    *) cat "$d/out" >&2; die "the command to start again does not carry the no: $line" ;;
+  esac
+  # A yes is carried as --with-deploy, as before.
+  d="$(tmpdir)"
+  working_git "$d"
+  use_built "$d"
+  fake_tool "$d" npm 10.0.0
+  export STUB_GH_EXISTING="octo-user/my-app"
+  printf '%s\n' my-app "" "Lends tools." "" "" web yes "" none "" "" "" q >"$d/in"
+  whole "$d"
+  unset STUB_GH_EXISTING
+  expect_rc 3 "$d"
+  line="$(grep -A1 -xF 'To start again, run this command:' "$d/out" | sed -n 2p)"
+  case "$line " in
+    "    bash "*" --with-deploy "*) ;;
+    *) cat "$d/out" >&2; die "the command to start again does not carry the yes: $line" ;;
+  esac
 }
 
 test_other_answers_to_the_protection_request_are_explained() {
@@ -8272,6 +8366,89 @@ test_resume_waits_for_build_on_the_proposed_change_that_is_there() {
     [ "$(saved_changes "$d")" -eq 1 ] || die "$how: the change was saved again"
     expect_one_of_each "$d"
   done
+}
+
+# expect_nothing_changed_since <dir> <n>: no gh call after the first <n>
+# makes or changes anything.
+expect_nothing_changed_since() {
+  ! calls_since "$1" "$2" | grep -E '^(repo create|repo clone|repo edit|pr create|pr merge) |-X PUT' >/dev/null \
+    || { calls_since "$1" "$2" >&2; die "something was changed"; }
+}
+
+test_resume_past_the_pack_step_takes_the_publishing_choice_from_the_project() {
+  # End-to-end run 1 (repeat), r1e: once the pack's files are laid out,
+  # the publishing files are in the setup's change or not. A resumed run
+  # takes that from the change (in the copy, or on GitHub when there is
+  # no copy) and asks nothing; an option that says otherwise is refused
+  # before anything changes.
+  local d n how
+  for how in copy moved; do
+    d="$(tmpdir)"
+    working_git "$d"
+    fake_tool "$d" npm 10.0.0
+    export STUB_GH_BUILD="pull_request fail"
+    setup_run "$d" --non-interactive --yes --pack web --with-deploy
+    unset STUB_GH_BUILD
+    expect_rc 1 "$d"
+    [ "$how" != moved ] || mv "$(copy_of "$d")" "$d/elsewhere"
+    n="$(calls_count "$d")"
+    setup_run "$d" --yes --resume --pack web --without-deploy
+    expect_rc 2 "$d"
+    grep -qE -- '^    - --without-deploy: .{10,}' "$d/err" || { cat "$d/err" >&2; die "$how: a no that contradicts the change is not refused with its option"; }
+    expect_nothing_changed_since "$d" "$n"
+    # With no copy, the change on GitHub is read.
+    if [ "$how" = moved ]; then
+      calls_since "$d" "$n" | grep -xF 'api -i -H Accept: application/vnd.github.raw+json repos/octo-user/my-app/contents/.github/workflows/deploy.yml?ref=bootstrap-setup' >/dev/null \
+        || { calls_since "$d" "$n" >&2; die "moved: the setup's change on GitHub was not read"; }
+    fi
+    # No option, and no answers on stdin: nothing is asked.
+    setup_run "$d" --yes --resume --pack web
+    expect_rc 0 "$d"
+    ! grep -qF 'Add the publishing files' "$d/out" || { cat "$d/out" >&2; die "$how: the publishing question was asked"; }
+    grep -qxF '    Language pack: web, with the files that publish the website' "$d/out" || { cat "$d/out" >&2; die "$how: the report does not name the publishing files"; }
+    expect_one_of_each "$d"
+  done
+  # Without the publishing files: a yes is refused, no option takes the no.
+  d="$(tmpdir)"
+  working_git "$d"
+  fake_tool "$d" npm 10.0.0
+  export STUB_GH_BUILD="pull_request fail"
+  setup_run "$d" --non-interactive --yes --pack web
+  unset STUB_GH_BUILD
+  expect_rc 1 "$d"
+  n="$(calls_count "$d")"
+  setup_run "$d" --yes --resume --pack web --with-deploy
+  expect_rc 2 "$d"
+  grep -qE -- '^    - --with-deploy: .{10,}' "$d/err" || { cat "$d/err" >&2; die "a yes that contradicts the change is not refused with its option"; }
+  expect_nothing_changed_since "$d" "$n"
+  setup_run "$d" --yes --resume --pack web
+  expect_rc 0 "$d"
+  ! grep -qF 'Add the publishing files' "$d/out" || { cat "$d/out" >&2; die "the publishing question was asked"; }
+  grep -qxF '    Language pack: web' "$d/out" || { cat "$d/out" >&2; die "the report does not name the pack without the publishing files"; }
+  [ ! -e "$(copy_of "$d")/.github/workflows/deploy.yml" ] || die "the publishing files were added"
+  expect_one_of_each "$d"
+}
+
+test_resume_before_the_pack_step_asks_the_publishing_question_once_the_state_is_known() {
+  # A --resume typed without the answer, in a project with only the
+  # bootstrapper's files: the pack is not laid out yet, so the choice is
+  # still open. It is asked after the state is worked out, not before.
+  local d
+  d="$(tmpdir)"
+  working_git "$d"
+  fake_tool "$d" npm 10.0.0
+  export STUB_GH_PROTECT_FAIL=plan
+  setup_run "$d" --non-interactive --yes --private --pack web
+  unset STUB_GH_PROTECT_FAIL
+  expect_rc 3 "$d"
+  printf 'yes\n' >"$d/in"
+  setup_run "$d" --yes --private --resume --pack web
+  expect_rc 0 "$d"
+  [ "$(grep -c '^Add the publishing files? (yes or no) \[no\]: ' "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "the publishing question was not asked once"; }
+  [ "$(grep -n '^Add the publishing files' "$d/out" | head -1 | cut -d: -f1)" -gt "$(line_of "$d" "==> Working out where the setup stopped, from GitHub and from the copy on this computer")" ] \
+    || { cat "$d/out" >&2; die "the publishing question came before the state was worked out"; }
+  [ -e "$(copy_of "$d")/.github/workflows/deploy.yml" ] || die "the publishing files were not added after a yes"
+  expect_one_of_each "$d"
 }
 
 test_ctrl_c_says_what_exists_and_the_resume_finishes_without_duplicates() {
