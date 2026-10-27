@@ -4416,19 +4416,30 @@ linux_npm_on_enter() {
 
 test_in_wsl_a_link_to_the_windows_npm_counts_as_no_npm() {
   # #255 review, N1: the place npm is found is followed to the file it
-  # leads to. A link in a Linux folder to the Windows npm, and . on PATH
-  # while the current folder is the Windows Node.js folder (command -v
-  # then says ./npm), are the Windows npm too: refused, and not run.
+  # leads to. A link in a Linux folder to the Windows npm is the Windows
+  # npm too: refused, and not run. Git Bash without the right to make
+  # links makes a copy for ln -s (#255 review, N8): no link, so nothing
+  # to check there.
   local d
   d="$(tmpdir)"
   on_wsl "$d"
   windows_npm "$d"
   mkdir -p "$d/linux bin"
-  ln -s "$(windows_npm_dir "$d")npm" "$d/linux bin/npm"
+  if ! ln -s "$(windows_npm_dir "$d")npm" "$d/linux bin/npm" 2>/dev/null || [ ! -L "$d/linux bin/npm" ]; then
+    skip_test "no symbolic links here (ln -s made no link)"
+    return 0
+  fi
   pre "$d" ni with_pack node path_first "$d/linux bin" preflight_npm
   expect_rc 3 "$d"
   expect_out "$d" "The npm this Linux finds is the Windows one"
   [ ! -e "$d/tools.log" ] || ! grep -q '^windows-npm' "$d/tools.log" || { cat "$d/tools.log" >&2; die "the Windows npm was run through a link"; }
+}
+
+test_in_wsl_dot_on_path_in_a_windows_folder_counts_as_no_npm() {
+  # #255 review, N1: with . on PATH while the current folder is the
+  # Windows Node.js folder, command -v says ./npm; followed from the
+  # current folder, that is the Windows npm: refused, and not run.
+  local d
   d="$(tmpdir)"
   on_wsl "$d"
   windows_npm "$d"
