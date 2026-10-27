@@ -4446,6 +4446,76 @@ test_the_refresh_asks_for_every_missing_permission() {
   done
 }
 
+# GH_GIT_QUESTION: the step for gh's own question, in every guide that
+# has the user run gh auth login or gh auth refresh. End-to-end run 1
+# (repeated), finding r1b: the user had to ask what to answer. gh v2.93.0
+# (pkg/cmd/auth/shared/git_credential.go, used by both login and refresh)
+# asks it, default Yes, before the one-time code, unless gh already signs
+# git in to GitHub; so "If", and right after the command.
+GH_GIT_QUESTION='If gh asks "Authenticate Git with your GitHub credentials?", answer Yes (type y or press Enter).'
+gg_permissions_public() { PERM_PROBLEM=missing; PERM_MISSING="public_repo workflow"; IN_VISIBILITY=public; guide_github_permissions; }
+
+test_every_gh_sign_in_guide_says_what_to_answer_when_gh_asks_to_authenticate_git() {
+  # For the sign-in guide (signed out, sign-in no longer accepted) and
+  # each refresh the permissions guide shows: the command, then at once
+  # the step for the question, once, then the one-time code step.
+  local d c g want cmd_n q_n code_n
+  for c in "gg_signed_out|gh auth login -h github.com -p https -w -s workflow" \
+    "gg_expired|gh auth login -h github.com -p https -w -s workflow" \
+    "gg_permissions|gh auth refresh -h github.com -s workflow" \
+    "gg_permissions_public|gh auth refresh -h github.com -s public_repo,workflow" \
+    "gg_permissions_repo|gh auth refresh -h github.com -s repo,workflow"; do
+    g="${c%%|*}"; want="${c#*|}"
+    d="$(tmpdir)"
+    pre "$d" "$g"
+    [ "$RC" -eq 0 ] || { cat "$d/err" >&2; die "$g failed"; }
+    cmd_n="$(grep -nxF -- "    $want" "$d/out" | cut -d: -f1)"
+    [ -n "$cmd_n" ] || { cat "$d/out" >&2; die "$g: the command $want is not shown"; }
+    [ "$(grep -cF -- "$GH_GIT_QUESTION" "$d/out")" -eq 1 ] \
+      || { cat "$d/out" >&2; die "$g: the Authenticate Git step is not there exactly once"; }
+    q_n="$(grep -nF -- "$GH_GIT_QUESTION" "$d/out" | cut -d: -f1)"
+    sed -n "${q_n}p" "$d/out" | grep -qE '^  [0-9]+\. If gh asks ' \
+      || { cat "$d/out" >&2; die "$g: the Authenticate Git text is not a numbered step of its own"; }
+    [ "$q_n" -eq $((cmd_n + 1)) ] || { cat "$d/out" >&2; die "$g: the Authenticate Git step does not come right after the command"; }
+    code_n="$(grep -n 'one-time code' "$d/out" | head -1 | cut -d: -f1)"
+    [ -n "$code_n" ] && [ "$q_n" -lt "$code_n" ] \
+      || { cat "$d/out" >&2; die "$g: the Authenticate Git step does not come before the one-time code step"; }
+  done
+  # No gh auth command, no question: a token in GH_TOKEN (gh cannot
+  # refresh it), and GitHub out of reach.
+  for g in gg_permissions_token gg_offline; do
+    d="$(tmpdir)"
+    pre "$d" "$g"
+    [ "$RC" -eq 0 ] || { cat "$d/err" >&2; die "$g failed"; }
+    expect_no_out "$d" "Authenticate Git"
+    ! grep -qE '^    gh auth (login|refresh)' "$d/out" || { cat "$d/out" >&2; die "$g: a gh auth command is shown"; }
+  done
+}
+
+test_the_authenticate_git_step_is_one_shared_text_in_every_gh_sign_in_guide() {
+  # One text, so the guides cannot drift apart: the script writes gh's
+  # question once, and every guide that shows gh auth login or offers a
+  # gh auth refresh gives it through that one text.
+  local g body found=""
+  ( load_script; [ "$GH_GIT_QUESTION_STEP" = "$GH_GIT_QUESTION" ] ) \
+    || die "the script's GH_GIT_QUESTION_STEP is not the step this test expects"
+  [ "$(grep -cF 'Authenticate Git with your GitHub credentials' "$SCRIPT")" -eq 1 ] \
+    || { grep -nF 'Authenticate Git with your GitHub credentials' "$SCRIPT" >&2; die "gh's question is written more than once in the script"; }
+  for g in $(grep -oE '^guide_[a-z_]+\(\)' "$SCRIPT" | sed 's/()//'); do
+    body="$(G="$g() {" awk '$0 == ENVIRON["G"] { on = 1; next } on && /^}/ { exit } on { print }' "$SCRIPT")"
+    case "$body" in
+      *'"gh auth login'* | *'"gh auth refresh'* | *'offered gh-refresh-'*) ;;
+      *) continue ;;
+    esac
+    found="$found $g"
+    grep -qxF '  guide_step "$GH_GIT_QUESTION_STEP"' <<<"$body" \
+      || die "$g has the user run gh auth login or gh auth refresh but does not give GH_GIT_QUESTION_STEP"
+  done
+  # The search itself works: it finds the two guides known to have one.
+  case "$found " in *" guide_github_account "*) ;; *) die "the search did not find guide_github_account (found:$found)" ;; esac
+  case "$found " in *" guide_github_permissions "*) ;; *) die "the search did not find guide_github_permissions (found:$found)" ;; esac
+}
+
 test_the_refresh_never_runs_without_a_yes_typed_at_the_terminal() {
   local d answer
   export STUB_GH_SCOPES="repo"

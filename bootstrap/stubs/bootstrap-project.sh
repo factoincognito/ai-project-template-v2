@@ -2091,6 +2091,14 @@ check_github_account() {
   done <<<"$API_HEADERS"
 }
 
+# GH_GIT_QUESTION_STEP: the step every guide that has the user run gh auth
+# login or gh auth refresh gives, right after the command, in one text so
+# the guides cannot drift apart. Both commands ask this question (default
+# Yes) before the one-time code, unless gh already signs git in to GitHub
+# (gh v2.93.0, pkg/cmd/auth/shared/git_credential.go). Yes makes gh
+# git's sign-in for GitHub, as step 0 of the README says.
+GH_GIT_QUESTION_STEP='If gh asks "Authenticate Git with your GitHub credentials?", answer Yes (type y or press Enter).'
+
 guide_github_account() {
   case "$ACCOUNT_PROBLEM" in
     other) api_fail "read your GitHub account" ;;
@@ -2106,7 +2114,7 @@ guide_github_account() {
   esac
   guide_step "Open a second terminal window and run this command there; it is the sign-in command from step 0 of the README:"
   say_command "gh auth login -h github.com -p https -w -s workflow"
-  guide_step "When gh asks \"Authenticate Git with your GitHub credentials?\", answer Yes."
+  guide_step "$GH_GIT_QUESTION_STEP"
   guide_step "gh shows a one-time code (eight letters and digits, such as ABCD-1234) and asks you to press Enter: copy the code, then press Enter. Your browser opens GitHub's device page: paste the code, click Continue, then approve with the green Authorize button."
   guide_step "Come back to this window."
   guide_end "gh says \"Logged in as\" with your account name, and the script says \"Done. gh is signed in to GitHub as\" with your account name." \
@@ -2290,6 +2298,7 @@ guide_github_permissions() {
     public_repo*) offered gh-refresh-public show; OFFER=gh-refresh-public ;;
     *) offered gh-refresh-repo show; OFFER=gh-refresh-repo ;;
   esac
+  guide_step "$GH_GIT_QUESTION_STEP"
   guide_step "gh shows a one-time code (eight letters and digits, such as ABCD-1234) and asks you to press Enter: copy the code, then press Enter."
   guide_step "Your browser opens https://github.com/login/device: paste the code, click Continue, then approve with the green Authorize button."
   guide_step "Come back to this window."
