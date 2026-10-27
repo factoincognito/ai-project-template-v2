@@ -476,12 +476,19 @@ case "${1:-}" in
       ref=main
       q='?ref='
       case "$p" in *"$q"*) ref="${p#*"$q"}"; p="${p%%"$q"*}" ;; esac
-      if [ -d "$bare" ] && "${STUB_GIT:-git}" --git-dir="$bare" cat-file -e "refs/heads/$ref:$p" 2>/dev/null; then
-        respond 200 OK 'application/vnd.github.raw'
-        "${STUB_GIT:-git}" --git-dir="$bare" show "refs/heads/$ref:$p"
-      else
-        http_error 404 'Not Found' 'Not Found'
+      # Not <rev>:<path>: Git Bash rewrites a <rev>:.github/... (#239).
+      blob=""
+      if [ -d "$bare" ]; then
+        blob="$("${STUB_GIT:-git}" --git-dir="$bare" ls-tree "refs/heads/$ref" -- "$p" 2>/dev/null)" || blob=""
       fi
+      blob="${blob%%"$(printf '\t')"*}"
+      case "$blob" in
+        *" blob "*)
+          respond 200 OK 'application/vnd.github.raw'
+          "${STUB_GIT:-git}" --git-dir="$bare" cat-file blob "${blob##* }"
+          ;;
+        *) http_error 404 'Not Found' 'Not Found' ;;
+      esac
     elif [ "$#" -eq 5 ] && [ "$2" = -i ] && [ "${3#repos/}" != "$3" ] && [ "$4 $5" = "--jq .private" ]; then
       # --resume: whether the project is private: listed in the file
       # "private" (made with --private and not made public since) or in
@@ -986,17 +993,53 @@ REAL_DATE="$(command -v date)"
 # The stub gh seeds and copies projects with the real git.
 export STUB_GIT="$REAL_GIT"
 
+# GIT_BASH_ARGS: stand-in text that rewrites "$@" the way Git Bash does
+# before it starts a native program such as git.exe: an argument whose
+# first : has a / before it and a . or a / (not //) right after it, but
+# not ./ or ../, is taken as a list of paths (git-for-windows/msys2-runtime,
+# winsup/cygwin/msys2_path_conv.cc, find_path_start_and_type). Its : become
+# ;, which is enough to break a <rev>:<path> the way Windows does (r1e,
+# #239). Arguments that start with -, /, ~ or :, or that hold a space, a
+# quote, a glob character, =, ::, /~ or @@, are left alone: Git Bash skips
+# most of these, and the rest are not simulated.
+IFS= read -r -d '' GIT_BASH_ARGS <<'EOF' || true
+n=$#
+while [ "$n" -gt 0 ]; do
+  a="$1"
+  shift
+  n=$((n - 1))
+  case "$a" in
+    *[[:space:]\'\"\`*?=]* | *\[* | *\]* | *::* | */~* | *@@*) ;;
+    [!/:~-]*:*)
+      case "${a%%:*}" in
+        */*)
+          case "${a#*:}" in
+            ./* | ../* | //*) ;;
+            [./]*) a="${a//:/;}" ;;
+          esac
+          ;;
+      esac
+      ;;
+  esac
+  set -- "$@" "$a"
+done
+EOF
+
+# git_bash_git <dir>: makes <dir>/git-bash-git, a git that gets its
+# arguments as from Git Bash (GIT_BASH_ARGS), for STUB_GIT.
+git_bash_git() {
+  write_stand_in "$1/git-bash-git" "$GIT_BASH_ARGS
+exec \"$REAL_GIT\" \"\$@\"
+"
+}
+
 # fake_tool <dir> <name> [output]: makes <dir>/bin/<name>. Each call is
 # logged to <dir>/tools.log. While <dir>/<name>-fails holds a number above
 # 0 it counts it down and fails as a missing command does (exit 127): a
 # test writes 1 there for "missing, then installed by the user". Otherwise
 # a fake git runs the real git, and any other fake prints [output].
-# With <dir>/git-bash-paths present, a fake git first rewrites the
-# arguments Git Bash rewrites as a path list before git.exe sees them: one
-# with a / before a : that is followed by ., / or : (but not ./ or ../),
-# with no space, quote, glob, = or :: (git-for-windows/msys2-runtime,
-# winsup/cygwin/msys2_path_conv.cc, find_path_start_and_type). Its : becomes
-# ;, enough to break a <rev>:<path> the way Windows does (r1e, #239).
+# With <dir>/git-bash-paths present, a fake git first rewrites its
+# arguments as Git Bash does (GIT_BASH_ARGS).
 fake_tool() {
   local d="$1" name="$2" out="${3:-}" text
   IFS= read -r -d '' text <<EOF || true
@@ -1009,17 +1052,7 @@ fi
 if [ "$name" = git ]; then
   [ ! -x "$d/push-hook" ] || "$d/push-hook" "\$@" || exit \$?
   if [ -f "$d/git-bash-paths" ]; then
-    n=\$#
-    while [ "\$n" -gt 0 ]; do
-      a="\$1"
-      shift
-      n=\$((n - 1))
-      case "\$a" in
-        *[[:space:]\\'\\"\\\`*?=]* | *\\[* | *\\]* | *::* | *:./* | *:../* | *://*) ;;
-        [!/:~-]*/*:[./]*) a="\${a//:/;}" ;;
-      esac
-      set -- "\$@" "\$a"
-    done
+$GIT_BASH_ARGS
   fi
   exec "$REAL_GIT" "\$@"
 fi
@@ -8636,13 +8669,16 @@ test_resume_past_the_pack_step_takes_the_publishing_choice_from_the_project() {
   # the publishing files are in the setup's change or not. A resumed run
   # takes that from the change (in the copy, or on GitHub when there is
   # no copy) and asks nothing; an option that says otherwise is refused
-  # before anything changes. git gets its arguments as from Git Bash,
-  # where a <rev>:.github/... is rewritten before git sees it (#239).
+  # before anything changes. git, the script's and the stub gh's, gets
+  # its arguments as from Git Bash, where a <rev>:.github/... is
+  # rewritten before git sees it (#239).
   local d n how
   for how in copy moved; do
     d="$(tmpdir)"
     working_git "$d"
     : >"$d/git-bash-paths"
+    git_bash_git "$d"
+    export STUB_GIT="$d/git-bash-git"
     fake_tool "$d" npm 10.0.0
     export STUB_GH_BUILD="pull_request fail"
     setup_run "$d" --non-interactive --yes --pack web --with-deploy
@@ -8670,6 +8706,8 @@ test_resume_past_the_pack_step_takes_the_publishing_choice_from_the_project() {
   d="$(tmpdir)"
   working_git "$d"
   : >"$d/git-bash-paths"
+  git_bash_git "$d"
+  export STUB_GIT="$d/git-bash-git"
   fake_tool "$d" npm 10.0.0
   export STUB_GH_BUILD="pull_request fail"
   setup_run "$d" --non-interactive --yes --pack web
