@@ -27,6 +27,13 @@
 #   tests it ran; bootstrapper-test also fails unless, for every OS,
 #   the 4 shards together ran every test exactly once
 #   (bootstrap/check-shards.sh).
+# - A pull request that changes only files no test reads
+#   (bootstrap/not-read-by-tests.txt, judged by the base branch's copy
+#   of bootstrap/changed-inputs.sh and of that list) skips the test jobs
+#   (PBI-1.22, part 1). bootstrapper-test still reports: it passes only
+#   when the changes job succeeded and said the tests are not needed and
+#   both test jobs were skipped. Each test job deletes the listed files
+#   before the tests run, so a test that starts reading one fails.
 # - A pushed v* tag: run the tests and the pack chain test (packs.yml:
 #   build the bootstrapper, create a project from it, run each pack's
 #   CI), refuse unless the tagged commit is on main, build, and publish
@@ -52,10 +59,43 @@ permissions:
   contents: read
 
 jobs:
+  # Whether the tests are needed: always for a tag; for a pull request,
+  # when it changes a file the tests read. Judged by the base branch's
+  # script and list, so a pull request cannot switch off its own tests;
+  # when the base has no such script, the tests run.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      needed: ${{ steps.judge.outputs.needed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The merge commit and its parents: HEAD^1 is the base branch.
+          fetch-depth: 2
+      - name: Decide whether the tests are needed
+        id: judge
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          needed=true
+          if [ "$EVENT" = pull_request ] \
+            && git show HEAD^1:bootstrap/changed-inputs.sh >"$RUNNER_TEMP/changed-inputs.sh" 2>/dev/null \
+            && git show HEAD^1:bootstrap/not-read-by-tests.txt >"$RUNNER_TEMP/not-read-by-tests.txt" 2>/dev/null; then
+            needed="$(LIST="$RUNNER_TEMP/not-read-by-tests.txt" bash "$RUNNER_TEMP/changed-inputs.sh" needed HEAD^1 HEAD)"
+          fi
+          case "$needed" in true | false) ;; *) echo "::error::unexpected answer: $needed"; exit 1 ;; esac
+          echo "Tests needed: $needed"
+          echo "needed=$needed" >>"$GITHUB_OUTPUT"
+
   scripts-test:
+    needs: [changes]
+    if: needs.changes.outputs.needed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Delete the files no test reads
+        run: bash bootstrap/changed-inputs.sh remove
       - name: Test build.sh and publish.sh
         run: bash bootstrap/test.sh
       - name: Test the require-test-change check
@@ -64,6 +104,8 @@ jobs:
         run: bash bootstrap/test-e2e-check.sh
 
   bootstrap-project-test:
+    needs: [changes]
+    if: needs.changes.outputs.needed == 'true'
     strategy:
       # Every OS and shard reports, even when one fails first.
       fail-fast: false
@@ -85,6 +127,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7
+      - name: Delete the files no test reads
+        run: bash bootstrap/changed-inputs.sh remove
       - name: Test bootstrap-project.sh
         if: runner.os != 'macOS'
         run: bash bootstrap/test-bootstrap-project.sh
@@ -119,11 +163,12 @@ jobs:
   # together are every test exactly once.
   bootstrapper-test:
     if: always()
-    needs: [scripts-test, bootstrap-project-test]
+    needs: [changes, scripts-test, bootstrap-project-test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - name: Download the lists of tests the shards ran
+        if: needs.changes.outputs.needed == 'true'
         uses: actions/download-artifact@v7
         with:
           pattern: bootstrap-tests-*
@@ -134,7 +179,16 @@ jobs:
         if: always()
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          TESTS_NEEDED: ${{ needs.changes.outputs.needed }}
+          TEST_RESULTS: ${{ needs.scripts-test.result }} ${{ needs.bootstrap-project-test.result }}
         run: |
+          # Not needed: passes only if the changes job said so and both
+          # test jobs were skipped. Anything else is judged in full.
+          if [ "$CHANGES_RESULT" = success ] && [ "$TESTS_NEEDED" = false ] && [ "$TEST_RESULTS" = "skipped skipped" ]; then
+            echo "This pull request changes only files no test reads (bootstrap/not-read-by-tests.txt): the test jobs were skipped."
+            exit 0
+          fi
           BOOTSTRAP_TEST_LIST=1 bash bootstrap/test-bootstrap-project.sh >all-tests.txt
           bash bootstrap/check-shards.sh shard-list all-tests.txt ubuntu-latest macos-latest windows-latest
 
