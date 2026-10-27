@@ -6,9 +6,18 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.8.0] — 2026-10-27
+
 ### Added
 - Release prep for v2.6.0; it was left out of the 2.7.0 section (PR #230)
 - Release prep for v2.7.0 (PR #244)
+- Recorded in NEXT_SESSION, `STATUS.md` and CHANGELOG that v2.7.0 is released and verified (PR #245)
+- Run 2 of the end-to-end runs is on Linux, through WSL (PR #246)
+- Recorded run 1 on v2.7.0, its result and findings r1f to r1i, in NEXT_SESSION and `STATUS.md` (PR #249)
+- Run 1 is not repeated again; run 2 is interactive and checks the fixes for r1f to r1i (PR #250)
+- End-to-end run 1, r1f: keys typed while the script works are dropped before the run offer, "Proceed?" and the guide pause, so a stray Enter no longer answers them; a Ctrl-C there leaves the terminal as it was (PR #247)
+- End-to-end run 1, r1g to r1i: questions, the lines that explain them, commands and the log each have their own colour, with a four-line colour key; the stars of the wait are not dim and stand on a line of their own; a blank line separates questions from the log that follows (PR #248)
+- End-to-end run 1, r1g: the lines that explain a question are bold magenta, not yellow, which is hard to read on a light background (Adam's choice) (PR #252)
 
 ## [2.7.0] — 2026-10-27
 
