@@ -141,7 +141,7 @@ show_help() {
 # on the same line (the signs of life of the wait for build). The next
 # message of any helper below ends that line first (end_line).
 LINE_OPEN=""
-say_open() { printf '%s' "$*"; LINE_OPEN=1; OUT_BLANK=""; }
+say_open() { paint 2 "$*"; LINE_OPEN=1; }
 end_line() {
   [ -z "$LINE_OPEN" ] || printf '\n'
   LINE_OPEN=""
@@ -163,10 +163,12 @@ end_line() {
 # does not go through the helpers (an offered command's own) is not seen;
 # at worst a blank line is then left out, never doubled.
 OUT_BLANK=1
+IN_LOG=""
 block_start() {
   end_line
   [ -n "$OUT_BLANK" ] || printf '\n'
   OUT_BLANK=1
+  IN_LOG=""
 }
 
 # The lines the user acts on or reads first (a question with its default,
@@ -176,7 +178,13 @@ block_start() {
 # or that the script offers to run, is in a second colour, bold green
 # (end-to-end run 1 repeated, finding r1d): green rather than yellow,
 # which is hard to read on a light background, while green reads on both
-# light and dark ones. Nothing else is in colour.
+# light and dark ones. The progress log is dim (SGR 2), which follows the
+# terminal's own text colour on any background: a step's first and last
+# line, the wait's open line, and a say line inside a step (IN_LOG, from
+# step_start until step_end or a block the user reads starts), except a
+# warning. A terminal that has no dim shows it as plain text. Nothing
+# else is in colour. show_colour_key, at the start of a run, says in
+# words what each colour marks.
 # colour_on [err]: colour is used when the stream the line goes to is a
 # terminal (stdout_is_terminal, whose hook BOOTSTRAP_STDOUT_TERMINAL
 # counts too; [ -t 2 ] for a line on stderr), or BOOTSTRAP_COLOR is set
@@ -204,6 +212,20 @@ paint() {
 }
 painted() { paint '1;36' "$1" "${2:-}"; }
 
+# show_colour_key: one line per colour, each in its own colour and saying
+# in words what it marks, then a blank line; nothing when colour is off.
+# Shown once, at the start of a run, before the first check.
+show_colour_key() {
+  colour_on || return 0
+  painted "Colour key: questions, and what to do next"
+  printf '\n'
+  paint '1;32' "Colour key: commands to copy or to run"
+  printf '\n'
+  paint 2 "Colour key: the progress log of what the script does"
+  printf '\n\n'
+  OUT_BLANK=1
+}
+
 # say_heading <text>: the first line of a block the user reads (the
 # plan), after a blank line, in colour.
 say_heading() {
@@ -223,7 +245,12 @@ say() {
     "$START_AGAIN_INTRO" | "$CONTINUE_INTRO" | "$ADVANCE_INTRO") block_start; painted "$*"; printf '\n' ;;
     "$OFFER_INTRO") end_line; painted "$*"; printf '\n' ;;
     "") end_line; printf '\n'; OUT_BLANK=1 ;;
-    *) end_line; printf '%s\n' "$*"; OUT_BLANK="" ;;
+    "Warning: "*) end_line; printf '%s\n' "$*"; OUT_BLANK="" ;;
+    *)
+      end_line
+      if [ -n "$IN_LOG" ]; then paint 2 "$*"; printf '\n'; else printf '%s\n' "$*"; fi
+      OUT_BLANK=""
+      ;;
   esac
 }
 
@@ -242,9 +269,23 @@ say_command() {
   OUT_BLANK=""
 }
 
-# step_start <what>, step_end <result>: the first and last line of a step.
-step_start() { end_line; CURRENT_STEP="$*"; printf '==> %s\n' "$*"; OUT_BLANK=""; }
-step_end() { end_line; printf '    Done. %s\n' "$*"; OUT_BLANK=""; }
+# step_start <what>, step_end <result>: the first and last line of a step,
+# dim, as the say lines between them (the indent of the last line stays
+# outside the colour).
+step_start() {
+  end_line
+  CURRENT_STEP="$*"
+  paint 2 "==> $*"
+  printf '\n'
+  IN_LOG=1
+}
+step_end() {
+  end_line
+  printf '    '
+  paint 2 "Done. $*"
+  printf '\n'
+  IN_LOG=""
+}
 
 # show_error <what happened> <what to do next> [raw text]: an error in
 # plain words with the next action, on stderr. Raw text (an error from a
@@ -5021,6 +5062,7 @@ cmd_setup() {
     add_problem --yes "With --non-interactive the script asks nothing, so it cannot ask \"Proceed?\" before it creates the project: add --yes to go ahead, or --dry-run to only see the plan."
   fi
   check_options
+  show_colour_key
   preflight_tools
   preflight_github_account
   preflight_published_version

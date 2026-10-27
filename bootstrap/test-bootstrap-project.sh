@@ -1544,6 +1544,10 @@ COLOUR_OFF="$(printf '\033[0m')"
 # script offers to run (end-to-end run 1 repeated, finding r1d): its
 # instruction line is in COLOUR_ON, the command itself in COMMAND_ON.
 COMMAND_ON="$(printf '\033[1;32m')"
+# The third, for the progress log (Adam, 2026-10-27, with the colour key):
+# dim, which follows the terminal's own text colour on light and dark
+# backgrounds alike.
+LOG_ON="$(printf '\033[2m')"
 # has_esc <file>: the file holds an escape character (the start of a
 # colour code), read through od -c as has_cr does.
 has_esc() { od -A n -c "$1" | grep -F '033' >/dev/null; }
@@ -1626,6 +1630,7 @@ test_no_colour_codes_by_default_in_a_file_or_pipe() {
     printf 'no\n' >"$got.tty"
     ask "Why it is asked, in one sentence." "Name" x; ask_terminal "It runs only if you type yes." "Run it now?" || true
     wait_for_enter || true; say_heading "Here is the plan."; say "What to do next: open it."
+    show_colour_key; step_start "Checking"; say "A line of work."; say_open "Waiting"; say_open " *"; step_end "It works."
     say "$CONTINUE_INTRO"; say_command "bash x.sh --resume"
     guide_begin "The title." "a reason"; guide_step "Run this command:"; say_command "gh auth status"; guide_end a b c
     OFFER=gh-setup-git; offer_command || true; say_command "gh auth status" err
@@ -1641,7 +1646,7 @@ test_the_colour_hook_paints_only_the_lines_the_user_acts_on() {
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
   printf 'no\n' >"$got.tty"
   ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1 BOOTSTRAP_TTY="$got.tty"
-    step_start "Checking"; step_end "It works."; say "A line of work."; say_command "gh auth status"
+    step_start "Checking"; say "A line of work."; step_end "It works."; say_command "gh auth status"
     ask "Why it is asked, in one sentence." "Pack" "" "1) node: the first choice"
     ask_terminal "It runs only if you type yes." "Run it now? (yes or no)" || true
     guide_begin "The title." "a reason"; guide_step "Do it."; guide_end a b c
@@ -1649,7 +1654,9 @@ test_the_colour_hook_paints_only_the_lines_the_user_acts_on() {
     say_heading "Here is the plan."; say "    On GitHub: a/b"
     say "What to do next: open the Claude app." ) <<<"$(printf 'node\nq')" >"$got" 2>"$got.err"
   {
-    printf '%s\n' '==> Checking' '    Done. It works.' 'A line of work.'
+    printf '%s==> Checking%s\n' "$LOG_ON" "$COLOUR_OFF"
+    printf '%sA line of work.%s\n' "$LOG_ON" "$COLOUR_OFF"
+    printf '    %sDone. It works.%s\n' "$LOG_ON" "$COLOUR_OFF"
     printf '    %sgh auth status%s\n' "$COMMAND_ON" "$COLOUR_OFF"
     printf '%s\n' '' 'Why it is asked, in one sentence.' '  1) node: the first choice'
     printf '%sPack:%s \n' "$COLOUR_ON" "$COLOUR_OFF"
@@ -1681,11 +1688,13 @@ test_no_color_and_a_dumb_terminal_win_over_the_colour_hook() {
   # terminal that says it is dumb. An empty NO_COLOR does not count.
   local got="$WORK/got.$RANDOM"
   ( load_script; export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1
+    show_colour_key; step_start "Checking"; say "A line of work."; say_open "Waiting"; say_open " *"; step_end "It works."
     say_heading "Here is the plan."; say "$CONTINUE_INTRO"; say_command "bash x.sh --resume"
     guide_begin "The title." "a reason"; guide_step "Run this command:"; say_command "gh auth status"
     say_command "gh auth status" err; show_error "It broke." "Run it again." ) >"$got" 2>&1
   ! has_esc "$got" || { od -c "$got" | head >&2; die "NO_COLOR did not turn colour off"; }
   ( load_script; unset NO_COLOR; export TERM=dumb BOOTSTRAP_COLOR=1
+    show_colour_key; step_start "Checking"; say "A line of work."; say_open "Waiting"; say_open " *"; step_end "It works."
     say_heading "Here is the plan."; say "$CONTINUE_INTRO"; say_command "bash x.sh --resume"
     guide_begin "The title." "a reason"; guide_step "Run this command:"; say_command "gh auth status"
     say_command "gh auth status" err; show_error "It broke." "Run it again." ) >"$got" 2>&1
@@ -1716,6 +1725,72 @@ test_colour_follows_the_terminal_check_of_the_wait() {
   ! has_esc "$got" || die "TERM=dumb did not win over BOOTSTRAP_STDOUT_TERMINAL=yes"
 }
 
+# Adam, 2026-10-27, with r1d: the progress log in a colour of its own, and
+# a colour key at the start that says in words what each colour marks.
+test_the_progress_log_is_dim_only_when_colour_is_on() {
+  # The log: a step's first and last line, a say inside a step, and the
+  # wait's open line. A say after the step, or inside a block the user
+  # reads (here a guide) even within a step, is not log; a warning is
+  # never dimmed. The indent of the done line stays outside the code.
+  local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
+  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
+    step_start "Checking"; say "A line of work."; say "Warning: be careful."
+    say_open "Waiting"; say_open " *"; step_end "It works."; say "After the step."
+    step_start "Checking again"; guide_begin "The title." "a reason"; say "In the guide."
+    guide_end a b c; step_end "It works now." ) >"$got" 2>"$got.err"
+  {
+    printf '%s==> Checking%s\n' "$LOG_ON" "$COLOUR_OFF"
+    printf '%sA line of work.%s\n' "$LOG_ON" "$COLOUR_OFF"
+    printf '%s\n' 'Warning: be careful.'
+    printf '%sWaiting%s%s *%s\n' "$LOG_ON" "$COLOUR_OFF" "$LOG_ON" "$COLOUR_OFF"
+    printf '    %sDone. It works.%s\n' "$LOG_ON" "$COLOUR_OFF"
+    printf '%s\n' 'After the step.'
+    printf '%s==> Checking again%s\n' "$LOG_ON" "$COLOUR_OFF"
+    printf '%s\n' '' 'The title.' 'Why this is needed: a reason' 'In the guide.' 'When it has worked: a' \
+      'If you see something else: b' 'How the script checks it: c'
+    printf '    %sDone. It works now.%s\n' "$LOG_ON" "$COLOUR_OFF"
+  } >"$want"
+  expect_same "the dim progress log" "$want" "$got"
+  [ ! -s "$got.err" ] || { cat "$got.err" >&2; die "wrote to stderr"; }
+  # Colour off (no terminal, NO_COLOR, TERM=dumb): the same lines, plain.
+  printf '%s\n' '==> Checking' 'A line of work.' 'Waiting *' '    Done. It works.' >"$want"
+  ( load_script; unset NO_COLOR BOOTSTRAP_COLOR BOOTSTRAP_STDOUT_TERMINAL; export TERM=xterm
+    step_start "Checking"; say "A line of work."; say_open "Waiting"; say_open " *"; step_end "It works." ) >"$got"
+  expect_same "the progress log with no terminal" "$want" "$got"
+  ( load_script; export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1
+    step_start "Checking"; say "A line of work."; say_open "Waiting"; say_open " *"; step_end "It works." ) >"$got"
+  expect_same "the progress log with NO_COLOR" "$want" "$got"
+  ( load_script; unset NO_COLOR; export TERM=dumb BOOTSTRAP_COLOR=1
+    step_start "Checking"; say "A line of work."; say_open "Waiting"; say_open " *"; step_end "It works." ) >"$got"
+  expect_same "the progress log with TERM=dumb" "$want" "$got"
+}
+
+test_the_colour_key_says_in_words_what_each_colour_marks() {
+  # At most 4 short lines, one per colour, each in its own colour and
+  # saying in words what it marks, then a blank line; nothing at all when
+  # colour is off.
+  local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
+  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1; show_colour_key; step_start "Checking" ) >"$got"
+  {
+    printf '%sColour key: questions, and what to do next%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '%sColour key: commands to copy or to run%s\n' "$COMMAND_ON" "$COLOUR_OFF"
+    printf '%sColour key: the progress log of what the script does%s\n' "$LOG_ON" "$COLOUR_OFF"
+    printf '\n%s==> Checking%s\n' "$LOG_ON" "$COLOUR_OFF"
+  } >"$want"
+  expect_same "the colour key" "$want" "$got"
+  ( load_script; unset NO_COLOR BOOTSTRAP_COLOR BOOTSTRAP_STDOUT_TERMINAL; export TERM=xterm; show_colour_key ) >"$got"
+  [ ! -s "$got" ] || { cat "$got" >&2; die "a colour key with no terminal"; }
+  ( load_script; export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1; show_colour_key ) >"$got"
+  [ ! -s "$got" ] || { cat "$got" >&2; die "a colour key with NO_COLOR"; }
+  ( load_script; unset NO_COLOR; export TERM=dumb BOOTSTRAP_COLOR=1; show_colour_key ) >"$got"
+  [ ! -s "$got" ] || { cat "$got" >&2; die "a colour key with TERM=dumb"; }
+  # A question right after the key: one blank line between, never two.
+  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1; show_colour_key
+    ask "Why it is asked, in one sentence." "Name" x ) <<<"y" >"$got"
+  [ "$(sed -n '4p;5p' "$got")" = "$(printf '\nWhy it is asked, in one sentence.')" ] \
+    || { od -c "$got" | head -20 >&2; die "the key and a question are not one blank line apart"; }
+}
+
 # End-to-end run 1 repeated, finding r1d (Adam): "When the user is
 # instructed to execute a prompt it should be color coded for easy
 # identification. One color for the instruction [...], another color for
@@ -1727,13 +1802,12 @@ test_an_instruction_and_the_command_below_it_are_in_two_colours() {
   [ "$COMMAND_ON" != "$COLOUR_ON" ] || die "the command colour is the instruction colour"
   advance="$(load_script; printf '%s' "$ADVANCE_INTRO")"
   ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
-    step_end "Checked."; say "$CONTINUE_INTRO"; say_command "bash x.sh --resume"
+    say "$CONTINUE_INTRO"; say_command "bash x.sh --resume"
     say "$START_AGAIN_INTRO"; say_command "bash x.sh"
     say "$ADVANCE_INTRO"; say_command "bash x.sh --resume"
     guide_begin "The title." "a reason"; guide_step "Run this command; it does a thing:"
     say_command "gh auth status"; guide_step "Come back to this window."; guide_end a b c ) >"$got" 2>"$got.err"
   {
-    printf '%s\n' '    Done. Checked.' ''
     printf '%sTo continue the setup, run this command:%s\n' "$COLOUR_ON" "$COLOUR_OFF"
     printf '    %sbash x.sh --resume%s\n' "$COMMAND_ON" "$COLOUR_OFF"
     printf '\n%sTo start again, run this command:%s\n' "$COLOUR_ON" "$COLOUR_OFF"
@@ -7542,8 +7616,10 @@ test_on_a_terminal_the_wait_shows_a_star_a_second_and_each_check_on_a_new_line()
   # Adam's indicator (finding 9): one * per second on the line, a new line
   # at each look. BOOTSTRAP_STDOUT_TERMINAL=yes stands for a terminal.
   # The seconds come one at a time from the sleep hook; the total is the
-  # same as without a terminal.
+  # same as without a terminal. Colour off here: with colour on, the
+  # same lines come with the codes of the progress log (next test).
   local d want
+  export NO_COLOR=1
   d="$(tmpdir)"
   echo 5 >"$d/build-pending"
   export BOOTSTRAP_STDOUT_TERMINAL=yes
@@ -7596,6 +7672,60 @@ test_on_a_terminal_the_wait_shows_a_star_a_second_and_each_check_on_a_new_line()
   expect_rc 0 "$d"
   expect_no_out "$d" '*'
   [ "$(cat "$d/sleep.log")" = 15 ] || { cat "$d/sleep.log" >&2; die "no: not one wait of 15 seconds"; }
+}
+
+test_with_colour_a_whole_run_starts_with_the_colour_key_and_the_stars_end_their_line() {
+  # A whole run on a terminal that takes colour: the colour key first,
+  # once; the log dim; and the wait's stars, each wrapped in the log's
+  # code, end their line before any other line, so with the codes taken
+  # out the wait's lines are the ones the run shows without colour. The
+  # limit reached: the command to continue starts a line of its own,
+  # after a blank line, in the instruction colour.
+  local d want n esc
+  esc="$(printf '\033')"
+  export TERM=xterm BOOTSTRAP_STDOUT_TERMINAL=yes
+  unset NO_COLOR BOOTSTRAP_COLOR
+  d="$(tmpdir)"
+  echo 1 >"$d/build-pending"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 0 "$d"
+  {
+    printf '%sColour key: questions, and what to do next%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '%sColour key: commands to copy or to run%s\n' "$COMMAND_ON" "$COLOUR_OFF"
+    printf '%sColour key: the progress log of what the script does%s\n' "$LOG_ON" "$COLOUR_OFF"
+    printf '\n'
+  } >"$d/want-key"
+  head -n 4 "$d/out" >"$d/got-key"
+  expect_same "the start of a run with colour" "$d/want-key" "$d/got-key"
+  [ "$(grep -c 'Colour key: ' "$d/out")" -eq 3 ] || { cat "$d/out" >&2; die "the colour key is not shown exactly once"; }
+  [ "$(sed -n '5p' "$d/out")" = "${LOG_ON}==> Checking that bash (the program that runs this script) is new enough${COLOUR_OFF}" ] \
+    || { sed -n '1,8p' "$d/out" | od -c | head -20 >&2; die "the first check does not come right after the colour key, dim"; }
+  ! grep -qE '^==> |^    Done\. ' "$d/out" || { grep -E '^==> |^    Done\. ' "$d/out" >&2; die "a step line is not dim"; }
+  ! grep -F '*' "$d/out" | grep -qE "$esc\\[1;3[26]m" || { cat "$d/out" >&2; die "a line of stars goes on with a coloured line"; }
+  sed "s/$esc\\[[0-9;]*m//g" "$d/out" >"$d/plain"
+  want="$(printf '%s\n' \
+    "==> Waiting for the project's check build to pass on the proposed change, for at most 20 minutes" \
+    "$WAIT_LIMIT_LINE" "$WAIT_LINK_LINE" \
+    "The check build has not finished yet; the script looks again every 15 seconds. $STARS_15" \
+    'Checking the build status (15 seconds of at most 20 minutes)' \
+    '    Done. The check build passed on the proposed change.')"
+  [ "$(sed -n "/^==> Waiting for the project's check build/,/^    Done\. The check build/p" "$d/plain")" = "$want" ] \
+    || { cat "$d/plain" >&2; die "with the codes taken out, the wait's lines differ"; }
+  grep -qxF "$FINISHED" "$d/plain" || { cat "$d/out" "$d/err" >&2; die "did not go through"; }
+  d="$(tmpdir)"
+  echo 9999 >"$d/build-pending"
+  setup_run "$d" --non-interactive --yes --ci-timeout 1
+  expect_rc 1 "$d"
+  n="$(grep -nxF "${COLOUR_ON}To continue the setup, run this command:${COLOUR_OFF}" "$d/out" | cut -d: -f1)"
+  [ -n "$n" ] || { od -c "$d/out" | tail -20 >&2; die "timeout: the command to continue is not on a line of its own, in colour"; }
+  [ -z "$(sed -n "$((n - 1))p" "$d/out")" ] || { od -c "$d/out" | tail -20 >&2; die "timeout: no blank line between the stars and the command to continue"; }
+  # Colour off: no key anywhere in a whole run.
+  export NO_COLOR=1
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 0 "$d"
+  expect_no_out "$d" 'Colour key'
+  ! has_esc "$d/out" || die "codes in a run with NO_COLOR"
 }
 
 test_a_wait_in_seconds_is_said_in_minutes_and_seconds() {
