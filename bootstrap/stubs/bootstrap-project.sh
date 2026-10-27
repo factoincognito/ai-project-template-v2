@@ -48,6 +48,10 @@
 #                  as one argument, so the tests never install anything.
 #   BOOTSTRAP_TTY  the terminal the yes to an offered command is read from
 #                  (default: /dev/tty), never stdin.
+#   BOOTSTRAP_INPUT_TERMINAL  yes or no: whether the input of a question
+#                  (stdin, or BOOTSTRAP_TTY for the offer) is a terminal,
+#                  where keys typed before the question are discarded
+#                  (default: asked of the shell, [ -t 0 ]).
 #   BOOTSTRAP_OS_RELEASE  the Linux release file (default: /etc/os-release).
 #   BOOTSTRAP_SLEEP  the command that waits between two checks of GitHub
 #                  (default: sleep). It gets the seconds as its argument.
@@ -393,11 +397,50 @@ ask() {
   ANSWER="${TRIMMED:-$default}"
 }
 
+# input_is_terminal: stdin is a terminal (BOOTSTRAP_INPUT_TERMINAL, yes
+# or no, answers for the tests).
+input_is_terminal() {
+  case "${BOOTSTRAP_INPUT_TERMINAL:-}" in
+    yes) return 0 ;;
+    no) return 1 ;;
+  esac
+  [ -t 0 ]
+}
+
+# discard_typeahead: drops the keys waiting at the terminal on stdin,
+# typed before the question that follows was shown (end-to-end run 1 on
+# v2.7.0, finding r1f: an Enter pressed while the script was busy, during
+# the gh checks, answered "Run it now?" with no before the user saw it).
+# Used before the questions a stray Enter must not answer: the offer to
+# run a command, "Proceed?", and the pause of a guide. It runs only at a
+# terminal: answers from a file or a pipe are all answers and are never
+# dropped. It always returns 0 and never waits: with the terminal set to
+# -icanon min 0 time 0, one dd read returns at once, with what is waiting
+# or with nothing (a whole terminal buffer fits in its 64 KiB), and the
+# saved mode is put back. bash's own read cannot do this on bash 3.2: its
+# read -t 0 fails at once without reading, and read -n sets the terminal
+# to wait for a key. When the mode cannot be saved or set, nothing is
+# read (dd would wait for a whole line); when the saved mode cannot be
+# put back, stty sane brings back a terminal that reads whole lines.
+discard_typeahead() {
+  local saved
+  input_is_terminal || return 0
+  saved="$(stty -g 2>/dev/null)" || return 0
+  [ -n "$saved" ] || return 0
+  if stty -icanon min 0 time 0 2>/dev/null; then
+    dd bs=65536 count=1 >/dev/null 2>&1 || true
+  fi
+  stty "$saved" 2>/dev/null || stty sane 2>/dev/null || true
+  return 0
+}
+
 # wait_for_enter: the pause of a guide. Returns 1 when the user types q
-# (or stop) or stdin has no more lines, else 0 (check again).
+# (or stop) or stdin has no more lines, else 0 (check again). Keys typed
+# before the pause was shown are discarded (discard_typeahead).
 wait_for_enter() {
   local got=""
   block_start
+  discard_typeahead
   painted 'Press Enter to check again, or type q to stop:'
   printf ' '
   if ! IFS= read -r got && [ -z "$got" ]; then
@@ -419,18 +462,29 @@ wait_for_enter() {
 # is no terminal to read from. A terminal that cannot be read is a no at
 # once, with the question line ended. One that can be read but not opened
 # (/dev/tty with no terminal attached) is a no too: the redirection
-# fails, the read does not run, got stays empty, and that is not a yes.
+# fails, nothing in the braces runs, the question is shown with its line
+# ended, and that is not a yes. Keys typed before the question was shown
+# are discarded first (discard_typeahead, finding r1f), with the terminal
+# opened once for the discard and the read.
 ask_terminal() {
-  local tty="${BOOTSTRAP_TTY:-/dev/tty}" got=""
+  local tty="${BOOTSTRAP_TTY:-/dev/tty}" got="" opened="" eof=""
   block_start
   printf '%s\n' "$1"
-  painted "$2 [no]:"
-  printf ' '
-  if [ ! -r "$tty" ]; then
-    printf '\n'
+  if [ -r "$tty" ]; then
+    {
+      opened=1
+      discard_typeahead
+      painted "$2 [no]:"
+      printf ' '
+      IFS= read -r got || eof=1
+    } 2>/dev/null <"$tty" || true
+  fi
+  if [ -z "$opened" ]; then
+    painted "$2 [no]:"
+    printf ' \n'
     return 1
   fi
-  if ! { IFS= read -r got; } 2>/dev/null <"$tty" && [ -z "$got" ]; then
+  if [ -n "$eof" ] && [ -z "$got" ]; then
     printf '\n'
     return 1
   fi
@@ -2761,9 +2815,12 @@ show_plan() {
 # is the safe answer: a stray Enter must create or change nothing, and
 # the explanation says so. A no stops with nothing created (exit 1).
 # --non-interactive without --yes never gets here: cmd_setup refuses it
-# with the other option problems.
+# with the other option problems. Keys typed during the checks before it
+# are discarded (discard_typeahead, finding r1f): the answer is one typed
+# after the plan was shown.
 confirm_plan() {
   [ -z "$OPT_YES" ] || return 0
+  discard_typeahead
   if [ -n "$OPT_RESUME" ]; then
     prompt_for check_yes_no \
       "If you answer yes, the script continues the setup as described above; if you answer no, it stops and changes nothing. Pressing Enter alone answers no, so nothing is changed by accident; type yes to go on." \

@@ -4800,6 +4800,191 @@ test_ask_terminal_says_no_at_once_when_there_is_no_terminal() {
   [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "an error was shown"; }
 }
 
+# Keys typed before a question (end-to-end run 1 on v2.7.0, finding r1f):
+# an Enter pressed while the script was busy waits at the terminal, and
+# the next read takes it, so it answered "Run it now?" with no before the
+# user saw the question. Before such a question the script discards
+# what is waiting at the terminal (discard_typeahead): stty -g, stty
+# -icanon min 0 time 0, one dd read, then the saved mode back.
+# typeahead_tools <dir>: a stand-in stty and dd in <dir>/bin. Both log
+# each call to <dir>/tty.log. stty -g prints "saved-state";
+# STUB_STTY_FAILS names the call that fails: g (stty -g), set (stty
+# -icanon min 0 time 0) or restore (stty saved-state). The dd stands for
+# the read of what is waiting at a terminal: it reads one line, the one
+# typed before the question, and logs it. With BOOTSTRAP_INPUT_TERMINAL=yes
+# a file counts as a terminal, so a file "<waiting line><next line>"
+# plays a terminal with one line waiting.
+typeahead_tools() {
+  local d="$1" text
+  IFS= read -r -d '' text <<EOF || true
+printf '%s\n' "stty \$*" >>"$d/tty.log"
+case "\$*:\${STUB_STTY_FAILS:-}" in
+  -g:g | "-icanon min 0 time 0:set" | saved-state:restore) exit 1 ;;
+esac
+[ "\$*" != -g ] || echo saved-state
+EOF
+  write_stand_in "$d/bin/stty" "$text"
+  IFS= read -r -d '' text <<EOF || true
+printf '%s\n' "dd \$*" >>"$d/tty.log"
+line=""
+IFS= read -r line || true
+printf '%s\n' "dd read: [\$line]" >>"$d/tty.log"
+EOF
+  write_stand_in "$d/bin/dd" "$text"
+}
+
+# The calls of a discard that worked, with an empty line waiting.
+TYPEAHEAD_DISCARDED="$(printf '%s\n' 'stty -g' 'stty -icanon min 0 time 0' 'dd bs=65536 count=1' 'dd read: []' 'stty saved-state')"
+
+test_the_run_offer_is_not_answered_by_keys_typed_before_it() {
+  # r1f: an empty line waits at the terminal; the line typed after the
+  # question is yes. The waiting line is discarded, the question reads
+  # yes, and stdin is not touched.
+  local d
+  d="$(tmpdir)"
+  typeahead_tools "$d"
+  printf '\nyes\n' >"$d/tty"
+  printf 'from stdin\n' >"$d/in"
+  set +e
+  ( load_script
+    export PATH="$d/bin:$PATH" BOOTSTRAP_TTY="$d/tty" BOOTSTRAP_INPUT_TERMINAL=yes
+    rc=0
+    ask_terminal "Why it is asked, in a sentence." "Run it now? (yes or no)" || rc=$?
+    echo "rc=$rc"
+    IFS= read -r line; echo "stdin=$line"
+  ) <"$d/in" >"$d/out" 2>"$d/err"
+  set -e
+  [ "$(cat "$d/out")" = "$(printf '%s\n' 'Why it is asked, in a sentence.' 'Run it now? (yes or no) [no]: ' 'rc=0' 'stdin=from stdin')" ] \
+    || { cat "$d/out" "$d/err" "$d/tty.log" >&2; die "the waiting line answered the offer"; }
+  [ "$(cat "$d/tty.log")" = "$TYPEAHEAD_DISCARDED" ] || { cat "$d/tty.log" >&2; die "not discarded as expected"; }
+  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "an error was shown"; }
+}
+
+test_keys_are_discarded_only_at_a_terminal_never_from_a_file_or_pipe() {
+  # r1f: answers given in a file or a pipe (the tests, a user's answers)
+  # are all answers: nothing is discarded, and the first line answers, as
+  # before. Checked with the hook unset (the shell is asked: [ -t 0 ]) and
+  # with BOOTSTRAP_INPUT_TERMINAL=no, for the offer, "Proceed?" and the
+  # pause of a guide.
+  local d hook rc
+  for hook in unset no; do
+    d="$(tmpdir)"
+    typeahead_tools "$d"
+    printf '\nyes\n' >"$d/tty"
+    printf '\nyes\n' >"$d/in"
+    set +e
+    ( load_script
+      export PATH="$d/bin:$PATH" BOOTSTRAP_TTY="$d/tty"
+      if [ "$hook" = unset ]; then unset BOOTSTRAP_INPUT_TERMINAL; else export BOOTSTRAP_INPUT_TERMINAL=no; fi
+      rc=0
+      ask_terminal "Why it is asked, in a sentence." "Run it now? (yes or no)" || rc=$?
+      echo "offer rc=$rc"
+      rc=0
+      wait_for_enter <<<"$(printf '\nq')" || rc=$?
+      echo "pause rc=$rc"
+      confirm_plan
+    ) <"$d/in" >"$d/out" 2>"$d/err"
+    rc=$?
+    set -e
+    grep -qx 'offer rc=1' "$d/out" || { cat "$d/out" >&2; die "[$hook] the offer did not read the first line of the file"; }
+    grep -qx 'pause rc=0' "$d/out" || { cat "$d/out" >&2; die "[$hook] the pause did not read the first line of the pipe"; }
+    [ "$rc" -eq 1 ] && grep '^What happened: You answered no' "$d/err" >/dev/null \
+      || { cat "$d/out" "$d/err" >&2; die "[$hook] Proceed? did not read the first line of the file"; }
+    [ ! -e "$d/tty.log" ] || { cat "$d/tty.log" >&2; die "[$hook] stty or dd ran for answers from a file"; }
+  done
+}
+
+test_a_terminal_whose_mode_cannot_be_set_is_read_as_it_is() {
+  # r1f, error paths: the discard never blocks a question and never
+  # leaves the terminal changed. When stty -g fails, nothing more runs;
+  # when the mode cannot be set, dd (which could then wait for a whole
+  # line) does not run and the saved mode is put back; when the saved
+  # mode cannot be put back, stty sane is tried. The question is asked
+  # and read in each case.
+  local d fails want rc_want
+  for fails in g set restore; do
+    d="$(tmpdir)"
+    typeahead_tools "$d"
+    printf '\nyes\n' >"$d/tty"
+    case "$fails" in
+      g) want="stty -g"; rc_want=1 ;;
+      set) want="$(printf '%s\n' 'stty -g' 'stty -icanon min 0 time 0' 'stty saved-state')"; rc_want=1 ;;
+      restore) want="$(printf '%s\n' "$TYPEAHEAD_DISCARDED" 'stty sane')"; rc_want=0 ;;
+    esac
+    set +e
+    ( load_script
+      export PATH="$d/bin:$PATH" BOOTSTRAP_TTY="$d/tty" BOOTSTRAP_INPUT_TERMINAL=yes STUB_STTY_FAILS="$fails"
+      rc=0
+      ask_terminal "Why it is asked, in a sentence." "Run it now? (yes or no)" || rc=$?
+      echo "rc=$rc"
+    ) </dev/null >"$d/out" 2>"$d/err"
+    set -e
+    [ "$(cat "$d/tty.log")" = "$want" ] || { cat "$d/tty.log" >&2; die "[$fails] calls differ"; }
+    [ "$(cat "$d/out")" = "$(printf '%s\n' 'Why it is asked, in a sentence.' 'Run it now? (yes or no) [no]: ' "rc=$rc_want")" ] \
+      || { cat "$d/out" "$d/err" >&2; die "[$fails] the question was not asked and read"; }
+    [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "[$fails] an error was shown"; }
+  done
+}
+
+test_keys_typed_before_a_question_are_discarded_at_a_real_terminal() {
+  # r1f at a real terminal (a pseudo-terminal from python3's pty module,
+  # with this harness's bash: macOS /bin/bash 3.2 and its BSD stty and dd
+  # in CI). The child reads a first line "go" to start, so a second line
+  # sent with it is waiting before the question, as a key pressed while
+  # the script was busy. The driver types yes only once the question is
+  # shown. With a line waiting and with none, the offer and "Proceed?"
+  # read that yes, and nothing waits for ever. Skipped where python3 has
+  # no pty module (Windows).
+  local d mode waiting
+  if ! command -v python3 >/dev/null 2>&1 || ! python3 -I -c 'import pty, termios' >/dev/null 2>&1; then
+    echo "no python3 with a pty module here; skipped"
+    return 0
+  fi
+  d="$(tmpdir)"
+  cat >"$d/drive.py" <<'EOF'
+import os, pty, sys, time, select
+bash, script, call, first = sys.argv[1:5]
+child = ('. "$1"; unset BOOTSTRAP_TTY BOOTSTRAP_INPUT_TERMINAL; export NO_COLOR=1; '
+         'IFS= read -r go; if ( ' + call + ' ); then echo ANSWER=yes; else echo ANSWER=no; fi')
+pid, fd = pty.fork()
+if pid == 0:
+    os.execv(bash, [bash, '-c', child, '_', script])
+os.write(fd, first.encode().replace(b'|', b'\n'))
+out, typed, deadline = b'', False, time.time() + 30
+while time.time() < deadline:
+    if not typed and b'[no]:' in out:
+        os.write(fd, b'yes\n')
+        typed = True
+    r, _, _ = select.select([fd], [], [], 0.2)
+    if not r:
+        continue
+    try:
+        got = os.read(fd, 4096)
+    except OSError:
+        break
+    if not got:
+        break
+    out += got
+else:
+    os.kill(pid, 9)
+    out += b'\nTIMEOUT\n'
+os.waitpid(pid, 0)
+sys.stdout.write(out.decode('utf-8', 'replace'))
+EOF
+  for mode in offer proceed; do
+    for waiting in yes no; do
+      case "$mode" in
+        offer) call='ask_terminal "Why it is asked." "Run it now? (yes or no)"' ;;
+        proceed) call='confirm_plan' ;;
+      esac
+      if [ "$waiting" = yes ]; then first='go||'; else first='go|'; fi
+      python3 -I "$d/drive.py" "$BASH" "$SCRIPT" "$call" "$first" >"$d/out.$mode.$waiting" 2>&1 || true
+      grep -q 'ANSWER=yes' "$d/out.$mode.$waiting" \
+        || { cat "$d/out.$mode.$waiting" >&2; die "[$mode, line waiting: $waiting] the yes typed after the question was not what answered it"; }
+    done
+  done
+}
+
 test_non_interactive_reports_every_option_problem_before_the_checks() {
   # #148 review, finding 5: with --non-interactive the options are checked
   # before the checks of this computer and of GitHub, so one run lists
@@ -5688,6 +5873,36 @@ test_proceed_says_why_its_default_is_no() {
     [ "$why" = "$keep $enter" ] || { cat "$d/out" >&2; die "[$mode] explanation is: $why"; }
     expect_rc 1 "$d"
     sed -n 1p "$d/err" | grep '^What happened: You answered no' >/dev/null || { cat "$d/err" >&2; die "[$mode] Enter did not stop as a no"; }
+  done
+}
+
+test_proceed_and_the_guide_pause_are_not_answered_by_keys_typed_before_them() {
+  # r1f: an Enter pressed during the checks before "Proceed?" would stop
+  # the setup as a no, and one pressed during a check before the pause of
+  # a guide would check again at once. At a terminal (the hook, with the
+  # stand-in stty and dd of typeahead_tools) the waiting empty line is
+  # discarded: "Proceed?" reads the yes typed after it (first run and
+  # --resume), and the pause reads the q.
+  local d mode
+  for mode in first resume pause; do
+    d="$(tmpdir)"
+    typeahead_tools "$d"
+    if [ "$mode" = pause ]; then printf '\nq\n' >"$d/in"; else printf '\nyes\n' >"$d/in"; fi
+    set +e
+    ( load_script
+      export PATH="$d/bin:$PATH" BOOTSTRAP_INPUT_TERMINAL=yes
+      case "$mode" in
+        first) confirm_plan; echo "went on" ;;
+        resume) OPT_RESUME=1; confirm_plan; echo "went on" ;;
+        pause) rc=0; wait_for_enter || rc=$?; echo "pause rc=$rc" ;;
+      esac
+    ) <"$d/in" >"$d/out" 2>"$d/err"
+    set -e
+    case "$mode" in
+      pause) grep -qx 'pause rc=1' "$d/out" || { cat "$d/out" "$d/err" >&2; die "[pause] the waiting line answered the pause"; } ;;
+      *) grep -qx 'went on' "$d/out" || { cat "$d/out" "$d/err" >&2; die "[$mode] the waiting line answered Proceed?"; } ;;
+    esac
+    [ "$(cat "$d/tty.log")" = "$TYPEAHEAD_DISCARDED" ] || { cat "$d/tty.log" >&2; die "[$mode] not discarded as expected"; }
   done
 }
 
