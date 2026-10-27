@@ -5351,6 +5351,9 @@ test_a_signed_out_gh_is_guided_to_sign_in() {
   grep -qxF '    gh auth login -h github.com -p https -w -s workflow' "$d/out" \
     || { cat "$d/out" >&2; die "the sign-in command is not shown"; }
   expect_out "$d" "Authenticate Git"
+  # End-to-end run 2, r2c: under WSL gh cannot open a browser; the guide
+  # says to open the device page yourself, as the README does.
+  expect_out "$d" "if the browser does not open, open https://github.com/login/device yourself"
   expect_out "$d" "To start again, run this command:"
   expect_no_out "$d" "Run it now?"
   expect_nothing_ran "$d"
@@ -11303,36 +11306,73 @@ test_template_readme_has_step_0_and_the_one_command() {
   ! grep -qF 'Turn on branch protection for `main`' "$TEMPLATE_README" || die "the by-hand protection step is still there"
 }
 
+# gh_auth_parts_without <needle> <file>: the parts of a README that have
+# the reader run gh auth login or gh auth refresh, except the item that
+# only describes the permissions guide (the guide gives the steps). A
+# part starts at a line that is not indented, or at a nested "  - "
+# item, and goes on over indented and empty lines (a numbered step with
+# its command). Prints the number of such parts on the first line, then
+# each part that lacks <needle>, one per line, with one space between
+# words (wrapped lines keep their indentation).
+gh_auth_parts_without() {
+  NEEDLE="$1" awk '
+    function check() {
+      if (part !~ /gh auth (login|refresh) -h/) return
+      gsub(/  +/, " ", part)
+      if (index(part, "the script offers to run")) return
+      n++
+      if (!index(part, ENVIRON["NEEDLE"])) hits[++h] = part
+    }
+    /^  - / || /^[^ ]/ { check(); part = "" }
+    { part = part " " $0 }
+    END {
+      check()
+      print n + 0
+      for (i = 1; i <= h; i++) print hits[i]
+    }' "$2"
+}
+
 test_template_readme_says_what_to_answer_wherever_it_has_you_run_gh_auth() {
   # Review of #235, N4: the README's other gh auth refresh (to delete a
   # project made to try things out) can ask gh's question too. Every
   # part of the README that has the reader run gh auth login or gh auth
-  # refresh says to answer Yes to it, except the item that only describes
-  # the permissions guide (the guide gives the step). A part starts at a
-  # line that is not indented, or at a nested "  - " item, and goes on
-  # over indented and empty lines (a numbered step with its command).
-  local part="" line hits="" n=0
-  readme_part_check() {
-    case "$part" in
-      *'gh auth login -h'* | *'gh auth refresh -h'*) ;;
-      *) return 0 ;;
-    esac
-    # Wrapped lines keep their indentation: one space between words.
-    part="$(tr -s ' ' <<<"$part")"
-    case "$part" in *'the script offers to run'*) return 0 ;; esac
-    n=$((n + 1))
-    case "$part" in *'Authenticate Git with your GitHub credentials?'*) ;; *) hits="$hits | $part" ;; esac
-  }
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
-      "" | " "*) case "$line" in "  - "*) readme_part_check; part="" ;; esac ;;
-      *) readme_part_check; part="" ;;
-    esac
-    part="$part $line"
-  done <"$TEMPLATE_README"
-  readme_part_check
-  [ -z "$hits" ] || die "a part of the README has the reader run gh auth without the answer to gh's question:$hits"
+  # refresh says to answer Yes to it.
+  local out n
+  out="$(gh_auth_parts_without 'Authenticate Git with your GitHub credentials?' "$TEMPLATE_README")"
+  n="$(sed -n 1p <<<"$out")"
+  [ -z "$(sed 1d <<<"$out")" ] || die "a part of the README has the reader run gh auth without the answer to gh's question: $(sed 1d <<<"$out")"
   [ "$n" -ge 2 ] || die "found $n parts of the README that have the reader run gh auth, want at least 2 (step 0 and deleting a project)"
+}
+
+test_template_readme_says_what_to_do_when_gh_cannot_open_the_browser() {
+  # End-to-end run 2, r2c: under WSL (Windows' Linux) gh could not open a
+  # browser ("Failed opening a web browser at
+  # https://github.com/login/device") and the README did not say what to
+  # do. Every part of the README that has the reader run gh auth login
+  # or gh auth refresh says to open that page yourself, as the script's
+  # guides do.
+  local out n
+  out="$(gh_auth_parts_without 'browser does not open' "$TEMPLATE_README")"
+  n="$(sed -n 1p <<<"$out")"
+  [ -z "$(sed 1d <<<"$out")" ] || die "a part of the README has the reader run gh auth without saying what to do when the browser does not open: $(sed 1d <<<"$out")"
+  out="$(gh_auth_parts_without 'https://github.com/login/device' "$TEMPLATE_README")"
+  [ -z "$(sed 1d <<<"$out")" ] || die "a part of the README has the reader run gh auth without the address https://github.com/login/device: $(sed 1d <<<"$out")"
+  [ "$n" -ge 2 ] || die "found $n parts of the README that have the reader run gh auth, want at least 2 (step 0 and deleting a project)"
+}
+
+test_gh_auth_part_check_catches_a_part_without_the_text() {
+  # Guards the two checks above: a planted part that runs gh auth
+  # refresh, with neither text, is found, also as a nested item; the
+  # item that describes the permissions guide is not counted.
+  local d out
+  d="$(tmpdir)"
+  printf '%s\n' '- Top item: run' '  `gh auth refresh -h github.com -s x` once.' \
+    '- List:' '  - nested: run `gh auth login -h github.com` and see' '    the browser does not open https://github.com/login/device' \
+    '  - the script offers to run' '    `gh auth refresh -h github.com -s workflow`' >"$d/r"
+  out="$(gh_auth_parts_without 'browser does not open' "$d/r")"
+  [ "$(sed -n 1p <<<"$out")" = 2 ] || { printf '%s\n' "$out" >&2; die "counted $(sed -n 1p <<<"$out") parts, want 2"; }
+  [ "$(sed 1d <<<"$out" | grep -c . || true)" = 1 ] && grep -F 'Top item: run' <<<"$out" >/dev/null \
+    || { printf '%s\n' "$out" >&2; die "the part without the text was not the one found"; }
 }
 
 # README_GUIDES: each guide of the script as "<function>|<group>|<phrase>":

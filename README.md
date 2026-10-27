@@ -57,9 +57,12 @@ Windows.
    If gh asks "Authenticate Git with your GitHub credentials?", answer
    Yes: type y and press Enter, or just press Enter. Then gh shows a
    one-time code and opens your browser (press Enter if it asks first).
-   Enter the code on the GitHub page and approve. When it has worked, gh says "Logged in as" and your GitHub name, and
-   `gh auth status` shows your account. If you see something else, run
-   the line again.
+   Enter the code on the GitHub page and approve. If the browser does
+   not open (as in WSL, the Linux inside Windows), open
+   https://github.com/login/device in your browser yourself and enter
+   the code there. When it has worked, gh says "Logged in as" and your
+   GitHub name, and `gh auth status` shows your account. If you see
+   something else, run the line again.
 
 **Step 1: run the setup.** In the same window, go to the folder that
 should hold the new project (for example `cd ~/Documents`), then copy
@@ -183,8 +186,9 @@ here first:
   Delete this repository (GitHub's word for a project).
   Or in the same window, run
   `gh auth refresh -h github.com -s delete_repo` once (if gh asks
-  "Authenticate Git with your GitHub credentials?", answer Yes), then
-  `gh repo delete OWNER/NAME --yes`. The script never deletes a
+  "Authenticate Git with your GitHub credentials?", answer Yes; if the
+  browser does not open, open https://github.com/login/device yourself
+  and enter the code there), then `gh repo delete OWNER/NAME --yes`. The script never deletes a
   project.
 
 A project can also be made with the "Use this template" button on the
