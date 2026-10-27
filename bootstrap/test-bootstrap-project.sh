@@ -1172,7 +1172,7 @@ use_home() {
 # What reaches the terminal some other way is the job of bypass_lines;
 # what it cannot see is listed there.
 
-MSG_HELPERS='say|say_note|say_heading|step_start|step_end|show_error|fail|lp_fail|stop_with_error|ask|ask_terminal|prompt_for|answer|add_problem|guide_begin|guide_step|guide_end'
+MSG_HELPERS='say|say_note|say_log|say_sign|say_heading|step_start|step_end|show_error|fail|lp_fail|stop_with_error|ask|ask_terminal|prompt_for|answer|add_problem|guide_begin|guide_step|guide_end'
 
 # user_strings <file>: prints "<line number>: <text>" for each.
 user_strings() {
@@ -1608,11 +1608,16 @@ test_fail_exits_with_the_code_it_is_given() {
 # two, and the lines the user must act on are in one colour, only at a
 # terminal that takes colour (BOOTSTRAP_COLOR stands in for the terminal).
 
+# End-to-end run 1 on v2.7.0, finding r1g (Adam): a line where the user
+# types an answer (COLOUR_ON) is told apart from the text the user reads
+# to act (READ_ON: the explanation above a question, a guide, "What to do
+# next", the instruction line above a command).
 COLOUR_ON="$(printf '\033[1;36m')"
 COLOUR_OFF="$(printf '\033[0m')"
-# The second colour, for a command the user is to copy or that the
+READ_ON="$(printf '\033[1;33m')"
+# The command colour, for a command the user is to copy or that the
 # script offers to run (end-to-end run 1 repeated, finding r1d): its
-# instruction line is in COLOUR_ON, the command itself in COMMAND_ON.
+# instruction line is in READ_ON, the command itself in COMMAND_ON.
 COMMAND_ON="$(printf '\033[1;32m')"
 # The third, for the progress log (Adam, 2026-10-27, with the colour key):
 # dim, which follows the terminal's own text colour on light and dark
@@ -1634,6 +1639,81 @@ test_a_question_after_progress_lines_comes_after_one_blank_line() {
   printf '%s\n' 'Why it is asked, in one sentence.' 'Name [x]: ' >"$want"
   ( load_script; ask "Why it is asked, in one sentence." "Name" x ) <<<"y" >"$got"
   expect_same "a question printed first" "$want" "$got"
+}
+
+test_the_log_after_a_question_comes_after_one_blank_line() {
+  # r1i (run 1 on v2.7.0; Adam: fold it into #248): the progress log that
+  # follows the last answer is set apart by one blank line, as under #202,
+  # after any question or prompt: a question, a question asked at the
+  # terminal, the pause of a guide. Never two blank lines, and a question
+  # right after another still has one blank line between.
+  local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
+  printf 'no\n' >"$got.tty"
+  ( load_script; export BOOTSTRAP_TTY="$got.tty"
+    ask "Why it is asked, in one sentence." "Your email address for git" a@b.c
+    step_start "Checking that npm is installed"; say "A line of work."
+    ask_terminal "It runs only if you type yes." "Run it now? (yes or no)" || true; step_end "It works."
+    wait_for_enter || true; say_log "Checking again."; step_end "It works now."
+    ask "Why the first one." First a; ask "Why the second one." Second b; step_start "Next"
+  ) <<<"$(printf 'x@y.z\n\n1\n2')" >"$got" 2>"$got.err"
+  printf '%s\n' 'Why it is asked, in one sentence.' 'Your email address for git [a@b.c]: ' \
+    '' '==> Checking that npm is installed' 'A line of work.' \
+    '' 'It runs only if you type yes.' 'Run it now? (yes or no) [no]: ' '' '    Done. It works.' \
+    '' 'Press Enter to check again, or type q to stop: ' '' 'Checking again.' '    Done. It works now.' \
+    '' 'Why the first one.' 'First [a]: ' '' 'Why the second one.' 'Second [b]: ' '' '==> Next' >"$want"
+  expect_same "the log after a question" "$want" "$got"
+  [ ! -s "$got.err" ] || { cat "$got.err" >&2; die "wrote to stderr"; }
+}
+
+test_an_offered_command_run_after_yes_never_doubles_a_blank_line() {
+  # #248 review, B1: after yes to "Run it now?", the blank line of r1i
+  # comes right after the answer, before the command's own output, which
+  # no helper sees; so output that ends in a blank line is not followed
+  # by a second one before "The command finished".
+  local d want
+  d="$(tmpdir)"
+  printf 'yes\n' >"$d/tty"
+  printf '%s\n' '#!/bin/sh' 'printf "output of the command: %s\n\n" "$1"' >"$d/run"
+  chmod +x "$d/run"
+  ( load_script; export BOOTSTRAP_TTY="$d/tty" BOOTSTRAP_RUN="$d/run"; OFFER=gh-setup-git; offer_command ) >"$d/out" 2>"$d/err"
+  want="$(printf '%s\n' 'The script can run this command for you:' '    gh auth setup-git' '' \
+    'It runs only if you type yes; Enter or any other answer skips it, and you can run it yourself.' \
+    'Run it now? (yes or no) [no]: ' '' 'output of the command: gh auth setup-git' '' \
+    'The command finished. Checking again.')"
+  [ "$(cat "$d/out")" = "$want" ] || { printf 'want:\n%s\ngot:\n' "$want" >&2; cat "$d/out" >&2; die "the lines around an offered command differ"; }
+  ! awk 'prev == "" && NR > 1 && $0 == "" { bad = 1 } { prev = $0 } END { exit !bad }' "$d/out" \
+    || { cat "$d/out" >&2; die "two blank lines in a row"; }
+}
+
+test_the_log_after_the_command_to_continue_comes_after_one_blank_line() {
+  # #248 review, N3: the block with the command to continue, shown after
+  # "Proceed?" and before the first change, is set apart from the log that
+  # follows it by one blank line, as after a question (r1i): in a new
+  # setup before "==> Creating the project", and in a continued one before
+  # its next step.
+  local d n
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 0 "$d"
+  n="$(grep -nxF "$(load_script; printf '%s' "$ADVANCE_INTRO")" "$d/out" | cut -d: -f1)"
+  [ -n "$n" ] || { cat "$d/out" >&2; die "no command to continue"; }
+  [ "$(sed -n "$((n + 2)),$((n + 4))p" "$d/out")" = "$(printf '%s\n\n%s' \
+    'If the project was not created yet, that command says so and shows the command to start again.' \
+    '==> Creating the project octo-user/my-app on GitHub')" ] \
+    || { sed -n "$n,$((n + 5))p" "$d/out" >&2; die "no blank line between the command to continue and the log"; }
+  # Continued with --resume after the limit of the wait: the command, one
+  # blank line, the next step.
+  d="$(tmpdir)"
+  echo 9999 >"$d/build-pending"
+  setup_run "$d" --non-interactive --yes --ci-timeout 1
+  expect_rc 1 "$d"
+  echo 0 >"$d/build-pending"
+  again "$d"
+  expect_rc 0 "$d"
+  n="$(grep -nxF "$(load_script; printf '%s' "$ADVANCE_INTRO")" "$d/out" | cut -d: -f1)"
+  [ -n "$n" ] || { cat "$d/out" >&2; die "resume: no command to continue"; }
+  [ -z "$(sed -n "$((n + 2))p" "$d/out")" ] && sed -n "$((n + 3))p" "$d/out" | grep '^==> ' >/dev/null \
+    || { sed -n "$n,$((n + 4))p" "$d/out" >&2; die "resume: no blank line between the command to continue and the next step"; }
 }
 
 test_blocks_one_after_another_have_one_blank_line_between_never_two() {
@@ -1722,22 +1802,39 @@ test_the_colour_hook_paints_only_the_lines_the_user_acts_on() {
     guide_begin "The title." "a reason"; guide_step "Do it."; guide_end a b c
     wait_for_enter || true
     say_heading "Here is the plan."; say "    On GitHub: a/b"
-    say "What to do next: open the Claude app." ) <<<"$(printf 'node\nq')" >"$got" 2>"$got.err"
+    say "What to do next: open the Claude app."; say "If you ever feel stuck, ask Clead."
+    step_start "Checking"; say_note "You can follow the check here: x"; step_end "It works." ) <<<"$(printf 'node\nq')" >"$got" 2>"$got.err"
+  # r1g: the line where the user types an answer in one colour (COLOUR_ON,
+  # up to the space where the answer goes); the text read to act (the
+  # explanation above a question, a guide's title, why, steps, "When it
+  # has worked" and "If you see something else", the plan's heading,
+  # "What to do next", a note) in another (READ_ON). The choices, "How the
+  # script checks it", the plan's lines and the closing help line stay
+  # plain.
   {
     printf '%s==> Checking%s\n' "$LOG_ON" "$COLOUR_OFF"
     printf '%sA line of work.%s\n' "$LOG_ON" "$COLOUR_OFF"
     printf '    %sDone. It works.%s\n' "$LOG_ON" "$COLOUR_OFF"
     printf '    %sgh auth status%s\n' "$COMMAND_ON" "$COLOUR_OFF"
-    printf '%s\n' '' 'Why it is asked, in one sentence.' '  1) node: the first choice'
+    printf '\n%sWhy it is asked, in one sentence.%s\n' "$READ_ON" "$COLOUR_OFF"
+    printf '%s\n' '  1) node: the first choice'
     printf '%sPack:%s \n' "$COLOUR_ON" "$COLOUR_OFF"
-    printf '\n%s\n' 'It runs only if you type yes.'
+    printf '\n%sIt runs only if you type yes.%s\n' "$READ_ON" "$COLOUR_OFF"
     printf '%sRun it now? (yes or no) [no]:%s \n' "$COLOUR_ON" "$COLOUR_OFF"
-    printf '%s\n' '' 'The title.' 'Why this is needed: a reason' '  1. Do it.' 'When it has worked: a' \
-      'If you see something else: b' 'How the script checks it: c' ''
+    printf '\n%sThe title.%s\n' "$READ_ON" "$COLOUR_OFF"
+    printf '%sWhy this is needed: a reason%s\n' "$READ_ON" "$COLOUR_OFF"
+    printf '  %s1. Do it.%s\n' "$READ_ON" "$COLOUR_OFF"
+    printf '%sWhen it has worked: a%s\n' "$READ_ON" "$COLOUR_OFF"
+    printf '%sIf you see something else: b%s\n' "$READ_ON" "$COLOUR_OFF"
+    printf '%s\n' 'How the script checks it: c' ''
     printf '%sPress Enter to check again, or type q to stop:%s \n' "$COLOUR_ON" "$COLOUR_OFF"
-    printf '\n%sHere is the plan.%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '\n%sHere is the plan.%s\n' "$READ_ON" "$COLOUR_OFF"
     printf '%s\n' '    On GitHub: a/b' ''
-    printf '%sWhat to do next: open the Claude app.%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '%sWhat to do next: open the Claude app.%s\n' "$READ_ON" "$COLOUR_OFF"
+    printf '%s\n' 'If you ever feel stuck, ask Clead.'
+    printf '%s==> Checking%s\n' "$LOG_ON" "$COLOUR_OFF"
+    printf '%sYou can follow the check here: x%s\n' "$READ_ON" "$COLOUR_OFF"
+    printf '    %sDone. It works.%s\n' "$LOG_ON" "$COLOUR_OFF"
   } >"$want"
   expect_same "painted lines" "$want" "$got"
   [ ! -s "$got.err" ] || { cat "$got.err" >&2; die "wrote to stderr"; }
@@ -1746,10 +1843,77 @@ test_the_colour_hook_paints_only_the_lines_the_user_acts_on() {
     show_error "It broke." "Run it again." "raw text" ) 2>"$got"
   {
     printf '%s\n' 'What happened: It broke.'
-    printf '%sWhat to do next: Run it again.%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '%sWhat to do next: Run it again.%s\n' "$READ_ON" "$COLOUR_OFF"
     printf '%s\n' 'Details for support (you can ignore these):' '    raw text'
   } >"$want"
   expect_same "a painted stop" "$want" "$got"
+}
+
+# every_line_kind <tty file>: one of each kind of line the script prints,
+# on stdout and stderr (call after load_script; stdin gives the answers).
+every_line_kind() {
+  printf 'no\n' >"$1"
+  export BOOTSTRAP_TTY="$1"
+  show_colour_key; step_start "Checking"; say "A line of work."; say "Warning: be careful."
+  say_note "You can follow the check here: x"; say_open "Waiting"; say_open " *"; step_end "It works."
+  ask "Why it is asked, in one sentence." "Pack" "" "1) node: the first choice"
+  ask_terminal "It runs only if you type yes." "Run it now? (yes or no)" || true
+  guide_begin "The title." "a reason"; guide_step "Run this command:"; say_command "gh auth status"
+  guide_step "Come back to this window."; guide_end a b c; guide_details "raw text"
+  OFFER=gh-setup-git; offer_command || true; wait_for_enter || true
+  say_heading "Here is the plan."; say "    On GitHub: a/b"
+  say "$ADVANCE_INTRO"; say_command "bash x.sh --resume"; say "$CONTINUE_INTRO"; say_command "bash x.sh --resume"
+  say "What to do next: open it."; say "If you ever feel stuck, ask Clead."
+  say_command "gh auth status" err; show_error "It broke." "Run it again." "raw text"
+}
+
+test_colour_off_output_is_the_coloured_output_without_its_codes() {
+  # r1g: the colours change no text. With colour forced, every kind of
+  # line with its codes taken out is the output without a terminal, byte
+  # for byte (the key aside, which only colour shows); NO_COLOR and
+  # TERM=dumb give exactly the output without a terminal.
+  local d esc
+  d="$(tmpdir)"
+  esc="$(printf '\033')"
+  ( load_script; unset BOOTSTRAP_COLOR NO_COLOR BOOTSTRAP_STDOUT_TERMINAL; export TERM=xterm
+    every_line_kind "$d/tty" ) <<<"$(printf 'node\nq')" >"$d/plain" 2>"$d/plain.err"
+  ! has_esc "$d/plain" && ! has_esc "$d/plain.err" || die "codes without a terminal"
+  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
+    every_line_kind "$d/tty" ) <<<"$(printf 'node\nq')" >"$d/colour" 2>"$d/colour.err"
+  grep -F "$READ_ON" "$d/colour" >/dev/null || die "no line in the read colour"
+  grep -F "$COLOUR_ON" "$d/colour" >/dev/null || die "no line in the answer colour"
+  sed "s/$esc\\[[0-9;]*m//g" "$d/colour" | sed '/^Colour key: /d' | sed '1{/^$/d;}' >"$d/stripped"
+  sed "s/$esc\\[[0-9;]*m//g" "$d/colour.err" >"$d/stripped.err"
+  expect_same "stdout with the codes taken out" "$d/plain" "$d/stripped"
+  expect_same "stderr with the codes taken out" "$d/plain.err" "$d/stripped.err"
+  ( load_script; export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1
+    every_line_kind "$d/tty" ) <<<"$(printf 'node\nq')" >"$d/nc" 2>"$d/nc.err"
+  cmp -s "$d/plain" "$d/nc" && cmp -s "$d/plain.err" "$d/nc.err" || die "NO_COLOR output differs from the output without a terminal"
+  ( load_script; unset NO_COLOR; export TERM=dumb BOOTSTRAP_COLOR=1
+    every_line_kind "$d/tty" ) <<<"$(printf 'node\nq')" >"$d/dumb" 2>"$d/dumb.err"
+  cmp -s "$d/plain" "$d/dumb" && cmp -s "$d/plain.err" "$d/dumb.err" || die "TERM=dumb output differs from the output without a terminal"
+}
+
+test_the_read_colour_stays_off_the_log_the_plan_lines_and_the_report() {
+  # r1g, "not a lit-up Christmas tree": the read colour marks only what
+  # the user reads to act. A progress line, a warning, a line of the plan
+  # or of the report, "How the script checks it", "What happened" and the
+  # details for support never carry it.
+  local d l
+  d="$(tmpdir)"
+  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
+    every_line_kind "$d/tty" ) <<<"$(printf 'node\nq')" >"$d/out" 2>"$d/err"
+  for l in '==> Checking' 'A line of work.' 'Warning: be careful.' 'Waiting' 'Done. It works.' \
+    '1) node: the first choice' 'How the script checks it: c' 'Details for support' 'raw text' \
+    'On GitHub: a/b' 'If you ever feel stuck, ask Clead.' 'What happened: It broke.'; do
+    ! grep -F -- "$l" "$d/out" "$d/err" | grep -F "$READ_ON" >/dev/null || { grep -F -- "$l" "$d/out" "$d/err" | od -c | head >&2; die "in the read colour: $l"; }
+  done
+  # The lines offered with a command: its line in the read colour, the
+  # question in the answer colour, and the line after a no in the read
+  # colour, as it tells the user what to do.
+  grep -qxF "${READ_ON}The script can run this command for you:${COLOUR_OFF}" "$d/out" || { od -c "$d/out" | head -60 >&2; die "the offer's line is not in the read colour"; }
+  grep -qF "${COLOUR_ON}Run it now? (yes or no) [no]:${COLOUR_OFF} " "$d/out" || die "the offer's question is not in the answer colour"
+  grep -qF "${READ_ON}Not run. To run it yourself" "$d/out" || { grep -F 'Not run' "$d/out" | od -c >&2; die "the line after a no is not in the read colour"; }
 }
 
 test_no_color_and_a_dumb_terminal_win_over_the_colour_hook() {
@@ -1782,7 +1946,7 @@ test_colour_follows_the_terminal_check_of_the_wait() {
   local got="$WORK/got.$RANDOM"
   ( load_script; unset NO_COLOR BOOTSTRAP_COLOR; export TERM=xterm BOOTSTRAP_STDOUT_TERMINAL=yes
     say_heading "Here is the plan."; show_error "It broke." "Run it again." ) >"$got" 2>"$got.err"
-  grep -qF "${COLOUR_ON}Here is the plan.${COLOUR_OFF}" "$got" || { od -c "$got" | head >&2; die "no colour with BOOTSTRAP_STDOUT_TERMINAL=yes"; }
+  grep -qF "${READ_ON}Here is the plan.${COLOUR_OFF}" "$got" || { od -c "$got" | head >&2; die "no colour with BOOTSTRAP_STDOUT_TERMINAL=yes"; }
   ! has_esc "$got.err" || { od -c "$got.err" | head >&2; die "colour on stderr that is a file"; }
   ( load_script; unset NO_COLOR BOOTSTRAP_COLOR; export TERM=xterm BOOTSTRAP_STDOUT_TERMINAL=no
     say_heading "Here is the plan." ) >"$got"
@@ -1802,22 +1966,29 @@ test_the_progress_log_is_dim_only_when_colour_is_on() {
   # wait's open line. A say after the step, or inside a block the user
   # reads (here a guide) even within a step, is not log; a warning is
   # never dimmed. The indent of the done line stays outside the code.
+  # r1h: the signs of life of the wait (its lines and the stars on a line
+  # of their own) are not dim, so they are easy to see. r1g: say_log is dim
+  # also after a block the user reads (what the script did after an answer).
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
   ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
     step_start "Checking"; say "A line of work."; say "Warning: be careful."
-    say_open "Waiting"; say_open " *"; step_end "It works."; say "After the step."
+    wait_line "Waiting"; say_open "*"; say_open "*"; step_end "It works."; say "After the step."
     step_start "Checking again"; guide_begin "The title." "a reason"; say "In the guide."
-    guide_end a b c; step_end "It works now." ) >"$got" 2>"$got.err"
+    guide_end a b c; say_log "Not made public."; step_end "It works now." ) >"$got" 2>"$got.err"
   {
     printf '%s==> Checking%s\n' "$LOG_ON" "$COLOUR_OFF"
     printf '%sA line of work.%s\n' "$LOG_ON" "$COLOUR_OFF"
-    printf '%s\n' 'Warning: be careful.'
-    printf '%sWaiting%s%s *%s\n' "$LOG_ON" "$COLOUR_OFF" "$LOG_ON" "$COLOUR_OFF"
+    printf '%s\n' 'Warning: be careful.' 'Waiting' '**'
     printf '    %sDone. It works.%s\n' "$LOG_ON" "$COLOUR_OFF"
     printf '%s\n' 'After the step.'
     printf '%s==> Checking again%s\n' "$LOG_ON" "$COLOUR_OFF"
-    printf '%s\n' '' 'The title.' 'Why this is needed: a reason' 'In the guide.' 'When it has worked: a' \
-      'If you see something else: b' 'How the script checks it: c'
+    printf '\n%sThe title.%s\n' "$READ_ON" "$COLOUR_OFF"
+    printf '%sWhy this is needed: a reason%s\n' "$READ_ON" "$COLOUR_OFF"
+    printf '%s\n' 'In the guide.'
+    printf '%sWhen it has worked: a%s\n' "$READ_ON" "$COLOUR_OFF"
+    printf '%sIf you see something else: b%s\n' "$READ_ON" "$COLOUR_OFF"
+    printf '%s\n' 'How the script checks it: c'
+    printf '%sNot made public.%s\n' "$LOG_ON" "$COLOUR_OFF"
     printf '    %sDone. It works now.%s\n' "$LOG_ON" "$COLOUR_OFF"
   } >"$want"
   expect_same "the dim progress log" "$want" "$got"
@@ -1840,13 +2011,15 @@ test_lines_inside_a_step_the_user_may_act_on_are_not_dim() {
   # option or something to set is said with say_note, never dim; the
   # progress lines around it stay dim.
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM" d l
+  # r1g: such a line is in the read colour, as it tells the user what to
+  # read and do.
   ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
     step_start "Checking"; say "Working."; say_note "You can follow the check here: x"
     say "More work."; step_end "It works." ) >"$got"
   {
     printf '%s==> Checking%s\n' "$LOG_ON" "$COLOUR_OFF"
     printf '%sWorking.%s\n' "$LOG_ON" "$COLOUR_OFF"
-    printf '%s\n' 'You can follow the check here: x'
+    printf '%sYou can follow the check here: x%s\n' "$READ_ON" "$COLOUR_OFF"
     printf '%sMore work.%s\n' "$LOG_ON" "$COLOUR_OFF"
     printf '    %sDone. It works.%s\n' "$LOG_ON" "$COLOUR_OFF"
   } >"$want"
@@ -1864,7 +2037,7 @@ test_lines_inside_a_step_the_user_may_act_on_are_not_dim() {
   for l in "GitHub does not say which permissions this sign-in has, as with a fine-grained token (a key made on GitHub with chosen permissions)." \
     "The setup needs these permissions, each set to \"Read and write\": Administration, Contents, Workflows and Pull requests; and your account must be allowed to create repositories (new projects on GitHub)." \
     "If one of them is missing, a later step stops and says so."; do
-    grep -qxF -- "$l" "$d/out" || { od -c "$d/out" | head -40 >&2; die "permissions: not plain: $l"; }
+    grep -qxF -- "${READ_ON}$l${COLOUR_OFF}" "$d/out" || { od -c "$d/out" | head -40 >&2; die "permissions: not in the read colour: $l"; }
   done
   # Going on without protection (--allow-unprotected), GitHub Actions not
   # checked, and the wait's limit and link to the checks, in one run.
@@ -1883,7 +2056,7 @@ test_lines_inside_a_step_the_user_may_act_on_are_not_dim() {
     "You chose to go on without protection with --allow-unprotected, so the script goes on, and writes that decision into the project's memory/decisions.md." \
     "The script could not check whether GitHub Actions is turned on for the project: GitHub did not say (its answer is below). This check only warns early, so the setup goes on." \
     "$WAIT_LIMIT_LINE" "$WAIT_LINK_LINE"; do
-    grep -qxF -- "$l" "$d/out" || { cat "$d/out" >&2; die "not plain: $l"; }
+    grep -qxF -- "${READ_ON}$l${COLOUR_OFF}" "$d/out" || { cat "$d/out" >&2; die "not in the read colour: $l"; }
   done
   # A licence typed at the question that GitHub does not know (#237
   # delta review, B1): the problem and "Please try again." come inside
@@ -1898,22 +2071,37 @@ test_lines_inside_a_step_the_user_may_act_on_are_not_dim() {
   grep -qxF "${LOG_ON}==> Checking that GitHub knows the licence mti${COLOUR_OFF}" "$d/out" \
     || { od -c "$d/out" | head -20 >&2; die "licence: the step line is not dim"; }
   l="GitHub has no licence with the short name mti. Use none, one of the listed licences, or the short name of a licence on https://choosealicense.com/licenses/ (each licence's page shows its short name, such as mit). Please try again."
-  grep -qxF -- "$l" "$d/out" || { grep -F 'no licence with the short name' "$d/out" | od -c | head -20 >&2; die "licence: not plain: $l"; }
+  grep -qxF -- "${READ_ON}$l${COLOUR_OFF}" "$d/out" || { grep -F 'no licence with the short name' "$d/out" | od -c | head -20 >&2; die "licence: not in the read colour: $l"; }
 }
 
 test_the_colour_key_says_in_words_what_each_colour_marks() {
   # At most 4 short lines, one per colour, each in its own colour and
   # saying in words what it marks, then a blank line; nothing at all when
-  # colour is off.
+  # colour is off. r1g: four colours, the answer line and the text read to
+  # act apart.
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
   ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1; show_colour_key; step_start "Checking" ) >"$got"
   {
-    printf '%sColour key: questions, and what to do next%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '%sColour key: where you type an answer%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '%sColour key: what to read and do%s\n' "$READ_ON" "$COLOUR_OFF"
     printf '%sColour key: commands to copy or to run%s\n' "$COMMAND_ON" "$COLOUR_OFF"
     printf '%sColour key: the progress log of what the script does%s\n' "$LOG_ON" "$COLOUR_OFF"
     printf '\n%s==> Checking%s\n' "$LOG_ON" "$COLOUR_OFF"
   } >"$want"
   expect_same "the colour key" "$want" "$got"
+  # Adam's fallback (r1g, 15:23): the answer line and the text read to act
+  # in one colour, changed in one place (READ_COLOUR); the key then shows
+  # them as one line, and every such line is in that colour.
+  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1; READ_COLOUR="$ANSWER_COLOUR"
+    show_colour_key; ask "Why it is asked, in one sentence." "Name" x ) <<<"y" >"$got"
+  {
+    printf '%sColour key: where you type an answer, and what to read and do%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '%sColour key: commands to copy or to run%s\n' "$COMMAND_ON" "$COLOUR_OFF"
+    printf '%sColour key: the progress log of what the script does%s\n' "$LOG_ON" "$COLOUR_OFF"
+    printf '\n%sWhy it is asked, in one sentence.%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '%sName [x]:%s \n' "$COLOUR_ON" "$COLOUR_OFF"
+  } >"$want"
+  expect_same "the colour key with the answer and read colours the same" "$want" "$got"
   ( load_script; unset NO_COLOR BOOTSTRAP_COLOR BOOTSTRAP_STDOUT_TERMINAL; export TERM=xterm; show_colour_key ) >"$got"
   [ ! -s "$got" ] || { cat "$got" >&2; die "a colour key with no terminal"; }
   ( load_script; export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1; show_colour_key ) >"$got"
@@ -1923,7 +2111,7 @@ test_the_colour_key_says_in_words_what_each_colour_marks() {
   # A question right after the key: one blank line between, never two.
   ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1; show_colour_key
     ask "Why it is asked, in one sentence." "Name" x ) <<<"y" >"$got"
-  [ "$(sed -n '4p;5p' "$got")" = "$(printf '\nWhy it is asked, in one sentence.')" ] \
+  [ "$(sed -n '5p;6p' "$got")" = "$(printf '\n%sWhy it is asked, in one sentence.%s' "$READ_ON" "$COLOUR_OFF")" ] \
     || { od -c "$got" | head -20 >&2; die "the key and a question are not one blank line apart"; }
 }
 
@@ -1935,7 +2123,7 @@ test_the_colour_key_says_in_words_what_each_colour_marks() {
 # the indent in front of it.
 test_an_instruction_and_the_command_below_it_are_in_two_colours() {
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM" n advance
-  [ "$COMMAND_ON" != "$COLOUR_ON" ] || die "the command colour is the instruction colour"
+  [ "$COMMAND_ON" != "$READ_ON" ] || die "the command colour is the instruction colour"
   advance="$(load_script; printf '%s' "$ADVANCE_INTRO")"
   ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
     say "$CONTINUE_INTRO"; say_command "bash x.sh --resume"
@@ -1943,18 +2131,23 @@ test_an_instruction_and_the_command_below_it_are_in_two_colours() {
     say "$ADVANCE_INTRO"; say_command "bash x.sh --resume"
     guide_begin "The title." "a reason"; guide_step "Run this command; it does a thing:"
     say_command "gh auth status"; guide_step "Come back to this window."; guide_end a b c ) >"$got" 2>"$got.err"
+  # r1g: the instruction lines in the read colour, as every step of a
+  # guide, with or without a command below it.
   {
-    printf '%sTo continue the setup, run this command:%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '%sTo continue the setup, run this command:%s\n' "$READ_ON" "$COLOUR_OFF"
     printf '    %sbash x.sh --resume%s\n' "$COMMAND_ON" "$COLOUR_OFF"
-    printf '\n%sTo start again, run this command:%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '\n%sTo start again, run this command:%s\n' "$READ_ON" "$COLOUR_OFF"
     printf '    %sbash x.sh%s\n' "$COMMAND_ON" "$COLOUR_OFF"
-    printf '\n%s%s%s\n' "$COLOUR_ON" "$advance" "$COLOUR_OFF"
+    printf '\n%s%s%s\n' "$READ_ON" "$advance" "$COLOUR_OFF"
     printf '    %sbash x.sh --resume%s\n' "$COMMAND_ON" "$COLOUR_OFF"
-    printf '%s\n' '' 'The title.' 'Why this is needed: a reason'
-    printf '  %s1. Run this command; it does a thing:%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '\n%sThe title.%s\n' "$READ_ON" "$COLOUR_OFF"
+    printf '%sWhy this is needed: a reason%s\n' "$READ_ON" "$COLOUR_OFF"
+    printf '  %s1. Run this command; it does a thing:%s\n' "$READ_ON" "$COLOUR_OFF"
     printf '    %sgh auth status%s\n' "$COMMAND_ON" "$COLOUR_OFF"
-    printf '%s\n' '  2. Come back to this window.' 'When it has worked: a' \
-      'If you see something else: b' 'How the script checks it: c'
+    printf '  %s2. Come back to this window.%s\n' "$READ_ON" "$COLOUR_OFF"
+    printf '%sWhen it has worked: a%s\n' "$READ_ON" "$COLOUR_OFF"
+    printf '%sIf you see something else: b%s\n' "$READ_ON" "$COLOUR_OFF"
+    printf '%s\n' 'How the script checks it: c'
   } >"$want"
   expect_same "an instruction and its command" "$want" "$got"
   [ ! -s "$got.err" ] || { cat "$got.err" >&2; die "wrote to stderr"; }
@@ -1963,7 +2156,7 @@ test_an_instruction_and_the_command_below_it_are_in_two_colours() {
   printf 'no\n' >"$got.tty"
   ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1 BOOTSTRAP_TTY="$got.tty"
     OFFER=gh-setup-git; offer_command || true ) >"$got" 2>"$got.err"
-  n="$(grep -nxF -- "${COLOUR_ON}The script can run this command for you:${COLOUR_OFF}" "$got" | cut -d: -f1)"
+  n="$(grep -nxF -- "${READ_ON}The script can run this command for you:${COLOUR_OFF}" "$got" | cut -d: -f1)"
   [ -n "$n" ] || { od -c "$got" | head -20 >&2; die "the line before the offered command is not in the instruction colour"; }
   [ "$(sed -n "$((n + 1))p" "$got")" = "    ${COMMAND_ON}gh auth setup-git${COLOUR_OFF}" ] \
     || { od -c "$got" | head -20 >&2; die "the offered command is not right below its line, in the command colour"; }
@@ -2015,7 +2208,7 @@ command_intro_faults() {
       pending = intro ? NR : 0
       next
     }
-    /(^|[^A-Za-z0-9_])(say|say_note|say_heading|guide_begin|guide_end|show_error|fail|stop_with_error|ask|ask_terminal|step_start|step_end)[[:space:]]/ {
+    /(^|[^A-Za-z0-9_])(say|say_note|say_log|say_sign|say_heading|guide_begin|guide_end|show_error|fail|stop_with_error|ask|ask_terminal|step_start|step_end)[[:space:]]/ {
       if (pending) print pending ": a step that ends with a colon, with no command below it"
       pending = 0
       intro = ($0 ~ /say "\$[A-Z_]*_INTRO"/)
@@ -6472,7 +6665,8 @@ test_an_unknown_licence_typed_at_the_question_is_asked_again() {
   # S6's rule for an answer that cannot be used: explained, then the
   # question again. The new answer is checked too; none (1) and PolyForm
   # Noncommercial (6) need no check, and the step ends with its own done
-  # line straight after the question (#156 review).
+  # line right after the question (#156 review), one blank line below it
+  # (r1i: the log after a question comes after a blank line).
   local d again want lic
   for again in mit 1 6; do
     d="$(tmpdir)"
@@ -6500,8 +6694,8 @@ test_an_unknown_licence_typed_at_the_question_is_asked_again() {
         lic=polyform-noncommercial-1.0.0
         expect_out "$d" "    Licence: polyform-noncommercial-1.0.0, in the name of"
       fi
-      grep -A1 -F 'Licence (type the number or the name): ' "$d/out" | tail -1 >"$d/done"
-      [ "$(cat "$d/done")" = "    Done. Nothing to check with GitHub for the licence $lic." ] \
+      grep -A2 -F 'Licence (type the number or the name): ' "$d/out" | tail -2 >"$d/done"
+      [ "$(cat "$d/done")" = "$(printf '\n    Done. Nothing to check with GitHub for the licence %s.' "$lic")" ] \
         || { cat "$d/out" >&2; die "[$again] the step does not end with its done line after the question"; }
     fi
     [ "$(grep -F "$(printf '\tlicenses/')" "$d/gh.log" | cut -f2-)" = "$want" ] || { cat "$d/gh.log" >&2; die "[$again] the licence checks were not as expected"; }
@@ -8526,8 +8720,9 @@ test_the_wait_says_its_limit_where_to_follow_the_check_and_each_check() {
 }
 
 test_on_a_terminal_the_wait_shows_a_star_a_second_and_each_check_on_a_new_line() {
-  # Adam's indicator (finding 9): one * per second on the line, a new line
-  # at each look. BOOTSTRAP_STDOUT_TERMINAL=yes stands for a terminal.
+  # Adam's indicator (finding 9): one * per second, a new line at each
+  # look; r1h (Adam, 15:32): the stars on a line of their own, under the
+  # line of the look. BOOTSTRAP_STDOUT_TERMINAL=yes stands for a terminal.
   # The seconds come one at a time from the sleep hook; the total is the
   # same as without a terminal. Colour off here: with colour on, the
   # same lines come with the codes of the progress log (next test).
@@ -8542,11 +8737,11 @@ test_on_a_terminal_the_wait_shows_a_star_a_second_and_each_check_on_a_new_line()
   want="$(printf '%s\n' \
     "==> Waiting for the project's check build to pass on the proposed change, for at most 20 minutes" \
     "$WAIT_LIMIT_LINE" "$WAIT_LINK_LINE" \
-    "The check build has not finished yet; the script looks again every 15 seconds. $STARS_15" \
-    "Checking the build status (15 seconds of at most 20 minutes) $STARS_15" \
-    "Checking the build status (30 seconds of at most 20 minutes) $STARS_15" \
-    "Checking the build status (45 seconds of at most 20 minutes) $STARS_15" \
-    "Checking the build status (1 minute of at most 20 minutes) $STARS_15" \
+    'The check build has not finished yet; the script looks again every 15 seconds.' "$STARS_15" \
+    'Checking the build status (15 seconds of at most 20 minutes)' "$STARS_15" \
+    'Checking the build status (30 seconds of at most 20 minutes)' "$STARS_15" \
+    'Checking the build status (45 seconds of at most 20 minutes)' "$STARS_15" \
+    'Checking the build status (1 minute of at most 20 minutes)' "$STARS_15" \
     'Checking the build status (1 minute 15 seconds of at most 20 minutes)' \
     '    Done. The check build passed on the proposed change.')"
   [ "$(wait_lines "$d")" = "$want" ] || { printf 'want:\n%s\ngot:\n%s\n' "$want" "$(wait_lines "$d")" >&2; die "the lines of the wait on a terminal differ"; }
@@ -8589,8 +8784,8 @@ test_on_a_terminal_the_wait_shows_a_star_a_second_and_each_check_on_a_new_line()
 
 test_with_colour_a_whole_run_starts_with_the_colour_key_and_the_stars_end_their_line() {
   # A whole run on a terminal that takes colour: the colour key first,
-  # once; the log dim; and the wait's stars, each wrapped in the log's
-  # code, end their line before any other line, so with the codes taken
+  # once; the log dim; and the wait's stars, plain on a line of their own
+  # (r1h), end their line before any other line, so with the codes taken
   # out the wait's lines are the ones the run shows without colour. The
   # limit reached: the command to continue starts a line of its own,
   # after a blank line, in the instruction colour.
@@ -8603,23 +8798,36 @@ test_with_colour_a_whole_run_starts_with_the_colour_key_and_the_stars_end_their_
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
   {
-    printf '%sColour key: questions, and what to do next%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '%sColour key: where you type an answer%s\n' "$COLOUR_ON" "$COLOUR_OFF"
+    printf '%sColour key: what to read and do%s\n' "$READ_ON" "$COLOUR_OFF"
     printf '%sColour key: commands to copy or to run%s\n' "$COMMAND_ON" "$COLOUR_OFF"
     printf '%sColour key: the progress log of what the script does%s\n' "$LOG_ON" "$COLOUR_OFF"
     printf '\n'
   } >"$d/want-key"
-  head -n 4 "$d/out" >"$d/got-key"
+  head -n 5 "$d/out" >"$d/got-key"
   expect_same "the start of a run with colour" "$d/want-key" "$d/got-key"
-  [ "$(grep -c 'Colour key: ' "$d/out")" -eq 3 ] || { cat "$d/out" >&2; die "the colour key is not shown exactly once"; }
-  [ "$(sed -n '5p' "$d/out")" = "${LOG_ON}==> Checking that bash (the program that runs this script) is new enough${COLOUR_OFF}" ] \
+  [ "$(grep -c 'Colour key: ' "$d/out")" -eq 4 ] || { cat "$d/out" >&2; die "the colour key is not shown exactly once"; }
+  [ "$(sed -n '6p' "$d/out")" = "${LOG_ON}==> Checking that bash (the program that runs this script) is new enough${COLOUR_OFF}" ] \
     || { sed -n '1,8p' "$d/out" | od -c | head -20 >&2; die "the first check does not come right after the colour key, dim"; }
   ! grep -qE '^==> |^    Done\. ' "$d/out" || { grep -E '^==> |^    Done\. ' "$d/out" >&2; die "a step line is not dim"; }
-  ! grep -F '*' "$d/out" | grep -E "$esc\\[1;3[26]m" >/dev/null || { cat "$d/out" >&2; die "a line of stars goes on with a coloured line"; }
+  ! grep -F '*' "$d/out" | grep -E "$esc\\[1;3[236]m" >/dev/null || { cat "$d/out" >&2; die "a line of stars goes on with a coloured line"; }
+  # r1g: in a whole run the read colour marks only the plan's heading, the
+  # lines above and below the command to continue, the wait's notes and the closing
+  # "What to do next"; no line of the report or of the plan's list.
+  grep -F "$READ_ON" "$d/out" | sed "s/$esc\\[[0-9;]*m//g" | sed '/^Colour key: /d' >"$d/read-lines"
+  {
+    printf '%s\n' 'Here is the plan. Nothing has been created yet.'
+    ( load_script; printf '%s\n' "$ADVANCE_INTRO" )
+    printf '%s\n' 'If the project was not created yet, that command says so and shows the command to start again.'
+    printf '%s\n' "$WAIT_LIMIT_LINE" "$WAIT_LINK_LINE"
+  } >"$d/want-read"
+  grep -F 'What to do next: ' "$d/read-lines" >>"$d/want-read" || die "the closing next step is not in the read colour"
+  expect_same "the lines of a whole run in the read colour" "$d/want-read" "$d/read-lines"
   sed "s/$esc\\[[0-9;]*m//g" "$d/out" >"$d/plain"
   want="$(printf '%s\n' \
     "==> Waiting for the project's check build to pass on the proposed change, for at most 20 minutes" \
     "$WAIT_LIMIT_LINE" "$WAIT_LINK_LINE" \
-    "The check build has not finished yet; the script looks again every 15 seconds. $STARS_15" \
+    'The check build has not finished yet; the script looks again every 15 seconds.' "$STARS_15" \
     'Checking the build status (15 seconds of at most 20 minutes)' \
     '    Done. The check build passed on the proposed change.')"
   [ "$(sed -n "/^==> Waiting for the project's check build/,/^    Done\. The check build/p" "$d/plain")" = "$want" ] \
@@ -8629,7 +8837,7 @@ test_with_colour_a_whole_run_starts_with_the_colour_key_and_the_stars_end_their_
   echo 9999 >"$d/build-pending"
   setup_run "$d" --non-interactive --yes --ci-timeout 1
   expect_rc 1 "$d"
-  n="$(grep -nxF "${COLOUR_ON}To continue the setup, run this command:${COLOUR_OFF}" "$d/out" | cut -d: -f1)"
+  n="$(grep -nxF "${READ_ON}To continue the setup, run this command:${COLOUR_OFF}" "$d/out" | cut -d: -f1)"
   [ -n "$n" ] || { od -c "$d/out" | tail -20 >&2; die "timeout: the command to continue is not on a line of its own, in colour"; }
   [ -z "$(sed -n "$((n - 1))p" "$d/out")" ] || { od -c "$d/out" | tail -20 >&2; die "timeout: no blank line between the stars and the command to continue"; }
   # Colour off: no key anywhere in a whole run.
@@ -8639,6 +8847,52 @@ test_with_colour_a_whole_run_starts_with_the_colour_key_and_the_stars_end_their_
   expect_rc 0 "$d"
   expect_no_out "$d" 'Colour key'
   ! has_esc "$d/out" || die "codes in a run with NO_COLOR"
+}
+
+test_with_colour_the_lines_of_a_run_after_the_advance_command_each_have_their_colour() {
+  # Adam's screenshots of run 1 on v2.7.0. r1h: the signs of life of the
+  # wait (its open lines with their stars, and "Checking the build
+  # status") are not dim, so they are easy to see; the other lines of the
+  # progress log stay dim. And every line from the command to continue to
+  # the end has the colour of its kind: the line below the command explains
+  # it (read colour), "GitHub is still copying the files" is progress
+  # (dim); plain are only the report, a warning, the plan's list and the
+  # signs of life.
+  local d esc l n
+  esc="$(printf '\033')"
+  export TERM=xterm BOOTSTRAP_STDOUT_TERMINAL=yes
+  unset NO_COLOR BOOTSTRAP_COLOR
+  d="$(tmpdir)"
+  echo 1 >"$d/build-pending"
+  echo 1 >"$d/main-missing"
+  setup_run "$d" --non-interactive --yes
+  expect_rc 0 "$d"
+  grep -qxF "${READ_ON}If the project was not created yet, that command says so and shows the command to start again.${COLOUR_OFF}" "$d/out" \
+    || { grep -F 'If the project was not created yet' "$d/out" | od -c >&2; die "the line below the command to continue is not in the read colour"; }
+  grep -qxF "${LOG_ON}GitHub is still copying the files; the script checks again every 2 seconds, for up to a minute.${COLOUR_OFF}" "$d/out" \
+    || { grep -F 'still copying' "$d/out" | od -c >&2; die "the line while GitHub copies the files is not dim"; }
+  # r1h: no dim code on a line with the stars or on a check of the status;
+  # the wait's step line still dim.
+  ! grep -F '*' "$d/out" | grep -F "$LOG_ON" >/dev/null || { grep -F '*' "$d/out" | od -c | head -20 >&2; die "the stars of the wait are dim"; }
+  grep -F 'Checking the build status' "$d/out" >"$d/checks" || die "no check of the build status"
+  ! grep -F "$esc" "$d/checks" >/dev/null || { od -c "$d/checks" >&2; die "a check of the build status is in colour"; }
+  grep -qxF "${LOG_ON}==> Waiting for the project's check build to pass on the proposed change, for at most 20 minutes${COLOUR_OFF}" "$d/out" \
+    || die "the wait's step line is not dim"
+  # The sweep: from the command to continue to the end, a plain line is
+  # one of the signs of life, a warning, or a line of the report (from
+  # "The setup is finished." on, but its last two lines).
+  n="$(grep -nF "$(load_script; printf '%s' "$ADVANCE_INTRO")" "$d/out" | cut -d: -f1)"
+  [ -n "$n" ] || die "no command to continue"
+  sed -n "$n,\$p" "$d/out" | sed "/^The setup is finished\\.\$/,\$d" | grep -v "^$esc" | grep -v "^    $esc" \
+    | grep -v '^$' | grep -v '^Warning: ' | grep -v '^Checking the build status (' | grep -v '^The check build has not finished yet' \
+    | grep -v '^\**$' >"$d/plain-lines" || true
+  # r1h: the stars on lines of their own, nothing else on them.
+  [ "$(grep -c '^\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*$' "$d/out")" -eq 1 ] || { grep -F '*' "$d/out" | od -c | head >&2; die "the stars are not on a line of their own"; }
+  [ ! -s "$d/plain-lines" ] || { cat "$d/plain-lines" >&2; die "lines after the command to continue that are plain"; }
+  for l in 'If you ever feel stuck'; do
+    grep -F -- "$l" "$d/out" | grep -F "$esc" >/dev/null && die "in colour: $l"
+  done
+  return 0
 }
 
 test_a_wait_in_seconds_is_said_in_minutes_and_seconds() {
