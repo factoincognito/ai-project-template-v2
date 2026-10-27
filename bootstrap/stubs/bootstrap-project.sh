@@ -1245,8 +1245,9 @@ check_deploy_pack() {
 # stop it shows the command to start again and exits 3. With
 # --non-interactive it shows the guide and exits 3 at once. Where the
 # script can run the fix itself (an install), the guide sets OFFER and the
-# script offers the command once, running it only after a yes typed at
-# the terminal (ask_terminal): never from stdin, never because of --yes.
+# script offers the command on each round (not straight after it ran),
+# running it only after a yes typed at the terminal (ask_terminal): never
+# from stdin, never because of --yes.
 #
 # guided_check <check> <guide> is the loop; the GitHub checks reuse it.
 # A check returns 0 when it passes; a guide prints through guide_begin,
@@ -1453,7 +1454,27 @@ offer_command() {
     fi
     return 0
   fi
-  say "Not run. Follow the steps above yourself."
+  # This window waits for Enter, so the user's own run is in another one.
+  # A winget install is found only in a Git Bash window opened after it,
+  # so its guide says to start the script again there: this line too.
+  if offer_needs_new_window; then
+    say "Not run. To run it yourself, run it in another Git Bash window. When it has finished, type q here and copy the command the script shows to start again. Then close both windows, open Git Bash again from the Start menu, and run that command there."
+    return 1
+  fi
+  case "$OS_KIND" in
+    windows) say "Not run. To run it yourself, open another Git Bash window (this one is waiting), run the command there, then come back here and press Enter to check again." ;;
+    *) say "Not run. To run it yourself, open another terminal window (this one is waiting), run the command there, then come back here and press Enter to check again." ;;
+  esac
+  return 1
+}
+
+# offer_needs_new_window: the offer (OFFER) is a winget install, which
+# this window cannot see (its PATH was read when it opened); its guide
+# says to start the script again in a new Git Bash window.
+offer_needs_new_window() {
+  case "$OFFER" in
+    winget-*) return 0 ;;
+  esac
   return 1
 }
 
@@ -1461,17 +1482,33 @@ offer_command() {
 # whose check cannot pass again in this run (a new script or a new
 # terminal window is needed) sets NO_RECHECK: it stops at once, as with
 # --non-interactive.
+# The offer comes on every round whose guide has one (end-to-end run 1:
+# after a no by accident, the only ways on were another window or a new
+# start), except the round straight after the command ran: that round
+# waits for Enter, as the command may still be working (Apple's
+# installer goes on in its own window) or need a new window. So every
+# round reads a line, from the terminal or from stdin, and between two
+# runs there is always an Enter: the loop never goes round on its own.
+# Once a winget install has run, no winget install is offered again in
+# this window, which cannot see it: each round says to start again in a
+# new Git Bash window instead.
 guided_check() {
-  local check="$1" guide="$2" offered_once=""
+  local check="$1" guide="$2" just_ran="" ran_winget=""
   while ! "$check"; do
     OFFER=""
     NO_RECHECK=""
     "$guide"
     [ -z "$OPT_NON_INTERACTIVE" ] && [ -z "$NO_RECHECK" ] || stop_at_guide
-    if [ -n "$OFFER" ] && [ -z "$offered_once" ]; then
-      offered_once=1
-      offer_command && continue
+    if [ -n "$ran_winget" ] && offer_needs_new_window; then
+      say "The script cannot check again in this window, because a program installed with winget is found only in a Git Bash window opened after the install. Type q here and copy the command the script shows to start again. Then close this window, open Git Bash again from the Start menu, and run that command there."
+    elif [ -n "$OFFER" ] && [ -z "$just_ran" ]; then
+      if offer_command; then
+        just_ran=1
+        if offer_needs_new_window; then ran_winget=1; fi
+        continue
+      fi
     fi
+    just_ran=""
     wait_for_enter || stop_at_guide
   done
 }

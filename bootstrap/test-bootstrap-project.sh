@@ -3269,6 +3269,20 @@ yes_opt() { OPT_YES=1; "$@"; }
 resume() { OPT_RESUME=1; "$@"; }
 with_pack() { IN_PACK="$1"; shift; "$@"; }
 with_dir() { IN_DIR="$1"; shift; "$@"; }
+# tty_answers: the Nth question asked at the terminal reads line N of
+# <dir>/tty-answers (no line left: no answer), for a test whose answers
+# differ from one question to the next; the test makes <dir>/tty too.
+# The script's own ask_terminal still reads them.
+tty_answers() {
+  eval "real_ask_terminal() $(declare -f ask_terminal | sed 1d)"
+  TTY_ASKED=0
+  ask_terminal() {
+    TTY_ASKED=$((TTY_ASKED + 1))
+    sed -n "${TTY_ASKED}p" "$BOOTSTRAP_TTY-answers" >"$BOOTSTRAP_TTY"
+    real_ask_terminal "$@"
+  }
+  "$@"
+}
 
 # on_os <dir> <macos|linux|windows> [debian|fedora|arch|suse|other]: the
 # OS the script sees, through a fake uname and release file.
@@ -3462,7 +3476,9 @@ test_the_yes_option_does_not_approve_an_install() {
 
 test_a_command_is_offered_once_per_check() {
   # The offered command ran but did not fix it: the guide shows again,
-  # without a second offer, and waits for Enter.
+  # without an offer straight away, and waits for Enter (the command may
+  # still be working, as Apple's installer does in its own window). Once
+  # per round: the next round offers again (the tests below).
   local d
   d="$(tmpdir)"
   on_os "$d" macos
@@ -3473,6 +3489,140 @@ test_a_command_is_offered_once_per_check() {
   expect_rc 0 "$d"
   [ "$(grep -c . "$d/run.log")" -eq 1 ] || { cat "$d/run.log" >&2; die "the command was offered and run more than once"; }
   [ "$(grep -c 'Run it now?' "$d/out")" -eq 1 ] || die "offered more than once"
+}
+
+test_an_accidental_no_is_offered_again_and_a_yes_then_runs_it() {
+  # End-to-end run 1: Enter at "Run it now?" by accident, then Enter to
+  # check again, and the check still fails: the command is offered
+  # again, and a yes at the terminal runs it.
+  local d
+  d="$(tmpdir)"
+  on_os "$d" macos
+  missing "$d" git 2
+  : >"$d/tty"
+  printf '%s\n' "" yes >"$d/tty-answers"
+  printf '\n' >"$d/in"
+  pre "$d" tty_answers preflight_git
+  expect_rc 0 "$d"
+  [ "$(grep -c 'Run it now?' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "not offered again after the no"; }
+  [ "$(cat "$d/run.log")" = "xcode-select --install" ] || { cat "$d/run.log" >&2; die "the yes did not run the command once"; }
+  [ "$(grep -c 'Press Enter to check again' "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "not one wait, after the no"; }
+  [ "$(tail -1 "$d/out")" = "    Done. git is installed." ] || { cat "$d/out" >&2; die "no done line"; }
+}
+
+test_answering_no_every_time_reads_input_on_every_round() {
+  # A no on every round never checks again without reading a line: each
+  # round offers, then waits for Enter, and the end of the input stops.
+  # The same without a terminal to read the answer from, and on Windows.
+  local d os
+  for os in macos none windows; do
+    d="$(tmpdir)"
+    on_os "$d" "${os/none/macos}"
+    fake_tool "$d" winget
+    missing "$d" git
+    [ "$os" = none ] || printf 'no\n' >"$d/tty"
+    printf '\n\n\n' >"$d/in"
+    pre "$d" preflight_git
+    expect_rc 3 "$d"
+    expect_nothing_ran "$d"
+    [ "$(grep -c 'Run it now?' "$d/out")" -eq 4 ] || { cat "$d/out" >&2; die "$os: not offered on each of the 4 rounds"; }
+    [ "$(grep -c 'Press Enter to check again' "$d/out")" -eq 4 ] || { cat "$d/out" >&2; die "$os: not a wait on each round"; }
+    [ "$(grep -c '^git --version' "$d/tools.log")" -eq 4 ] || { cat "$d/tools.log" >&2; die "$os: checked other than once per round"; }
+  done
+}
+
+test_a_command_that_ran_is_offered_again_only_after_enter() {
+  # A yes to each offer and a command that never fixes it: between two
+  # runs there is always an Enter, so the end of the input stops it. The
+  # terminal has 5 yeses, then no answer: without the Enter between two
+  # runs this fails (5 runs) instead of going round for ever.
+  local d
+  d="$(tmpdir)"
+  on_os "$d" macos
+  missing "$d" git
+  : >"$d/tty"
+  printf '%s\n' yes yes yes yes yes >"$d/tty-answers"
+  printf '\n\n' >"$d/in"
+  pre "$d" tty_answers preflight_git
+  expect_rc 3 "$d"
+  [ "$(grep -c . "$d/run.log")" -eq 3 ] || { cat "$d/run.log" >&2; die "not run 3 times (one more than the Enters)"; }
+  [ "$(grep -c 'Run it now?' "$d/out")" -eq 3 ] || { cat "$d/out" >&2; die "not offered 3 times"; }
+  [ "$(grep -c 'Press Enter to check again' "$d/out")" -eq 3 ] || { cat "$d/out" >&2; die "not a wait after each run"; }
+}
+
+# The "Not run." lines: the offers whose guide says to come back to this
+# window, and the winget installs, whose guide says to start the script
+# again in a new Git Bash window (this window does not see the install).
+NOT_RUN_TERMINAL="Not run. To run it yourself, open another terminal window (this one is waiting), run the command there, then come back here and press Enter to check again."
+NOT_RUN_GIT_BASH="Not run. To run it yourself, open another Git Bash window (this one is waiting), run the command there, then come back here and press Enter to check again."
+NOT_RUN_WINGET="Not run. To run it yourself, run it in another Git Bash window. When it has finished, type q here and copy the command the script shows to start again. Then close both windows, open Git Bash again from the Start menu, and run that command there."
+NEW_WINDOW_NEEDED="The script cannot check again in this window, because a program installed with winget is found only in a Git Bash window opened after the install. Type q here and copy the command the script shows to start again. Then close this window, open Git Bash again from the Start menu, and run that command there."
+
+test_not_run_says_where_to_run_the_command() {
+  # This window waits for Enter, so the command runs in another one: a
+  # terminal window on macOS, Git Bash on Windows for the gh refresh
+  # (its guide says to come back to this window). A winget install is
+  # found only in a new Git Bash window, as its guide says: its line
+  # says to start again there, never to press Enter here.
+  local d c want
+  for c in macos-git windows-refresh windows-gh windows-gh-old windows-git; do
+    d="$(tmpdir)"
+    on_os "$d" "${c%%-*}"
+    fake_tool "$d" winget
+    printf 'no\n' >"$d/tty"
+    printf 'q\n' >"$d/in"
+    case "$c" in
+      macos-git) missing "$d" git; pre "$d" preflight_git; want="$NOT_RUN_TERMINAL" ;;
+      windows-refresh)
+        export STUB_GH_SCOPES="repo"
+        pre "$d" with_vis public preflight_github_permissions
+        unset STUB_GH_SCOPES
+        want="$NOT_RUN_GIT_BASH"
+        ;;
+      windows-gh) make_stub_gh "$d/gh"; echo 9999 >"$d/gh-missing"; working_git "$d"; pre "$d" preflight_gh; want="$NOT_RUN_WINGET" ;;
+      windows-gh-old) make_stub_gh "$d/gh"; echo 9999 >"$d/gh-old"; working_git "$d"; pre "$d" preflight_gh; want="$NOT_RUN_WINGET" ;;
+      windows-git) missing "$d" git; pre "$d" preflight_git; want="$NOT_RUN_WINGET" ;;
+    esac
+    expect_rc 3 "$d"
+    expect_out "$d" "Run it now?"
+    grep -qxF "$want" "$d/out" || { cat "$d/out" >&2; die "$c: the Not run line is not: $want"; }
+    expect_no_out "$d" "Follow the steps above yourself."
+    if [ "$want" = "$NOT_RUN_WINGET" ]; then expect_no_out "$d" "come back here and press Enter"; fi
+  done
+}
+
+test_a_winget_install_that_ran_is_not_offered_again_in_this_window() {
+  # Windows: after a yes to a winget install the check still fails (this
+  # window does not see the install). Each round after it says to start
+  # again in a new Git Bash window instead of offering the install again.
+  local d c
+  for c in gh-missing gh-old git; do
+    d="$(tmpdir)"
+    on_os "$d" windows
+    fake_tool "$d" winget
+    printf 'yes\n' >"$d/tty"
+    printf '\n\n' >"$d/in"
+    case "$c" in
+      git) missing "$d" git; pre "$d" preflight_git ;;
+      *) make_stub_gh "$d/gh"; echo 9999 >"$d/$c"; working_git "$d"; pre "$d" preflight_gh ;;
+    esac
+    expect_rc 3 "$d"
+    [ "$(grep -c . "$d/run.log")" -eq 1 ] || { cat "$d/run.log" >&2; die "$c: the install ran other than once"; }
+    [ "$(grep -c 'Run it now?' "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "$c: offered again in this window"; }
+    [ "$(grep -cxF "$NEW_WINDOW_NEEDED" "$d/out")" -eq 3 ] || { cat "$d/out" >&2; die "$c: not told on each of the 3 rounds after the install to start again in a new window"; }
+    [ "$(grep -c 'Press Enter to check again' "$d/out")" -eq 3 ] || { cat "$d/out" >&2; die "$c: not a wait on each round"; }
+  done
+  # The gh refresh is not a winget install: after a yes that did not fix
+  # it, the round after the Enter offers it again.
+  d="$(tmpdir)"
+  on_os "$d" windows
+  export STUB_GH_SCOPES="repo"
+  printf 'yes\n' >"$d/tty"
+  printf '\n' >"$d/in"
+  pre "$d" with_vis public preflight_github_permissions
+  expect_rc 3 "$d"
+  [ "$(grep -c 'Run it now?' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "refresh: not offered again after Enter"; }
+  expect_no_out "$d" "$NEW_WINDOW_NEEDED"
 }
 
 test_each_offered_command_is_the_one_shown_in_the_guide() {
@@ -6965,7 +7115,7 @@ test_a_push_git_cannot_sign_in_for_offers_gh_auth_setup_git_after_saying_what_it
   expect_rc 0 "$d"
   grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "Enter: did not reach the end"; }
   expect_nothing_ran "$d"
-  expect_out "$d" "Not run. Follow the steps above yourself."
+  expect_out "$d" "Not run. To run it yourself, open another "
 }
 
 test_other_push_failures_are_explained_with_the_continue_command() {
