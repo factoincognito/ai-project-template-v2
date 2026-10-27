@@ -53,6 +53,10 @@
 #                  where keys typed before the question are discarded
 #                  (default: asked of the shell, [ -t 0 ]).
 #   BOOTSTRAP_OS_RELEASE  the Linux release file (default: /etc/os-release).
+#   BOOTSTRAP_KERNEL_RELEASE  the file WSL (Linux on Windows) is read from
+#                  (default: /proc/sys/kernel/osrelease).
+#   BOOTSTRAP_WINDOWS_DRIVES  the folder where WSL shows the Windows drives,
+#                  one folder per drive letter (default: /mnt).
 #   BOOTSTRAP_SLEEP  the command that waits between two checks of GitHub
 #                  (default: sleep). It gets the seconds as its argument.
 #   BOOTSTRAP_STDOUT_TERMINAL  yes or no: whether the output goes to a
@@ -1490,6 +1494,7 @@ check_deploy_pack() {
 
 OS_KIND=""
 LINUX_PM=""
+LINUX_WSL=""
 OFFER=""
 RESTART_CMD=""
 RESTART_ARGS=""
@@ -1499,7 +1504,10 @@ SQ="'"
 
 # detect_os: OS_KIND is macos, linux, windows (Git Bash, MSYS or Cygwin)
 # or other, from uname -s. On Linux, LINUX_PM is the package manager
-# (apt, dnf, pacman or zypper) read from the release file, or empty.
+# (apt, dnf, pacman or zypper) read from the release file, or empty, and
+# LINUX_WSL is yes in WSL (Linux on Windows), whose kernel release names
+# Microsoft (WSL 2: 5.15.167.4-microsoft-standard-WSL2, WSL 1:
+# 4.4.0-19041-Microsoft), or empty.
 detect_os() {
   local kind="" f line id="" like="" w
   kind="$(uname -s 2>/dev/null)" || kind=""
@@ -1511,7 +1519,14 @@ detect_os() {
     *) OS_KIND=other ;;
   esac
   LINUX_PM=""
+  LINUX_WSL=""
   [ "$OS_KIND" = linux ] || return 0
+  f="${BOOTSTRAP_KERNEL_RELEASE:-/proc/sys/kernel/osrelease}"
+  if [ -r "$f" ]; then
+    line=""
+    IFS= read -r line <"$f" || true
+    case "$line" in *[Mm]icrosoft* | *MICROSOFT*) LINUX_WSL=yes ;; esac
+  fi
   f="${BOOTSTRAP_OS_RELEASE:-/etc/os-release}"
   [ -r "$f" ] || return 0
   while IFS= read -r line || [ -n "$line" ]; do
@@ -1962,9 +1977,63 @@ preflight_tools() {
 
 # ---- npm (node, web and react-native packs) ----
 
-check_npm() { npm --version >/dev/null 2>&1; }
+# check_npm: npm runs. In WSL (Linux on Windows), an npm in a Windows
+# drive's folder (/mnt/c/...) is the Windows one, reached through WSL's
+# Windows interop: a project in Linux should not depend on it, so it
+# counts as no npm and is not run (end-to-end run 2, r2e). NPM_PROBLEM
+# says which part failed: missing or windows; NPM_WINDOWS_PATH is where
+# the Windows npm was found. The cache of command paths is cleared first,
+# so an npm installed in Linux since the last round is found.
+NPM_PROBLEM=""
+NPM_WINDOWS_PATH=""
+check_npm() {
+  local where=""
+  if [ -n "$LINUX_WSL" ]; then
+    hash -r
+    where="$(command -v npm 2>/dev/null)" || where=""
+    if on_windows_drive "$where"; then
+      NPM_PROBLEM=windows
+      NPM_WINDOWS_PATH="$where"
+      return 1
+    fi
+  fi
+  NPM_PROBLEM=missing
+  npm --version >/dev/null 2>&1 || return 1
+  NPM_PROBLEM=""
+}
+
+# on_windows_drive <path>: the path is in the folder of a Windows drive as
+# WSL shows it: /mnt/<one letter>/... (BOOTSTRAP_WINDOWS_DRIVES for /mnt).
+# Other folders under /mnt (WSL's own /mnt/wsl, a disk mounted at
+# /mnt/data) are not Windows drives.
+on_windows_drive() {
+  local root="${BOOTSTRAP_WINDOWS_DRIVES:-/mnt}"
+  root="${root%/}"
+  case "$1" in
+    "$root"/[A-Za-z]/*) return 0 ;;
+  esac
+  return 1
+}
 
 guide_npm() {
+  case "$NPM_PROBLEM" in
+    windows) guide_npm_windows ;;
+    *) guide_npm_missing ;;
+  esac
+}
+
+guide_npm_windows() {
+  guide_begin "The npm this Linux finds is the Windows one, so npm (part of Node.js) is not installed in this Linux." \
+    "This Linux runs inside Windows (WSL, the Windows Subsystem for Linux), and the npm it found, $NPM_WINDOWS_PATH, is a Windows program. A project in this Linux should use a Node.js installed in Linux: the node, web and react-native packs use npm to record the exact versions of the tools your project uses, so that its checks on GitHub can install the same ones."
+  guide_step "Open https://nodejs.org/en/download in your browser. It shows the steps for Windows, because the browser runs on Windows: where the page says Windows, choose Linux instead, and keep the version marked LTS (the one with long-term support)."
+  guide_step "Open another window of this Linux (from the Start menu, as you opened this one) and run there, one by one, the commands the page shows: they install Node.js, which includes npm, in this Linux."
+  guide_step "Close this window, open a new window of this Linux, and start the script there, so that it finds the new npm before the Windows one."
+  guide_end "the script says \"Done. npm is installed.\"" \
+    "if the script still says that the npm it finds is the Windows one, check that the commands from the page ended without an error, then open a new window of this Linux and start the script there." \
+    "it looks where the npm it finds is: one under /mnt/, where this Linux shows the Windows drives, is the Windows one. Otherwise it runs npm --version, which works only when npm is installed."
+}
+
+guide_npm_missing() {
   guide_begin "npm (part of Node.js) is not installed." \
     "The node, web and react-native packs use npm to record the exact versions of the tools your project uses, so that its checks on GitHub can install the same ones."
   guide_step "Open https://nodejs.org in your browser and download the version marked LTS (the one with long-term support)."

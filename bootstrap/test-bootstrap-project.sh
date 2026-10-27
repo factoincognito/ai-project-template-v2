@@ -3619,6 +3619,10 @@ in_env() {
   export GIT_CEILING_DIRECTORIES="$WORK"
   [ ! -e "$d/tty" ] || export BOOTSTRAP_TTY="$d/tty"
   [ ! -e "$d/os-release" ] || export BOOTSTRAP_OS_RELEASE="$d/os-release"
+  # WSL (Linux on Windows) is read from <dir>/kernel-release, never from
+  # this computer's own (on_wsl writes one), and the Windows drives are
+  # <dir>/drives: so a test runs the same on a computer that is WSL.
+  export BOOTSTRAP_KERNEL_RELEASE="$d/kernel-release" BOOTSTRAP_WINDOWS_DRIVES="$d/drives"
   # Temporary files go to <dir>/tmp, so a test can see what is left there.
   [ -d "$d/tmp" ] || mkdir -p "$d/tmp"
   export TMPDIR="$d/tmp"
@@ -3826,6 +3830,10 @@ yes_opt() { OPT_YES=1; "$@"; }
 resume() { OPT_RESUME=1; "$@"; }
 with_pack() { IN_PACK="$1"; shift; "$@"; }
 with_dir() { IN_DIR="$1"; shift; "$@"; }
+# path_first <folder>: the folder comes first on the run's PATH.
+path_first() { PATH="$1:$PATH"; shift; "$@"; }
+# path_last <folder>: the folder comes last on the run's PATH.
+path_last() { PATH="$PATH:$1"; shift; "$@"; }
 # tty_answers: the Nth question asked at the terminal reads line N of
 # <dir>/tty-answers (no line left: no answer), for a test whose answers
 # differ from one question to the next; the test makes <dir>/tty too.
@@ -3857,6 +3865,24 @@ on_os() {
     suse) printf '%s\n' 'NAME="openSUSE Leap"' 'ID="opensuse-leap"' 'ID_LIKE="suse opensuse"' >"$d/os-release" ;;
     other) printf '%s\n' 'NAME="Something"' 'ID=something' >"$d/os-release" ;;
   esac
+}
+
+# on_wsl <dir> [release]: Linux in WSL on Windows, as the script sees it
+# (Ubuntu, and a kernel release as WSL 2 has it, unless given).
+on_wsl() {
+  on_os "$1" linux debian
+  printf '%s\n' "${2:-5.15.167.4-microsoft-standard-WSL2}" >"$1/kernel-release"
+}
+
+# windows_npm <dir>: an npm as Windows' Node.js has it, in
+# <dir>/drives/c/Program Files/nodejs (where WSL shows C:\Program Files),
+# that logs "windows-npm <args>" to <dir>/tools.log and prints 11.16.0.
+# Put its folder first on PATH with path_first "$(windows_npm_dir <dir>)".
+windows_npm_dir() { printf '%s\n' "$1/drives/c/Program Files/nodejs/"; }
+windows_npm() {
+  write_stand_in "$(windows_npm_dir "$1")npm" "printf '%s\n' \"windows-npm \$*\" >>\"$1/tools.log\"
+echo 11.16.0
+"
 }
 
 # missing <dir> <tool> [times]: the fake <tool> fails as a missing
@@ -4320,6 +4346,121 @@ test_npm_is_needed_only_for_node_web_and_react_native() {
   done
 }
 
+test_in_wsl_the_windows_npm_counts_as_no_npm_and_its_guide_says_why() {
+  # r2e (end-to-end run 2, Ubuntu in WSL): the check passed with the
+  # Windows npm, reached through WSL's Windows interop on PATH
+  # (/mnt/c/Program Files/nodejs//npm). A project in Linux should not
+  # depend on it: in WSL an npm under the Windows drives counts as none,
+  # and its guide says why and how to install Node.js in Linux. The
+  # Windows npm is not run.
+  local d p want
+  for p in node web react-native; do
+    d="$(tmpdir)"
+    on_wsl "$d"
+    windows_npm "$d"
+    pre "$d" ni with_pack "$p" path_first "$(windows_npm_dir "$d")" preflight_npm
+    expect_rc 3 "$d"
+    want="$(windows_npm_dir "$d")"
+    want="${want%/}/npm"
+    expect_out "$d" "The npm this Linux finds is the Windows one, so npm (part of Node.js) is not installed in this Linux."
+    expect_out "$d" "the npm it found, $want, is a Windows program"
+    expect_out "$d" "A project in this Linux should use a Node.js installed in Linux"
+    expect_out "$d" "https://nodejs.org/en/download"
+    expect_out "$d" "choose Linux"
+    expect_out "$d" "How the script checks it: it looks where the npm it finds is: one under /mnt/, where this Linux shows the Windows drives, is the Windows one."
+    expect_out "$d" "To start again, run this command:"
+    expect_no_out "$d" "    Done. npm is installed."
+    expect_no_out "$d" "npm (part of Node.js) is not installed."
+    [ ! -e "$d/tools.log" ] || ! grep -q '^windows-npm' "$d/tools.log" || { cat "$d/tools.log" >&2; die "$p: the Windows npm was run"; }
+    expect_nothing_ran "$d"
+  done
+}
+
+test_in_wsl_the_npm_check_passes_once_npm_is_installed_in_linux() {
+  # The guide is checked again after Enter, as every guide is: once
+  # Node.js is installed in Linux, its npm comes before the Windows one
+  # on PATH and the check passes, with the Linux npm.
+  local d
+  d="$(tmpdir)"
+  on_wsl "$d"
+  windows_npm "$d"
+  fake_tool "$d" npm 10.9.2
+  mkdir -p "$d/later"
+  mv "$d/bin/npm" "$d/later/npm"
+  printf '\n' >"$d/in"
+  # The Linux folder npm moves to comes first (path_first prepends).
+  pre "$d" with_pack node linux_npm_on_enter "$d" path_first "$(windows_npm_dir "$d")" path_first "$d/linux bin" preflight_npm
+  expect_rc 0 "$d"
+  [ "$(grep -c '^The npm this Linux finds is the Windows one' "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "the guide was not shown once"; }
+  [ "$(tail -1 "$d/out")" = "    Done. npm is installed." ] || { cat "$d/out" >&2; die "no done line after npm was installed in Linux"; }
+  [ "$(grep -c '^npm --version' "$d/tools.log")" -eq 1 ] || { cat "$d/tools.log" >&2; die "the Linux npm was not checked once"; }
+  ! grep -q '^windows-npm' "$d/tools.log" || { cat "$d/tools.log" >&2; die "the Windows npm was run"; }
+}
+
+# linux_npm_on_enter <dir> <command...>: at the first Enter the user
+# presses, <dir>/later/npm moves to "<dir>/linux bin", which the test puts
+# before the Windows folder on PATH, as an install of Node.js in Linux
+# puts its npm before the Windows one.
+linux_npm_on_enter() {
+  LATER_DIR="$1"
+  shift
+  eval "real_wait_for_enter() $(declare -f wait_for_enter | sed 1d)"
+  wait_for_enter() {
+    real_wait_for_enter "$@" || return 1
+    [ ! -e "$LATER_DIR/later/npm" ] || { mkdir -p "$LATER_DIR/linux bin"; mv "$LATER_DIR/later/npm" "$LATER_DIR/linux bin/npm"; }
+  }
+  "$@"
+}
+
+test_in_wsl_a_linux_npm_passes_and_a_missing_one_gets_the_usual_guide() {
+  # Error paths of the WSL check: only an npm under a Windows drive
+  # (/mnt/<letter>/) is the Windows one. A Linux npm, also one in a folder
+  # under /mnt that is not a drive, passes; no npm at all gets the usual
+  # guide, not the Windows one.
+  local d
+  d="$(tmpdir)"
+  on_wsl "$d"
+  windows_npm "$d"
+  fake_tool "$d" npm 10.9.2
+  # WSL puts the Windows folders after the Linux ones on PATH.
+  pre "$d" ni with_pack node path_last "$(windows_npm_dir "$d")" preflight_npm
+  expect_rc 0 "$d"
+  expect_out "$d" "    Done. npm is installed."
+  d="$(tmpdir)"
+  on_wsl "$d"
+  write_stand_in "$d/drives/data/node/bin/npm" 'echo 10.9.2'
+  pre "$d" ni with_pack node path_first "$d/drives/data/node/bin" preflight_npm
+  expect_rc 0 "$d"
+  expect_out "$d" "    Done. npm is installed."
+  d="$(tmpdir)"
+  on_wsl "$d"
+  missing "$d" npm
+  pre "$d" ni with_pack node preflight_npm
+  expect_rc 3 "$d"
+  expect_out "$d" "npm (part of Node.js) is not installed."
+  expect_no_out "$d" "the Windows one"
+}
+
+test_outside_wsl_an_npm_under_mnt_is_not_refused() {
+  # Outside WSL nothing changes: an npm in a folder under /mnt (a disk
+  # mounted there on Linux) is used as before, on Linux without WSL and
+  # on a Linux whose kernel release names no Microsoft.
+  local d
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  windows_npm "$d"
+  pre "$d" ni with_pack node path_first "$(windows_npm_dir "$d")" preflight_npm
+  expect_rc 0 "$d"
+  expect_out "$d" "    Done. npm is installed."
+  grep -q '^windows-npm --version' "$d/tools.log" || { cat "$d/tools.log" >&2; die "the npm under /mnt was not run"; }
+  d="$(tmpdir)"
+  on_wsl "$d" 6.8.0-45-generic
+  windows_npm "$d"
+  pre "$d" ni with_pack node path_first "$(windows_npm_dir "$d")" preflight_npm
+  expect_rc 0 "$d"
+  expect_out "$d" "    Done. npm is installed."
+}
+
 test_bash_older_than_3_2_is_refused_with_steps() {
   local d v
   for v in "3 2" "3 10" "4 0" "5 2"; do
@@ -4732,7 +4873,7 @@ test_npm_and_folder_checks_come_after_the_questions() {
 # guide_cases: every guide, as a function to run after detect_os. The
 # GitHub guides read what their check found; the gg_ wrappers set it.
 guide_cases() {
-  printf '%s\n' guide_git guide_gh_missing guide_gh_old guide_npm guide_dir_not_empty \
+  printf '%s\n' guide_git guide_gh_missing guide_gh_old guide_npm gg_npm_windows guide_dir_not_empty \
     guide_dir_is_file guide_bash_old gg_signed_out gg_expired gg_offline gg_permissions \
     gg_permissions_repo gg_permissions_token gg_old_script gg_project_exists \
     gg_create_taken gg_create_refused gg_protect_plan gg_protect_token gg_protect_unknown \
@@ -4744,6 +4885,7 @@ gg_actions_local_only() {
   IN_OWNER=acme; IN_NAME=my-app; PR_URL=https://github.com/acme/my-app/pull/1
   ACTIONS_PROBLEM=local-only; guide_actions_off
 }
+gg_npm_windows() { NPM_PROBLEM=windows; NPM_WINDOWS_PATH="/mnt/c/Program Files/nodejs//npm"; guide_npm; }
 gg_dir_not_writable() { DIR_UNWRITABLE=/srv/shared; guide_dir_not_writable; }
 gg_dir_in_git() { DIR_OUTER=/home/me/work; guide_dir_in_git; }
 gg_dir_in_git_unknown() { DIR_OUTER=""; guide_dir_in_git; }
@@ -4937,6 +5079,45 @@ test_the_os_is_read_from_uname_and_the_linux_release_file() {
   printf 'NAME="Fedora"\r\nID=fedora\r' >"$d/os-release"
   pre "$d" eval 'say "${LINUX_PM:-none}"'
   [ "$(cat "$d/out")" = dnf ] || die "a release file with carriage returns gave $(cat "$d/out")"
+}
+
+test_wsl_is_read_from_the_kernel_release_on_linux_only() {
+  # r2e: in WSL (Linux on Windows) the Windows npm is on PATH. WSL is
+  # read from the kernel release (BOOTSTRAP_KERNEL_RELEASE, by default
+  # /proc/sys/kernel/osrelease): WSL 2 and WSL 1 name Microsoft in it.
+  local d want
+  for want in "5.15.167.4-microsoft-standard-WSL2 yes" "4.4.0-19041-Microsoft yes" \
+    "6.8.0-45-generic none" "6.6.87.2-MICROSOFT-standard-WSL2 yes"; do
+    set -- $want
+    d="$(tmpdir)"
+    on_wsl "$d" "$1"
+    pre "$d" eval 'say "${LINUX_WSL:-none}"'
+    [ "$(cat "$d/out")" = "$2" ] || { cat "$d/err" >&2; die "kernel release $1 gave $(cat "$d/out"), want $2"; }
+  done
+  # Error paths: no kernel release file, an empty one, one with carriage
+  # returns and no line break; and a Microsoft release on another OS
+  # (only Linux can be WSL).
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  pre "$d" eval 'say "${LINUX_WSL:-none}"'
+  [ "$(cat "$d/out")" = none ] || die "no kernel release file gave $(cat "$d/out")"
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  : >"$d/kernel-release"
+  pre "$d" eval 'say "${LINUX_WSL:-none}"'
+  [ "$(cat "$d/out")" = none ] || die "an empty kernel release file gave $(cat "$d/out")"
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  printf '5.15.167.4-microsoft-standard-WSL2\r' >"$d/kernel-release"
+  pre "$d" eval 'say "${LINUX_WSL:-none}"'
+  [ "$(cat "$d/out")" = yes ] || die "a kernel release with a carriage return gave $(cat "$d/out")"
+  for want in macos windows; do
+    d="$(tmpdir)"
+    on_os "$d" "$want"
+    printf '%s\n' 5.15.167.4-microsoft-standard-WSL2 >"$d/kernel-release"
+    pre "$d" eval 'say "${LINUX_WSL:-none}"'
+    [ "$(cat "$d/out")" = none ] || die "$want with a Microsoft kernel release gave $(cat "$d/out")"
+  done
 }
 
 test_every_say_command_call_on_a_line_is_checked() {
@@ -11349,7 +11530,8 @@ guide_github_permissions|restart|a key (a token) set in GH_TOKEN
 guide_git|recheck|git not installed
 guide_gh_missing|recheck|gh not installed
 guide_gh_old|recheck|gh installed, but too old for the script
-guide_npm|recheck|Node.js and npm not installed
+guide_npm_missing|recheck|Node.js and npm not installed
+guide_npm_windows|recheck|only the Windows npm found in Linux on Windows (WSL)
 guide_github_account|recheck|gh signed out, or its sign-in no longer accepted
 guide_github_permissions|recheck|signed in without the `workflow` permission
 guide_github_offline|recheck|GitHub not reachable from this computer
@@ -11404,7 +11586,7 @@ test_template_readme_lists_every_guide_in_its_group() {
   for g in $(grep -oE '^(guide|refuse)_[a-z_]+\(\)' "$SCRIPT" | sed 's/()//'); do
     case "$g" in
       guide_begin | guide_step | guide_end | guide_details) continue ;; # helpers
-      guide_gh | guide_dir | guide_project | guide_published_version) continue ;; # pick one of the guides above
+      guide_gh | guide_npm | guide_dir | guide_project | guide_published_version) continue ;; # pick one of the guides above
     esac
     grep -q "^$g|" <<<"$README_GUIDES" || die "the script's guide $g is not in README_GUIDES (add it to the README and here)"
   done
