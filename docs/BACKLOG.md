@@ -308,6 +308,7 @@ get a working project in any supported language.
   - `--yes` skips the final "Proceed?" confirmation.
   - `--dry-run` runs the preflight and prints the plan.
   - `--resume` continues an existing repo (see re-runs).
+  - `--version` (Adam, 2026-10-27) prints one line, the stamped version and the template commit the script was built from (`bootstrap-project.sh vX.Y.Z, built from factoincognito/ai-project-template-v2@<commit>`; the unstamped script in the template says it is not a release), and exits 0 before any check, prompt, network or gh call. Like `--help`, it is read where it stands: the options after it are not read, and a wrong option before it is refused as in any run. `--help` lists it.
   - Name values may not contain control characters, `"`, `\`, `<`, `>`, `&` or backtick, because they go into JSON and HTML. The description must be one line. A `|` in the PO name or display name is rejected (it breaks the README table). A `.` in the repo name becomes `-` in the `[project-name]`/`[project-slug]` values, which must be valid npm and Expo slugs.
 
   **Steps.**
