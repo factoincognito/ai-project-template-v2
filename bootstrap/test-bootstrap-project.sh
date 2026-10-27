@@ -991,6 +991,12 @@ export STUB_GIT="$REAL_GIT"
 # 0 it counts it down and fails as a missing command does (exit 127): a
 # test writes 1 there for "missing, then installed by the user". Otherwise
 # a fake git runs the real git, and any other fake prints [output].
+# With <dir>/git-bash-paths present, a fake git first rewrites the
+# arguments Git Bash rewrites as a path list before git.exe sees them: one
+# with a / before a : that is followed by ., / or : (but not ./ or ../),
+# with no space, quote, glob, = or :: (git-for-windows/msys2-runtime,
+# winsup/cygwin/msys2_path_conv.cc, find_path_start_and_type). Its : becomes
+# ;, enough to break a <rev>:<path> the way Windows does (r1e, #239).
 fake_tool() {
   local d="$1" name="$2" out="${3:-}" text
   IFS= read -r -d '' text <<EOF || true
@@ -1002,6 +1008,19 @@ if [ -f "\$f" ]; then
 fi
 if [ "$name" = git ]; then
   [ ! -x "$d/push-hook" ] || "$d/push-hook" "\$@" || exit \$?
+  if [ -f "$d/git-bash-paths" ]; then
+    n=\$#
+    while [ "\$n" -gt 0 ]; do
+      a="\$1"
+      shift
+      n=\$((n - 1))
+      case "\$a" in
+        *[[:space:]\\'\\"\\\`*?=]* | *\\[* | *\\]* | *::* | *:./* | *:../* | *://*) ;;
+        [!/:~-]*/*:[./]*) a="\${a//:/;}" ;;
+      esac
+      set -- "\$@" "\$a"
+    done
+  fi
   exec "$REAL_GIT" "\$@"
 fi
 printf '%s\n' "$out"
@@ -8380,11 +8399,13 @@ test_resume_past_the_pack_step_takes_the_publishing_choice_from_the_project() {
   # the publishing files are in the setup's change or not. A resumed run
   # takes that from the change (in the copy, or on GitHub when there is
   # no copy) and asks nothing; an option that says otherwise is refused
-  # before anything changes.
+  # before anything changes. git gets its arguments as from Git Bash,
+  # where a <rev>:.github/... is rewritten before git sees it (#239).
   local d n how
   for how in copy moved; do
     d="$(tmpdir)"
     working_git "$d"
+    : >"$d/git-bash-paths"
     fake_tool "$d" npm 10.0.0
     export STUB_GH_BUILD="pull_request fail"
     setup_run "$d" --non-interactive --yes --pack web --with-deploy
@@ -8411,6 +8432,7 @@ test_resume_past_the_pack_step_takes_the_publishing_choice_from_the_project() {
   # Without the publishing files: a yes is refused, no option takes the no.
   d="$(tmpdir)"
   working_git "$d"
+  : >"$d/git-bash-paths"
   fake_tool "$d" npm 10.0.0
   export STUB_GH_BUILD="pull_request fail"
   setup_run "$d" --non-interactive --yes --pack web
