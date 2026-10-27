@@ -6,6 +6,9 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Added
+- Release prep for v2.8.0 (PR #251)
+
 ## [2.8.0] — 2026-10-27
 
 ### Added
