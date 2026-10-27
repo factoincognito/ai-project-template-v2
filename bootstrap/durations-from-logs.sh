@@ -19,7 +19,7 @@
 # header "test <os>...", in the order ubuntu-latest, macos-latest,
 # windows-latest, then one line per test, sorted, with tenths of a
 # second (0 where an OS has no time: the harness weighs a 0 as the
-# median). Exits 1 when a log has no test
+# median; a measured time below 0.1 is written 0.1). Exits 1 when a log has no test
 # result. Carriage returns are ignored.
 #
 # Template-only: bootstrap/ is not in bootstrap/manifest.txt.
@@ -79,7 +79,11 @@ done | LC_ALL=C awk -F'\t' '
       name = list[i]; out = name
       split("ubuntu-latest macos-latest windows-latest", oses, " ")
       for (o = 1; o <= 3; o++) {
-        if ((name, oses[o]) in sum) out = out " " sprintf("%.1f", sum[name, oses[o]] / cnt[name, oses[o]])
+        if ((name, oses[o]) in sum) {
+          mean = sum[name, oses[o]] / cnt[name, oses[o]]
+          # A measured test is never written as 0, which means no time.
+          out = out " " ((mean < 0.1) ? "0.1" : sprintf("%.1f", mean))
+        }
         else out = out " 0"
       }
       print out

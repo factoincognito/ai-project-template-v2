@@ -74,6 +74,7 @@ if [ -n "${BOOTSTRAP_TEST_WEIGHTS:-}" ]; then
   WEIGHTS_COL="${BOOTSTRAP_TEST_WEIGHTS##*:}"
   case "$WEIGHTS_FILE" in /*) ;; *) WEIGHTS_FILE="$PWD/$WEIGHTS_FILE" ;; esac
   [ -f "$WEIGHTS_FILE" ] && [ -r "$WEIGHTS_FILE" ] || weights_refused "no readable file $WEIGHTS_FILE"
+  [ -s "$WEIGHTS_FILE" ] || weights_refused "it is empty"
 fi
 MANIFEST="${BOOTSTRAP_TEST_MANIFEST:-}"
 case "$MANIFEST" in
@@ -9758,9 +9759,10 @@ TESTS=$(declare -F | awk '{print $3}' | grep '^test_')
 # median of the measured ones (the lower middle one). Total ties go to
 # the shard with fewer tests, then the lower shard. Prints "refused:
 # <why>" instead, and nothing else, when the file has no header naming
-# the column, no data line or a value that is not a number.
+# the column, no data line or a value that is not a number (an empty
+# file is refused before, where the setting is read).
 by_duration() {
-  awk -v col="$2" -v want="$3" -v n="$4" '
+  LC_ALL=C awk -v col="$2" -v want="$3" -v n="$4" '
     NR == FNR {
       sub(/\r$/, "")
       if (FNR == 1) {
@@ -9778,7 +9780,6 @@ by_duration() {
     }
     { name[++m] = $0 }
     END {
-      if (!bad && FNR == 0) bad = "it is empty"
       if (!bad && !rows) bad = "it has no line of times"
       if (bad) { print "refused: " bad; exit }
       for (i = 2; i <= nv; i++) { x = v[i]; j = i - 1; while (j > 0 && v[j] > x) { v[j + 1] = v[j]; j-- } v[j + 1] = x }
@@ -9799,7 +9800,8 @@ by_duration() {
       for (i = 1; i <= m; i++) if (shard[i] == want) print name[i]
     }' "$1" -
 }
-ALL_COUNT="$(printf '%s\n' $TESTS | grep -c .)" || ALL_COUNT=0
+ALL_COUNT=0
+for t in $TESTS; do ALL_COUNT=$((ALL_COUNT + 1)); done
 if [ -n "$WEIGHTS_FILE" ]; then
   TESTS="$(printf '%s\n' $TESTS | by_duration "$WEIGHTS_FILE" "$WEIGHTS_COL" "$SHARD_I" "$SHARD_N")" \
     || weights_refused "the split failed"
