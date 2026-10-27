@@ -1051,11 +1051,11 @@ prompt_for() {
     ask "$@" || fail 2 "The script stopped because a question got no answer." \
       "Run the script again and type an answer to each question, or give every answer as an option with --non-interactive. $OPTIONS_NEXT"
     if [ -z "$ANSWER" ]; then
-      say "$ASK_NEEDED $ASK_RETRY"
+      say_note "$ASK_NEEDED $ASK_RETRY"
     elif "$check" "$ANSWER"; then
       return 0
     else
-      say "$PROBLEM $ASK_RETRY"
+      say_note "$PROBLEM $ASK_RETRY"
     fi
   done
 }
@@ -2507,7 +2507,7 @@ preflight_license() {
       add_problem --license "$problem"
       stop_if_problems
     fi
-    say "$problem $ASK_RETRY"
+    say_note "$problem $ASK_RETRY"
     ask_license
     case "$IN_LICENSE" in
       none | "$POLYFORM_KEY")

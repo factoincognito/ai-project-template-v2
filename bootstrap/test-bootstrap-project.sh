@@ -1815,6 +1815,20 @@ test_lines_inside_a_step_the_user_may_act_on_are_not_dim() {
     "$WAIT_LIMIT_LINE" "$WAIT_LINK_LINE"; do
     grep -qxF -- "$l" "$d/out" || { cat "$d/out" >&2; die "not plain: $l"; }
   done
+  # A licence typed at the question that GitHub does not know (#237
+  # delta review, B1): the problem and "Please try again." come inside
+  # the licence check, before the question is asked again.
+  d="$(tmpdir)"
+  working_git "$d"
+  printf '%s\n' my-app "" "Lends tools." "" "" python "" mti "" "" "" "" mit no >"$d/in"
+  export BOOTSTRAP_COLOR=1
+  whole "$d"
+  unset BOOTSTRAP_COLOR
+  expect_rc 1 "$d"
+  grep -qxF "${LOG_ON}==> Checking that GitHub knows the licence mti${COLOUR_OFF}" "$d/out" \
+    || { od -c "$d/out" | head -20 >&2; die "licence: the step line is not dim"; }
+  l="GitHub has no licence with the short name mti. Use none, one of the listed licences, or the short name of a licence on https://choosealicense.com/licenses/ (each licence's page shows its short name, such as mit). Please try again."
+  grep -qxF -- "$l" "$d/out" || { grep -F 'no licence with the short name' "$d/out" | od -c | head -20 >&2; die "licence: not plain: $l"; }
 }
 
 test_the_colour_key_says_in_words_what_each_colour_marks() {
