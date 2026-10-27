@@ -11303,6 +11303,37 @@ test_template_readme_has_step_0_and_the_one_command() {
   ! grep -qF 'Turn on branch protection for `main`' "$TEMPLATE_README" || die "the by-hand protection step is still there"
 }
 
+test_template_readme_step_1_folder_example_works_on_every_system() {
+  # End-to-end run 2, r2d: step 1's example "cd ~/Documents" failed in a
+  # new Ubuntu account, which has no such folder. Every folder that step
+  # 1 has you go to with cd is made first, in the same command
+  # (mkdir -p <folder> && cd <folder>), so the example works anywhere.
+  local step dirs dir n=0
+  # Step 1 ends at the next bold lead-in or heading.
+  step="$(awk '/^\*\*Step 1: / { on = 1; print; next } on && /^(\*\*|#)/ { exit } on { print }' "$TEMPLATE_README")"
+  [ -n "$step" ] || die "the README has no step 1 (test is stale)"
+  grep -F -- "$ONE_COMMAND" <<<"$step" >/dev/null || die "step 1 as the test reads it lacks the one command (test is stale)"
+  ! grep -F 'Documents' <<<"$step" >/dev/null || { printf '%s\n' "$step" >&2; die "step 1 still names a Documents folder"; }
+  dirs="$(grep -oE '(^|[`&;] *)cd [^ `&;]+' <<<"$step" | sed -E 's/^.*cd //' || true)"
+  for dir in $dirs; do
+    n=$((n + 1))
+    grep -F -- "mkdir -p $dir && cd $dir" <<<"$step" >/dev/null \
+      || { printf '%s\n' "$step" >&2; die "step 1 has you go to $dir without making it first (mkdir -p $dir && cd $dir)"; }
+  done
+  [ "$n" -ge 1 ] || { printf '%s\n' "$step" >&2; die "step 1 gives no example of going to a folder"; }
+}
+
+test_step_1_folder_check_catches_a_folder_it_does_not_make() {
+  # Guards the check above: a step 1 whose example goes to a folder with
+  # cd without making it first fails the check.
+  local d
+  d="$(tmpdir)"
+  awk '/^\*\*Step 1: / { print; print "(for example `cd ~/work`)"; next } { print }' "$TEMPLATE_README" >"$d/README.md"
+  ! cmp -s "$TEMPLATE_README" "$d/README.md" || die "nothing was planted (test is stale)"
+  ! ( TEMPLATE_README="$d/README.md"; test_template_readme_step_1_folder_example_works_on_every_system ) 2>/dev/null \
+    || die "the check passed a step 1 that goes to a folder it does not make"
+}
+
 test_template_readme_says_what_to_answer_wherever_it_has_you_run_gh_auth() {
   # Review of #235, N4: the README's other gh auth refresh (to delete a
   # project made to try things out) can ask gh's question too. Every
