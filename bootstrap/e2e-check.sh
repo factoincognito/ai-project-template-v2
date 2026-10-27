@@ -793,6 +793,9 @@ delete_hint() {
   echo "To delete this throwaway project when you are done, run these yourself (this check deleted nothing):"
   echo "    gh auth refresh -h github.com -s delete_repo"
   echo "    gh repo delete $OWNER/$NAME --yes"
+  # gh auth refresh asks this unless gh already signs git in to GitHub
+  # (gh v2.93.0, pkg/cmd/auth/shared/git_credential.go).
+  echo 'If gh auth refresh asks "Authenticate Git with your GitHub credentials?", answer Yes: type y and press Enter, or just press Enter.'
   # A symbolic link gets no removal line: rm -rf would remove only the
   # link, and the folder it points to is not checked to be the one meant.
   if [ -n "$COPY_PASSED" ] && [ -d "$DIR" ] && [ ! -L "${DIR%/}" ]; then

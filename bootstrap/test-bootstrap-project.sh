@@ -4949,6 +4949,145 @@ test_the_refresh_asks_for_every_missing_permission() {
   done
 }
 
+# GH_GIT_QUESTION: the step for gh's own question, in every guide that
+# has the user run gh auth login or gh auth refresh. End-to-end run 1
+# (repeated), finding r1b: the user had to ask what to answer. gh v2.93.0
+# (pkg/cmd/auth/shared/git_credential.go, used by both login and refresh)
+# asks it, default Yes, before the one-time code, unless gh already signs
+# git in to GitHub; so "If", and right after the command.
+GH_GIT_QUESTION='If gh asks "Authenticate Git with your GitHub credentials?", answer Yes: type y and press Enter, or just press Enter.'
+gg_permissions_public() { PERM_PROBLEM=missing; PERM_MISSING="public_repo workflow"; IN_VISIBILITY=public; guide_github_permissions; }
+
+test_every_gh_sign_in_guide_says_what_to_answer_when_gh_asks_to_authenticate_git() {
+  # For the sign-in guide (signed out, sign-in no longer accepted) and
+  # each refresh the permissions guide shows: the command, then at once
+  # the step for the question, once, then the one-time code step.
+  local d c g want cmd_n q_n code_n
+  for c in "gg_signed_out|gh auth login -h github.com -p https -w -s workflow" \
+    "gg_expired|gh auth login -h github.com -p https -w -s workflow" \
+    "gg_permissions|gh auth refresh -h github.com -s workflow" \
+    "gg_permissions_public|gh auth refresh -h github.com -s public_repo,workflow" \
+    "gg_permissions_repo|gh auth refresh -h github.com -s repo,workflow"; do
+    g="${c%%|*}"; want="${c#*|}"
+    d="$(tmpdir)"
+    pre "$d" "$g"
+    [ "$RC" -eq 0 ] || { cat "$d/err" >&2; die "$g failed"; }
+    cmd_n="$(grep -nxF -- "    $want" "$d/out" | cut -d: -f1)"
+    [ -n "$cmd_n" ] || { cat "$d/out" >&2; die "$g: the command $want is not shown"; }
+    [ "$(grep -cF -- "$GH_GIT_QUESTION" "$d/out")" -eq 1 ] \
+      || { cat "$d/out" >&2; die "$g: the Authenticate Git step is not there exactly once"; }
+    q_n="$(grep -nF -- "$GH_GIT_QUESTION" "$d/out" | cut -d: -f1)"
+    grep -qE '^  [0-9]+\. If gh asks ' <<<"$(sed -n "${q_n}p" "$d/out")" \
+      || { cat "$d/out" >&2; die "$g: the Authenticate Git text is not a numbered step of its own"; }
+    [ "$q_n" -eq $((cmd_n + 1)) ] || { cat "$d/out" >&2; die "$g: the Authenticate Git step does not come right after the command"; }
+    code_n="$(grep -n 'one-time code' "$d/out" | head -1 | cut -d: -f1)"
+    [ -n "$code_n" ] && [ "$q_n" -lt "$code_n" ] \
+      || { cat "$d/out" >&2; die "$g: the Authenticate Git step does not come before the one-time code step"; }
+  done
+  # No gh auth command, no question: a token in GH_TOKEN (gh cannot
+  # refresh it), and GitHub out of reach.
+  for g in gg_permissions_token gg_offline; do
+    d="$(tmpdir)"
+    pre "$d" "$g"
+    [ "$RC" -eq 0 ] || { cat "$d/err" >&2; die "$g failed"; }
+    expect_no_out "$d" "Authenticate Git"
+    ! grep -qE '^    gh auth (login|refresh)' "$d/out" || { cat "$d/out" >&2; die "$g: a gh auth command is shown"; }
+  done
+}
+
+api_signed_out() { CREATED_NOTE="$1"; API_STATUS=""; API_RC=4; API_MESSAGE=""; api_fail "read your GitHub account"; }
+
+test_the_sign_in_next_actions_say_what_to_answer_when_gh_asks_to_authenticate_git() {
+  # Review of #235, N1: the stop messages that give gh auth login as the
+  # next action (before and after the project exists) give the answer
+  # in the same line, as the push refusal does for gh auth refresh.
+  local d note want
+  for note in "" "The project acme/my-app exists on GitHub."; do
+    d="$(tmpdir)"
+    pre "$d" api_signed_out "$note"
+    [ "$RC" -ne 0 ] || { cat "$d/out" "$d/err" >&2; die "[$note]: did not stop"; }
+    want='gh auth login -h github.com -p https -w -s workflow (if gh asks "Authenticate Git with your GitHub credentials?", answer Yes), then '
+    grep -F -- "$want" <<<"$(sed -n 2p "$d/err")" >/dev/null \
+      || { cat "$d/err" >&2; die "[$note]: the next action does not say what to answer when gh asks to authenticate Git"; }
+  done
+}
+
+test_the_authenticate_git_step_is_one_shared_text_in_every_gh_sign_in_guide() {
+  # One text, so the guides cannot drift apart: the script writes gh's
+  # question once, and every guide that shows gh auth login or offers a
+  # gh auth refresh gives it through that one text.
+  local g body found=""
+  ( load_script; [ "$GH_GIT_QUESTION_STEP" = "$GH_GIT_QUESTION" ] ) \
+    || die "the script's GH_GIT_QUESTION_STEP is not the step this test expects"
+  ( load_script; [ "$GH_GIT_QUESTION_TEXT" = 'Authenticate Git with your GitHub credentials?' ] ) \
+    || die "the script's GH_GIT_QUESTION_TEXT is not gh's question"
+  [ "$(grep -cF 'Authenticate Git with your GitHub credentials' "$SCRIPT")" -eq 1 ] \
+    || { grep -nF 'Authenticate Git with your GitHub credentials' "$SCRIPT" >&2; die "gh's question is written more than once in the script"; }
+  for g in $(grep -oE '^guide_[a-z_]+\(\)' "$SCRIPT" | sed 's/()//'); do
+    body="$(G="$g() {" awk '$0 == ENVIRON["G"] { on = 1; next } on && /^}/ { exit } on { print }' "$SCRIPT")"
+    case "$body" in
+      *'"gh auth login'* | *'"gh auth refresh'* | *'offered gh-refresh-'*) ;;
+      *) continue ;;
+    esac
+    found="$found $g"
+    grep -qxF '  guide_step "$GH_GIT_QUESTION_STEP"' <<<"$body" \
+      || die "$g has the user run gh auth login or gh auth refresh but does not give GH_GIT_QUESTION_STEP"
+  done
+  # The search itself works: it finds the two guides known to have one.
+  case "$found " in *" guide_github_account "*) ;; *) die "the search did not find guide_github_account (found:$found)" ;; esac
+  case "$found " in *" guide_github_permissions "*) ;; *) die "the search did not find guide_github_permissions (found:$found)" ;; esac
+  # Stop messages and guide steps too: every line that names gh auth
+  # login or gh auth refresh in words gives gh's question through
+  # GH_GIT_QUESTION_TEXT.
+  local missing
+  missing="$(tmpdir)/missing"
+  gh_auth_words_without_answer "$SCRIPT" >"$missing"
+  [ ! -s "$missing" ] || { cat "$missing" >&2; die "a message names gh auth login or gh auth refresh without GH_GIT_QUESTION_TEXT (lines above)"; }
+  [ "$GH_AUTH_WORD_LINES" -ge 1 ] || die "the search found no message that names gh auth login or gh auth refresh (the push refusal for workflow files has one)"
+}
+
+# gh_auth_words_without_answer <file>: prints each line of the file that
+# names gh auth login or gh auth refresh in words without
+# $GH_GIT_QUESTION_TEXT. Comments and exact commands (say_command,
+# run_offered) are left out. GH_AUTH_WORD_LINES counts the lines looked
+# at; run it in the current shell (with a redirect, not in $( )).
+GH_AUTH_WORD_LINES=0
+gh_auth_words_without_answer() {
+  local line
+  GH_AUTH_WORD_LINES=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in *'gh auth login'* | *'gh auth refresh'*) ;; *) continue ;; esac
+    case "${line#"${line%%[![:space:]]*}"}" in '#'*) continue ;; esac
+    case "$line" in *say_command*|*run_offered*) continue ;; esac
+    GH_AUTH_WORD_LINES=$((GH_AUTH_WORD_LINES + 1))
+    case "$line" in *'$GH_GIT_QUESTION_TEXT'*) ;; *) printf '%s\n' "$line" ;; esac
+  done <"$1"
+}
+
+test_the_gh_auth_words_check_catches_what_it_looks_for() {
+  # Guards the check above (review of #235, N5): a guide step or a stop
+  # message that names gh auth login or gh auth refresh in words without
+  # the answer is caught; one with it, a comment and an exact command
+  # are not.
+  local d
+  d="$(tmpdir)"
+  printf '%s\n' \
+    '  guide_step "Sign in again with gh auth login -h github.com -p https -w, then come back."' \
+    '    stop_with_error "gh lost its sign-in." "Run gh auth login -h github.com -p https -w -s workflow, then start the script again." "$raw"' \
+    '        "Give gh that permission with the command gh auth refresh -h github.com -s delete_repo, then continue." \' \
+    '  say_command "gh auth login -h github.com -p https -w -s workflow"' \
+    '    gh-x) if [ "$2" = run ]; then run_offered "gh auth refresh -s x"; fi ;;' \
+    '  # gh auth login asks it too.' \
+    'NEXT="Run gh auth login (if gh asks \"$GH_GIT_QUESTION_TEXT\", answer Yes), then start again."' \
+    'OTHER="Run gh auth refresh (if gh asks \"$GH_GIT_QUESTION_TEXT\", answer Yes), then continue."' >"$d/script"
+  gh_auth_words_without_answer "$d/script" >"$d/missing"
+  [ "$(grep -c . "$d/missing")" -eq 3 ] || { cat "$d/missing" >&2; die "want the 3 lines without the answer, got the lines above"; }
+  grep -qF 'guide_step "Sign in again with gh auth login' "$d/missing" || die "a guide step naming gh auth login was not caught"
+  grep -qF 'Run gh auth login -h github.com -p https -w -s workflow, then start' "$d/missing" || die "a stop message naming gh auth login was not caught"
+  grep -qF 'gh auth refresh -h github.com -s delete_repo' "$d/missing" || die "a stop message naming gh auth refresh was not caught"
+  [ "$GH_AUTH_WORD_LINES" -eq 5 ] || die "looked at $GH_AUTH_WORD_LINES lines, want 5 (not the comment and the two exact commands)"
+}
+
 test_the_refresh_never_runs_without_a_yes_typed_at_the_terminal() {
   local d answer
   export STUB_GH_SCOPES="repo"
@@ -7405,6 +7544,9 @@ test_other_push_failures_are_explained_with_the_continue_command() {
       workflow)
         expect_err_shape "$d" "GitHub refused the setup's changes, because the sign-in that gh lends to git may not change the project's workflow files"
         sed -n 2p "$d/err" | grep -F 'gh auth refresh -h github.com -s workflow' >/dev/null || { cat "$d/err" >&2; die "workflow: the refresh command is not given"; }
+        # r1b: the refresh asks gh's question; the answer comes with it.
+        sed -n 2p "$d/err" | grep -F 'gh auth refresh -h github.com -s workflow (if gh asks "Authenticate Git with your GitHub credentials?", answer Yes), then continue the setup' >/dev/null \
+          || { cat "$d/err" >&2; die "workflow: the next action does not say what to answer when gh asks to authenticate Git"; }
         ;;
       other)
         expect_err_shape "$d" "git could not send the setup's changes to GitHub\. "
@@ -10331,6 +10473,12 @@ test_template_readme_has_step_0_and_the_one_command() {
   grep -qiE 'step 0' <<<"$body" || die "no step 0"
   grep -qF -- "$SIGN_IN_LINE" <<<"$body" || die "step 0 lacks the sign-in line"
   grep -qF 'Authenticate Git' <<<"$body" || die "step 0 does not say to answer Yes to Authenticate Git"
+  # Review of #235, N2: gh asks it before it shows the one-time code
+  # (gh v2.93.0, login_flow.go), so step 0 says it in that order.
+  local ask code
+  ask="$(grep -nF 'Authenticate Git' <<<"$body" | head -1 | cut -d: -f1)"
+  code="$(grep -nF 'one-time code' <<<"$body" | head -1 | cut -d: -f1)"
+  [ -n "$code" ] && [ "$ask" -lt "$code" ] || { printf '%s\n' "$body" >&2; die "step 0 does not put the Authenticate Git answer before the one-time code"; }
   grep -qF 'Git for Windows' <<<"$body" || die "step 0 lacks Git for Windows"
   grep -qF 'https://cli.github.com' <<<"$body" || die "step 0 does not say where gh comes from"
   # Here-strings, not printf | grep -q: under pipefail, grep -q leaving
@@ -10340,6 +10488,38 @@ test_template_readme_has_step_0_and_the_one_command() {
   ! grep -qF 'does not exist until' "$TEMPLATE_README" || die "the stale 'does not exist until' text is still there"
   [ -z "$(placement_rows "$TEMPLATE_README")" ] || { placement_rows "$TEMPLATE_README" >&2; die "the by-hand pack table is still there"; }
   ! grep -qF 'Turn on branch protection for `main`' "$TEMPLATE_README" || die "the by-hand protection step is still there"
+}
+
+test_template_readme_says_what_to_answer_wherever_it_has_you_run_gh_auth() {
+  # Review of #235, N4: the README's other gh auth refresh (to delete a
+  # project made to try things out) can ask gh's question too. Every
+  # part of the README that has the reader run gh auth login or gh auth
+  # refresh says to answer Yes to it, except the item that only describes
+  # the permissions guide (the guide gives the step). A part starts at a
+  # line that is not indented, or at a nested "  - " item, and goes on
+  # over indented and empty lines (a numbered step with its command).
+  local part="" line hits="" n=0
+  readme_part_check() {
+    case "$part" in
+      *'gh auth login -h'* | *'gh auth refresh -h'*) ;;
+      *) return 0 ;;
+    esac
+    # Wrapped lines keep their indentation: one space between words.
+    part="$(tr -s ' ' <<<"$part")"
+    case "$part" in *'the script offers to run'*) return 0 ;; esac
+    n=$((n + 1))
+    case "$part" in *'Authenticate Git with your GitHub credentials?'*) ;; *) hits="$hits | $part" ;; esac
+  }
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      "" | " "*) case "$line" in "  - "*) readme_part_check; part="" ;; esac ;;
+      *) readme_part_check; part="" ;;
+    esac
+    part="$part $line"
+  done <"$TEMPLATE_README"
+  readme_part_check
+  [ -z "$hits" ] || die "a part of the README has the reader run gh auth without the answer to gh's question:$hits"
+  [ "$n" -ge 2 ] || die "found $n parts of the README that have the reader run gh auth, want at least 2 (step 0 and deleting a project)"
 }
 
 # README_GUIDES: each guide of the script as "<function>|<group>|<phrase>":
