@@ -15,7 +15,7 @@ Last update: 2026-10-27
 Build and release: the turn-key bootstrap script is built (v2.4.0); the fixes for end-to-end run 1 are released (v2.5.0, 2026-10-26), v2.6.0 adds `STATUS.md` to every new project, and v2.7.0 (2026-10-27, the fixes for the repeated run 1, `--version`, a colour key) is published to the bootstrapper.
 
 ## Current focus
-Getting the bootstrapper through Adam's end-to-end runs, which must pass before acuteping, the first real project, is created. Run 1 on v2.7.0 (2026-10-27) passed `e2e-check.sh` but had three findings: input typed ahead answered the run offer, and two colour wishes (`docs/NEXT_SESSION.md`, Adam's to-do 2). Their fixes are #247 (in review) and #248 (being built).
+Getting the bootstrapper through Adam's end-to-end runs, which must pass before acuteping, the first real project, is created. Run 1 on v2.7.0 (2026-10-27) passed `e2e-check.sh` but had four findings: input typed ahead answered the run offer, two colour wishes and a missing blank line (`docs/NEXT_SESSION.md`, Adam's to-do 2). Their fixes are #247 (in review) and #248 (being built).
 
 ## Next step
 Clead merges #247 and #248 after review and CI, prepares v2.8.0, and Adam tags it; then Adam repeats run 1 on v2.8.0.
