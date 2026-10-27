@@ -4005,16 +4005,36 @@ guide_shape_problem() {
   fi
 }
 
-# numbered_prose <file> <label>: the lines of a guide's output that are
-# not indented by four spaces (the commands), as "<label> <n>: <line>",
-# n counting only those lines: what banned_hits reads.
+# numbered_prose <file> <label>: prints the lines of a guide's output
+# that are not indented by four spaces (the commands) as "<N>: <line>",
+# N counting on over every call (PROSE_N), as awk's NR did for one case:
+# that is what banned_hits reads, so no label is in it. PROSE_LABEL[N]
+# keeps "<label> <n>", n counting within this call; PROSE_CASE_LINES is
+# the number of lines this call printed. Run it in the current shell
+# (with a redirect, not in $( )), so the counters carry over.
+PROSE_N=0
+PROSE_CASE_LINES=0
+PROSE_LABEL=()
 numbered_prose() {
   local line n=0
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in "    "*) continue ;; esac
     n=$((n + 1))
-    printf '%s %s: %s\n' "$2" "$n" "$line"
+    PROSE_N=$((PROSE_N + 1))
+    PROSE_LABEL[PROSE_N]="$2 $n"
+    printf '%s: %s\n' "$PROSE_N" "$line"
   done <"$1"
+  PROSE_CASE_LINES=$n
+}
+
+# labelled_hits: reads banned_hits' lines ("<N>: <text>") on stdin and
+# prints each as "<label> <n>: <text>" (from PROSE_LABEL).
+labelled_hits() {
+  local hit
+  while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    printf '%s: %s\n' "${PROSE_LABEL[${hit%%:*}]}" "${hit#*: }"
+  done
 }
 
 test_every_guide_says_why_how_what_you_see_and_how_it_is_checked() {
@@ -4027,9 +4047,10 @@ test_every_guide_says_why_how_what_you_see_and_how_it_is_checked() {
   # the same as in a fresh folder), the shape is read with bash's own
   # regular expressions, and the banned words are looked for once, in
   # the prose of every case, each line labelled with its case.
-  local d os g with label problem hits prose
+  local d os g with label problem hits prose cases=0
   prose="$(tmpdir)/prose"
   : >"$prose"
+  PROSE_N=0; PROSE_LABEL=()
   for os in macos linux windows; do
     for with in "" brew winget; do
       d="$(tmpdir)"
@@ -4042,16 +4063,14 @@ test_every_guide_says_why_how_what_you_see_and_how_it_is_checked() {
         problem="$(guide_shape_problem "$d/out")"
         [ -z "$problem" ] || { cat "$d/out" >&2; die "$label: $problem"; }
         numbered_prose "$d/out" "$label" >>"$prose"
+        [ "$PROSE_CASE_LINES" -gt 0 ] || die "$label: no prose collected"
+        cases=$((cases + 1))
       done
     done
   done
-  # Every case's prose was collected, and no part of a label holds a
-  # banned word, so a hit is the guide's own.
-  [ "$(grep -c . "$prose")" -ge 234 ] || die "the prose of some cases was not collected"
-  [ -z "$( { guide_cases; printf '%s\n' macos linux windows none brew winget; } | banned_hits)" ] \
-    || die "a part of a case label holds a banned word (test is stale)"
+  [ "$cases" -eq $((3 * 3 * $(guide_cases | grep -c .))) ] || die "only $cases cases were checked"
   hits="$(banned_hits <"$prose")"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "banned word in a guide (labels above)"; }
+  [ -z "$hits" ] || { printf '%s\n' "$hits" | labelled_hits >&2; die "banned word in a guide (cases above)"; }
 }
 
 test_the_every_guide_checks_catch_what_they_look_for() {
@@ -4080,11 +4099,16 @@ test_the_every_guide_checks_catch_what_they_look_for() {
   printf '%s' "$(cat "$good")" >"$d/last"
   [ -z "$(guide_shape_problem "$d/last")" ] || die "a last line with no line break was not read"
   # Command lines (4-space indent) are left out and not counted: one
-  # with a banned word comes first here.
+  # with a banned word comes first here. Two cases in a row: the second
+  # case's line is number 2 overall and number 1 within its case.
   printf '%s\n' '    open the repo page' 'Open the repo page.' >"$d/words"
-  [ "$(numbered_prose "$d/words" macos/none/guide_git)" = "macos/none/guide_git 1: Open the repo page." ] \
-    || die "numbered_prose read the command line or counted it"
-  [ "$(numbered_prose "$d/words" macos/none/guide_git | banned_hits)" = "macos/none/guide_git 1: Open the repo page." ] \
+  printf '%s\n' 'All is well here.' >"$d/clean"
+  PROSE_N=0; PROSE_LABEL=()
+  numbered_prose "$d/clean" linux/none/guide_npm >"$d/prose"
+  numbered_prose "$d/words" macos/none/guide_git >>"$d/prose"
+  [ "$PROSE_CASE_LINES" -eq 1 ] || die "numbered_prose counted $PROSE_CASE_LINES lines for one prose line"
+  [ "$(sed -n 2p "$d/prose")" = "2: Open the repo page." ] || die "numbered_prose read the command line or counted it"
+  [ "$(banned_hits <"$d/prose" | labelled_hits)" = "macos/none/guide_git 1: Open the repo page." ] \
     || die "the banned word in prose was not caught with its case, or the command line was read"
   # The why needs at least 6 words (5 words, each followed by a space,
   # then more): 5 in all is refused, 6 accepted.
