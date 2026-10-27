@@ -143,8 +143,7 @@ STAND_IN_SHEBANG="$(stand_in_shebang "${BASH:-}")"
 write_stand_in() {
   case "$1" in */*) ;; *) die "write_stand_in: '$1' has no folder" ;; esac
   [ -d "${1%/*}" ] || mkdir -p "${1%/*}"
-  printf '%s\n%s' "$STAND_IN_SHEBANG" "$2" >"$1"
-  chmod +x "$1"
+  printf '%s\n%s' "$STAND_IN_SHEBANG" "$2" >"$1" && chmod +x "$1"
 }
 
 # load_script: source the script with no arguments, defining its
@@ -3062,17 +3061,21 @@ test_every_stand_in_starts_the_harness_bash_directly() {
   ' "$HERE/test-bootstrap-project.sh")"
   [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "a stand-in writes its own bash shebang"; }
   d="$(tmpdir)"
-  make_stub_gh "$d/s/gh"; make_stub_run "$d/s/run"; make_stub_npm "$d/s/npm"
-  make_refuser "$d/s/refuser" BOOTSTRAP_GH
-  fake_tool "$d" git; fake_tool "$d" uname Linux
-  failing_push "$d" auth; cp "$d/push-hook" "$d/s/push-hook"
-  finish_hook "$d" offline; cp "$d/push-hook" "$d/s/finish-hook"
-  use_built "$d"; cp "$d/bin/date" "$d/s/date"
-  cp "$WORK/refuse/sleep" "$WORK/refuse/gh" "$d/s/"
-  for f in "$d/s/"* "$d/bin/git" "$d/bin/uname"; do
-    [ -x "$f" ] || die "${f##*/} is not executable"
-    [ "$(sed -n 1p "$f")" = "$want" ] || die "${f##*/} starts with '$(sed -n 1p "$f")', want '$want'"
-  done
+  # Each file as the harness wrote it, checked where it was written.
+  first_line_is() {
+    [ -x "$1" ] || die "$2 is not executable"
+    [ "$(sed -n 1p "$1")" = "$want" ] || die "$2 starts with '$(sed -n 1p "$1")', want '$want'"
+  }
+  make_stub_gh "$d/s/gh"; first_line_is "$d/s/gh" "the stub gh"
+  make_stub_run "$d/s/run"; first_line_is "$d/s/run" "the stub runner"
+  make_stub_npm "$d/s/npm"; first_line_is "$d/s/npm" "the stub npm"
+  make_refuser "$d/s/refuser" BOOTSTRAP_GH; first_line_is "$d/s/refuser" "a refuser"
+  first_line_is "$WORK/refuse/gh" "the gh refuser"; first_line_is "$WORK/refuse/sleep" "the sleep stand-in"
+  fake_tool "$d" git; first_line_is "$d/bin/git" "the fake git"
+  fake_tool "$d" uname Linux; first_line_is "$d/bin/uname" "a fake tool"
+  failing_push "$d" auth; first_line_is "$d/push-hook" "the failing-push hook"
+  finish_hook "$d" offline; first_line_is "$d/push-hook" "the finish hook"
+  use_built "$d"; first_line_is "$d/bin/date" "the fake date"
 }
 
 test_write_stand_in_refuses_a_path_with_no_folder_and_makes_its_folder() {
@@ -4280,8 +4283,11 @@ test_a_missing_workflow_permission_offers_the_refresh_and_checks_again() {
   echo 1 >"$d/scopes-old"
   printf 'yes\n' >"$d/tty"
   prepare "$d"
-  write_stand_in "$d/run" 'printf '"'"'%s|%s\n'"'"' "$*" "${GH_PROMPT_DISABLED-<unset>}" >>"$STUB_RUN_LOG"
-'
+  local run_text
+  IFS= read -r -d '' run_text <<'RUN' || true
+printf '%s|%s\n' "$*" "${GH_PROMPT_DISABLED-<unset>}" >>"$STUB_RUN_LOG"
+RUN
+  write_stand_in "$d/run" "$run_text"
   pre "$d" with_vis public preflight_github_permissions
   expect_rc 0 "$d"
   expect_out "$d" "does not have every permission on GitHub that the setup needs."
