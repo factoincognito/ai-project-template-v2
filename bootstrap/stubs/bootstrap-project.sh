@@ -422,15 +422,34 @@ input_is_terminal() {
 # to wait for a key. When the mode cannot be saved or set, nothing is
 # read (dd would wait for a whole line); when the saved mode cannot be
 # put back, stty sane brings back a terminal that reads whole lines.
+# While the mode is changed, TTY_SAVED holds the saved one and fd 7 the
+# terminal, so that a stop in between (Ctrl-C: the INT trap exits 130)
+# still puts it back: leave_script calls restore_terminal_mode (#247
+# review, B1). A terminal left at min 0 would make every later read
+# return nothing at once, in the user's own shell too.
+TTY_SAVED=""
 discard_typeahead() {
   local saved
   input_is_terminal || return 0
   saved="$(stty -g 2>/dev/null)" || return 0
   [ -n "$saved" ] || return 0
+  exec 7<&0
+  TTY_SAVED="$saved"
   if stty -icanon min 0 time 0 2>/dev/null; then
     dd bs=65536 count=1 >/dev/null 2>&1 || true
   fi
-  stty "$saved" 2>/dev/null || stty sane 2>/dev/null || true
+  restore_terminal_mode
+  return 0
+}
+
+# restore_terminal_mode: puts back the terminal mode discard_typeahead
+# saved (TTY_SAVED, on the terminal open on fd 7), once; nothing to do
+# when it is back already.
+restore_terminal_mode() {
+  [ -n "$TTY_SAVED" ] || return 0
+  stty "$TTY_SAVED" <&7 2>/dev/null || stty sane <&7 2>/dev/null || true
+  TTY_SAVED=""
+  exec 7<&-
   return 0
 }
 
@@ -4713,6 +4732,7 @@ catch_stops() {
 leave_script() {
   local rc=$? work="$WORK_DIR"
   trap - EXIT INT ERR
+  restore_terminal_mode
   UNEXPECTED_LOG=""
   [ -z "$STDERR_LOG" ] || [ ! -s "$STDERR_LOG" ] || UNEXPECTED_LOG="$(tail -5 "$STDERR_LOG" | tr -d '\r')"
   WORK_DIR=""
