@@ -12,6 +12,18 @@
 #                              of tests (interleaved, so the slow tests
 #                              spread over the shards). CI runs each OS
 #                              leg as n shards (PBI-1.18).
+#   BOOTSTRAP_TEST_WEIGHTS=f:c with BOOTSTRAP_TEST_SHARD: split by
+#                              measured duration instead (PBI-1.22).
+#                              File f has a header "test <columns...>"
+#                              and one line per test, its seconds in each
+#                              column; c names the column (CI: the OS).
+#                              Longest test first, each to the shard with
+#                              the least total so far (ties: fewer tests,
+#                              then the lower shard); a test f does not
+#                              list, or lists with 0, weighs the median
+#                              of the column. bootstrap/
+#                              test-durations.txt holds the measured
+#                              times (bootstrap/durations-from-logs.sh).
 #   BOOTSTRAP_TEST_LIST=1      print the names of the tests that would
 #                              run, one per line, and run none.
 #   BOOTSTRAP_TEST_MANIFEST=f  write the name of each test run to file f
@@ -46,6 +58,23 @@ if [ -n "${BOOTSTRAP_TEST_SHARD:-}" ]; then
     echo "BOOTSTRAP_TEST_SHARD must be i/n, whole numbers of up to 6 digits with 1 <= i <= n and no leading zeros; got '$BOOTSTRAP_TEST_SHARD'." >&2
     exit 2
   fi
+fi
+# The weights setting, read before anything else too: a shard that
+# cannot read it would run a wrong set of tests. The file's content is
+# checked where it is read, before any test runs (by_duration).
+WEIGHTS_FILE=""
+WEIGHTS_COL=""
+weights_refused() {
+  echo "BOOTSTRAP_TEST_WEIGHTS must be <file>:<column> of a durations file; '$BOOTSTRAP_TEST_WEIGHTS': $1." >&2
+  exit 2
+}
+if [ -n "${BOOTSTRAP_TEST_WEIGHTS:-}" ]; then
+  case "$BOOTSTRAP_TEST_WEIGHTS" in *?:?*) ;; *) weights_refused "it is not <file>:<column>" ;; esac
+  WEIGHTS_FILE="${BOOTSTRAP_TEST_WEIGHTS%:*}"
+  WEIGHTS_COL="${BOOTSTRAP_TEST_WEIGHTS##*:}"
+  case "$WEIGHTS_FILE" in /*) ;; *) WEIGHTS_FILE="$PWD/$WEIGHTS_FILE" ;; esac
+  [ -f "$WEIGHTS_FILE" ] && [ -r "$WEIGHTS_FILE" ] || weights_refused "no readable file $WEIGHTS_FILE"
+  [ -s "$WEIGHTS_FILE" ] || weights_refused "it is empty"
 fi
 MANIFEST="${BOOTSTRAP_TEST_MANIFEST:-}"
 case "$MANIFEST" in
@@ -9721,13 +9750,71 @@ test_dev_infrastructure_says_the_script_turns_protection_on() {
 # ---------- run ----------
 
 TESTS=$(declare -F | awk '{print $3}' | grep '^test_')
+# by_duration <file> <column> <i> <n>: reads the tests on stdin, in the
+# list's order, and prints those of shard i of n by measured duration
+# (see BOOTSTRAP_TEST_WEIGHTS above), in the list's order. A carriage
+# return at the end of any line of the file is ignored. Weights are
+# compared in hundredths of a second; a weight of 0 means no time was
+# measured, and it and every test the file does not list weigh the
+# median of the measured ones (the lower middle one). Total ties go to
+# the shard with fewer tests, then the lower shard. Prints "refused:
+# <why>" instead, and nothing else, when the file has no header naming
+# the column, no data line or a value that is not a number (an empty
+# file is refused before, where the setting is read).
+by_duration() {
+  LC_ALL=C awk -v col="$2" -v want="$3" -v n="$4" '
+    NR == FNR {
+      sub(/\r$/, "")
+      if (FNR == 1) {
+        if ($1 != "test") { bad = "its first line is not a header starting with test"; next }
+        for (k = 2; k <= NF; k++) if ($k == col) c = k
+        if (!c) bad = "it has no column " col
+        next
+      }
+      if (bad || NF == 0) next
+      if ($c !~ /^[0-9]+(\.[0-9]+)?$/) { bad = "line " FNR " has no number in column " col; next }
+      rows++
+      x = int($c * 100 + 0.5)
+      if (x > 0) { w[$1] = x; v[++nv] = x }
+      next
+    }
+    { name[++m] = $0 }
+    END {
+      if (!bad && !rows) bad = "it has no line of times"
+      if (bad) { print "refused: " bad; exit }
+      for (i = 2; i <= nv; i++) { x = v[i]; j = i - 1; while (j > 0 && v[j] > x) { v[j + 1] = v[j]; j-- } v[j + 1] = x }
+      med = nv ? v[int((nv + 1) / 2)] : 1
+      for (i = 1; i <= m; i++) { wt[i] = (name[i] in w) ? w[name[i]] : med; ord[i] = i }
+      # Longest first; equal weights in the order of the list.
+      for (i = 2; i <= m; i++) {
+        x = ord[i]; j = i - 1
+        while (j > 0 && (wt[ord[j]] < wt[x] || (wt[ord[j]] == wt[x] && ord[j] > x))) { ord[j + 1] = ord[j]; j-- }
+        ord[j + 1] = x
+      }
+      for (k = 1; k <= n; k++) { tot[k] = 0; cnt[k] = 0 }
+      for (i = 1; i <= m; i++) {
+        best = 1
+        for (k = 2; k <= n; k++) if (tot[k] < tot[best] || (tot[k] == tot[best] && cnt[k] < cnt[best])) best = k
+        tot[best] += wt[ord[i]]; cnt[best]++; shard[ord[i]] = best
+      }
+      for (i = 1; i <= m; i++) if (shard[i] == want) print name[i]
+    }' "$1" -
+}
+ALL_COUNT=0
+for t in $TESTS; do ALL_COUNT=$((ALL_COUNT + 1)); done
+if [ -n "$WEIGHTS_FILE" ]; then
+  TESTS="$(printf '%s\n' $TESTS | by_duration "$WEIGHTS_FILE" "$WEIGHTS_COL" "$SHARD_I" "$SHARD_N")" \
+    || weights_refused "the split failed"
+  case "$TESTS" in "refused: "*) weights_refused "${TESTS#refused: }" ;; esac
+fi
 if [ -n "$MANIFEST" ]; then
   mkdir -p "$(dirname "$MANIFEST")"
   : >"$MANIFEST"
 fi
 k=0
 for t in $TESTS; do
-  if [ $((k % SHARD_N)) -eq $((SHARD_I - 1)) ]; then
+  # Split by duration: TESTS holds this shard's tests only.
+  if [ -n "$WEIGHTS_FILE" ] || [ $((k % SHARD_N)) -eq $((SHARD_I - 1)) ]; then
     if [ "${BOOTSTRAP_TEST_LIST:-}" = 1 ]; then
       printf '%s\n' "$t"
     else
@@ -9739,7 +9826,7 @@ for t in $TESTS; do
 done
 [ "${BOOTSTRAP_TEST_LIST:-}" != 1 ] || exit 0
 if [ $((PASSED + FAILED)) -eq 0 ]; then
-  echo "This run ran no test: shard $SHARD_I of $SHARD_N selects none of the $k tests." >&2
+  echo "This run ran no test: shard $SHARD_I of $SHARD_N selects none of the $ALL_COUNT tests." >&2
   exit 1
 fi
 
