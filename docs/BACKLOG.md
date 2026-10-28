@@ -796,6 +796,8 @@ get a working project in any supported language.
 
   **Candidate HOW (Clead's, not decided).** Folder `languages/csharp/`. `dotnet format` for lint and formatting; nullable reference types with warnings as errors; xUnit with coverlet for the 80% line coverage gate; `actions/setup-dotnet` with the SDK version pinned; no lockfile step in the bootstrap script, as for the Python pack. Versions and tools are checked when specced, not taken from this line.
 
+  **Order (Clead, 2026-10-28), so the pack cannot delay acuteping.** The bootstrapper's end-to-end runs (`docs/NEXT_SESSION.md`, Adam's to-do 2) are the gate for acuteping, and the runs test the bootstrap script. Part 1, now: the `languages/csharp/` folder, its job in `packs.yml`, `tools/layout-pack.sh` and `tools/test-layout-pack.sh`, and the README tables. Part 2, only after the end-to-end runs have passed: the bootstrap script offers the pack, and `bootstrap/e2e-check.sh` checks it. Part 1 adds nothing the runs exercise; if part 1 needs a change to `bootstrap/stubs/bootstrap-project.sh` itself (the layout table lives there), it is kept to the layout rows and released after the runs.
+
   **Done when.** The pack meets "Rules for a pack" and "Adding a pack" in `languages/README.md`: green on day one on a scratch project, each rule CI enforces proven by a deliberate violation, a job in `.github/workflows/packs.yml`, its files in the bootstrap script's layout table and in `tools/test-layout-pack.sh`, both README tables, and the pack offered by the bootstrap script and checked by `bootstrap/e2e-check.sh`.
 
   **Rules that apply.** Code and config: test-first, reviewed by the role that did not write it.
