@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Lays out a language pack in a project directory, exactly as the setup
 # script's layout table places it.
-# Usage: bash tools/layout-pack.sh <node|web|python|react-native> <target-dir>
+# Usage: bash tools/layout-pack.sh <node|web|python|react-native|csharp> <target-dir>
 #
 # Template-only: tools/ is not in bootstrap/manifest.txt. Used by
 # .github/workflows/packs.yml to test each pack on a fresh project.

@@ -14,6 +14,7 @@ project changes them as it needs to.
 | `web/` | A static web page built into one self-contained HTML file | Everything in `node/`, plus a Vite build and Playwright browser tests at phone and desktop width, in light and dark mode |
 | `python/` | Python 3.14 code: libraries, services, tools | Ruff lint and format, mypy in strict mode, pytest with an 80% line coverage gate |
 | `react-native/` | A mobile app for Android and iOS, built with React Native and Expo | Biome lint and format, TypeScript type check, Jest (jest-expo) unit and component tests with an 80% line coverage gate. No device, simulator or app-store builds |
+| `csharp/` | C# on .NET 10: a class library, a console app and an xUnit test project. No web (ASP.NET), desktop or mobile app | `dotnet format` (formatting, code style and analyzers), a build with nullable reference types and every warning an error, xUnit v3 with an 80% line coverage gate (coverlet) |
 
 The web pack also has an optional deploy to Cloudflare (`deploy.yml`,
 `wrangler.jsonc`). The setup script, `bootstrap-project.sh`, lays the
@@ -31,7 +32,7 @@ Every pack follows the same shape. A new pack should too:
 | `code-standards.md` | The rules for code in this language, with "First-time setup" and "Running the project" sections giving the commands to install and to run the checks locally. It is read in place, not copied into the project layout. |
 | `gitignore` | Entries to merge into the project's `.gitignore`. Named without the dot so it doesn't act on the template itself. |
 | `vscode-settings.json`, `vscode-extensions.json` | Editor settings and recommended extensions, copied to `.vscode/`. Recommend only what the pack needs. |
-| The language's own manifest and config | For example `package.json`, `tsconfig.json` and `biome.json`, or `pyproject.toml` and the `requirements` files. Tool versions are pinned exactly, so every project starts from a known, tested combination. |
+| The language's own manifest and config | For example `package.json`, `tsconfig.json` and `biome.json`, or `pyproject.toml` and the `requirements` files, or `global.json`, `Directory.Build.props`, `Directory.Packages.props` and the `.csproj` files. Tool versions are pinned exactly, so every project starts from a known, tested combination. |
 | A placeholder or starter test | Keeps the coverage gate green on day one. The project replaces it with its own code and tests. |
 
 ## Rules for a pack

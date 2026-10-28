@@ -656,6 +656,7 @@ test_template_pack_test_patterns_each_count() {
   template_verdict 0 languages/python/starter/src/tests/__init__.py
   template_verdict 0 languages/python/test_foo.py
   template_verdict 0 languages/web/starter/e2e/smoke.e2e.ts
+  template_verdict 0 languages/csharp/starter/tests/Example.Tests/GreeterTests.cs
 }
 # Each of these is code only because of one pattern.
 test_template_code_patterns_each_count() {
@@ -673,6 +674,10 @@ test_template_pack_starter_code_with_its_test_passes() {
   template_verdict 0 languages/web/starter/src/example.ts languages/web/starter/src/example.test.ts
 }
 test_template_pack_starter_code_alone_fails()   { template_verdict 1 languages/web/starter/src/example.ts; }
+test_template_csharp_starter_code_alone_fails() { template_verdict 1 languages/csharp/starter/src/Example/Greeter.cs; }
+test_template_csharp_starter_code_with_its_test_passes() {
+  template_verdict 0 languages/csharp/starter/src/Example/Greeter.cs languages/csharp/starter/tests/Example.Tests/GreeterTests.cs
+}
 
 test_template_ci_workflow_is_wired_to_the_check() {
   # A workflow cannot run locally, so: a wiring assertion that fails
@@ -703,7 +708,7 @@ test_template_ci_workflow_is_wired_to_the_check() {
 # chain test makes it: the bootstrapper's build output on main, and the
 # pack laid out on a `setup` branch (the setup pull request).
 
-PACKS="node web python react-native"
+PACKS="node web python react-native csharp"
 
 pack_args() {
   local line
@@ -759,11 +764,18 @@ after_setup() {
   git -C "$1" checkout -q -b change
 }
 
-pack_code_file() { case "$1" in python) echo src/feature.py ;; *) echo src/feature.ts ;; esac; }
+pack_code_file() {
+  case "$1" in
+    python) echo src/feature.py ;;
+    csharp) echo src/Example/Feature.cs ;;
+    *) echo src/feature.ts ;;
+  esac
+}
 pack_test_file() {
   case "$1" in
     python) echo src/tests/test_feature.py ;;
     react-native) echo src/feature.test.tsx ;;
+    csharp) echo tests/Example.Tests/FeatureTests.cs ;;
     *) echo src/feature.test.ts ;;
   esac
 }
@@ -803,7 +815,7 @@ test_every_pack_treats_config_and_docs_as_not_code() {
     pack_args "$p"
     w="$(project_repo "$p" "config-$p")"
     after_setup "$w"
-    case "$p" in python) cfg=pyproject.toml ;; *) cfg=package.json ;; esac
+    case "$p" in python) cfg=pyproject.toml ;; csharp) cfg=src/Example/Example.csproj ;; *) cfg=package.json ;; esac
     printf '\n' >>"$w/$cfg"; git -C "$w" add "$cfg"
     printf '\n' >>"$w/.github/workflows/ci.yml"; git -C "$w" add .github/workflows/ci.yml
     put "$w" docs/notes.md "words"
@@ -834,6 +846,32 @@ test_every_pack_counts_the_tests_it_runs() {
   put "$w" src/tests/conftest.py; commit "$w" "fixture helper"
   run_check "$w" "$BASE" "${PACK_ARGS[@]}"
   [ "$CHECK_RC" -eq 0 ] || die "python: conftest.py not counted as a test: $CHECK_OUT"
+  # C#: everything under tests/, helpers and project files included.
+  pack_args csharp
+  for f in tests/Example.Tests/Support/Fixture.cs tests/Other.Tests/Other.Tests.csproj; do
+    w="$(project_repo csharp "forms-csharp")"
+    after_setup "$w"
+    put "$w" "$f"; commit "$w" "test form"
+    run_check "$w" "$BASE" "${PACK_ARGS[@]}"
+    [ "$CHECK_RC" -eq 0 ] || die "csharp: $f not counted as a test (exit $CHECK_RC): $CHECK_OUT"
+    grep -qxF "test: $f" <<<"$CHECK_OUT" || die "csharp: $f not listed as a test"
+  done
+}
+
+test_csharp_pack_counts_project_files_under_src_as_config() {
+  # A .csproj is config: a new project under src/ needs no test, but code
+  # added with it still does.
+  local w
+  pack_args csharp
+  w="$(project_repo csharp "csharp-csproj")"
+  after_setup "$w"
+  put "$w" src/Other/Other.csproj; commit "$w" "a new project file only"
+  run_check "$w" "$BASE" "${PACK_ARGS[@]}"
+  [ "$CHECK_RC" -eq 0 ] || die "csharp: a project file alone was refused (exit $CHECK_RC): $CHECK_OUT"
+  put "$w" src/Other/Thing.cs; commit "$w" "and code"
+  run_check "$w" "$BASE" "${PACK_ARGS[@]}"
+  [ "$CHECK_RC" -eq 1 ] || die "csharp: code in a new project was not refused (exit $CHECK_RC): $CHECK_OUT"
+  grep -qxF "code: src/Other/Thing.cs" <<<"$CHECK_OUT" || die "csharp: the code file not named: $CHECK_OUT"
 }
 
 test_web_pack_counts_the_page_as_code_and_e2e_as_tests() {

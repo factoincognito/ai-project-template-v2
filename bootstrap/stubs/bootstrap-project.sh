@@ -28,7 +28,7 @@
 #     Asks for each answer not given as an option, then checks them all.
 #     --help lists the options; --non-interactive asks nothing.
 #     --version prints the version and the commit it was built from.
-#   bash bootstrap-project.sh layout-pack <node|web|python|react-native> <target-dir>
+#   bash bootstrap-project.sh layout-pack <node|web|python|react-native|csharp> <target-dir>
 #     Lays out a language pack in <target-dir>, which must be empty or
 #     absent. The packs are read from PACKS_DIR, by default the
 #     languages/ folder next to this script.
@@ -96,7 +96,7 @@ WORK_DIR=""
 # any word: it shows an exact command for the user to copy.
 
 usage() {
-  printf '%s\n' "usage: bootstrap-project.sh layout-pack <node|web|python|react-native> <target-dir>" \
+  printf '%s\n' "usage: bootstrap-project.sh layout-pack <node|web|python|react-native|csharp> <target-dir>" \
     "   or: bootstrap-project.sh [options]   (run it with --help to see them)" >&2
   CLEAN=1
   exit 2
@@ -106,7 +106,7 @@ usage() {
 show_help() {
   printf '%s\n' \
     "usage: bootstrap-project.sh [options]" \
-    "       bootstrap-project.sh layout-pack <node|web|python|react-native> <target-dir>" \
+    "       bootstrap-project.sh layout-pack <node|web|python|react-native|csharp> <target-dir>" \
     "" \
     "Sets up a new project on GitHub. It asks a question for each answer" \
     "that is not given as an option below." \
@@ -422,7 +422,7 @@ fail() {
 
 # Texts used by more than one message. They live here so the tests
 # check them with the rest.
-LP_PACK_NEXT="Choose one of the packs: node, web, python or react-native."
+LP_PACK_NEXT="Choose one of the packs: node, web, python, react-native or csharp."
 LP_BROKEN_NEXT="This copy of the bootstrapper is incomplete. Download it again; if that does not help, report it to the bootstrapper's maintainers."
 SETUP_BROKEN_NEXT="The project was made from the current bootstrapper, so downloading the script again does not help. Report it to the bootstrapper's maintainers and show them the details below."
 ASK_NO_DEFAULT="There is no default, because only you can choose it."
@@ -764,8 +764,19 @@ app.json app.json
 starter/src/ src/"
       not_laid_out="code-standards.md"
       ;;
+    csharp)
+      table="$common
+editorconfig .editorconfig
+global.json global.json
+Directory.Build.props Directory.Build.props
+Directory.Packages.props Directory.Packages.props
+Project.slnx Project.slnx
+starter/src/ src/
+starter/tests/ tests/"
+      not_laid_out="code-standards.md"
+      ;;
     *)
-      fail 2 "layout-pack: unknown pack: $pack (expected node, web, python or react-native)" "$LP_PACK_NEXT"
+      fail 2 "layout-pack: unknown pack: $pack (expected node, web, python, react-native or csharp)" "$LP_PACK_NEXT"
       ;;
   esac
   LP_KEPT="$not_laid_out"
