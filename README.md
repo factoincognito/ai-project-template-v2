@@ -22,6 +22,12 @@ It asks for what it needs and explains each question. First you need
 two tools: `gh`, the GitHub command-line tool, and, on Windows, Git for
 Windows.
 
+A physical keyboard is recommended, though not required. On a touch
+screen with the on-screen keyboard, typing symbols such as `@` and
+copying long commands out of that window is harder. If the window where
+you type commands stops reacting after you selected text in it, press
+Ctrl-Q (hold Ctrl and press Q).
+
 **Step 0: install gh and sign in (once per computer).**
 
 1. Install the tools.
