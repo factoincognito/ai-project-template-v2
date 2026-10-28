@@ -20,6 +20,7 @@ A bootstrapped project records the tag it was built from.
 - End-to-end run 2 repeated, r2k: the README says a physical keyboard is recommended, not required, and that Ctrl-Q wakes a window that stopped after text was selected in it (PR #266)
 - End-to-end run 2 repeated, r2l: at a stop the script saves the answers next to itself and shows a short command, `cd <folder> && bash bootstrap-project.sh --again`, which works from a new window too (PR #267)
 - Recorded in NEXT_SESSION and `STATUS.md` that r2k is done and r2l decided (PR #268)
+- Backlog: PBI-1.23, the C# base language pack, built in two parts so it cannot delay acuteping (PR #269)
 
 ## [2.8.1] — 2026-10-28
 
