@@ -9,7 +9,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 LAYOUT="$HERE/layout-pack.sh"
 SCRIPT="$REPO/bootstrap/stubs/bootstrap-project.sh"
-PACKS="node web python react-native"
+PACKS="node web python react-native csharp"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -204,6 +204,85 @@ test_python_pre_commit_ruff_matches_the_pinned_ruff() {
   [ "$rev" = "$pinned" ] || die "pre-commit ruff rev v$rev != requirements-dev ruff==$pinned"
 }
 
+test_csharp_layout_matches_the_expected_files() {
+  local out="$WORK/csharp.$RANDOM" expected
+  bash "$LAYOUT" csharp "$out" >/dev/null || die "layout failed"
+  expected="$( {
+    printf '%s\n' .github/workflows/ci.yml .gitignore .vscode/extensions.json \
+      .vscode/settings.json .editorconfig global.json Directory.Build.props \
+      Directory.Packages.props Project.slnx
+    (cd "$REPO/languages/csharp/starter" && find src tests -type f)
+  } | LC_ALL=C sort)"
+  diff <(list_files "$out") <(echo "$expected") || die "csharp layout differs from the expected files"
+  [ -f "$out/src/Example/Example.csproj" ] || die "no class library in src/Example/"
+  [ -f "$out/src/Example.App/Example.App.csproj" ] || die "no console app in src/Example.App/"
+  [ -f "$out/tests/Example.Tests/Example.Tests.csproj" ] || die "no test project in tests/Example.Tests/"
+  [ ! -e "$out/code-standards.md" ] || die "code-standards.md laid out"
+  [ ! -e "$out/starter" ] || die "starter/ copied as is"
+}
+
+test_csharp_solution_names_every_project_the_layout_lays_out() {
+  # dotnet restore, format, build and test all run on Project.slnx, so a
+  # project missing from it would be skipped by every check in CI.
+  local out="$WORK/csharp.$RANDOM" proj n=0
+  bash "$LAYOUT" csharp "$out" >/dev/null || die "layout failed"
+  while IFS= read -r proj; do
+    n=$((n + 1))
+    grep -qF "Path=\"$proj\"" "$out/Project.slnx" || die "Project.slnx does not name $proj"
+  done < <(cd "$out" && find src tests -name '*.csproj' | LC_ALL=C sort)
+  [ "$n" -eq 3 ] || die "expected 3 projects (library, console app, tests), found $n"
+  [ "$(grep -c '<Project ' "$out/Project.slnx")" -eq "$n" ] || die "Project.slnx names a project the layout does not lay out"
+}
+
+test_csharp_pack_has_no_lockfile() {
+  local found
+  found="$(cd "$REPO/languages/csharp" && find . -name packages.lock.json)"
+  [ -z "$found" ] || die "lockfile in the csharp pack: $found"
+  ! grep -rqF RestorePackagesWithLockFile "$REPO/languages/csharp" || die "the csharp pack turns on a NuGet lockfile"
+}
+
+test_csharp_pack_pins_every_package_exactly() {
+  # Central package management: every version is in Directory.Packages.props,
+  # exact, and no project file sets one of its own.
+  local p="$REPO/languages/csharp" v n=0
+  grep -qF '<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>' "$p/Directory.Packages.props" \
+    || die "central package management is not on"
+  while IFS= read -r v; do
+    n=$((n + 1))
+    [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Directory.Packages.props: not pinned exactly: $v"
+  done < <(sed -n 's/.*<PackageVersion Include="[^"]*" Version="\([^"]*\)".*/\1/p' "$p/Directory.Packages.props")
+  [ "$n" -ge 2 ] || die "found only $n package versions; the parser is broken"
+  [ "$n" -eq "$(grep -c '<PackageVersion ' "$p/Directory.Packages.props")" ] \
+    || die "a PackageVersion in Directory.Packages.props is not in the one-line form the check reads"
+  ! grep -rE '<PackageReference [^>]*Version=' "$p" --include='*.csproj' >/dev/null \
+    || die "a project file sets a package version of its own"
+}
+
+test_csharp_global_json_pins_the_sdk_feature_band() {
+  # setup-dotnet reads global.json: sdk.version must be a full SDK version
+  # (it refuses wildcards when rollForward is set), and latestPatch keeps
+  # CI and every developer on the same feature band.
+  local g="$REPO/languages/csharp/global.json" v r
+  v="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sdk"]["version"])' "$g")"
+  r="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sdk"]["rollForward"])' "$g")"
+  [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]00$ ]] || die "global.json sdk.version is not the first SDK of a feature band: $v"
+  [ "$r" = latestPatch ] || die "global.json rollForward is $r, want latestPatch"
+}
+
+test_csharp_ci_reads_the_sdk_from_global_json() {
+  # The pack's CI and packs.yml install the SDK global.json names; packs.yml
+  # runs from the checkout's root, where the project is in project/.
+  local wf="$REPO/.github/workflows/packs.yml" job
+  grep -qxF '          global-json-file: global.json' "$REPO/languages/csharp/ci.yml" \
+    || die "the csharp ci.yml does not install the SDK from global.json"
+  ! grep -qE 'dotnet-version:' "$REPO/languages/csharp/ci.yml" || die "the csharp ci.yml names an SDK version of its own"
+  job="$(awk '$0 == "  pack-csharp:" { injob = 1; next } /^  [a-z][a-z-]*:$/ { injob = 0 } injob' "$wf")"
+  [ -n "$job" ] || die "no pack-csharp job"
+  grep -qxF '          global-json-file: project/global.json' <<<"$job" \
+    || die "pack-csharp does not install the SDK from the project's global.json"
+  ! grep -qE 'dotnet-version:' <<<"$job" || die "pack-csharp names an SDK version of its own"
+}
+
 test_files_are_byte_identical_to_the_pack() {
   local out="$WORK/web.$RANDOM"
   bash "$LAYOUT" web "$out" >/dev/null
@@ -353,6 +432,9 @@ biome.json biome.json"
       "requirements-dev.txt requirements-dev.txt" ".pre-commit-config.yaml pre-commit-config.yaml" \
       "src/ starter/src/" ;;
     react-native) printf '%s\n' "$common" "$ts" "app.json app.json" "src/ starter/src/" ;;
+    csharp) printf '%s\n' "$common" ".editorconfig editorconfig" "global.json global.json" \
+      "Directory.Build.props Directory.Build.props" "Directory.Packages.props Directory.Packages.props" \
+      "Project.slnx Project.slnx" "src/ starter/src/" "tests/ starter/tests/" ;;
     *) die "no expected placement for $1" ;;
   esac
 }
@@ -453,6 +535,14 @@ test_the_layout_table_is_only_in_the_script_not_the_readmes() {
     || die "languages/README.md does not give tools/layout-pack.sh for the template"
 }
 
+test_languages_readme_lists_every_pack() {
+  # "Adding a pack": a new pack gets a row in the packs table.
+  local p
+  for p in $PACKS; do
+    grep -qE "^\| \`$p/\` \|" "$REPO/languages/README.md" || die "languages/README.md has no row for $p/"
+  done
+}
+
 test_the_layout_commands_languages_readme_gives_work_where_it_says() {
   # In the template: the wrapper works and the script alone does not
   # (it looks for languages/ next to itself, in bootstrap/stubs/).
@@ -470,6 +560,8 @@ test_packs_workflow_uses_the_script_for_every_pack() {
   grep -qE '^  pack-web:' "$wf" || die "no pack-web job"
   grep -qE '^  pack-python:' "$wf" || die "no pack-python job"
   grep -qE '^  pack-react-native:' "$wf" || die "no pack-react-native job"
+  grep -qE '^  pack-csharp:' "$wf" || die "no pack-csharp job"
+  grep -qE 'tools/layout-pack\.sh csharp ' "$wf" || die "pack-csharp does not use layout-pack.sh"
   grep -qE 'tools/layout-pack\.sh react-native ' "$wf" || die "pack-react-native does not use layout-pack.sh"
   grep -qE 'tools/layout-pack\.sh python ' "$wf" || die "pack-python does not use layout-pack.sh"
   grep -qE 'tools/layout-pack\.sh node ' "$wf" || die "pack-node does not use layout-pack.sh"
@@ -484,18 +576,18 @@ test_packs_workflow_tests_the_pack_from_the_built_bootstrapper() {
   # from the build output's languages/ folder, and makes the project from
   # that output, with languages/ deleted.
   local wf="$REPO/.github/workflows/packs.yml" p n
-  for p in node web python react-native; do
+  for p in node web python react-native csharp; do
     grep -qE "PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack\\.sh $p pack" "$wf" \
       || die "pack-$p does not lay out from the built bootstrapper"
   done
   n="$(grep -cF 'bash template/bootstrap/build.sh bootstrapper v0.0.0' "$wf")"
-  [ "$n" -eq 4 ] || die "expected 4 bootstrapper builds in packs.yml, found $n"
+  [ "$n" -eq 5 ] || die "expected 5 bootstrapper builds in packs.yml, found $n"
   n="$(grep -cF 'cp -a bootstrapper project' "$wf")"
-  [ "$n" -eq 4 ] || die "expected 4 project copies from the bootstrapper, found $n"
+  [ "$n" -eq 5 ] || die "expected 5 project copies from the bootstrapper, found $n"
   n="$(grep -cF 'cp -a pack/. project/' "$wf")"
-  [ "$n" -eq 4 ] || die "expected 4 pack overlays onto the project, found $n"
+  [ "$n" -eq 5 ] || die "expected 5 pack overlays onto the project, found $n"
   n="$(grep -cF 'rm -rf project/languages' "$wf")"
-  [ "$n" -eq 4 ] || die "expected 4 languages/ deletions, found $n"
+  [ "$n" -eq 5 ] || die "expected 5 languages/ deletions, found $n"
   ! grep -qE 'layout-pack\.sh [a-z-]+ project' "$wf" || die "a pack job still lays out straight from the template"
 }
 
@@ -507,41 +599,41 @@ test_packs_workflow_simulates_the_setup_change_and_a_refused_change() {
   # the project's own check command, read from its ci.yml, must exit 1.
   local wf="$REPO/.github/workflows/packs.yml" n p want got
   n="$(grep -cF 'git -C project init -q -b main' "$wf")"
-  [ "$n" -eq 4 ] || die "expected 4 project repos (git init -b main), found $n"
+  [ "$n" -eq 5 ] || die "expected 5 project repos (git init -b main), found $n"
   n="$(grep -cF 'git -C project checkout -q -b setup' "$wf")"
-  [ "$n" -eq 4 ] || die "expected 4 setup branches, found $n"
+  [ "$n" -eq 5 ] || die "expected 5 setup branches, found $n"
   # Each job runs exactly its own pack's check line, verbatim: not another
   # pack's, and nothing appended.
-  for p in node web python react-native; do
+  for p in node web python react-native csharp; do
     want="run: $(sed -n 's|^ *run: \(bash \.github/scripts/require-test-change\.sh .*\)$|\1|p' "$REPO/languages/$p/ci.yml")"
     got="$(awk -v job="  pack-$p:" '$0 == job { injob = 1; next } /^  [a-z][a-z-]*:$/ { injob = 0 } injob && /run: bash \.github\/scripts\/require-test-change\.sh/ { sub(/^ */, ""); print }' "$wf")"
     [ "$got" = "$want" ] || die "pack-$p does not run its own check line verbatim (want: $want; got: $got)"
   done
   n="$(grep -B3 -F 'run: bash .github/scripts/require-test-change.sh' "$wf" | grep -cF 'TEST_FIRST_BASE: main')"
-  [ "$n" -eq 4 ] || die "expected TEST_FIRST_BASE: main on the 4 verbatim checks, found $n"
+  [ "$n" -eq 5 ] || die "expected TEST_FIRST_BASE: main on the 5 verbatim checks, found $n"
   n="$(grep -cxF '          git merge -q --ff-only setup' "$wf")"
-  [ "$n" -eq 4 ] || die "expected setup merged into main 4 times, found $n"
+  [ "$n" -eq 5 ] || die "expected setup merged into main 5 times, found $n"
   n="$(grep -cxF '          [ "$rc" -eq 1 ]' "$wf")"
-  [ "$n" -eq 4 ] || die "expected 4 refused-change assertions (exactly exit 1), found $n"
+  [ "$n" -eq 5 ] || die "expected 5 refused-change assertions (exactly exit 1), found $n"
   ! grep -qE '"\$rc" -eq 2|"\$rc" -ne 0' "$wf" || die "a refused-change assertion accepts an exit code other than 1"
   n="$(grep -cF 'cmd="$(sed -n' "$wf")"
-  [ "$n" -eq 4 ] || die "expected the project's check command read from its ci.yml 4 times, found $n"
+  [ "$n" -eq 5 ] || die "expected the project's check command read from its ci.yml 5 times, found $n"
   # The refusal is intended, so it must not show as an error annotation or
   # job summary on a green job: workflow commands are stopped around it.
   n="$(grep -cF 'echo "::stop-commands::$token"' "$wf")"
-  [ "$n" -eq 4 ] || die "expected workflow commands stopped around the refused change 4 times, found $n"
+  [ "$n" -eq 5 ] || die "expected workflow commands stopped around the refused change 5 times, found $n"
   n="$(grep -cF 'echo "::$token::"' "$wf")"
-  [ "$n" -eq 4 ] || die "expected workflow commands resumed 4 times, found $n"
+  [ "$n" -eq 5 ] || die "expected workflow commands resumed 5 times, found $n"
   n="$(grep -cF 'env -u GITHUB_STEP_SUMMARY TEST_FIRST_BASE=main bash -c "$cmd"' "$wf")"
-  [ "$n" -eq 4 ] || die "expected the refused change run without a job summary 4 times, found $n"
+  [ "$n" -eq 5 ] || die "expected the refused change run without a job summary 5 times, found $n"
   # The refused-change step is the last step of each pack job, so the branch
   # it leaves behind cannot affect the pack's own steps.
   n="$(awk '
-    /^  [a-z][a-z-]*:$/ { if (job ~ /^pack-(node|web|python|react-native)$/ && last ~ /Refuse a source change without a test/) ok++; job = $1; sub(":", "", job); last = "" }
+    /^  [a-z][a-z-]*:$/ { if (job ~ /^pack-(node|web|python|react-native|csharp)$/ && last ~ /Refuse a source change without a test/) ok++; job = $1; sub(":", "", job); last = "" }
     /^      - (name|uses): / { last = $0 }
-    END { if (job ~ /^pack-(node|web|python|react-native)$/ && last ~ /Refuse a source change without a test/) ok++; print ok + 0 }
+    END { if (job ~ /^pack-(node|web|python|react-native|csharp)$/ && last ~ /Refuse a source change without a test/) ok++; print ok + 0 }
   ' "$wf")"
-  [ "$n" -eq 4 ] || die "the refused-change step is not the last step of all 4 pack jobs (found $n)"
+  [ "$n" -eq 5 ] || die "the refused-change step is not the last step of all 5 pack jobs (found $n)"
 }
 
 test_packs_workflow_node_version_matches_pack_ci() {
@@ -563,7 +655,7 @@ test_pack_ci_steps_are_single_line() {
   # The drift test below reads `run:` lines one at a time; a multi-line
   # `run: |` block would slip past it.
   local p
-  for p in node web python react-native; do
+  for p in node web python react-native csharp; do
     [ -f "$REPO/languages/$p/ci.yml" ] || die "no $p ci.yml"
     ! grep -nE '^ *run: *[|>]' "$REPO/languages/$p/ci.yml" || die "$p ci.yml has a multi-line run"
   done
@@ -575,7 +667,7 @@ test_packs_workflow_runs_every_pack_ci_step() {
   # `npm install --package-lock-only`, because the template has no
   # lockfile.
   local wf="$REPO/.github/workflows/packs.yml" p cmd n=0
-  for p in node web python react-native; do
+  for p in node web python react-native csharp; do
     while IFS= read -r cmd; do
       n=$((n + 1))
       grep -qF -- "run: $cmd" "$wf" || die "packs.yml lacks the $p pack step: $cmd"
@@ -617,7 +709,8 @@ test_packs_workflow_uses_the_pack_ci_action_versions() {
   while IFS= read -r u; do
     grep -qF -- "$u" "$wf" || die "packs.yml lacks $u from the pack ci.yml"
   done < <(grep -hoE 'uses: [^ ]+' "$REPO/languages/node/ci.yml" "$REPO/languages/web/ci.yml" \
-    "$REPO/languages/python/ci.yml" "$REPO/languages/react-native/ci.yml" | sort -u)
+    "$REPO/languages/python/ci.yml" "$REPO/languages/react-native/ci.yml" \
+    "$REPO/languages/csharp/ci.yml" | sort -u)
 }
 
 test_template_only_files_are_not_in_the_manifest() {
