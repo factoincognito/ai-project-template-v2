@@ -8,6 +8,8 @@ A bootstrapped project records the tag it was built from.
 
 ### Added
 - Release prep for v2.8.2 (PR #270)
+- Recorded in NEXT_SESSION, `STATUS.md` and CHANGELOG that v2.8.2 is released and verified (PR #272)
+- The C# base language pack, part 1 (PBI-1.23): `languages/csharp/`, a class library, a console app and an xUnit v3 test project on .NET 10, with `dotnet format`, a build with nullable reference types and every warning an error, and an 80% line coverage gate over every project under `src/`; its job in `packs.yml` and its rows in the layout table. The setup does not offer it yet (part 2) (PR #271)
 
 ## [2.8.2] — 2026-10-28
 
