@@ -1681,7 +1681,9 @@ start_cd() {
   SHOWN_CD=""
   [ -n "$START_DIR" ] || return 0
   case "$START_DIR" in *"$NL"*) return 0 ;; esac
-  home="${home%/}"
+  # The home folder is read back with cd and pwd, as START_DIR is, so a
+  # HOME written with a // or a / at the end still matches it.
+  if [ -n "$home" ]; then home="$(CDPATH='' cd -- "$home" 2>/dev/null && pwd)" || home=""; fi
   if [ -n "$home" ] && [ "$START_DIR" = "$home" ]; then
     SHOWN_CD="~"
   elif [ -n "$home" ] && [ "${START_DIR#"$home"/}" != "$START_DIR" ]; then

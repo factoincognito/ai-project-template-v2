@@ -7199,11 +7199,16 @@ test_help_and_readme_name_the_short_command() {
 
 # start_cd_of <dir>: the "cd <folder> && " a whole run in <dir> shows, for
 # its folder (RUN_CWD, else <dir>/cwd), written as the script writes it.
+# Both folders are read back with cd and pwd, as the script reads its own
+# (pwd), never compared as written: macOS's TMPDIR ends in a /, so a
+# path built from it holds a // that pwd does not show (#267, CI on macOS).
 start_cd_of() {
-  local f="${RUN_CWD:-$1/cwd}" rest
+  local f home rest
+  f="$(cd "${RUN_CWD:-$1/cwd}" && pwd)" || die "start_cd_of: no folder ${RUN_CWD:-$1/cwd}"
+  home="$(cd "$1/home" && pwd)" || die "start_cd_of: no folder $1/home"
   case "$f" in
-    "$1/home") printf 'cd ~ && ' ;;
-    "$1/home/"*) rest="${f#"$1/home/"}"; ( load_script; quote_word "$rest"; printf 'cd ~/%s && ' "$QUOTED" ) ;;
+    "$home") printf 'cd ~ && ' ;;
+    "$home/"*) rest="${f#"$home/"}"; ( load_script; quote_word "$rest"; printf 'cd ~/%s && ' "$QUOTED" ) ;;
     *) ( load_script; quote_word "$f"; printf 'cd %s && ' "$QUOTED" ) ;;
   esac
 }
