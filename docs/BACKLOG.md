@@ -788,7 +788,7 @@ get a working project in any supported language.
   - `bootstrapper-test` keeps its name and meaning.
 
   **Rules that apply.** Harness, test and workflow changes are code and config: test-first (red run in the PR), reviewed by Crog on Opus. A change to the name or meaning of the required check `bootstrapper-test` needs Adam's intent approval.
-- **[NOW] PBI-1.23** (Adam, 2026-10-28; the WHAT is Adam's, the HOW is Clead's; part 1 specced and built by Crog in PR #271, in review; part 2 not started; in a `NOW` slot of the product office's WIP limit) — C# base language pack.
+- **[NOW] PBI-1.23** (Adam, 2026-10-28; the WHAT is Adam's, the HOW is Clead's; part 1 specced and built by Crog in PR #271; part 2 not started, waits until the end-to-end runs pass; in a `NOW` slot of the product office's WIP limit) — C# base language pack.
 
   **Why (Adam, 2026-10-28).** Give users C# capabilities in their own projects. Out of scope for Phase 1 until now ("planned in v1, not yet built").
 
