@@ -6,8 +6,20 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.8.2] — 2026-10-28
+
 ### Added
 - Release prep for v2.8.1 (PR #258)
+- Recorded in NEXT_SESSION, `STATUS.md` and CHANGELOG that v2.8.1 is ready to tag, with the plan for the tablet and Mac runs (PR #259)
+- Recorded in NEXT_SESSION and `STATUS.md` that v2.8.1 is released and verified (PR #260)
+- Recorded end-to-end run 2 repeated on a Windows tablet with nothing installed, its result and findings r2f to r2l, in NEXT_SESSION and `STATUS.md` (PR #261)
+- End-to-end run 2 repeated, r2h: README step 0 and the script's sign-in guides say that GitHub may first ask you to sign in, before the page for the code (PR #262)
+- End-to-end run 2 repeated, r2i and r2j: on Linux and in WSL the npm guide says to choose Linux on nodejs.org and, after the install, to start the script again in a new window, where the new npm is found (PR #263)
+- End-to-end run 2 repeated, r2f and r2g: README step 0 has a step for Linux on Windows (WSL): `wsl --install -d Ubuntu`, what to do when Ubuntu does not appear, the first start, the user name and password (PR #264)
+- Recorded in NEXT_SESSION and `STATUS.md` that r2f to r2j are fixed, with the reviews' notes (PR #265)
+- End-to-end run 2 repeated, r2k: the README says a physical keyboard is recommended, not required, and that Ctrl-Q wakes a window that stopped after text was selected in it (PR #266)
+- End-to-end run 2 repeated, r2l: at a stop the script saves the answers next to itself and shows a short command, `cd <folder> && bash bootstrap-project.sh --again`, which works from a new window too (PR #267)
+- Recorded in NEXT_SESSION and `STATUS.md` that r2k is done and r2l decided (PR #268)
 
 ## [2.8.1] — 2026-10-28
 
