@@ -788,7 +788,7 @@ get a working project in any supported language.
   - `bootstrapper-test` keeps its name and meaning.
 
   **Rules that apply.** Harness, test and workflow changes are code and config: test-first (red run in the PR), reviewed by Crog on Opus. A change to the name or meaning of the required check `bootstrapper-test` needs Adam's intent approval.
-- **[NOW] PBI-1.23** (Adam, 2026-10-28; the WHAT is Adam's, the HOW is Clead's; part 1 specced and built by Crog in PR #271; part 2 not started, waits until the end-to-end runs pass; in a `NOW` slot of the product office's WIP limit) — C# base language pack.
+- **[NOW] PBI-1.23** (Adam, 2026-10-28; the WHAT is Adam's, the HOW is Clead's; part 1 specced and built by Crog, merged 2026-10-28 in PR #271; part 2 not started, waits until the end-to-end runs pass; in a `NOW` slot of the product office's WIP limit) — C# base language pack.
 
   **Why (Adam, 2026-10-28).** Give users C# capabilities in their own projects. Out of scope for Phase 1 until now ("planned in v1, not yet built").
 
@@ -801,6 +801,8 @@ get a working project in any supported language.
   - **The SDK is pinned to the 10.0.1xx feature band, not to one patch.** `global.json` says `10.0.100` with `rollForward: latestPatch`, and `actions/setup-dotnet@v6` installs the newest 10.0.1xx from it, as the Python pack takes the newest 3.14. An exact patch would refuse every other SDK on a developer's computer. The analyzer rules are fixed to 10.0, so a newer patch does not add rules. The packages are pinned exactly.
 
   **Order (Clead, 2026-10-28), so the pack cannot delay acuteping.** The bootstrapper's end-to-end runs (`docs/NEXT_SESSION.md`, Adam's to-do 2) are the gate for acuteping, and the runs test the bootstrap script. Part 1, now: the `languages/csharp/` folder, its job in `packs.yml`, `tools/layout-pack.sh` and `tools/test-layout-pack.sh`, and the README tables. Part 2, only after the end-to-end runs have passed: the bootstrap script offers the pack, and `bootstrap/e2e-check.sh` checks it. Part 1 adds nothing the runs exercise; part 1's change to `bootstrap/stubs/bootstrap-project.sh` (the layout table lives there) is kept to the layout rows, and its PR merges only after the release prep for the version Adam runs next is merged, so it is not in that release.
+
+  **Open for part 2 (review note N8 on #271, non-blocking).** The test project references every project under `src/` through a glob, so each one must be a project the `net10.0` test project can reference: a `net10.0-windows` project, for example, would break restore on Linux CI. Outside part 1's scope (no desktop, web or mobile); part 2 says so in `code-standards.md` or narrows the glob.
 
   **Done when.** The pack meets "Rules for a pack" and "Adding a pack" in `languages/README.md`: green on day one on a scratch project, each rule CI enforces proven by a deliberate violation, a job in `.github/workflows/packs.yml`, its files in the bootstrap script's layout table and in `tools/test-layout-pack.sh`, both README tables, and the pack offered by the bootstrap script and checked by `bootstrap/e2e-check.sh`.
 
