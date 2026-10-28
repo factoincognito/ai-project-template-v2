@@ -2197,7 +2197,7 @@ command_intro_faults() {
     inblk || /^[[:space:]]*#/ { next }
     /^offered\(\) \{/ { inoffered = 1 }
     inoffered { if ($0 ~ /^}/) inoffered = 0; next }
-    /(^|[^A-Za-z0-9_])say_command[[:space:]]/ || /(^|[^A-Za-z0-9_])offered [^ ;]+ show/ {
+    /(^|[^A-Za-z0-9_])say_command[[:space:]]/ || /(^|[^A-Za-z0-9_])say_shown_command([[:space:];]|$)/ || /(^|[^A-Za-z0-9_])offered [^ ;]+ show/ {
       if (!intro) print NR ": a command with no instruction line right above it: " $0
       pending = 0
       next
@@ -3832,7 +3832,10 @@ run_script_of() {
 # what a command to start again or to continue carries read what --again
 # will carry.
 long_of() {
-  local d="$1" line="$2" f
+  local d="$1" line f
+  # The cd to the folder the run started in (#267 review, B1) is checked
+  # and taken off: the tests of what a command carries read the rest.
+  line="$(strip_cd "$d" "$2")"
   case "$line" in
     "    bash "*" --again" | "    bash "*" --again "* | "bash "*" --again" | "bash "*" --again "*) ;;
     *) printf '%s\n' "$line"; return 0 ;;
@@ -3844,6 +3847,32 @@ long_of() {
     rest="${line#"$head --again"}"
     while IFS= read -r w; do quote_word "$w"; head="$head $QUOTED"; done <"$f"
     printf '%s\n' "$head$rest" )
+}
+
+# strip_cd <dir> <line>: the shown line without the cd to the run's
+# folder in front of it; a cd to another folder fails the test.
+strip_cd() {
+  local cdp lead=""
+  case "$2" in "    "*) lead="    " ;; esac
+  case "${2#    }" in
+    "cd "*)
+      cdp="$(start_cd_of "$1")"
+      case "${2#    }" in "$cdp"*) printf '%s%s\n' "$lead" "${2#"$lead$cdp"}" ;; *) die "the cd in front of the command is not to the run's folder ($cdp): $2" ;; esac
+      ;;
+    *) printf '%s\n' "$2" ;;
+  esac
+}
+
+# strip_any_cd <line>: the shown line without the cd in front of it,
+# whatever its folder, for again and advance_again: a test may run the
+# next command from another folder on purpose (RUN_CWD), as a user who
+# went there; the cd itself is tested in
+# test_the_command_shown_goes_to_the_folder_the_script_started_in.
+strip_any_cd() {
+  case "$1" in
+    "    cd "*" && bash "*) printf '    bash %s\n' "${1#* && bash }" ;;
+    *) printf '%s\n' "$1" ;;
+  esac
 }
 
 # shown_after <dir> <line>: the command shown right below that exact
@@ -6098,7 +6127,7 @@ test_an_older_script_is_told_to_download_the_current_one() {
   expect_out "$d" "v9.9.9"
   grep -qxF '    gh api repos/factoincognito/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh' "$d/out" \
     || { cat "$d/out" >&2; die "the download command is not shown"; }
-  grep -qxF "    bash bootstrap-project.sh --name my-app --description 'Lends tools.'" "$d/out" \
+  grep -qxF "    $(start_cd_of "$d")bash bootstrap-project.sh --name my-app --description 'Lends tools.'" "$d/out" \
     || { cat "$d/out" >&2; die "the command to start the downloaded copy is not shown"; }
   expect_no_out "$d" "Press Enter"
   expect_no_out "$d" "Project name"
@@ -6626,7 +6655,7 @@ test_the_command_to_continue_is_shown_after_yes_and_before_the_project_is_create
   # and the command is checked as shown: the short one. What it carries
   # is checked at a stop (test_a_stop_after_the_project_exists_saves_resume...).
   cmd="$(grep -A1 -xF "$ADVANCE_INTRO" "$d/out" | sed -n 2p | sed 's/^    //')"
-  [ "$cmd" = "bash $(shown_script_of "$d") --again" ] || die "the command shown is not the short one: $cmd"
+  [ "$cmd" = "$(start_cd_of "$d")bash $(shown_script_of "$d") --again" ] || die "the command shown is not the short one: $cmd"
   p="$(line_of "$d" 'Proceed? (yes or no) [no]: ')"
   a="$(line_of "$d" "$ADVANCE_INTRO")"
   c="$(line_of "$d" '==> Creating the project octo-user/my-app on GitHub')"
@@ -6640,7 +6669,7 @@ test_the_command_to_continue_is_shown_after_yes_and_before_the_project_is_create
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
-  [ "$(grep -A1 -xF "$ADVANCE_INTRO" "$d/out" | sed -n 2p)" = "    bash $(shown_script_of "$d") --again" ] \
+  [ "$(grep -A1 -xF "$ADVANCE_INTRO" "$d/out" | sed -n 2p)" = "    $(start_cd_of "$d")bash $(shown_script_of "$d") --again" ] \
     || { cat "$d/out" >&2; die "--yes: not the short command"; }
   [ "$(line_of "$d" "$ADVANCE_INTRO")" -lt "$(line_of "$d" '==> Creating the project octo-user/my-app on GitHub')" ] || { cat "$d/out" >&2; die "--yes: the command came after create"; }
   # No, Enter, or a dry run: nothing is changed, so no command to continue.
@@ -6775,7 +6804,7 @@ test_a_403_on_protection_stops_before_anything_else_with_its_guide() {
         expect_out "$d" "needs a paid GitHub plan"
         grep -qxF '    gh repo edit octo-user/my-app --visibility public --accept-visibility-change-consequences' "$d/out" \
           || { cat "$d/out" >&2; die "$mode: the command to make it public is not shown"; }
-        grep -E '^    bash .* --allow-unprotected$' "$d/out" | while IFS= read -r l; do long_of "$d" "$l"; done \
+        grep -E '^    (cd .* && )?bash .* --allow-unprotected$' "$d/out" | while IFS= read -r l; do long_of "$d" "$l"; done \
           | grep -E '^    bash .* --resume( .*)? --allow-unprotected$' >/dev/null || { cat "$d/out" >&2; die "$mode: --allow-unprotected not shown"; }
         ;;
       mystery)
@@ -6958,7 +6987,7 @@ shown_script_of() { ( load_script; quote_word "$(run_script_of "$1")"; printf '%
 expect_short_command() {
   local line
   line="$(grep -A1 -xF -- "$2" "$1/out" | sed -n 2p)"
-  [ "$line" = "    bash $(shown_script_of "$1") --again${3:-}" ] \
+  [ "$line" = "    $(start_cd_of "$1")bash $(shown_script_of "$1") --again${3:-}" ] \
     || { cat "$1/out" >&2; die "not the short command under '$2': $line"; }
 }
 
@@ -7002,7 +7031,7 @@ test_a_stop_after_the_project_exists_saves_resume_and_the_guide_offers_the_short
   expect_again_file "$d" "${REQUIRED_OPTS[@]}" --pack python "${ALL_OPTS[@]}" --non-interactive --yes --private --resume
   # The guide's way on without protection: the same file, with the option
   # added on the command line.
-  grep -qxF "    bash $(shown_script_of "$d") --again --allow-unprotected" "$d/out" \
+  grep -qxF "    $(start_cd_of "$d")bash $(shown_script_of "$d") --again --allow-unprotected" "$d/out" \
     || { cat "$d/out" >&2; die "the short command with --allow-unprotected is not shown"; }
   # Run as shown, it goes on without protection.
   again "$d" --allow-unprotected
@@ -7154,8 +7183,136 @@ test_help_and_readme_name_the_short_command() {
   [ "$rc" -eq 0 ] || die "--help exit $rc"
   [ "$(grep -c -- '--again' "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "--help does not list --again in one line"; }
   step="$(sed -n '/^\*\*Step 1: /,/^\*\*What the script guides you through/p' "$TEMPLATE_README" | tr '\n' ' ' | sed 's/  */ /g')"
-  grep -qF '`bash bootstrap-project.sh --again`' <<<"$step" || die "README step 1 does not give the short command"
-  grep -qiF 'in the same folder' <<<"$step" || die "README step 1 does not say to run it in the same folder"
+  # #267 review, B1 (Clead): the command goes to the folder itself, so it
+  # works from a new window too; the README says so, not "the same folder".
+  ! grep -qiF 'in the same folder' <<<"$step" || die "README step 1 still says to run it in the same folder"
+  grep -qF '`cd ~/projects && bash bootstrap-project.sh --again`' <<<"$step" || die "README step 1 does not show the command with its cd"
+  grep -qiF 'also in a new window' <<<"$step" || die "README step 1 does not say the command works in a new window"
+}
+
+# ---------- the command goes to the folder the script started in ----------
+# #267 review, B1 (Clead): several guides send the user to a new window,
+# which starts in the home folder, where bash bootstrap-project.sh finds
+# no script and --dir ./my-app points elsewhere. The command shown starts
+# with cd to the folder the script was started in: ~/... under the home
+# folder, else the folder quoted.
+
+# start_cd_of <dir>: the "cd <folder> && " a whole run in <dir> shows, for
+# its folder (RUN_CWD, else <dir>/cwd), written as the script writes it.
+start_cd_of() {
+  local f="${RUN_CWD:-$1/cwd}" rest
+  case "$f" in
+    "$1/home") printf 'cd ~ && ' ;;
+    "$1/home/"*) rest="${f#"$1/home/"}"; ( load_script; quote_word "$rest"; printf 'cd ~/%s && ' "$QUOTED" ) ;;
+    *) ( load_script; quote_word "$f"; printf 'cd %s && ' "$QUOTED" ) ;;
+  esac
+}
+
+# run_shown_from <dir> <folder> <line>: runs a shown command line, as
+# typed in a new window: bash -c in <folder>, with the run's environment.
+run_shown_from() {
+  local d="$1" f="$2" line="${3#    }"
+  mv "$d/out" "$d/out.prev"
+  mv "$d/err" "$d/err.prev"
+  set +e
+  ( in_env "$d"; cd "$f"; "$BASH" -c "$line" ) <"$d/in" >"$d/out" 2>"$d/err"
+  RC=$?
+  set -e
+}
+
+test_the_command_shown_goes_to_the_folder_the_script_started_in() {
+  local d line other
+  # Start again: a guide stop; the command, run from another folder, reads
+  # the saved answers and reaches the same guide.
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  missing "$d" git
+  printf 'q\n' >"$d/in"
+  whole "$d" --name my-app --description "Lends tools." --pack node
+  expect_rc 3 "$d"
+  line="$(grep -A1 -xF 'To start again, run this command:' "$d/out" | sed -n 2p)"
+  [ "$line" = "    $(start_cd_of "$d")bash $(shown_script_of "$d") --again" ] || { cat "$d/out" >&2; die "start again: not the command with its cd: $line"; }
+  other="$d/other"; mkdir -p "$other"
+  printf 'q\n' >"$d/in"
+  run_shown_from "$d" "$other" "$line"
+  expect_rc 3 "$d"
+  [ "$(sed -n 1p "$d/out")" = "Using the answers saved when the script stopped last time, for the project my-app." ] || { cat "$d/out" "$d/err" >&2; die "start again: the saved answers were not used"; }
+  expect_out "$d" "git is not installed."
+  [ -z "$(ls -A "$other")" ] || die "start again: something was made in the other folder"
+  # Continue: once the project exists, the command run from another folder
+  # finds the copy at ./my-app of the first folder and finishes.
+  d="$(tmpdir)"
+  working_git "$d"
+  export STUB_GH_PR_FAIL=broken
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_PR_FAIL
+  expect_rc 1 "$d"
+  line="$(grep -A1 -xF 'To continue the setup, run this command:' "$d/out" | sed -n 2p)"
+  [ "$line" = "    $(start_cd_of "$d")bash $(shown_script_of "$d") --again" ] || { cat "$d/out" >&2; die "continue: not the command with its cd: $line"; }
+  other="$d/other"; mkdir -p "$other"
+  run_shown_from "$d" "$other" "$line"
+  expect_rc 0 "$d"
+  expect_one_of_each "$d"
+  [ -z "$(ls -A "$other")" ] || die "continue: something was made in the other folder"
+  # Under the home folder the folder is written with ~, and a folder with
+  # spaces and quotes is quoted; both work from another folder.
+  for sub in "home/projects" "home/my 'quoted' \"dir\"" "it's a \"dir\" \$(x)"; do
+    d="$(tmpdir)"
+    on_os "$d" linux debian
+    missing "$d" git
+    prepare "$d"
+    mkdir -p "$d/$sub"
+    printf 'q\n' >"$d/in"
+    RUN_CWD="$d/$sub" whole "$d" --name my-app --description "Lends tools." --pack node
+    expect_rc 3 "$d"
+    line="$(grep -A1 -xF 'To start again, run this command:' "$d/out" | sed -n 2p)"
+    [ "$line" = "    $(RUN_CWD="$d/$sub" start_cd_of "$d")bash $(shown_script_of "$d") --again" ] || { cat "$d/out" >&2; die "$sub: not the command with its cd: $line"; }
+    case "$sub" in home/projects) [ "$line" = "    cd ~/projects && bash $(shown_script_of "$d") --again" ] || die "home: not written with ~: $line" ;; esac
+    mkdir -p "$d/other"
+    printf 'q\n' >"$d/in"
+    ( in_env "$d"; cd "$d/other"; "$BASH" -c "${line#    }" ) <"$d/in" >"$d/out2" 2>&1 || true
+    grep -qF 'Using the answers saved when the script stopped last time, for the project my-app.' "$d/out2" || { cat "$d/out2" >&2; die "$sub: the command did not run from another folder"; }
+    [ -z "$(ls -A "$d/other")" ] || die "$sub: something was made in the other folder"
+  done
+}
+
+# #267 independent review, B1: README step 1 runs the script with no
+# options; a stop before the first answer has no words to save. The
+# command shown is then the plain one, and it works.
+test_a_stop_before_any_answer_shows_the_plain_command_and_it_works() {
+  local d line f
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  missing "$d" git
+  printf 'q\n' >"$d/in"
+  whole "$d"
+  expect_rc 3 "$d"
+  f="$(again_file_of "$d")"
+  [ ! -e "$f" ] || { od -c "$f" >&2; die "a file was saved with no answers"; }
+  line="$(grep -A1 -xF 'To start again, run this command:' "$d/out" | sed -n 2p)"
+  [ "$line" = "    $(start_cd_of "$d")bash $(shown_script_of "$d")" ] || { cat "$d/out" >&2; die "not the plain command: $line"; }
+  printf 'q\n' >"$d/in"
+  run_shown_from "$d" "$d/cwd" "$line"
+  expect_rc 3 "$d"
+  expect_out "$d" "git is not installed."
+  # A saved file with only empty lines holds no answers: --again refuses it
+  # in plain words, as with no file.
+  printf '\n\n' >"$f"
+  whole "$d" --again
+  expect_rc 2 "$d"
+  sed -n 1p "$d/err" | grep -E '^What happened: .*no saved answers' >/dev/null || { cat "$d/err" >&2; die "an empty file was not refused as no saved answers"; }
+  [ ! -s "$d/gh.log" ] || die "gh was called"
+}
+
+# #267 independent review, N5: a temporary file of the saved answers left
+# by a stop between its write and its move is removed on the way out.
+test_a_temporary_file_of_the_saved_answers_is_removed_on_the_way_out() {
+  local t rc=0
+  t="$(tmpdir)"
+  : >"$t/.bootstrap-project.again.Xy12Zq"
+  ( load_script; catch_stops; AGAIN_TMP="$t/.bootstrap-project.again.Xy12Zq"; CLEAN=1; exit 1 ) >/dev/null 2>&1 || rc=$?
+  [ "$rc" -eq 1 ] || die "exit $rc, want 1"
+  [ ! -e "$t/.bootstrap-project.again.Xy12Zq" ] || die "the temporary file was left"
 }
 
 test_other_answers_to_the_protection_request_are_explained() {
@@ -10100,6 +10257,7 @@ again() {
   local d="$1" line
   shift
   line="$(grep -A1 -xE 'To continue the setup, run this command:|To start again, run this command:' "$d/out" | tail -1)"
+  line="$(strip_any_cd "$line")"
   case "$line" in
     "    bash "*) ;;
     *) cat "$d/out" "$d/err" >&2; die "the last run showed no command to run again" ;;
@@ -10421,8 +10579,10 @@ advance_again() {
   local d="$1" line
   shift
   advance_command "$d" >/dev/null
-  # As the user would: the command as shown, short or long.
-  line="$(grep -A1 -xF "$ADVANCE_INTRO" "$d/out" | sed -n 2p | sed 's/^    //')"
+  # As the user would: the command as shown, short or long (its cd to the
+  # run's folder checked and taken off: whole runs there).
+  line="$(strip_any_cd "$(grep -A1 -xF "$ADVANCE_INTRO" "$d/out" | sed -n 2p)")"
+  line="${line#    }"
   case "$line" in
     "bash "*) ;;
     *) cat "$d/out" "$d/err" >&2; die "no command to continue was shown before the first change" ;;
@@ -10457,6 +10617,11 @@ test_a_stop_that_runs_no_trap_still_leaves_the_command_to_continue() {
     "bash "*" --resume$CARRIED") ;;
     *) die "the command does not continue with every answer: $cmd" ;;
   esac
+  # #267 review, N1: the file saved right after the yes (the stop ran no
+  # trap, so nothing wrote it again) holds --resume and every typed answer.
+  expect_again_file "$d" --resume --owner octo-user --name my-app --project-name my-app --description "Lends tools." \
+    --po-name "Octo User" --pack python --public --license none --dir ./my-app --git-name "Test Person" \
+    --git-email test@example.com
   printf 'yes\n' >"$d/in"
   advance_again "$d"
   expect_rc 0 "$d"
@@ -10501,7 +10666,7 @@ test_a_resume_shows_the_command_to_continue_before_its_first_change() {
   again "$d"
   expect_rc 0 "$d"
   cmd="$(grep -A1 -xF "$ADVANCE_INTRO" "$d/out" | sed -n 2p | sed 's/^    //')"
-  [ "$cmd" = "bash $(shown_script_of "$d") --again" ] || die "not the short command: $cmd"
+  [ "$cmd" = "$(start_cd_of "$d")bash $(shown_script_of "$d") --again" ] || die "not the short command: $cmd"
   [ ! -e "$(again_file_of "$d")" ] || die "the saved answers were not removed at the end"
   # Shown after the step that works out the state, before proposing.
   [ "$(line_of "$d" "$ADVANCE_INTRO")" -gt "$(line_of "$d" "==> Working out where the setup stopped, from GitHub and from the copy on this computer")" ] \

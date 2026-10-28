@@ -625,6 +625,18 @@ guide_details() {
   [ -z "$1" ] || details_block "$1"
 }
 
+# say_shown_command: the command to start again or to continue
+# (shown_command), with the cd to the folder the script was started in in
+# front of it when that is known (SHOWN_CD), so it works from a new
+# window too (#267 review, B1).
+say_shown_command() {
+  if [ -n "$SHOWN_CD" ]; then
+    say_command "cd $SHOWN_CD && bash $SHOWN_CMD"
+  else
+    say_command "bash $SHOWN_CMD"
+  fi
+}
+
 # ---------- end of messages ----------
 
 # ---------- test hooks ----------
@@ -1655,9 +1667,33 @@ FRESH_START=""
 # after the script (SHOWN_ARGV) are saved next to the script (save_again),
 # and SHOWN_CMD is then the short command that reads them back, the
 # script with --again. Where they cannot be saved, it stays the long one.
+# SHOWN_CD is the folder the script was started in (START_DIR), as the
+# cd in front of the command writes it: ~/... under the home folder,
+# else quoted. Guides send the user to a new window, which starts in
+# the home folder (#267 review, B1): the script path and a --dir such as
+# ./my-app are read from the folder the script was started in.
 SHOWN_CMD=""
+SHOWN_CD=""
 SHOWN_ARGV=()
+START_DIR=""
+start_cd() {
+  local home="${HOME:-}"
+  SHOWN_CD=""
+  [ -n "$START_DIR" ] || return 0
+  case "$START_DIR" in *"$NL"*) return 0 ;; esac
+  home="${home%/}"
+  if [ -n "$home" ] && [ "$START_DIR" = "$home" ]; then
+    SHOWN_CD="~"
+  elif [ -n "$home" ] && [ "${START_DIR#"$home"/}" != "$START_DIR" ]; then
+    quote_word "${START_DIR#"$home"/}"
+    SHOWN_CD="~/$QUOTED"
+  else
+    quote_word "$START_DIR"
+    SHOWN_CD="$QUOTED"
+  fi
+}
 shown_command() {
+  start_cd
   [ -n "$RESTART_CMD" ] || remember_command
   SHOWN_CMD="$RESTART_CMD"
   SHOWN_ARGV=(${RESTART_ARGV[@]+"${RESTART_ARGV[@]}"})
@@ -1697,6 +1733,9 @@ AGAIN_DIR=""
 # AGAIN_SAVED: this run wrote the file, so a finished setup removes it.
 AGAIN_SAVED=""
 AGAIN_ARGS=()
+# AGAIN_TMP: the temporary file save_again is writing, removed on the way
+# out (leave_script) if a stop comes before it is moved into place.
+AGAIN_TMP=""
 
 # find_again_dir: sets AGAIN_DIR (run by main, never when sourced).
 find_again_dir() {
@@ -1715,6 +1754,10 @@ find_again_dir() {
 save_again() {
   local here copy tmp word
   [ -n "$AGAIN_DIR" ] || return 1
+  # No words (no option given and no answer yet, as README step 1 starts
+  # it): the plain command is shown; a file would hold one empty line
+  # (#267 review, B1).
+  [ "$#" -gt 0 ] || return 1
   for word in "$@"; do
     case "$word" in *"$NL"*) return 1 ;; esac
   done
@@ -1727,12 +1770,15 @@ save_again() {
   fi
   [ ! -d "$AGAIN_DIR/$AGAIN_NAME" ] || return 1
   tmp="$(umask 077 && mktemp "$AGAIN_DIR/$AGAIN_NAME.XXXXXX" 2>/dev/null)" || return 1
+  AGAIN_TMP="$tmp"
   chmod 600 "$tmp" 2>/dev/null || true
   if printf '%s\n' "$@" >"$tmp" 2>/dev/null && mv -f -- "$tmp" "$AGAIN_DIR/$AGAIN_NAME" 2>/dev/null; then # not-user-facing
+    AGAIN_TMP=""
     AGAIN_SAVED=1
     return 0
   fi
   rm -f -- "$tmp"
+  AGAIN_TMP=""
   return 1
 }
 
@@ -1740,14 +1786,18 @@ save_again() {
 # words and never run; then one line says which project they are for. No
 # file, or one that cannot be read or is empty, stops (exit 2).
 read_again() {
-  local f="$AGAIN_DIR/$AGAIN_NAME" line owner="" name="" prev="" project
+  local f="$AGAIN_DIR/$AGAIN_NAME" line owner="" name="" prev="" project words=""
   AGAIN_ARGS=()
   if [ -n "$AGAIN_DIR" ] && [ -f "$f" ] && [ -r "$f" ]; then
     while IFS= read -r line || [ -n "$line" ]; do
-      AGAIN_ARGS[${#AGAIN_ARGS[@]}]="${line%"$CR"}"
+      line="${line%"$CR"}"
+      [ -z "$line" ] || words=1
+      AGAIN_ARGS[${#AGAIN_ARGS[@]}]="$line"
     done <"$f" || AGAIN_ARGS=()
   fi
-  [ "${#AGAIN_ARGS[@]}" -gt 0 ] || fail 2 "There are no saved answers for --again next to this script: the file $AGAIN_NAME is not in its folder, or cannot be read. The script saves them when it stops, in the folder it runs from." \
+  # Only empty lines are no saved answers either.
+  [ -n "$words" ] || AGAIN_ARGS=()
+  [ "${#AGAIN_ARGS[@]}" -gt 0 ] || fail 2 "There are no saved answers for --again next to this script: the file $AGAIN_NAME is not in its folder, cannot be read, or holds no answers. The script saves them when it stops, in the folder it runs from." \
     "Start the script as in step 1 of the README: it asks for each answer, and if it stops, it shows the command to run next."
   for line in "${AGAIN_ARGS[@]}"; do
     case "$prev" in
@@ -1786,12 +1836,12 @@ stop_at_guide() {
   shown_command
   if [ -n "$CREATED_NOTE" ]; then
     say "$CONTINUE_INTRO"
-    say_command "bash $SHOWN_CMD"
+    say_shown_command
     fail 3 "$GUIDE_TITLE The script stopped here. $CREATED_NOTE" \
       "Follow the steps above, then run the command shown to continue the setup."
   fi
   say "$START_AGAIN_INTRO"
-  say_command "bash $SHOWN_CMD"
+  say_shown_command
   fail 3 "$GUIDE_TITLE The script stopped here, and nothing was created." \
     "Follow the steps above, then run the command shown to start again."
 }
@@ -2537,7 +2587,7 @@ api_raw() {
 stop_with_error() {
   shown_command
   if [ -n "$CREATED_NOTE" ]; then say "$CONTINUE_INTRO"; else say "$START_AGAIN_INTRO"; fi
-  say_command "bash $SHOWN_CMD"
+  say_shown_command
   fail "${STOP_CODE:-1}" "${1:-Something unexpected happened.}${CREATED_NOTE:+ $CREATED_NOTE}" "$2" "$3"
 }
 
@@ -3193,7 +3243,7 @@ show_advance_command() {
   shown_command
   OPT_RESUME="$was"
   say "$ADVANCE_INTRO"
-  say_command "bash $SHOWN_CMD"
+  say_shown_command
   [ -n "$OPT_RESUME" ] || say_note "If the project was not created yet, that command says so and shows the command to start again."
   # The log that follows comes after one blank line (#248 review, N3).
   LOG_GAP=1
@@ -3474,7 +3524,7 @@ guide_protect() {
     if [ "$PROTECT_PROBLEM" = plan ]; then
       guide_step "Or carry on without protection: changes could then go straight into the main version, and the setup writes that decision into the project. Continue with this command:"
       shown_command_with_allow
-      say_command "bash $SHOWN_CMD"
+      say_shown_command
     fi
   fi
   if [ "$PROTECT_PROBLEM" != plan ]; then
@@ -5057,6 +5107,8 @@ catch_stops() {
 leave_script() {
   local rc=$? work="$WORK_DIR"
   trap - EXIT INT ERR
+  if [ -n "$AGAIN_TMP" ]; then rm -f -- "$AGAIN_TMP"; fi
+  AGAIN_TMP=""
   restore_terminal_mode
   UNEXPECTED_LOG=""
   [ -z "$STDERR_LOG" ] || [ ! -s "$STDERR_LOG" ] || UNEXPECTED_LOG="$(tail -5 "$STDERR_LOG" | tr -d '\r')"
@@ -5639,6 +5691,7 @@ cmd_setup() {
 # ---------- main ----------
 
 main() {
+  START_DIR="$(pwd 2>/dev/null)" || START_DIR=""
   case "${1:-}" in
     layout-pack) shift; cmd_layout_pack "$@" ;;
     --again)

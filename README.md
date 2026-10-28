@@ -129,25 +129,29 @@ says what it created and what to do next.
 Right after your yes, before it changes anything on GitHub, it prints
 the command to continue the setup if it stops before it finishes, for
 any reason (also Ctrl-C or a closed window). Copy that command and
-keep it until the setup has finished. That command includes
-`--resume`, which tells the script to continue the project that is
-there instead of creating a new one; if you run it and the project was
-not created yet, the script says so and prints the command to start
-again. When it stops by itself, it also says why and prints the exact
-command to run next: one that starts again, or one that continues the
-setup. The command to continue and the command to start again carry
-your answers along, so you are not asked again. At a stop before the
-project exists, that command is
-the one you ran. Once the project exists on GitHub, that command
-includes `--resume` as well.
+keep it until the setup has finished. When it stops by itself, it also
+says why and prints the exact command to run next: one that starts
+again, or one that continues the setup. If you run the command to
+continue and the project was not created yet, the script says so and
+prints the command to start again.
 
-These commands are short: `bash bootstrap-project.sh --again`, run in
-the same folder. The script saves your answers in a small file next to
-it, `.bootstrap-project.again`, and `--again` reads them from there, so
-you need not copy a long command. Each stop saves the answers anew, and
-the file is removed when the setup has finished. Only when the answers
-cannot be saved (for example an answer of more than one line) does the
-script print the long command with every answer in it.
+The command to continue and the command to start again carry your
+answers along, so you are not asked again. The script saves your
+answers in a small file next to it, `.bootstrap-project.again`, and the
+command it prints reads them back with `--again`. That command also
+goes to the folder you started the script in, so it works from any
+window, also in a new window, which starts in your home folder. With
+the folder of step 1 it reads
+`cd ~/projects && bash bootstrap-project.sh --again`. Once the project
+exists on GitHub, that command includes `--resume` as well: the saved
+answers carry it, and it tells the script to continue the project that
+is there instead of creating a new one. Each stop saves the answers
+anew, and the first line that `--again` prints names the project they
+are for, so a file left from another project is easy to spot. The file
+is removed when the setup has finished. When there is nothing to save
+yet, or the answers cannot be saved (for example an answer of more
+than one line), the script prints the full command instead, after the
+same `cd`: the one you ran, with every answer in it.
 
 **What the script guides you through.** When something is missing, the
 script prints numbered steps for your system (what to do, the page to
