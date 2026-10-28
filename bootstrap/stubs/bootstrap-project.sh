@@ -2040,31 +2040,58 @@ guide_npm() {
 guide_npm_windows() {
   guide_begin "The npm this Linux finds is the Windows one, so npm (part of Node.js) is not installed in this Linux." \
     "This Linux runs inside Windows (WSL, the Windows Subsystem for Linux), and the npm it found, $NPM_WINDOWS_PATH, is a Windows program. A project in this Linux should use a Node.js installed in Linux: the node, web and react-native packs use npm to record the exact versions of the tools your project uses, so that its checks on GitHub can install the same ones."
-  guide_step "Open https://nodejs.org/en/download in your browser. It shows the steps for Windows, because the browser runs on Windows: where the page says Windows, choose Linux instead, and keep the version marked LTS (the one with long-term support)."
-  guide_step "Open another window of this Linux (from the Start menu, as you opened this one) and run there, one by one, the commands the page shows: they install Node.js, which includes npm, in this Linux."
-  guide_step "Close this window, open a new window of this Linux, and start the script there, so that it finds the new npm before the Windows one."
+  npm_steps_in_wsl
   guide_end "the script says \"Done. npm is installed.\"" \
     "if the script still says that the npm it finds is the Windows one, check that the commands from the page ended without an error, then open a new window of this Linux and start the script there." \
     "it looks where the npm it finds is, following links: one in the folder of a Windows drive (/mnt/c/, /mnt/d/ and so on, where this Linux shows the Windows drives) is the Windows one. Otherwise it runs npm --version, which works only when npm is installed."
 }
 
+# npm_steps_in_wsl: in WSL, the steps to install Node.js in this Linux,
+# for both npm guides (end-to-end run 2 repeated, r2i). The browser runs
+# on Windows, so nodejs.org offers the Windows steps first.
+npm_steps_in_wsl() {
+  guide_step "Open https://nodejs.org/en/download in your browser. It shows the steps for Windows, because the browser runs on Windows: where the page says Windows, choose Linux instead, and keep the version marked LTS (the one with long-term support)."
+  guide_step "Open another window of this Linux (from the Start menu, as you opened this one) and run there, one by one, the commands the page shows: they install Node.js, which includes npm, in this Linux."
+  npm_step_new_window "a new window of this Linux"
+}
+
+# npm_step_new_window <window>: the last step on Linux and in WSL. The
+# page's Linux steps install Node.js with nvm, which puts npm on PATH only
+# for windows opened after it: this script, waiting in this window, cannot
+# find it (r2j), so it is started again in a new window. The command to
+# start again is shown only after q (#255 review, N2).
+npm_step_new_window() {
+  guide_step "When they have finished, type q here if the script waits, and copy the command it shows to start again. Then close this window, open $1, and run that command there: the new npm is found only in a window opened after the install."
+}
+
 guide_npm_missing() {
+  local other="if the script still says that npm is not installed, close this window, open a new one, and start the script again there."
   guide_begin "npm (part of Node.js) is not installed." \
     "The node, web and react-native packs use npm to record the exact versions of the tools your project uses, so that its checks on GitHub can install the same ones."
-  guide_step "Open https://nodejs.org in your browser and download the version marked LTS (the one with long-term support)."
   case "$OS_KIND" in
-    macos) guide_step "Open the downloaded file and follow the installer, then come back to this window." ;;
+    macos)
+      guide_step "Open https://nodejs.org in your browser and download the version marked LTS (the one with long-term support)."
+      guide_step "Open the downloaded file and follow the installer, then come back to this window."
+      ;;
     windows)
+      guide_step "Open https://nodejs.org in your browser and download the version marked LTS (the one with long-term support)."
       guide_step "Run the downloaded installer, keeping the default choices."
       guide_step "Close this window, open Git Bash again from the Start menu, and start the script there, so that it finds npm."
       ;;
     *)
-      guide_step "On the download page choose your system and follow the steps shown there; the Node.js in your system's own software list may be older than the one your project's checks use."
-      guide_step "Come back to this window."
+      if [ -n "$LINUX_WSL" ]; then
+        npm_steps_in_wsl
+        other="if the script still says that npm is not installed, check that the commands from the page ended without an error, then start the script again in a new window of this Linux."
+      else
+        guide_step "Open https://nodejs.org/en/download in your browser. Keep Linux and the version marked LTS (the one with long-term support) chosen there; the Node.js in your system's own software list may be older than the one your project's checks use."
+        guide_step "Open another terminal window and run there, one by one, the commands the page shows: they install Node.js, which includes npm."
+        npm_step_new_window "a new terminal window"
+        other="if the script still says that npm is not installed, check that the commands from the page ended without an error, then start the script again in a new terminal window."
+      fi
       ;;
   esac
   guide_end "the script says \"Done. npm is installed.\"" \
-    "if the script still says that npm is not installed, close this window, open a new one, and start the script again there." \
+    "$other" \
     "it runs npm --version, which works only when npm is installed."
 }
 

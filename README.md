@@ -116,10 +116,14 @@ here first:
   - gh not installed;
   - gh installed, but too old for the script;
   - Node.js and npm not installed (only for the node, web and
-    react-native packs; the guide points to https://nodejs.org);
+    react-native packs; the guide points to https://nodejs.org). On
+    Linux, and in Linux on Windows (WSL), only a window opened after the
+    install finds the new npm, so this one does not go on with Enter:
+    type `q`, then start the script again in a new window with the
+    command it shows;
   - only the Windows npm found in Linux on Windows (WSL): a project in
     Linux should not use it, and the guide shows how to install Node.js
-    in Linux;
+    in Linux, then start again in a new window, as above;
   - gh signed out, or its sign-in no longer accepted;
   - gh signed in without the `workflow` permission (the right to change
     the files that run the project's checks): the script offers to run
