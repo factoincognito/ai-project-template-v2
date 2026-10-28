@@ -238,7 +238,9 @@ test_csharp_pack_has_no_lockfile() {
   local found
   found="$(cd "$REPO/languages/csharp" && find . -name packages.lock.json)"
   [ -z "$found" ] || die "lockfile in the csharp pack: $found"
-  ! grep -rqF RestorePackagesWithLockFile "$REPO/languages/csharp" || die "the csharp pack turns on a NuGet lockfile"
+  # The build files only: code-standards.md names the property on purpose.
+  ! grep -rqF --include='*.props' --include='*.csproj' --include='*.slnx' --include=global.json \
+    RestorePackagesWithLockFile "$REPO/languages/csharp" || die "the csharp pack turns on a NuGet lockfile"
 }
 
 test_csharp_pack_pins_every_package_exactly() {
