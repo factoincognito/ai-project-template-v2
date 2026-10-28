@@ -135,6 +135,14 @@ project exists, that command is
 the one you ran. Once the project exists on GitHub, that command
 includes `--resume` as well.
 
+These commands are short: `bash bootstrap-project.sh --again`, run in
+the same folder. The script saves your answers in a small file next to
+it, `.bootstrap-project.again`, and `--again` reads them from there, so
+you need not copy a long command. Each stop saves the answers anew, and
+the file is removed when the setup has finished. Only when the answers
+cannot be saved (for example an answer of more than one line) does the
+script print the long command with every answer in it.
+
 **What the script guides you through.** When something is missing, the
 script prints numbered steps for your system (what to do, the page to
 open, what you will see when it has worked). You can read the guides
