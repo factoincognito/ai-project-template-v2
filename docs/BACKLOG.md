@@ -788,6 +788,20 @@ get a working project in any supported language.
   - `bootstrapper-test` keeps its name and meaning.
 
   **Rules that apply.** Harness, test and workflow changes are code and config: test-first (red run in the PR), reviewed by Crog on Opus. A change to the name or meaning of the required check `bootstrapper-test` needs Adam's intent approval.
+- **[NOW] PBI-1.23** (Adam, 2026-10-28; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed; in a `NOW` slot of the product office's WIP limit) — C# base language pack.
+
+  **Why (Adam, 2026-10-28).** Give users C# capabilities in their own projects. Out of scope for Phase 1 until now ("planned in v1, not yet built").
+
+  **Scope (Adam, 2026-10-28).** A base pack: a class library, a console app and an xUnit test project, with the same kind of gates as the other packs. Not in scope: web (ASP.NET), desktop (WPF, WinForms) and mobile (MAUI). Each of those could later become a pack of its own on top of this one, the way `web` builds on `node`.
+
+  **Candidate HOW (Clead's, not decided).** Folder `languages/csharp/`. `dotnet format` for lint and formatting; nullable reference types with warnings as errors; xUnit with coverlet for the 80% line coverage gate; `actions/setup-dotnet` with the SDK version pinned; no lockfile step in the bootstrap script, as for the Python pack. Versions and tools are checked when specced, not taken from this line.
+
+  **Order (Clead, 2026-10-28), so the pack cannot delay acuteping.** The bootstrapper's end-to-end runs (`docs/NEXT_SESSION.md`, Adam's to-do 2) are the gate for acuteping, and the runs test the bootstrap script. Part 1, now: the `languages/csharp/` folder, its job in `packs.yml`, `tools/layout-pack.sh` and `tools/test-layout-pack.sh`, and the README tables. Part 2, only after the end-to-end runs have passed: the bootstrap script offers the pack, and `bootstrap/e2e-check.sh` checks it. Part 1 adds nothing the runs exercise; part 1's change to `bootstrap/stubs/bootstrap-project.sh` (the layout table lives there) is kept to the layout rows, and its PR merges only after the release prep for the version Adam runs next is merged, so it is not in that release.
+
+  **Done when.** The pack meets "Rules for a pack" and "Adding a pack" in `languages/README.md`: green on day one on a scratch project, each rule CI enforces proven by a deliberate violation, a job in `.github/workflows/packs.yml`, its files in the bootstrap script's layout table and in `tools/test-layout-pack.sh`, both README tables, and the pack offered by the bootstrap script and checked by `bootstrap/e2e-check.sh`.
+
+  **Rules that apply.** Code and config: test-first, reviewed by the role that did not write it.
+
 ---
 
 ## Phase 2 — Validate unproven pieces
@@ -1108,6 +1122,6 @@ to fall out of a chat session.
 
 ## Explicitly out of scope for Phase 1
 
-- C# language pack — planned in v1, not yet built, not a Phase 1 priority
-- Elixir language pack — same
+- ~~C# language pack~~ — moved into Phase 1 as PBI-1.23 (Adam, 2026-10-28), as a base pack
+- Elixir language pack — planned in v1, not yet built, not a Phase 1 priority
 - Automated merge — Adam merges, always
