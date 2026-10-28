@@ -256,8 +256,19 @@ test_csharp_pack_pins_every_package_exactly() {
   [ "$n" -ge 2 ] || die "found only $n package versions; the parser is broken"
   [ "$n" -eq "$(grep -c '<PackageVersion ' "$p/Directory.Packages.props")" ] \
     || die "a PackageVersion in Directory.Packages.props is not in the one-line form the check reads"
-  ! grep -rE '<PackageReference [^>]*Version=' "$p" --include='*.csproj' >/dev/null \
+  ! grep -rE '<PackageReference [^>]*(Version|VersionOverride)=' "$p" --include='*.csproj' --include='*.props' >/dev/null \
     || die "a project file sets a package version of its own"
+}
+
+test_csharp_test_project_references_every_project_under_src() {
+  # coverlet measures only the assemblies a test project loads, so the test
+  # project references every project under src/ with one glob: a new
+  # project there counts toward the gate at once, at 0% until tested.
+  local t="$REPO/languages/csharp/starter/tests/Example.Tests/Example.Tests.csproj" n
+  grep -qF '<ProjectReference Include="../../src/**/*.csproj" />' "$t" \
+    || die "the test project does not reference every project under src/"
+  n="$(grep -c '<ProjectReference ' "$t")"
+  [ "$n" -eq 1 ] || die "the test project has $n project references, want only the glob"
 }
 
 test_csharp_global_json_pins_the_sdk_feature_band() {
@@ -269,6 +280,9 @@ test_csharp_global_json_pins_the_sdk_feature_band() {
   r="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sdk"]["rollForward"])' "$g")"
   [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]00$ ]] || die "global.json sdk.version is not the first SDK of a feature band: $v"
   [ "$r" = latestPatch ] || die "global.json rollForward is $r, want latestPatch"
+  # Without it the .NET 10 SDK refuses dotnet test for xUnit v3 (VSTest mode).
+  r="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("test", {}).get("runner", ""))' "$g")"
+  [ "$r" = Microsoft.Testing.Platform ] || die "global.json test.runner is '$r', want Microsoft.Testing.Platform"
 }
 
 test_csharp_ci_reads_the_sdk_from_global_json() {

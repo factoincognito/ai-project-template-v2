@@ -16,8 +16,10 @@
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
+  <!-- Every project under src/, so the coverage gate counts each of them:
+       coverlet measures only the assemblies a test project loads. A new
+       project there is counted at once, at 0% until it has tests. -->
   <ItemGroup>
-    <ProjectReference Include="../../src/Example/Example.csproj" />
-    <ProjectReference Include="../../src/Example.App/Example.App.csproj" />
+    <ProjectReference Include="../../src/**/*.csproj" />
   </ItemGroup>
 </Project>

@@ -6,14 +6,18 @@ root = true
 charset = utf-8
 end_of_line = lf
 insert_final_newline = true
-trim_trailing_whitespace = true
+
+# The project's code and config. Not [*]: Markdown keeps its trailing
+# spaces (a line break) and the other files their own indentation.
+[*.{cs,json,props,targets,csproj,slnx,yml,yaml}]
 indent_style = space
-indent_size = 4
+trim_trailing_whitespace = true
 
 [*.{json,props,targets,csproj,slnx,yml,yaml}]
 indent_size = 2
 
 [*.cs]
+indent_size = 4
 # Formatting (whitespace, indentation, new lines).
 dotnet_diagnostic.IDE0055.severity = warning
 # One namespace per file, file-scoped: namespace Example;
