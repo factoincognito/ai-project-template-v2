@@ -2299,6 +2299,11 @@ BOOTSTRAPPER=factoincognito/ai-project-bootstrap
 # clause built from GH_GIT_QUESTION_TEXT.
 GH_GIT_QUESTION_TEXT='Authenticate Git with your GitHub credentials?'
 GH_GIT_QUESTION_STEP="If gh asks \"$GH_GIT_QUESTION_TEXT\", answer Yes: type y and press Enter, or just press Enter."
+# GH_SIGN_IN_FIRST_STEP: the step every guide that has the user enter
+# gh's one-time code on GitHub's device page gives before the step with
+# the code. On a browser not signed in to GitHub, the page first asks
+# for the GitHub sign-in (end-to-end run 2 repeated, r2h).
+GH_SIGN_IN_FIRST_STEP="If your browser is not signed in to GitHub, GitHub first asks you to sign in: your user name or email address, your password, and a two-factor code if you use one. Then it shows the page for the code."
 SIGN_IN_COMMAND_NEXT="Sign in to GitHub with gh as in step 0 of the README, with the command gh auth login -h github.com -p https -w -s workflow (if gh asks \"$GH_GIT_QUESTION_TEXT\", answer Yes), then start the script again."
 SIGN_IN_CONTINUE_NEXT="Sign in to GitHub with gh as in step 0 of the README, with the command gh auth login -h github.com -p https -w -s workflow (if gh asks \"$GH_GIT_QUESTION_TEXT\", answer Yes), then continue the setup with the command shown above."
 
@@ -2500,7 +2505,9 @@ guide_github_account() {
   guide_step "Open a second terminal window and run this command there; it is the sign-in command from step 0 of the README:"
   say_command "gh auth login -h github.com -p https -w -s workflow"
   guide_step "$GH_GIT_QUESTION_STEP"
-  guide_step "gh shows a one-time code (eight letters and digits, such as ABCD-1234) and asks you to press Enter: copy the code, then press Enter. Your browser opens GitHub's device page: paste the code, click Continue, then approve with the green Authorize button."
+  guide_step "gh shows a one-time code (eight letters and digits, such as ABCD-1234) and asks you to press Enter: copy the code, then press Enter. Your browser opens GitHub's device page."
+  guide_step "$GH_SIGN_IN_FIRST_STEP"
+  guide_step "On the page for the code, paste the code, click Continue, then approve with the green Authorize button."
   guide_step "Come back to this window."
   guide_end "gh says \"Logged in as\" with your account name, and the script says \"Done. gh is signed in to GitHub as\" with your account name." \
     "if the browser does not open, open https://github.com/login/device yourself and type the code there." \
@@ -2685,7 +2692,9 @@ guide_github_permissions() {
   esac
   guide_step "$GH_GIT_QUESTION_STEP"
   guide_step "gh shows a one-time code (eight letters and digits, such as ABCD-1234) and asks you to press Enter: copy the code, then press Enter."
-  guide_step "Your browser opens https://github.com/login/device: paste the code, click Continue, then approve with the green Authorize button."
+  guide_step "Your browser opens https://github.com/login/device."
+  guide_step "$GH_SIGN_IN_FIRST_STEP"
+  guide_step "On the page for the code, paste the code, click Continue, then approve with the green Authorize button."
   guide_step "Come back to this window."
   guide_end "gh says that it is done, and the script says \"Done. gh has the permissions on GitHub that the setup needs.\"" \
     "if the browser does not open, open https://github.com/login/device yourself and type the code there." \

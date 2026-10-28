@@ -5568,6 +5568,17 @@ expect_err_shape() {
   [ "$(sed -n '4,$p' "$1/err" | grep -vc '^    ')" -eq 0 ] || { cat "$1/err" >&2; die "raw text not indented below"; }
 }
 
+# expect_sign_in_first_before_the_code <dir>: the guide says that GitHub
+# may first ask the user to sign in (end-to-end run 2 repeated, r2h), in
+# a step before the one where the code is pasted.
+expect_sign_in_first_before_the_code() {
+  local s c
+  expect_out "$1" "If your browser is not signed in to GitHub, GitHub first asks you to sign in: your user name or email address, your password, and a two-factor code if you use one. Then it shows the page for the code."
+  s="$(grep -nF 'If your browser is not signed in to GitHub' "$1/out" | head -1 | cut -d: -f1)"
+  c="$(grep -nF 'paste the code' "$1/out" | head -1 | cut -d: -f1)"
+  [ -n "$c" ] && [ "$s" -lt "$c" ] || { cat "$1/out" >&2; die "the sign-in step does not come before the step with the code"; }
+}
+
 test_a_signed_out_gh_is_guided_to_sign_in() {
   # gh exits 4 when it is not signed in. The guide shows the sign-in
   # command of the README's step 0 for the user to run; it is not offered
@@ -5585,6 +5596,10 @@ test_a_signed_out_gh_is_guided_to_sign_in() {
   # End-to-end run 2, r2c: under WSL gh cannot open a browser; the guide
   # says to open the device page yourself, as the README does.
   expect_out "$d" "if the browser does not open, open https://github.com/login/device yourself"
+  # Run 2 repeated, r2h: on a browser not signed in to GitHub, the device
+  # page first asks for the GitHub sign-in; the guide says so before the
+  # step with the code.
+  expect_sign_in_first_before_the_code "$d"
   expect_out "$d" "To start again, run this command:"
   expect_no_out "$d" "Run it now?"
   expect_nothing_ran "$d"
@@ -5716,6 +5731,7 @@ RUN
   expect_out "$d" "workflow (to add and change the files that run your project's checks)"
   grep -qxF '    gh auth refresh -h github.com -s workflow' "$d/out" || { cat "$d/out" >&2; die "the refresh command is not shown"; }
   expect_out "$d" "https://github.com/login/device"
+  expect_sign_in_first_before_the_code "$d"
   [ "$(cat "$d/run.log")" = "gh auth refresh -h github.com -s workflow|<unset>" ] \
     || { cat "$d/run.log" >&2; die "the refresh did not run once, with gh's prompts on"; }
   expect_no_out "$d" "Press Enter"

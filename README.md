@@ -57,6 +57,9 @@ Windows.
    If gh asks "Authenticate Git with your GitHub credentials?", answer
    Yes: type y and press Enter, or just press Enter. Then gh shows a
    one-time code and opens your browser (press Enter if it asks first).
+   If your browser is not signed in to GitHub, GitHub first asks you to
+   sign in: your user name or email address, your password, and a
+   two-factor code if you use one. Then it shows the page for the code.
    Enter the code on the GitHub page and approve. If the browser does
    not open (as in WSL, the Linux inside Windows), open
    https://github.com/login/device in your browser yourself and enter
@@ -198,7 +201,7 @@ here first:
   `gh auth refresh -h github.com -s delete_repo` once (if gh asks
   "Authenticate Git with your GitHub credentials?", answer Yes; if the
   browser does not open, open https://github.com/login/device yourself
-  and enter the code there), then `gh repo delete OWNER/NAME --yes`. The script never deletes a
+  and enter the code there, after signing in to GitHub if it asks), then `gh repo delete OWNER/NAME --yes`. The script never deletes a
   project.
 
 A project can also be made with the "Use this template" button on the
