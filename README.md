@@ -24,8 +24,9 @@ Windows.
 
 A physical keyboard is recommended, though not required. On a touch
 screen with the on-screen keyboard, typing symbols such as `@` and
-copying long commands is harder. If the window where you type commands
-stops reacting after you touched or selected text in it, press Ctrl-Q.
+copying long commands out of that window is harder. If the window where
+you type commands stops reacting after you selected text in it, press
+Ctrl-Q (hold Ctrl and press Q).
 
 **Step 0: install gh and sign in (once per computer).**
 
