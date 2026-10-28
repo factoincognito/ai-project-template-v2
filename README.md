@@ -40,8 +40,11 @@ Windows.
    - **Linux:** open a terminal and follow the steps for your system at
      https://github.com/cli/cli/blob/trunk/docs/install_linux.md.
    - **Linux on Windows (WSL):** to work in Linux on a Windows computer,
-     install Ubuntu (a Linux) first:
-     1. Right-click the Start button and choose **Terminal (Admin)**.
+     do this instead of the Windows step above (not both). First install
+     Ubuntu (a Linux):
+     1. Right-click the Start button and choose **Terminal (Admin)**. If
+        Windows asks whether to allow this app to make changes, choose
+        Yes.
      2. Type this line and press Enter:
 
         ```
@@ -50,11 +53,14 @@ Windows.
 
         If it asks you to restart the computer, restart it.
      3. If no Ubuntu window opens by itself, press the Windows key, type
-        `Ubuntu` and press Enter.
-     4. Ubuntu asks for a new user name and a password. Choose them and
-        remember the password: commands that start with `sudo` ask for
-        it again. Nothing shows on the screen while you type it; type it
-        and press Enter.
+        `Ubuntu` and press Enter. If Ubuntu is not in the list either,
+        open **Terminal (Admin)** again as in step 1 and type the same
+        line again.
+     4. The first start unpacks files and may take a few minutes. Wait
+        until Ubuntu asks for a new user name and a password. Choose
+        them and remember the password: commands that start with `sudo`
+        ask for it again. Nothing shows on the screen while you type it;
+        type it and press Enter.
      5. Ubuntu may ask whether to opt in to platform metrics collection.
         Either answer is fine.
 
