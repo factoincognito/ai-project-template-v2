@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Checks that STATUS.md files keep the format the product owner's
 # overview of all projects reads: the title "# Status", a
-# "Last update: YYYY-MM-DD" line, and the headings Phase, Current focus,
-# Next step and Blockers, each exactly once and in that order, written
-# exactly so. Headings after Blockers are allowed.
+# "Last update: YYYY-MM-DD" line with a date (the literal placeholder is
+# allowed only in a bootstrap/stubs/STATUS.md), and the headings Phase,
+# Current focus, Next step and Blockers, each exactly once and in that
+# order, written exactly so. Headings after Blockers are allowed.
 # Usage: bash tools/check-status.sh [file...]
 #   With no files: STATUS.md and bootstrap/stubs/STATUS.md under the repo
 #   root (STATUS_ROOT overrides the root, for the tests).
@@ -32,13 +33,15 @@ problem() {
 
 check_file() {
   local file="$1" text="$WORK/text" h n line last=0 complete=true in_order=true
+  local date='[0-9]{4}-[0-9]{2}-[0-9]{2}'
+  case "$file" in */bootstrap/stubs/STATUS.md | bootstrap/stubs/STATUS.md) date="(YYYY-MM-DD|$date)" ;; esac
   if [ ! -f "$file" ] || [ ! -r "$file" ]; then
     problem "$file" "cannot read"
     return
   fi
   tr -d '\r' <"$file" >"$text"
   grep -qx '# Status' "$text" || problem "$file" 'missing title "# Status"'
-  grep -Eqx 'Last update: (YYYY-MM-DD|[0-9]{4}-[0-9]{2}-[0-9]{2})' "$text" \
+  grep -Eqx "Last update: $date" "$text" \
     || problem "$file" 'missing "Last update: YYYY-MM-DD" line'
   for h in "${HEADINGS[@]}"; do
     n="$(grep -cxF -- "## $h" "$text" || true)"

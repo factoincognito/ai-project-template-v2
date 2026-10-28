@@ -92,9 +92,18 @@ test_good_file_passes() {
 }
 
 test_stub_placeholder_date_passes() {
+  local d="$WORK/ph.$RANDOM/bootstrap/stubs"
+  mkdir -p "$d"
+  cp "$(good)" "$d/STATUS.md"
+  edit "$d/STATUS.md" 's/^Last update: .*/Last update: YYYY-MM-DD/'
+  expect_pass "$d/STATUS.md"
+}
+
+test_placeholder_date_outside_the_stub_fails() {
+  # A filled file whose date was never set gives the overview no date.
   local f; f="$(good)"
   edit "$f" 's/^Last update: .*/Last update: YYYY-MM-DD/'
-  expect_pass "$f"
+  expect_fail 'missing "Last update: YYYY-MM-DD" line' "$f"
 }
 
 test_shipped_stub_passes() {
@@ -187,24 +196,28 @@ test_every_problem_is_reported_not_only_the_first() {
 
 test_crlf_file_passes() {
   local f; f="$(good)"
-  sed 's/$/\r/' "$f" >"$f.crlf"
+  awk '{ printf "%s\r\n", $0 }' "$f" >"$f.crlf"
   expect_pass "$f.crlf"
 }
 
 # ---------- wiring ----------
 
+# The exact step line, so a commented-out or reworded step does not pass.
 test_ci_build_runs_the_check() {
-  grep -qF 'bash tools/check-status.sh' "$REPO/.github/workflows/ci.yml" \
-    || die "ci.yml does not run the check"
+  grep -qxF '        run: bash tools/check-status.sh' "$REPO/.github/workflows/ci.yml" \
+    || die "ci.yml does not run the check as a step"
 }
 
 test_scripts_test_runs_these_tests() {
-  grep -qF 'bash tools/test-check-status.sh' "$REPO/.github/workflows/bootstrapper.yml" \
-    || die "bootstrapper.yml does not run these tests"
+  grep -qxF '        run: bash tools/test-check-status.sh' "$REPO/.github/workflows/bootstrapper.yml" \
+    || die "bootstrapper.yml does not run these tests as a step"
 }
 
+# That the template's own ci.yml never ships is pinned in bootstrap/test.sh.
 test_check_is_template_only() {
-  ! grep -qE '^tools' "$REPO/bootstrap/manifest.txt" || die "tools/ listed in the manifest"
+  local m="$REPO/bootstrap/manifest.txt"
+  [ -f "$m" ] || die "no $m"
+  ! grep -qE '^tools' "$m" || die "tools/ listed in the manifest"
 }
 
 # ---------- run ----------
