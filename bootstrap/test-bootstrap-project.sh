@@ -4339,6 +4339,9 @@ test_npm_is_needed_only_for_node_web_and_react_native() {
     expect_rc 3 "$d"
     expect_out "$d" "npm (part of Node.js) is not installed."
     expect_out "$d" "https://nodejs.org"
+    # r2j: on Linux the guide ends with a new window, not this one.
+    expect_out "$d" "open a new terminal window, and run that command there"
+    expect_no_out "$d" "Come back to this window"
     expect_nothing_ran "$d"
     d="$(tmpdir)"
     fake_tool "$d" npm 10.0.0
@@ -4346,6 +4349,65 @@ test_npm_is_needed_only_for_node_web_and_react_native() {
     expect_rc 0 "$d"
     expect_out "$d" "    Done. npm is installed."
   done
+}
+
+test_on_linux_the_npm_guide_has_you_start_again_in_a_new_window() {
+  # End-to-end run 2 repeated, r2j: nodejs.org's Linux steps install
+  # Node.js with nvm, which puts npm on PATH only for windows opened after
+  # it, so Enter in the waiting window still found no npm. Outside WSL the
+  # guide has the page's commands run in another window, then the script
+  # started again in a new window with the command shown at q (#255 N2);
+  # "Come back to this window" is gone. The note on the system's own
+  # software list stays. The WSL wording is not shown.
+  local d
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  missing "$d" npm
+  pre "$d" ni with_pack node preflight_npm
+  expect_rc 3 "$d"
+  expect_out "$d" "npm (part of Node.js) is not installed."
+  expect_out "$d" "1. Open https://nodejs.org/en/download in your browser. Keep Linux and the version marked LTS (the one with long-term support) chosen there; the Node.js in your system's own software list may be older than the one your project's checks use."
+  expect_out "$d" "2. Open another terminal window and run there, one by one, the commands the page shows"
+  expect_out "$d" "3. When they have finished, type q here if the script waits, and copy the command it shows to start again. Then close this window, open a new terminal window, and run that command there: the new npm is found only in a window opened after the install."
+  expect_out "$d" "If you see something else: if the script still says that npm is not installed, check that the commands from the page ended without an error, then start the script again in a new terminal window."
+  expect_no_out "$d" "Come back to this window"
+  expect_no_out "$d" "choose your system"
+  expect_no_out "$d" "this Linux"
+  expect_out "$d" "To start again, run this command:"
+  expect_nothing_ran "$d"
+  # Without --non-interactive the script waits; after q it shows the
+  # command to start again, as step 3 says.
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  missing "$d" npm
+  printf 'q\n' >"$d/in"
+  pre "$d" with_pack node preflight_npm
+  expect_rc 3 "$d"
+  expect_out "$d" "Press Enter to check again, or type q to stop:"
+  expect_out "$d" "To start again, run this command:"
+}
+
+test_the_npm_guide_on_macos_and_windows_keeps_its_steps() {
+  # Guard for r2i/r2j: the Linux and WSL change leaves the macOS and
+  # Windows (Git Bash) steps as they were.
+  local d
+  d="$(tmpdir)"
+  on_os "$d" macos
+  missing "$d" npm
+  pre "$d" ni with_pack node preflight_npm
+  expect_rc 3 "$d"
+  expect_out "$d" "1. Open https://nodejs.org in your browser and download the version marked LTS (the one with long-term support)."
+  expect_out "$d" "2. Open the downloaded file and follow the installer, then come back to this window."
+  expect_out "$d" "If you see something else: if the script still says that npm is not installed, close this window, open a new one, and start the script again there."
+  d="$(tmpdir)"
+  on_os "$d" windows
+  missing "$d" npm
+  pre "$d" ni with_pack node preflight_npm
+  expect_rc 3 "$d"
+  expect_out "$d" "1. Open https://nodejs.org in your browser and download the version marked LTS (the one with long-term support)."
+  expect_out "$d" "2. Run the downloaded installer, keeping the default choices."
+  expect_out "$d" "3. Close this window, open Git Bash again from the Start menu, and start the script there, so that it finds npm."
+  expect_out "$d" "If you see something else: if the script still says that npm is not installed, close this window, open a new one, and start the script again there."
 }
 
 test_in_wsl_the_windows_npm_counts_as_no_npm_and_its_guide_says_why() {
@@ -4482,6 +4544,11 @@ test_in_wsl_a_linux_npm_passes_and_a_missing_one_gets_the_usual_guide() {
   pre "$d" ni with_pack node path_first "$d/drives/data/node/bin" preflight_npm
   expect_rc 0 "$d"
   expect_out "$d" "    Done. npm is installed."
+  # No npm at all: the usual title, not the Windows one, with the WSL
+  # steps (r2i, foreseen as #255 N5): the browser runs on Windows, so the
+  # page offers Windows; choose Linux and run its commands in another
+  # window of this Linux, then start again in a new one (r2j), as the
+  # Windows-npm guide says.
   d="$(tmpdir)"
   on_wsl "$d"
   missing "$d" npm
@@ -4489,6 +4556,15 @@ test_in_wsl_a_linux_npm_passes_and_a_missing_one_gets_the_usual_guide() {
   expect_rc 3 "$d"
   expect_out "$d" "npm (part of Node.js) is not installed."
   expect_no_out "$d" "the Windows one"
+  expect_out "$d" "1. Open https://nodejs.org/en/download in your browser. It shows the steps for Windows, because the browser runs on Windows"
+  expect_out "$d" "choose Linux"
+  expect_out "$d" "2. Open another window of this Linux (from the Start menu, as you opened this one) and run there, one by one, the commands the page shows"
+  expect_out "$d" "3. When they have finished, type q here if the script waits, and copy the command it shows to start again. Then close this window, open a new window of this Linux, and run that command there: the new npm is found only in a window opened after the install."
+  expect_out "$d" "If you see something else: if the script still says that npm is not installed, check that the commands from the page ended without an error, then start the script again in a new window of this Linux."
+  expect_no_out "$d" "choose your system"
+  expect_no_out "$d" "download the version marked LTS"
+  expect_no_out "$d" "Come back to this window"
+  expect_no_out "$d" "terminal window"
 }
 
 test_outside_wsl_an_npm_under_mnt_is_not_refused() {
@@ -5568,6 +5644,17 @@ expect_err_shape() {
   [ "$(sed -n '4,$p' "$1/err" | grep -vc '^    ')" -eq 0 ] || { cat "$1/err" >&2; die "raw text not indented below"; }
 }
 
+# expect_sign_in_first_before_the_code <dir>: the guide says that GitHub
+# may first ask the user to sign in (end-to-end run 2 repeated, r2h), in
+# a step before the one where the code is pasted.
+expect_sign_in_first_before_the_code() {
+  local s c
+  expect_out "$1" "If your browser is not signed in to GitHub, GitHub first asks you to sign in: your user name or email address, your password, and a two-factor code if you use one. Then it shows the page for the code."
+  s="$(grep -nF 'If your browser is not signed in to GitHub' "$1/out" | head -1 | cut -d: -f1)"
+  c="$(grep -nF 'paste the code' "$1/out" | head -1 | cut -d: -f1)"
+  [ -n "$c" ] && [ "$s" -lt "$c" ] || { cat "$1/out" >&2; die "the sign-in step does not come before the step with the code"; }
+}
+
 test_a_signed_out_gh_is_guided_to_sign_in() {
   # gh exits 4 when it is not signed in. The guide shows the sign-in
   # command of the README's step 0 for the user to run; it is not offered
@@ -5585,6 +5672,10 @@ test_a_signed_out_gh_is_guided_to_sign_in() {
   # End-to-end run 2, r2c: under WSL gh cannot open a browser; the guide
   # says to open the device page yourself, as the README does.
   expect_out "$d" "if the browser does not open, open https://github.com/login/device yourself"
+  # Run 2 repeated, r2h: on a browser not signed in to GitHub, the device
+  # page first asks for the GitHub sign-in; the guide says so before the
+  # step with the code.
+  expect_sign_in_first_before_the_code "$d"
   expect_out "$d" "To start again, run this command:"
   expect_no_out "$d" "Run it now?"
   expect_nothing_ran "$d"
@@ -5716,6 +5807,7 @@ RUN
   expect_out "$d" "workflow (to add and change the files that run your project's checks)"
   grep -qxF '    gh auth refresh -h github.com -s workflow' "$d/out" || { cat "$d/out" >&2; die "the refresh command is not shown"; }
   expect_out "$d" "https://github.com/login/device"
+  expect_sign_in_first_before_the_code "$d"
   [ "$(cat "$d/run.log")" = "gh auth refresh -h github.com -s workflow|<unset>" ] \
     || { cat "$d/run.log" >&2; die "the refresh did not run once, with gh's prompts on"; }
   expect_no_out "$d" "Press Enter"

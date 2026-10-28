@@ -78,6 +78,9 @@ Windows.
    If gh asks "Authenticate Git with your GitHub credentials?", answer
    Yes: type y and press Enter, or just press Enter. Then gh shows a
    one-time code and opens your browser (press Enter if it asks first).
+   If your browser is not signed in to GitHub, GitHub first asks you to
+   sign in: your user name or email address, your password, and a
+   two-factor code if you use one. Then it shows the page for the code.
    Enter the code on the GitHub page and approve. If the browser does
    not open (as in WSL, the Linux inside Windows), open
    https://github.com/login/device in your browser yourself and enter
@@ -137,10 +140,14 @@ here first:
   - gh not installed;
   - gh installed, but too old for the script;
   - Node.js and npm not installed (only for the node, web and
-    react-native packs; the guide points to https://nodejs.org);
+    react-native packs; the guide points to https://nodejs.org). On
+    Linux, and in Linux on Windows (WSL), only a window opened after the
+    install finds the new npm, so this one does not go on with Enter:
+    type `q`, then start the script again in a new window with the
+    command it shows;
   - only the Windows npm found in Linux on Windows (WSL): a project in
     Linux should not use it, and the guide shows how to install Node.js
-    in Linux;
+    in Linux, then start again in a new window, as above;
   - gh signed out, or its sign-in no longer accepted;
   - gh signed in without the `workflow` permission (the right to change
     the files that run the project's checks): the script offers to run
@@ -219,7 +226,7 @@ here first:
   `gh auth refresh -h github.com -s delete_repo` once (if gh asks
   "Authenticate Git with your GitHub credentials?", answer Yes; if the
   browser does not open, open https://github.com/login/device yourself
-  and enter the code there), then `gh repo delete OWNER/NAME --yes`. The script never deletes a
+  and enter the code there, after signing in to GitHub if it asks), then `gh repo delete OWNER/NAME --yes`. The script never deletes a
   project.
 
 A project can also be made with the "Use this template" button on the
