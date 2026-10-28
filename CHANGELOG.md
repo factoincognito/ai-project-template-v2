@@ -6,8 +6,15 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.8.1] — 2026-10-28
+
 ### Added
 - Release prep for v2.8.0 (PR #251)
+- Recorded in NEXT_SESSION, `STATUS.md` and CHANGELOG that v2.8.0 is released and verified, with the Git Bash check of r1f (PR #253)
+- Recorded end-to-end run 2 (Linux through WSL), its result and findings r2c to r2e, in NEXT_SESSION and `STATUS.md` (PR #254)
+- End-to-end run 2, r2c: the README says to open https://github.com/login/device yourself when gh cannot open a browser, as in WSL (PR #256)
+- End-to-end run 2, r2d: README step 1's folder example makes the folder first, so it works on every system (PR #257)
+- End-to-end run 2, r2e: in WSL, an npm on a Windows drive (the Windows one, reached through WSL) counts as no npm, and a guide says how to install Node.js inside Linux (PR #255)
 
 ## [2.8.0] — 2026-10-27
 
