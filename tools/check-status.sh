@@ -41,8 +41,13 @@ check_file() {
   fi
   tr -d '\r' <"$file" >"$text"
   grep -qx '# Status' "$text" || problem "$file" 'missing title "# Status"'
-  grep -Eqx "Last update: $date" "$text" \
-    || problem "$file" 'missing "Last update: YYYY-MM-DD" line'
+  if grep -Eqx "Last update: $date" "$text"; then
+    :
+  elif grep -qxF "Last update: YYYY-MM-DD" "$text"; then
+    problem "$file" 'placeholder date "YYYY-MM-DD" outside the stub: set the date'
+  else
+    problem "$file" 'missing "Last update: YYYY-MM-DD" line'
+  fi
   for h in "${HEADINGS[@]}"; do
     n="$(grep -cxF -- "## $h" "$text" || true)"
     if [ "$n" -eq 0 ]; then

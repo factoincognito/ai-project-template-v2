@@ -103,7 +103,7 @@ test_placeholder_date_outside_the_stub_fails() {
   # A filled file whose date was never set gives the overview no date.
   local f; f="$(good)"
   edit "$f" 's/^Last update: .*/Last update: YYYY-MM-DD/'
-  expect_fail 'missing "Last update: YYYY-MM-DD" line' "$f"
+  expect_fail 'placeholder date "YYYY-MM-DD" outside the stub: set the date' "$f"
 }
 
 test_shipped_stub_passes() {
@@ -123,6 +123,8 @@ test_defaults_are_the_root_file_and_the_stub() {
   cp "$(good)" "$root/bootstrap/stubs/STATUS.md"
   local err="$WORK/err.$RANDOM"
   STATUS_ROOT="$root" bash "$CHECK" 2>"$err" >/dev/null || { cat "$err" >&2; die "defaults failed"; }
+  edit "$root/bootstrap/stubs/STATUS.md" 's/^Last update: .*/Last update: YYYY-MM-DD/'
+  STATUS_ROOT="$root" bash "$CHECK" 2>"$err" >/dev/null || { cat "$err" >&2; die "the stub's placeholder failed by default"; }
   edit "$root/bootstrap/stubs/STATUS.md" '/^## Blockers$/d'
   local rc=0
   STATUS_ROOT="$root" bash "$CHECK" 2>"$err" >/dev/null || rc=$?
