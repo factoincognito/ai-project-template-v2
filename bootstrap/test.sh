@@ -1164,7 +1164,8 @@ test_not_read_list_holds_only_tracked_files_and_every_test_job_deletes_them() {
   # change: it runs on every pull request, so it is not skipped, and a
   # listed file it read would only show there. It reads none (measured).
   for j in $(wf_jobs_running bootstrap/test.sh) $(wf_jobs_running tools/test-require-test-change.sh) \
-    $(wf_jobs_running bootstrap/test-e2e-check.sh) "$(matrix_job)"; do
+    $(wf_jobs_running bootstrap/test-e2e-check.sh) $(wf_jobs_running tools/test-check-status.sh) \
+    "$(matrix_job)"; do
     job="$(wf_job "$j")"
     grep -qxF '        run: bash bootstrap/changed-inputs.sh remove' <<<"$job" \
       || die "job $j runs tests without deleting the files no test reads first"
@@ -1909,6 +1910,12 @@ test_workflow_bootstrapper_test_gates_the_require_test_change_tests() {
   assert_gated tools/test-require-test-change.sh
 }
 
+test_workflow_bootstrapper_test_gates_the_check_status_tests() {
+  # The STATUS.md format check runs in ci.yml's build job; its own tests
+  # run in a job the required bootstrapper-test check needs.
+  assert_gated tools/test-check-status.sh
+}
+
 test_workflow_bootstrapper_test_gates_the_bootstrap_project_tests() {
   [ -f "$HERE/test-bootstrap-project.sh" ] || die "no bootstrap/test-bootstrap-project.sh"
   assert_gated bootstrap/test-bootstrap-project.sh
@@ -2184,7 +2191,7 @@ test_no_grep_q_at_the_end_of_a_pipe() {
     || die "with its output to /dev/null, grep stopped reading at the first match: the /dev/null form is not safe"
   for f in bootstrap/test.sh bootstrap/test-bootstrap-project.sh bootstrap/test-e2e-check.sh \
            tools/test-layout-pack.sh bootstrap/check-shards.sh bootstrap/e2e-check.sh \
-           tools/test-require-test-change.sh; do
+           tools/test-require-test-change.sh tools/check-status.sh tools/test-check-status.sh; do
     [ -f "$REPO/$f" ] || die "no $f"
     grep -q 'pipefail' "$REPO/$f" || die "$f no longer sets pipefail; update this test"
     grep -nvE '^[[:space:]]*#' "$REPO/$f" >"$code" || true

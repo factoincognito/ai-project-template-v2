@@ -17,7 +17,8 @@
 #
 # - Every pull request to main: run the build.sh / publish.sh tests and
 #   the tests of the shared test-first check
-#   (tools/test-require-test-change.sh) on ubuntu, and the tests of the
+#   (tools/test-require-test-change.sh) and of the STATUS.md format check
+#   (tools/test-check-status.sh) on ubuntu, and the tests of the
 #   bootstrap script (bootstrap/test-bootstrap-project.sh) on ubuntu,
 #   macOS (Apple's /bin/bash 3.2) and Windows (Git for Windows bash).
 #   bootstrapper-test, a required check, passes only if all of them did.
@@ -108,6 +109,8 @@ jobs:
         run: bash bootstrap/test.sh
       - name: Test the require-test-change check
         run: bash tools/test-require-test-change.sh
+      - name: Test the STATUS.md format check
+        run: bash tools/test-check-status.sh
       - name: Test e2e-check.sh
         run: bash bootstrap/test-e2e-check.sh
 
