@@ -296,6 +296,71 @@ agreement, the product owner decides. The product owner is never used to
 pass messages between Clead and Crog. Details: `CLAUDE.md`, "Change
 execution model".
 
+## Working without Claude
+
+Without Claude, a project made from this template is a conventional,
+well set-up development project, as development looked before AI became
+a tool for writing code. With Claude, the Clead and Crog workflow comes
+on top of it.
+
+**What works without Claude.**
+
+- The setup. `bootstrap-project.sh` does not call Claude. It needs bash,
+  git and a signed-in `gh`, and Node.js with npm for the node, web and
+  react-native packs. Claude appears only in the text it prints at the
+  end.
+- A green `build` check from the start, and `main` protected: nothing
+  merges without a pull request and a green `build`. The exception is a
+  private project on a free GitHub plan set up with
+  `--allow-unprotected`, which has no protection and records that in
+  `memory/decisions.md`.
+- The test-first check in `build`: a pull request that changes code
+  without changing a test fails, unless a commit in it has a
+  `Test-exempt: <reason>` trailer line (in the last paragraph of the
+  commit message).
+- A place for everything: the backlog (`docs/BACKLOG.md`), decisions
+  (`memory/decisions.md`, and `docs/decisions/` for longer ones), the
+  status (`STATUS.md`), the change history (`CHANGELOG.md`), the pull
+  request template, and the language pack's code standards.
+- The two workflows that post comments, `review.yml` (a hidden marker
+  on pull requests that change `src/`) and `changelog.yml` (a reminder
+  after a merge that did not change `CHANGELOG.md`), run on GitHub alone.
+  The comments are addressed to Clead and Crog.
+
+**What does not work without Claude.**
+
+- Clead and Crog, and everything they do: specs, reviews, merges,
+  session start and end, `..wrap` and pins.
+- `CLAUDE.md` and `memory/roles.md` are written for Clead and Crog, and
+  `memory/context.md` is Clead's session notes. Without Claude, nobody
+  reads them as instructions.
+  The other files under `memory/` hold the project's own data, such as
+  its description and decisions, and stay useful.
+- The texts the setup leaves for the first session with Clead: the
+  phase name in `docs/BACKLOG.md`, `memory/project.md`, the questions in
+  `docs/SPEC.md`, `memory/context.md` and `STATUS.md`.
+- Crog needs Claude Code, which the Free Claude plan does not include
+  (https://claude.com/pricing, checked 2026-10-29).
+- Whether other AI tools (such as Copilot or Cursor) read any of the
+  project's files has not been checked.
+
+**How to work with the project without Claude.** These are the rules
+written for Clead and Crog, as they apply to a team of people only:
+
+- Every change goes through a pull request; branch protection enforces
+  it, except in a project set up with `--allow-unprotected`, where the
+  team keeps to it without that check.
+- Write the test first and see it fail. The test-first check fails a
+  code change without a test; a change no test can check says why in a
+  `Test-exempt:` trailer line.
+- Someone other than the author reviews the pull request. Sections 1
+  to 5 of `memory/standards.md` work as the review checklist.
+- Merge once `build` is green and the review has passed.
+- Fill in the texts the setup leaves for Clead (listed above) yourself,
+  and keep `STATUS.md` up to date by hand.
+- The comments from `review.yml` and `changelog.yml` can be ignored, or
+  the two workflows deleted.
+
 ## Branch protection
 
 `main` in this template repo is protected: nothing merges without a pull
