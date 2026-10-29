@@ -31,7 +31,7 @@ set -euo pipefail
 
 BOOTSTRAPPER=factoincognito/ai-project-bootstrap
 SETUP_BRANCH=bootstrap-setup
-SETUP_HEADING="## After bootstrapping (delete this section when done)"
+SETUP_HEADING="## Finishing the setup"
 UNPROTECTED_ROW_KEY="| The main version (main) is not protected |"
 KEY_PATTERN_CLASSIC='gh[pousr]_[A-Za-z0-9]{20,}'
 KEY_PATTERN_FINE='github_pat_[A-Za-z0-9_]{20,}'
@@ -602,11 +602,23 @@ check_readme_section() {
   local found
   if [ -z "$COPY_READABLE" ]; then no_copy readme-section; return 0; fi
   if [ ! -f "$DIR/README.md" ]; then result FAIL readme-section "The copy has no README.md."; return 0; fi
-  found="$(tr -d '\r' <"$DIR/README.md" | grep -c '^## After bootstrapping' || true)"
+  found="$(tr -d '\r' <"$DIR/README.md" | grep -cxF -- "$SETUP_HEADING" || true)"
   if [ "$found" -gt 0 ]; then
-    result FAIL readme-section "README.md still has a section headed \"## After bootstrapping\"; the run removes \"$SETUP_HEADING\"."
+    result FAIL readme-section "README.md still has the section \"$SETUP_HEADING\", which the run removes."
   else
-    result PASS readme-section "README.md has no section \"## After bootstrapping\"."
+    result PASS readme-section "README.md has no section \"$SETUP_HEADING\"."
+  fi
+}
+
+# check_own_readme: the bootstrapper's own README (.github/README.md) is
+# gone; GitHub would show it on the project's page instead of the
+# project's README (PBI-1.29).
+check_own_readme() {
+  if [ -z "$COPY_READABLE" ]; then no_copy own-readme; return 0; fi
+  if grep -qxF .github/README.md <<<"$TRACKED" || [ -e "$DIR/.github/README.md" ]; then
+    result FAIL own-readme "The bootstrapper's own README, .github/README.md, is still in the project."
+  else
+    result PASS own-readme ".github/README.md is not in the project."
   fi
 }
 
@@ -852,6 +864,7 @@ main() {
   check_lockfile
   check_placeholders
   check_readme_section
+  check_own_readme
   check_languages
   check_pack_links
   check_licence

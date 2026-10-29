@@ -7,15 +7,15 @@ what gets built, Clead (Claude, Tech Owner) owns how, and Crog (Claude
 Code, Senior Developer) implements. Everything the agents need lives in
 this repo: `CLAUDE.md` is the entry point.
 
-## After bootstrapping (delete this section when done)
+## Finishing the setup
 
-If you see this, setup has not run. To run it, open Git Bash (Windows) or a terminal (macOS, Linux) and run the command below, with OWNER and NAME taken from this project's web address, https://github.com/OWNER/NAME:
+If you see this, the setup of this project has not finished. Until it has, this project's GitHub page shows the bootstrapper's README (the file `.github/README.md`): do its step 0 to install gh and sign in, then run the command below in Git Bash (Windows) or a terminal (macOS, Linux), with OWNER and NAME taken from this project's web address, https://github.com/OWNER/NAME:
 
 ```
 gh api repos/factoincognito/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh && bash bootstrap-project.sh --resume --owner OWNER --name NAME
 ```
 
-It needs gh installed and signed in first (step 0 in the README of https://github.com/factoincognito/ai-project-template-v2); it then finishes the setup and removes this section.
+The setup then finishes, and removes this section and `.github/README.md`.
 
 ## Setup
 
