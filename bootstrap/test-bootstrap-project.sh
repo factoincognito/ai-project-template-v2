@@ -9482,7 +9482,10 @@ test_build_still_running_is_looked_at_again_every_15_seconds_until_it_passes() {
 wait_lines() {
   sed -n "/^==> Waiting for the project's check build/,/^    Done\. The check build/p" "$1/out"
 }
-WAIT_LIMIT_LINE="That is the limit: if build has not passed after 20 minutes, the script stops, leaves the proposed change open and shows how to continue (--ci-timeout sets a different limit)."
+# End-to-end run 3, r3e: the note says on its own what the limit is; it
+# used to open with "That is the limit", pointing back at the line above
+# it, which is in another colour.
+WAIT_LIMIT_LINE="The script waits at most 20 minutes for build to pass. If build has not passed by then, the script stops, leaves the proposed change open and shows how to continue (--ci-timeout sets a different limit)."
 WAIT_LINK_LINE="You can follow the check here: https://github.com/octo-user/my-app/pull/1/checks"
 STARS_15='***************'
 
