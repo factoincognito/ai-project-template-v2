@@ -7,11 +7,18 @@
 # (bootstrap/build.sh), creates a project from that output (the
 # bootstrapper's files, plus the pack laid out from the bootstrapper's
 # own languages/ folder with tools/layout-pack.sh, plus deleting
-# languages/), then runs that pack's own CI steps. This follows the
-# setup script's layout and tidy-up with two differences: the pack's
-# .gitignore replaces the bootstrapper's instead of being merged into
-# it (nothing here reads it), and languages/ is deleted whole, where the
-# script keeps the chosen pack's code-standards.md. The
+# languages/ except the pack's files the setup keeps there), then runs
+# that pack's own CI steps. This follows the setup script's layout and
+# tidy-up with one difference: the pack's .gitignore replaces the
+# bootstrapper's instead of being merged into it (nothing here reads
+# it). The files the tidy-up keeps in languages/<pack>/ are the
+# script's own list (LP_KEPT), read by sourcing the built script and
+# laying the pack out once more in a temporary folder; the pack's CI
+# runs on them as in a project (r3f: ruff formats the Python blocks in
+# the python pack's code-standards.md). That read starts with `set -e`
+# because errexit is off inside $( ), so a failure in the layout stops
+# it at once. The kept files are plain names directly in the pack folder
+# (no spaces, no subfolders), which the copy loop relies on. The
 # steps below copy the pack's ci.yml commands verbatim;
 # tools/test-layout-pack.sh fails if they drift apart. The template has
 # no lockfile, so the npm-based packs (node, web, react-native) first
@@ -24,8 +31,9 @@
 # the template checkout. The C# pack has none either; pack-csharp sets up
 # .NET after the project is made, from the project's global.json.
 #
-# languages/ is deleted because it must be: left in a project, Biome
-# fails on the nested pack configs and Jest runs the other packs' tests.
+# The rest of languages/ is deleted because it must be: left in a
+# project, Biome fails on the nested pack configs and Jest runs the other
+# packs' tests.
 #
 # This workflow also runs as part of a release: bootstrapper.yml calls it
 # on a pushed v* tag and the publish job needs it to pass.
@@ -74,6 +82,8 @@ jobs:
         run: |
           set -euo pipefail
           PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh node pack
+          kept="$(set -e; set --; . bootstrapper/bootstrap-project.sh; layout_into node bootstrapper/languages "$(mktemp -d)/pack" strict >/dev/null; printf '%s\n' "$LP_KEPT")"
+          [ -n "$kept" ]
           cp -a bootstrapper project
           git -C project init -q -b main
           git -C project add -A
@@ -81,6 +91,8 @@ jobs:
           git -C project checkout -q -b setup
           cp -a pack/. project/
           rm -rf project/languages
+          mkdir -p project/languages/node
+          for f in $kept; do cp "bootstrapper/languages/node/$f" "project/languages/node/$f"; done
           git -C project add -A
           git -C project -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Set up the node pack"
 
@@ -156,6 +168,8 @@ jobs:
         run: |
           set -euo pipefail
           PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh web pack
+          kept="$(set -e; set --; . bootstrapper/bootstrap-project.sh; layout_into web bootstrapper/languages "$(mktemp -d)/pack" strict >/dev/null; printf '%s\n' "$LP_KEPT")"
+          [ -n "$kept" ]
           cp -a bootstrapper project
           git -C project init -q -b main
           git -C project add -A
@@ -163,6 +177,8 @@ jobs:
           git -C project checkout -q -b setup
           cp -a pack/. project/
           rm -rf project/languages
+          mkdir -p project/languages/web
+          for f in $kept; do cp "bootstrapper/languages/web/$f" "project/languages/web/$f"; done
           git -C project add -A
           git -C project -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Set up the web pack"
 
@@ -252,6 +268,8 @@ jobs:
         run: |
           set -euo pipefail
           PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh python pack
+          kept="$(set -e; set --; . bootstrapper/bootstrap-project.sh; layout_into python bootstrapper/languages "$(mktemp -d)/pack" strict >/dev/null; printf '%s\n' "$LP_KEPT")"
+          [ -n "$kept" ]
           cp -a bootstrapper project
           git -C project init -q -b main
           git -C project add -A
@@ -259,6 +277,8 @@ jobs:
           git -C project checkout -q -b setup
           cp -a pack/. project/
           rm -rf project/languages
+          mkdir -p project/languages/python
+          for f in $kept; do cp "bootstrapper/languages/python/$f" "project/languages/python/$f"; done
           git -C project add -A
           git -C project -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Set up the python pack"
 
@@ -334,6 +354,8 @@ jobs:
         run: |
           set -euo pipefail
           PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh react-native pack
+          kept="$(set -e; set --; . bootstrapper/bootstrap-project.sh; layout_into react-native bootstrapper/languages "$(mktemp -d)/pack" strict >/dev/null; printf '%s\n' "$LP_KEPT")"
+          [ -n "$kept" ]
           cp -a bootstrapper project
           git -C project init -q -b main
           git -C project add -A
@@ -341,6 +363,8 @@ jobs:
           git -C project checkout -q -b setup
           cp -a pack/. project/
           rm -rf project/languages
+          mkdir -p project/languages/react-native
+          for f in $kept; do cp "bootstrapper/languages/react-native/$f" "project/languages/react-native/$f"; done
           git -C project add -A
           git -C project -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Set up the react-native pack"
 
@@ -411,6 +435,8 @@ jobs:
         run: |
           set -euo pipefail
           PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh csharp pack
+          kept="$(set -e; set --; . bootstrapper/bootstrap-project.sh; layout_into csharp bootstrapper/languages "$(mktemp -d)/pack" strict >/dev/null; printf '%s\n' "$LP_KEPT")"
+          [ -n "$kept" ]
           cp -a bootstrapper project
           git -C project init -q -b main
           git -C project add -A
@@ -418,6 +444,8 @@ jobs:
           git -C project checkout -q -b setup
           cp -a pack/. project/
           rm -rf project/languages
+          mkdir -p project/languages/csharp
+          for f in $kept; do cp "bootstrapper/languages/csharp/$f" "project/languages/csharp/$f"; done
           git -C project add -A
           git -C project -c user.name=ci -c user.email=ci@example.invalid commit -q -m "Set up the csharp pack"
 

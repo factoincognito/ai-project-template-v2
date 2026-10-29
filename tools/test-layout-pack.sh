@@ -607,6 +607,39 @@ test_packs_workflow_tests_the_pack_from_the_built_bootstrapper() {
   ! grep -qE 'layout-pack\.sh [a-z-]+ project' "$wf" || die "a pack job still lays out straight from the template"
 }
 
+test_packs_workflow_keeps_the_pack_files_the_setup_keeps() {
+  # The setup's tidy-up keeps the chosen pack's files that are not laid
+  # out (the script's LP_KEPT) in languages/<pack>/, and the project's CI
+  # runs on them: ruff formats the Python blocks in the python pack's
+  # code-standards.md (r3f). Each pack job reads that list from the built
+  # script and puts those files back after deleting languages/, before
+  # the setup commit.
+  # The probe line is matched whole: it assigns kept from LP_KEPT, and
+  # its `set -e` stops it at the first failure inside layout_into, which
+  # errexit would skip in an && list (#288 review, round 1).
+  local wf="$REPO/.github/workflows/packs.yml" p job probe l_probe l_check l_rm l_mkdir l_copy l_add l_commit n=0
+  for p in $PACKS; do
+    n=$((n + 1))
+    job="$(awk -v job="  pack-$p:" '$0 == job { injob = 1; next } /^  [a-z][a-z-]*:$/ { injob = 0 } injob' "$wf")"
+    probe="          kept=\"\$(set -e; set --; . bootstrapper/bootstrap-project.sh; layout_into $p bootstrapper/languages \"\$(mktemp -d)/pack\" strict >/dev/null; printf '%s\\n' \"\$LP_KEPT\")\""
+    l_probe="$(grep -nxF -- "$probe" <<<"$job" | cut -d: -f1 || true)"
+    l_check="$(grep -nxF '          [ -n "$kept" ]' <<<"$job" | cut -d: -f1 || true)"
+    l_rm="$(grep -nxF '          rm -rf project/languages' <<<"$job" | cut -d: -f1 || true)"
+    l_mkdir="$(grep -nxF "          mkdir -p project/languages/$p" <<<"$job" | cut -d: -f1 || true)"
+    l_copy="$(grep -nxF "          for f in \$kept; do cp \"bootstrapper/languages/$p/\$f\" \"project/languages/$p/\$f\"; done" <<<"$job" | cut -d: -f1 || true)"
+    l_add="$(grep -nxF '          git -C project add -A' <<<"$job" | cut -d: -f1 | tail -n 1 || true)"
+    l_commit="$(grep -nF "commit -q -m \"Set up the $p pack\"" <<<"$job" | cut -d: -f1 || true)"
+    [ -n "$l_probe" ] || die "pack-$p does not read the kept files from LP_KEPT with this line: $probe"
+    [ "$l_check" = "$((l_probe + 1))" ] || die "pack-$p does not check right after reading it that the kept list is not empty"
+    [ -n "$l_rm" ] && [ -n "$l_mkdir" ] && [ -n "$l_copy" ] && [ -n "$l_add" ] && [ -n "$l_commit" ] \
+      || die "pack-$p does not put the kept files back in languages/$p/ and commit them"
+    [ "$l_probe" -lt "$l_rm" ] && [ "$l_rm" -lt "$l_mkdir" ] && [ "$l_mkdir" -lt "$l_copy" ] \
+      && [ "$l_copy" -lt "$l_add" ] && [ "$l_add" -lt "$l_commit" ] \
+      || die "pack-$p: the kept files are not put back after deleting languages/ and added before the setup commit"
+  done
+  [ "$n" -eq 5 ] || die "checked $n pack jobs, expected 5"
+}
+
 test_packs_workflow_simulates_the_setup_change_and_a_refused_change() {
   # In every pack job the project is a git repo: the bootstrapper output is
   # committed on main and the pack is laid out on a `setup` branch. The
