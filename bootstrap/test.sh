@@ -251,7 +251,7 @@ test_real_repo_build_matches_manifest_plus_stubs() {
   bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
   expected="$WORK/expected.$RANDOM"
   {
-    grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -v '^exclude ' | while read -r p; do
+    grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -vE '^[[:space:]]*exclude ' | while read -r p; do
       p="${p%/}"
       if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
         git -C "$REPO" ls-files -- "$p"
@@ -261,7 +261,14 @@ test_real_repo_build_matches_manifest_plus_stubs() {
     done
     (cd "$REPO/bootstrap/stubs" && find . -type f | sed 's|^\./||')
     echo .github/README.md
-  } | LC_ALL=C sort -u | grep -vxF -f <(sed -n 's/^exclude //p' "$REPO/bootstrap/manifest.txt"; echo '/nothing/') >"$expected"
+  } | LC_ALL=C sort -u | while IFS= read -r f; do
+    keep=1
+    while IFS= read -r x; do
+      x="${x%/}"
+      if [ "$f" = "$x" ] || [ "${f#"$x"/}" != "$f" ]; then keep=""; fi
+    done < <(sed -n 's/^[[:space:]]*exclude[[:space:]]*//p' "$REPO/bootstrap/manifest.txt")
+    [ -z "$keep" ] || echo "$f"
+  done >"$expected"
   diff <(list_files "$out") "$expected" || die "real output differs from manifest plus stubs"
   grep -qF "v2.1.0" "$out/CHANGELOG.md" || die "real CHANGELOG lacks version"
   grep -qF "$SHA" "$out/CHANGELOG.md" || die "real CHANGELOG lacks commit"
@@ -578,6 +585,8 @@ test_bootstrapper_readme_placeholder_must_be_one_line_of_its_own() {
   expect_build_fail "$fx" "bootstrap/bootstrapper-README.md must have the line {{TEMPLATE_README_SETUP}} exactly once" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
   printf '%s\n' '# B' 'see {{TEMPLATE_README_SETUP}} here' >"$fx/bootstrap/bootstrapper-README.md"
   expect_build_fail "$fx" "bootstrap/bootstrapper-README.md must have the line {{TEMPLATE_README_SETUP}} exactly once" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+  printf '%s\n' '# B' '{{TEMPLATE_README_SETUP}}' 'see {{TEMPLATE_README_SETUP}} above' >"$fx/bootstrap/bootstrapper-README.md"
+  expect_build_fail "$fx" "bootstrap/bootstrapper-README.md must have the line {{TEMPLATE_README_SETUP}} exactly once" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
 }
 
 test_template_readme_markers_must_be_there_once_and_in_order() {
@@ -593,6 +602,15 @@ test_template_readme_markers_must_be_there_once_and_in_order() {
   expect_build_fail "$fx" "README.md: the line $s must come before $e" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
   printf '%s\n' "$s" '' '   ' "$e" >"$fx/README.md"
   expect_build_fail "$fx" "README.md: nothing between $s and $e" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+  # Adjacent markers: sed's N+1,N range would print the end marker.
+  printf '%s\n' '# T' "$s" "$e" >"$fx/README.md"
+  expect_build_fail "$fx" "README.md: nothing between $s and $e" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+  # A marker only inside a line is not the marker line.
+  printf '%s\n' "x $s" 'a' "$e" >"$fx/README.md"
+  expect_build_fail "$fx" "README.md must have the line $s exactly once, on a line of its own" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+  # A marker line plus a mention of it elsewhere is ambiguous.
+  printf '%s\n' "$s" 'a' "$e" "see $e above" >"$fx/README.md"
+  expect_build_fail "$fx" "README.md must have the line $e exactly once, on a line of its own" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
   rm "$fx/README.md"
   expect_build_fail "$fx" "template README not found: README.md" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
 }
@@ -615,6 +633,33 @@ test_the_marked_part_goes_through_the_output_checks() {
   local fx; fx="$(make_fixture)"
   printf '%s\n' '<!-- bootstrapper-readme: start -->' 'see PBI-4' '<!-- bootstrapper-readme: end -->' >"$fx/README.md"
   expect_build_fail "$fx" "in output file: .github/README.md" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+  printf '%s\n' '<!-- bootstrapper-readme: start -->' 'built {{TEMPLATE_X}}' '<!-- bootstrapper-readme: end -->' >"$fx/README.md"
+  expect_build_fail "$fx" "placeholder left in output: .github/README.md" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+}
+
+test_a_long_marked_part_builds_every_time() {
+  # The empty-part check once ended its pipe with grep -q: on a long part
+  # the writer got SIGPIPE and, under pipefail, the build failed at random.
+  local fx out i
+  fx="$(make_fixture)"
+  { echo '<!-- bootstrapper-readme: start -->'
+    awk 'BEGIN { for (i = 1; i <= 5000; i++) print "Line " i " of the marked part, long enough to fill the pipe." }'
+    echo '<!-- bootstrapper-readme: end -->'; } >"$fx/README.md"
+  for i in 1 2 3; do
+    out="$WORK/out.$i"
+    build_ok "$fx" "$out" v1.2.3 "$SHA"
+    [ "$(grep -c '^Line ' "$out/.github/README.md")" -eq 5000 ] || die "run $i: the marked part did not arrive whole"
+  done
+}
+
+test_carriage_returns_in_the_readme_sources_are_dropped() {
+  local fx out
+  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  printf '%s\r\n' '# The bootstrapper' '{{TEMPLATE_README_SETUP}}' 'End.' >"$fx/bootstrap/bootstrapper-README.md"
+  printf '%s\r\n' '<!-- bootstrapper-readme: start -->' 'Step 0.' '<!-- bootstrapper-readme: end -->' >"$fx/README.md"
+  build_ok "$fx" "$out" v1.2.3 "$SHA"
+  diff <(printf '%s\n' '# The bootstrapper' 'Step 0.' 'End.') "$out/.github/README.md" >&2 \
+    || die "the CRLF sources did not give an LF .github/README.md (diff above)"
 }
 
 # ---------- build.sh: paths left out of a listed folder ----------
@@ -626,6 +671,25 @@ test_manifest_exclude_leaves_a_file_out_of_a_listed_folder() {
   build_ok "$fx" "$out" v1.2.3 "$SHA"
   [ ! -e "$out/lang/b.txt" ] || die "the excluded file shipped"
   [ -f "$out/lang/a/x.txt" ] || die "the rest of the folder did not ship"
+}
+
+test_manifest_exclude_with_a_trailing_slash_leaves_the_folder_out() {
+  local fx out
+  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  echo "  exclude lang/a/" >>"$fx/bootstrap/manifest.txt"
+  build_ok "$fx" "$out" v1.2.3 "$SHA"
+  [ ! -e "$out/lang/a" ] || die "the excluded folder shipped"
+  [ -f "$out/lang/b.txt" ] || die "the rest of the folder did not ship"
+}
+
+test_manifest_exclude_through_a_symlink_rejected_and_nothing_outside_is_removed() {
+  local fx keep
+  fx="$(make_fixture)"; keep="$WORK/outside.$RANDOM"
+  mkdir -p "$keep"; echo precious >"$keep/precious.txt"
+  ln -s "$keep" "$fx/lang/link"
+  echo "exclude lang/link/precious.txt" >>"$fx/bootstrap/manifest.txt"
+  expect_build_fail "$fx" "manifest exclude path goes through a symlink: lang/link/precious.txt" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
+  [ -f "$keep/precious.txt" ] || die "the build removed a file outside its stage"
 }
 
 test_manifest_exclude_of_a_missing_path_rejected() {

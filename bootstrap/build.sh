@@ -67,6 +67,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     'exclude '*)
       line="${line#exclude }"
       line="${line#"${line%%[![:space:]]*}"}"
+      while [ "${line%/}" != "$line" ]; do line="${line%/}"; done
       case "/$line/" in
         //*|*/../*|*/./*) fail "manifest path must be relative, inside the repo: $line" ;;
       esac
@@ -88,33 +89,61 @@ done <"$MANIFEST"
 [ "${#ENTRIES[@]}" -gt 0 ] || fail "manifest lists no paths"
 
 # An excluded path must be inside a listed folder: excluding a listed
-# file, or a path nothing would copy, is a mistake in the manifest.
+# file, or a path nothing would copy, is a mistake in the manifest. No
+# folder between the two may be a symlink: removing the path from the
+# stage would then remove a file outside it.
 for x in ${EXCLUDES[@]+"${EXCLUDES[@]}"}; do
   inside=""
   for m in "${ENTRIES[@]}"; do
     if [ -d "$SRC/$m" ] && [ ! -L "$SRC/$m" ]; then
-      case "$x" in "$m"/*) inside=1 ;; esac
+      case "$x" in "$m"/*) inside="$m" ;; esac
     fi
   done
   [ -n "$inside" ] || fail "manifest exclude path is not inside a listed folder: $x"
+  p="${x%/*}"
+  while [ "$p" != "$inside" ]; do
+    [ ! -L "$SRC/$p" ] || fail "manifest exclude path goes through a symlink: $x"
+    p="${p%/*}"
+  done
 done
+
+# is_excluded <path>: the path is an excluded one or inside one. (A
+# function, not a case in a $(...): bash 3.2 ends a $(...) at a case
+# pattern's ")".)
+is_excluded() {
+  local x
+  for x in ${EXCLUDES[@]+"${EXCLUDES[@]}"}; do
+    case "$1" in "$x"|"$x"/*) return 0 ;; esac
+  done
+  return 1
+}
 
 # ---------- the bootstrapper's own README ----------
 
+# Both files are read without carriage returns (.gitattributes keeps
+# them LF; a CRLF copy gives the same result). The slot and each marker
+# must be there once, each on a line of its own and nowhere else.
 [ -f "$OWN_README_SRC" ] || fail "bootstrapper README source not found: bootstrap/bootstrapper-README.md"
 [ -f "$SRC/README.md" ] || fail "template README not found: README.md"
-[ "$(grep -cxF -- "$OWN_README_SLOT" "$OWN_README_SRC" || true)" -eq 1 ] \
-  && [ "$(grep -cF -- "$OWN_README_SLOT" "$OWN_README_SRC" || true)" -eq 1 ] \
+[ "$(tr -d '\r' <"$OWN_README_SRC" | grep -cxF -- "$OWN_README_SLOT" || true)" -eq 1 ] \
+  && [ "$(tr -d '\r' <"$OWN_README_SRC" | grep -cF -- "$OWN_README_SLOT" || true)" -eq 1 ] \
   || fail "bootstrap/bootstrapper-README.md must have the line $OWN_README_SLOT exactly once, on a line of its own"
 for mk in "$MARK_START" "$MARK_END"; do
   [ "$(tr -d '\r' <"$SRC/README.md" | grep -cxF -- "$mk" || true)" -eq 1 ] \
-    || fail "README.md must have the line $mk exactly once"
+    && [ "$(tr -d '\r' <"$SRC/README.md" | grep -cF -- "$mk" || true)" -eq 1 ] \
+    || fail "README.md must have the line $mk exactly once, on a line of its own"
 done
 mark_start_line="$(tr -d '\r' <"$SRC/README.md" | grep -nxF -- "$MARK_START" | cut -d: -f1)"
 mark_end_line="$(tr -d '\r' <"$SRC/README.md" | grep -nxF -- "$MARK_END" | cut -d: -f1)"
 [ "$mark_start_line" -lt "$mark_end_line" ] \
   || fail "README.md: the line $MARK_START must come before $MARK_END"
-sed -n "$((mark_start_line + 1)),$((mark_end_line - 1))p" "$SRC/README.md" | grep -q '[^[:space:]]' \
+# marked_part: the lines strictly between the two markers. grep -c reads
+# all of it: grep -q would stop early and, under pipefail, the writer's
+# SIGPIPE would fail the check at random.
+marked_part() {
+  tr -d '\r' <"$SRC/README.md" | awk -v s="$mark_start_line" -v e="$mark_end_line" 'NR > s && NR < e'
+}
+[ "$(marked_part | grep -c '[^[:space:]]' || true)" -gt 0 ] \
   || fail "README.md: nothing between $MARK_START and $MARK_END"
 
 # ---------- stubs ----------
@@ -178,10 +207,10 @@ fi
 mkdir -p "$STAGE/$(dirname "$OWN_README_OUT")"
 OWN_PART="$(mktemp)"
 trap 'rm -rf "$STAGE" "$OWN_PART"' EXIT
-sed -n "$((mark_start_line + 1)),$((mark_end_line - 1))p" "$SRC/README.md" >"$OWN_PART"
-SLOT="$OWN_README_SLOT" awk -v part="$OWN_PART" '
+marked_part >"$OWN_PART"
+tr -d '\r' <"$OWN_README_SRC" | SLOT="$OWN_README_SLOT" awk -v part="$OWN_PART" '
   $0 == ENVIRON["SLOT"] { while ((getline l < part) > 0) print l; next }
-  { print }' "$OWN_README_SRC" >"$STAGE/$OWN_README_OUT"
+  { print }' >"$STAGE/$OWN_README_OUT"
 
 # Stamp the version. Both values are validated above, so they are safe
 # in a sed replacement. In place: the stamped text is written back over
@@ -243,11 +272,7 @@ EXPECTED="$(
       echo "$m"
     fi
   done | while IFS= read -r f; do
-    keep=1
-    for x in ${EXCLUDES[@]+"${EXCLUDES[@]}"}; do
-      case "$f" in "$x"|"$x"/*) keep="" ;; esac
-    done
-    [ -z "$keep" ] || echo "$f"
+    is_excluded "$f" || echo "$f"
   done
   for s in ${STUB_FILES[@]+"${STUB_FILES[@]}"}; do echo "$s"; done
   echo "$OWN_README_OUT"
