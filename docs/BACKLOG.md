@@ -828,6 +828,33 @@ get a working project in any supported language.
 
   **Done when.** Written when specced.
 
+- **[LATER] PBI-1.25** (Adam, 2026-10-29, from a product office session; Adam chose Clead's recommendation; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — Make the template's CI cost less per change, without loosening the testing requirement. Follows PBI-1.22.
+
+  **Why (Adam, 2026-10-29).** Even the smallest change to the template runs a lot of testing. The requirement on testing stays as strict as it is; the process gets more efficient.
+
+  **Measured (an analysis agent on Opus, 2026-10-29, read-only; the per-test dependency counts come from a static scan of `bootstrap/test-bootstrap-project.sh` and are estimates).**
+  - The repo is public, so runner minutes are not billed (run 40855454812 shows 0 billable ms). The cost is waiting: a full `bootstrapper-test` took 23.5 to 25 min in runs 40777072695, 40755402152 and 40740684097, and the slowest Windows shard sets that time.
+  - Selection is all or nothing (`bootstrap/changed-inputs.sh`): the matrix is skipped only when every changed file is in `bootstrap/not-read-by-tests.txt` (8 files). Any other change runs all 388 tests on ubuntu, macOS and Windows. PR #277 changed `README.md` and `bootstrap/stubs/README.md`, which about 58 tests read.
+  - 63 of the 388 tests have no entry in `bootstrap/test-durations.txt`, so the duration split weights them at the median.
+  - Windows takes about 7.7 times as long as ubuntu per test. The 50 slowest Windows tests take 66% of the Windows total.
+  - Each new push to a PR cancels the running Bootstrapper run: on #277, 4 runs were cancelled, about 240 job-minutes.
+
+  **Scope (Clead's recommendation, chosen by Adam), in this order, each part as its own PR or PRs.**
+  1. Rebalance the shards. Add the missing durations and give each OS the number of shards its total needs (Windows more than ubuntu). Expected: wall time about 12 min instead of about 24 for every PR, at about the same total runner time.
+  2. Run `ci.yml` and `packs.yml` on pull requests and on pushes to `main`, not on every branch push, which runs them twice per push today (about 3 Linux minutes each time).
+  3. Per-test selection. Record mechanically which files each test reads (as PBI-1.22 part 1 did per file), run on all three OS legs only the tests that read a changed file, and run the whole suite when the record is out of date and at every `v*` tag. A test fails when a test reads a file that the record does not list. Expected for a change like #277: about 3 to 4 min instead of about 24.
+  4. Speed up the 50 slowest Windows tests: fewer processes, shared fixtures where state cannot leak between tests. Expected: 20 to 30% off the Windows total.
+
+  **Not done, because it would loosen the requirement or cannot work here.** Running macOS and Windows only for "OS-sensitive" files (text handling differs between the systems, as the line-ending tests show). A merge queue (it needs GraphQL, which sessions cannot use, so merges by Crog would break).
+
+  **Order (Clead's proposal, not decided).** After the end-to-end runs (`docs/NEXT_SESSION.md`, Adam's to-do 2), unless Adam moves it earlier. Parts 1 and 2 do not touch the bootstrap script.
+
+  **Done when.**
+  - A before/after table from job timestamps, as in PBI-1.22: wall time, and per OS the longest shard and the sum of shard times, for a doc-only change that tests read (like #277) and for a script change.
+  - Every test still runs on all three OS legs for every change it reads, and the full suite runs at every `v*` tag.
+
+  **Rules that apply.** Harness, test and workflow changes are code and config: test-first (red run in the PR), reviewed by Crog on Opus. Part 3 changes which tests the required check `bootstrapper-test` runs, so it needs Adam's intent approval of its spec before it merges.
+
 ---
 
 ## Phase 2 — Validate unproven pieces
