@@ -543,7 +543,7 @@ test_the_layout_table_is_only_in_the_script_not_the_readmes() {
     ! grep -qF '| Pack file | Goes to |' "$readme" || die "$readme still has a placement table"
   done
   ! grep -qiF 'placement tables in the' "$langs" || die "languages/README.md still points to README placement tables"
-  ! grep -qF '"After' "$langs" || die "languages/README.md still points to the README's \"After bootstrapping\" section"
+  ! grep -qF '"Finishing the setup' "$langs" || die "languages/README.md points to the README's \"Finishing the setup\" section"
   grep -qF 'bootstrap-project.sh layout-pack' "$langs" || die "languages/README.md does not give the layout-pack command"
   # Review of #174, note 1: that command works only in the bootstrapper;
   # in the template the wrapper is the command that works.
