@@ -914,6 +914,26 @@ get a working project in any supported language.
   **Order.** Before end-to-end run 5, because it changes what the newcomer reads; released, then run 5 on that release.
 
   **Rules that apply.** Build-script and test changes are code: test first, reviewed by the role that did not write it. Changes to process documents that ship are reviewed by Crog.
+
+- **[NEXT] PBI-1.30** (Adam, 2026-10-29, from a product office session; Adam chose Clead's recommendation; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — A newcomer persona, run on a small AI model, as a pre-check before each human end-to-end run.
+
+  **Why (Adam, 2026-10-29).** Adam asked whether an AI persona with limited intelligence, run on a simple model at low effort and told exactly how to be and act, could do run 5.
+
+  **What it is and is not (Clead, 2026-10-29; Adam chose this).** A standing pre-check, run before each human run, not run 5 itself: run 5 stays with a person who has never used gh or a terminal (PBI-1.14 Done when 7). Reasons: a model still knows what a terminal, git and gh are and fills gaps from that knowledge, which are exactly the gaps run 5 looks for; a weak model fails differently from a newcomer (it misreads or invents rather than getting stuck where a person would); and it cannot do the physical part (installing on Windows, the browser sign-in with a code, a window that freezes), where run 3 showed people get stuck.
+
+  **The persona (confirmed by Adam, 2026-10-29), as one fixed file used the same way every time:**
+  - Role: someone with an idea for a small app who wants a project set up to build it.
+  - Qualities: uses Windows, a browser and email daily; reads carefully; follows written steps one at a time.
+  - Lacks: has never used a terminal, git, gh or GitHub; does not know words like repo, branch, PR or CI; does not know what Claude Code is.
+  - Rules of behaviour: uses only what is written on the page or printed by the script; stops at every word or step it cannot follow and reports it with the exact text; never fills a gap from its own knowledge.
+
+  **What it reads:** the bootstrapper's README (from PBI-1.29 on, its own README) and every message the setup script prints, in the order a newcomer meets them. Its findings are recorded like a human run's, in `docs/NEXT_SESSION.md`.
+
+  **Open (for the spec).** Which model and effort, how the script's messages are given to it (a recorded run's output, or the script's message texts), and where the persona file lives.
+
+  **Order.** After PBI-1.29 is released and before run 5: the persona checks that release first.
+
+  **Rules that apply.** The persona file and its prompt are process documents: reviewed by Crog. Any script or test that runs it is code: test first, reviewed by the role that did not write it.
 ---
 
 ## Phase 2 — Validate unproven pieces
