@@ -607,6 +607,31 @@ test_packs_workflow_tests_the_pack_from_the_built_bootstrapper() {
   ! grep -qE 'layout-pack\.sh [a-z-]+ project' "$wf" || die "a pack job still lays out straight from the template"
 }
 
+test_packs_workflow_keeps_the_pack_files_the_setup_keeps() {
+  # The setup's tidy-up keeps the chosen pack's files that are not laid
+  # out (the script's LP_KEPT) in languages/<pack>/, and the project's CI
+  # runs on them: ruff formats the Python blocks in the python pack's
+  # code-standards.md (r3f). Each pack job reads that list from the built
+  # script and puts those files back after deleting languages/, before
+  # the setup commit.
+  local wf="$REPO/.github/workflows/packs.yml" p job read rm mk cp commit
+  for p in $PACKS; do
+    job="$(awk -v job="  pack-$p:" '$0 == job { injob = 1; next } /^  [a-z][a-z-]*:$/ { injob = 0 } injob' "$wf")"
+    read="$(grep -nF ". bootstrapper/bootstrap-project.sh && layout_into $p bootstrapper/languages " <<<"$job" | cut -d: -f1 || true)"
+    rm="$(grep -nxF '          rm -rf project/languages' <<<"$job" | cut -d: -f1 || true)"
+    mk="$(grep -nxF "          mkdir -p project/languages/$p" <<<"$job" | cut -d: -f1 || true)"
+    cp="$(grep -nxF "          for f in \$kept; do cp \"bootstrapper/languages/$p/\$f\" \"project/languages/$p/\$f\"; done" <<<"$job" | cut -d: -f1 || true)"
+    commit="$(grep -nF "commit -q -m \"Set up the $p pack\"" <<<"$job" | cut -d: -f1 || true)"
+    [ -n "$read" ] || die "pack-$p does not read the kept files from the built script"
+    grep -qF 'printf '"'"'%s\n'"'"' "$LP_KEPT")"' <<<"$job" || die "pack-$p does not take the kept files from LP_KEPT"
+    grep -qxF '          [ -n "$kept" ]' <<<"$job" || die "pack-$p does not check that the kept list is not empty"
+    [ -n "$rm" ] && [ -n "$mk" ] && [ -n "$cp" ] && [ -n "$commit" ] \
+      || die "pack-$p does not put the kept files back in languages/$p/"
+    [ "$read" -lt "$rm" ] && [ "$rm" -lt "$mk" ] && [ "$mk" -lt "$cp" ] && [ "$cp" -lt "$commit" ] \
+      || die "pack-$p: the kept files are not put back after deleting languages/ and before the setup commit"
+  done
+}
+
 test_packs_workflow_simulates_the_setup_change_and_a_refused_change() {
   # In every pack job the project is a git repo: the bootstrapper output is
   # committed on main and the pack is laid out on a `setup` branch. The
