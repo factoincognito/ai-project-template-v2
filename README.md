@@ -310,10 +310,14 @@ on top of it.
   react-native packs. Claude appears only in the text it prints at the
   end.
 - A green `build` check from the start, and `main` protected: nothing
-  merges without a pull request and a green `build`.
+  merges without a pull request and a green `build`. The exception is a
+  private project on a free GitHub plan set up with
+  `--allow-unprotected`, which has no protection and records that in
+  `memory/decisions.md`.
 - The test-first check in `build`: a pull request that changes code
   without changing a test fails, unless a commit in it has a
-  `Test-exempt: <reason>` line.
+  `Test-exempt: <reason>` trailer line (in the last paragraph of the
+  commit message).
 - A place for everything: the backlog (`docs/BACKLOG.md`), decisions
   (`memory/decisions.md`, and `docs/decisions/` for longer ones), the
   status (`STATUS.md`), the change history (`CHANGELOG.md`), the pull
@@ -327,8 +331,10 @@ on top of it.
 
 - Clead and Crog, and everything they do: specs, reviews, merges,
   session start and end, `..wrap` and pins.
-- `CLAUDE.md` and the files under `memory/` are instructions for Clead
-  and Crog; without them, nobody reads them as instructions.
+- `CLAUDE.md`, `memory/roles.md` and `memory/context.md` are written
+  for Clead and Crog. Without Claude, nobody reads them as instructions.
+  The other files under `memory/` hold the project's own data, such as
+  its description and decisions, and stay useful.
 - The texts the setup leaves for the first session with Clead: the
   phase name in `docs/BACKLOG.md`, `memory/project.md`, the questions in
   `docs/SPEC.md`, `memory/context.md` and `STATUS.md`.
@@ -337,16 +343,16 @@ on top of it.
 - Whether other AI tools (such as Copilot or Cursor) read any of the
   project's files has not been checked.
 
-**How to work with the project without Claude.** The rules written for
-Clead and Crog, read for a team of people only:
+**How to work with the project without Claude.** These are the rules
+written for Clead and Crog, as they apply to a team of people only:
 
 - Every change goes through a pull request; branch protection enforces
   it.
 - Write the test first and see it fail. The test-first check fails a
   code change without a test; a change no test can check says why in a
-  `Test-exempt:` line.
-- Someone other than the author reviews the pull request.
-  `memory/standards.md` works as the review checklist.
+  `Test-exempt:` trailer line.
+- Someone other than the author reviews the pull request. Sections 1
+  to 5 of `memory/standards.md` work as the review checklist.
 - Merge once `build` is green and the review has passed.
 - Fill in the texts the setup leaves for Clead (listed above) yourself,
   and keep `STATUS.md` up to date by hand.
