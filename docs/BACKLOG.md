@@ -882,6 +882,8 @@ get a working project in any supported language.
   3. Put the macOS steps back in the README, the stub README and the docs, starting from what PBI-1.26's removal PR took out.
   4. A human-run end-to-end run on a Mac with macOS 13.5 or later (Node.js 24's minimum).
 
+  **Together with PBI-1.28 (Adam, 2026-10-29).** macOS returns with PBI-1.28's minimum-version checks in place, so the setup on any Mac goes ahead with what that computer can run and says what it cannot (for example: Node.js 24, and so the node, web and react-native packs, needs macOS 13.5 or later). PBI-1.28 is done first, or in the same step.
+
   **Rules that apply.** As for PBI-1.26; adding the leg back changes what `bootstrapper-test` covers, so the spec needs Adam's intent approval.
 
 - **[LATER] PBI-1.28** (Adam, 2026-10-29, from a product office session; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — Before it changes anything, the setup checks that this computer meets the minimum versions of everything the setup itself needs to finish.
