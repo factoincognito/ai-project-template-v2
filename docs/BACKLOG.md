@@ -883,6 +883,16 @@ get a working project in any supported language.
   4. A human-run end-to-end run on a Mac with macOS 13.5 or later (Node.js 24's minimum).
 
   **Rules that apply.** As for PBI-1.26; adding the leg back changes what `bootstrapper-test` covers, so the spec needs Adam's intent approval.
+
+- **[LATER] PBI-1.28** (Adam, 2026-10-29, from a product office session; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — Before it changes anything, the setup checks that this computer meets the minimum versions of everything the setup itself needs to finish.
+
+  **Why (Adam, 2026-10-29).** The check is not about a minimum operating system version as such: it is whether the platform the setup runs on has what the setup needs to complete successfully.
+
+  **Where things stand (Clead, checked on main 2026-10-29).** `bootstrap-project.sh` checks bash for version 3.2 or later. It checks gh by the options it uses (`repo create --template`, `pr checks --json`, `pr merge --match-head-commit`), not by version. It checks only that git and npm are installed (and, in WSL, that npm is not the Windows one), with no version. It runs `npm install --package-lock-only` on the user's computer for the node, web and react-native packs, while the packs' CI uses Node.js 24; what an older Node.js does at that step is not checked. Node.js 24 needs macOS 13.5 or later (Node's v24.x `BUILDING.md`).
+
+  **Scope (for the spec).** For each tool the setup runs on the user's computer: its minimum version, how the script reads it, and a guide when it is too old, as gh has today. Where a minimum depends on the operating system (as Node.js 24 does on macOS), the guide says so.
+
+  **Rules that apply.** Script and test changes are code: test-first (red run in the PR), reviewed by Crog on Opus.
 ---
 
 ## Phase 2 — Validate unproven pieces
