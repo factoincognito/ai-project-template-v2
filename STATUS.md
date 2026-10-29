@@ -18,7 +18,7 @@ Build and release: the turn-key bootstrap script is built (v2.4.0); the fixes fo
 Getting the bootstrapper through Adam's end-to-end runs, which must pass before acuteping, the first real project, is created. The C# base language pack (PBI-1.23): part 1 (the pack, its CI job and the layout rows, #271) is done; part 2 (the bootstrap script offers the pack) waits until the end-to-end runs pass. v2.8.0 carries the fixes for run 1's findings; the Git Bash check confirmed the typed-ahead fix on Windows. Run 2 (Linux through WSL) passed `e2e-check.sh` on 2026-10-27 and again on 2026-10-28 on v2.8.1 on a tablet with nothing installed. The repeat found six gaps where Adam needed help: no WSL step in the README, GitHub's sign-in on a new device, the npm guide in WSL, and touch-only typing, all fixed in v2.8.2 together with a short restart command (`docs/NEXT_SESSION.md`, Adam's to-do 2, r2f to r2l).
 
 ## Next step
-PBI-1.29 (the bootstrapper needs nothing from the template), then a release, then run 5: someone who has never used a terminal or `gh` sets up a project from the README alone. Runs 1 to 4 have passed (run 3 on v2.8.3, 2026-10-29).
+PBI-1.29 (the bootstrapper needs nothing from the template), then a release, then the newcomer persona's pre-check (PBI-1.30), then run 5: someone who has never used a terminal or `gh` sets up a project from the README alone. Runs 1 to 4 have passed (run 3 on v2.8.3, 2026-10-29).
 
 ## Blockers
 Product Owner: a tester for run 5, someone new to the terminal. acuteping waits until run 5 passes.
