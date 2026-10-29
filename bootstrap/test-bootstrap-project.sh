@@ -8011,7 +8011,7 @@ expect_setup_tree() {
   PACKS_DIR="$BUILT/languages" bash "$BUILT/bootstrap-project.sh" layout-pack "$p" "$fresh" >/dev/null
   kept=code-standards.md
   [ "$p" != web ] || [ -n "$deploy" ] || kept="$kept deploy.yml wrangler.jsonc"
-  { tree_of "$BUILT" | grep -v '^languages/' | grep -vx 'bootstrap-project.sh'
+  { tree_of "$BUILT" | grep -v '^languages/' | grep -vx 'bootstrap-project.sh' | grep -vxF '.github/README.md'
     tree_of "$fresh"
     for f in $kept; do echo "languages/$p/$f"; done
     [ -z "$deploy" ] || printf '%s\n' .github/workflows/deploy.yml wrangler.jsonc
@@ -8050,16 +8050,21 @@ expect_setup_tree() {
   while IFS= read -r f; do
     case "$f" in README.md | .gitignore | docs/DEV_INFRASTRUCTURE.md | .github/workflows/ci.yml | CHANGELOG.md) continue ;; esac
     expect_filled "$d" "$p" "$deploy" "$f" "$BUILT/$f" "$c/$f"
-  done < <(tree_of "$BUILT" | grep -v '^languages/' | grep -vx 'bootstrap-project.sh')
+  done < <(tree_of "$BUILT" | grep -v '^languages/' | grep -vx 'bootstrap-project.sh' | grep -vxF '.github/README.md')
+  # The bootstrapper's own README (PBI-1.29) is gone: the project's page
+  # shows the project's README.
+  [ -f "$BUILT/.github/README.md" ] || die "the built bootstrapper has no .github/README.md (test is stale)"
+  [ ! -e "$c/.github/README.md" ] || die "$p$deploy: the bootstrapper's own README is still in the copy"
+  [ -d "$c/.github/workflows" ] || die "$p$deploy: the tidy-up removed more of .github/ than its README"
   # .gitignore: the bootstrapper's, then the pack's lines it lacked.
   { cat "$BUILT/.gitignore"
     while IFS= read -r f; do grep -qxF -- "$f" "$BUILT/.gitignore" || printf '%s\n' "$f"; done <"$BUILT/languages/$p/gitignore"
   } >"$d/gitignore"
   expect_same "$p$deploy: .gitignore" "$d/gitignore" "$c/.gitignore"
-  # README.md: the section from "## After bootstrapping" up to the next
+  # README.md: the section from "## Finishing the setup" up to the next
   # heading (## Setup) is gone, nothing else, and the rest filled in.
-  grep -q '^## After bootstrapping' "$BUILT/README.md" || die "the built README has no setup section (test is stale)"
-  sed '/^## After bootstrapping/,/^## Setup$/{/^## Setup$/!d;}' "$BUILT/README.md" >"$d/readme"
+  grep -q '^## Finishing the setup' "$BUILT/README.md" || die "the built README has no setup section (test is stale)"
+  sed '/^## Finishing the setup/,/^## Setup$/{/^## Setup$/!d;}' "$BUILT/README.md" >"$d/readme"
   [ "$(wc -l <"$d/readme")" -lt "$(wc -l <"$BUILT/README.md")" ] || die "the test's README expectation removed nothing"
   expect_filled "$d" "$p" "$deploy" README.md "$d/readme" "$c/README.md"
   # docs/DEV_INFRASTRUCTURE.md: the links to the other packs'
@@ -8201,22 +8206,22 @@ test_the_pack_overlay_replaces_ci_yml_adds_missing_gitignore_lines_and_refuses_o
 test_the_readme_setup_section_is_removed_up_to_the_next_heading() {
   local d rc
   d="$(tmpdir)"
-  printf '%s\n' '# App' '' 'Intro.' '' '## After bootstrapping (delete this section when done)' '' 'Steps.' \
+  printf '%s\n' '# App' '' 'Intro.' '' '## Finishing the setup' '' 'Steps.' \
     '### A smaller heading' '##Not a heading' '' '## Setup' '' 'Run it.' >"$d/a"
   ( load_script; remove_setup_section "$d/a" ) || die "the section was not found"
   printf '%s\n' '# App' '' 'Intro.' '' '## Setup' '' 'Run it.' >"$d/want"
   expect_same "README" "$d/want" "$d/a"
   # The last section: removed up to the end of the file.
-  printf '%s\n' '# App' '' '## Setup' 'x' '' '## After bootstrapping (delete this section when done)' 'y' >"$d/b"
+  printf '%s\n' '# App' '' '## Setup' 'x' '' '## Finishing the setup' 'y' >"$d/b"
   ( load_script; remove_setup_section "$d/b" ) || die "the last section was not found"
   printf '%s\n' '# App' '' '## Setup' 'x' '' >"$d/want"
   expect_same "README, last section" "$d/want" "$d/b"
   # No such section: the file is left as it is, and the function says so.
   # S15 (#153 review): only the whole heading line counts, so a heading
   # that only starts the same way (a filled-in description such as
-  # "## After bootstrapping: ...", or the bare words) is not the section.
-  for t in 'After bootstrapping, run it.' '## After bootstrapping: lends tools' '## After bootstrapping' \
-    '## After bootstrapping (delete this section when done) now' ' ## After bootstrapping (delete this section when done)'; do
+  # "## Finishing the setup: ...", or the bare words) is not the section.
+  for t in 'Finishing the setup, run it.' '## Finishing the setup: lends tools' '## Finishing' \
+    '## Finishing the setup now' ' ## Finishing the setup' '## Finishing the setup '; do
     printf '%s\n' '# App' '## Setup' "$t" 'more' >"$d/c"
     cp "$d/c" "$d/c0"
     rc=0
@@ -8251,12 +8256,12 @@ test_a_copy_that_does_not_fit_the_setup_stops_with_the_continue_command() {
   # line counts (#153 review): here it is cut short.
   d="$(tmpdir)"
   cp -R "$BUILT" "$d/template"
-  sed 's/^## After bootstrapping (delete this section when done)$/## After bootstrapping/' "$BUILT/README.md" >"$d/template/README.md"
+  sed 's/^## Finishing the setup$/## Finishing/' "$BUILT/README.md" >"$d/template/README.md"
   ! cmp -s "$BUILT/README.md" "$d/template/README.md" || die "the heading in the built README is not the one the test expects"
   export STUB_GH_TEMPLATE="$d/template"
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
-  sed -n 1p "$d/err" | grep -F "What happened: The file README.md in the copy of the project has no section \"## After bootstrapping (delete this section when done)\", which the setup removes." >/dev/null \
+  sed -n 1p "$d/err" | grep -F "What happened: The file README.md in the copy of the project has no section \"## Finishing the setup\", which the setup removes." >/dev/null \
     || { cat "$d/err" >&2; die "the missing section is not explained"; }
   expect_continue_command "$d" " --resume"
   ! grep -qxF "$FINISHED" "$d/out" || die "it went on after the error"
@@ -8325,7 +8330,7 @@ test_the_awk_helpers_take_a_path_named_like_a_setting() {
   local d
   d="$(tmpdir)"
   mkdir -p "$d/a=b"
-  printf '%s\n' '# App' '## After bootstrapping (delete this section when done)' 'x' '## Setup' 'see languages/node/x' >"$d/a=b/README.md"
+  printf '%s\n' '# App' '## Finishing the setup' 'x' '## Setup' 'see languages/node/x' >"$d/a=b/README.md"
   printf '%s\n' 'dist/' >"$d/a=b/gitignore"
   printf '%s\n' 'node_modules/' >"$d/a=b/.gitignore"
   printf '%s\n' 'FROM-STDIN' >"$d/in"
@@ -8453,7 +8458,7 @@ test_values_with_special_characters_are_copied_literally() {
   # characters that sed, awk or bash give a meaning to (. * $ ^ / % [ ]
   # ~ '), spaces and non-ASCII letters, and a dot in the project name,
   # which becomes a - in the slug. The description starts with
-  # "## After bootstrapping": the fill runs after the tidy-up, so only the
+  # "## Finishing the setup": the fill runs after the tidy-up, so only the
   # README's real setup section is removed and the description stays.
   local d
   built_bootstrapper
@@ -8461,7 +8466,7 @@ test_values_with_special_characters_are_copied_literally() {
   fake_tool "$d" npm 10.0.0
   W_DISPLAY="Zoë's Shed *.* \$1 ^a/b\$ ~ [x] 100%s"
   W_PO="Zoë O'Brien \$HOME .* a/b [y]"
-  W_DESCRIPTION="## After bootstrapping: lends tools (.*) \$0 a/b ^x\$ to Zoë's street, 100%."
+  W_DESCRIPTION="## Finishing the setup: lends tools (.*) \$0 a/b ^x\$ to Zoë's street, 100%."
   W_OWNER_AND_NAME=octo-user/Tool.Shed
   W_SLUG=tool-shed
   setup_run "$d" --non-interactive --yes --pack react-native --name Tool.Shed \
@@ -9195,6 +9200,9 @@ node||mit|M |package.json|no
 react-native||mit|M |app.json|no
 web|yes|mit|M |wrangler.jsonc|no
 python||mit|D |bootstrap-project.sh|yes
+python||mit|D |.github/README.md|yes
+python||mit|M |.github/README.md|no
+python||mit|D |.github/PULL_REQUEST_TEMPLATE.md|no
 python||mit|D |languages/README.md|yes
 python||mit|D |languages/node/package.json|yes
 python||mit|D |languages/node/code-standards.md|yes
@@ -11270,9 +11278,9 @@ hand_made_project() {
   [ "$script" = kept ] || rm -f "$d/files/bootstrap-project.sh"
   case "$heading" in
     gone | lookalike)
-      grep -vxF '## After bootstrapping (delete this section when done)' "$d/files/README.md" >"$d/files/README.new"
+      grep -vxF '## Finishing the setup' "$d/files/README.md" >"$d/files/README.new"
       mv "$d/files/README.new" "$d/files/README.md"
-      [ "$heading" != lookalike ] || printf '%s\n' '## After bootstrapping: lends tools' >>"$d/files/README.md"
+      [ "$heading" != lookalike ] || printf '%s\n' '## Finishing the setup: lends tools' >>"$d/files/README.md"
       ! cmp -s "$BUILT/README.md" "$d/files/README.md" || die "the README was not changed (test is stale)"
       ;;
     crlf)
@@ -11518,7 +11526,7 @@ test_a_project_is_read_as_added_from_each_signal_alone() {
     built_bootstrapper
     mkdir -p "$d/files"
     cp -R "$BUILT/." "$d/files/"
-    grep -qxF '## After bootstrapping (delete this section when done)' "$d/files/README.md" || die "the built README has no section (test is stale)"
+    grep -qxF '## Finishing the setup' "$d/files/README.md" || die "the built README has no section (test is stale)"
     [ -e "$d/files/bootstrap-project.sh" ] || die "the built project has no script (test is stale)"
     case "$signal" in
       mark) printf '%s\n' '- Set up by bootstrap-project.sh.' >>"$d/files/CHANGELOG.md" ;;
@@ -11608,9 +11616,9 @@ test_only_the_whole_setup_heading_starts_the_section_the_readme_loses() {
   # way and, further down, the real one: only the real section goes.
   local d
   d="$(tmpdir)"
-  printf '%s\n' '# App' '## After bootstrapping: lends tools' 'keep me' '## After bootstrapping (delete this section when done)' 'gone' '## Setup' 'x' >"$d/a"
+  printf '%s\n' '# App' '## Finishing the setup: lends tools' 'keep me' '## Finishing the setup' 'gone' '## Setup' 'x' >"$d/a"
   ( load_script; remove_setup_section "$d/a" ) || die "the section was not found"
-  printf '%s\n' '# App' '## After bootstrapping: lends tools' 'keep me' '## Setup' 'x' >"$d/want"
+  printf '%s\n' '# App' '## Finishing the setup: lends tools' 'keep me' '## Setup' 'x' >"$d/want"
   expect_same "README" "$d/want" "$d/a"
 }
 
@@ -12071,30 +12079,36 @@ test_stub_readme_keeps_the_setup_heading_and_its_setup_boundary() {
   # and e2e-check.sh match this whole heading line, and the section ends
   # at "## Setup".
   local next
-  grep -qxF -- '## After bootstrapping (delete this section when done)' "$STUB_README" \
+  grep -qxF -- '## Finishing the setup' "$STUB_README" \
     || die "the stub README lost the setup heading line"
-  ( load_script; [ "$SETUP_HEADING" = '## After bootstrapping (delete this section when done)' ] ) \
+  ( load_script; [ "$SETUP_HEADING" = '## Finishing the setup' ] ) \
     || die "the script's SETUP_HEADING is not the stub's heading"
-  next="$(awk '$0 == "## After bootstrapping (delete this section when done)" { on = 1; next } on && /^## / { print; exit }' "$STUB_README")"
+  next="$(awk '$0 == "## Finishing the setup" { on = 1; next } on && /^## / { print; exit }' "$STUB_README")"
   [ "$next" = '## Setup' ] || die "the next heading after the setup section is [$next], want [## Setup]"
 }
 
 test_stub_readme_setup_section_is_three_lines_with_the_resume_command() {
   local body n
-  body="$(section_of "$STUB_README" '## After bootstrapping (delete this section when done)' '^## ')"
+  body="$(section_of "$STUB_README" '## Finishing the setup' '^## ')"
   # Lines of text: not empty and not a ``` fence line around the command.
   n="$(grep -v '^ *```' <<<"$body" | grep -c . || true)"
   [ "$n" -eq 3 ] || { printf '%s\n' "$body" >&2; die "the setup section has $n lines of text, want 3"; }
   grep -qF -- "$ONE_COMMAND --resume --owner " <<<"$body" \
     || { printf '%s\n' "$body" >&2; die "the setup section lacks the one command with --resume --owner"; }
   grep -qF -- ' --name ' <<<"$body" || die "the setup section lacks --name"
-  grep -qF 'If you see this, setup has not run' <<<"$body" \
-    || die "the setup section does not say that setup has not run"
+  grep -qF 'If you see this, the setup of this project has not finished' <<<"$body" \
+    || die "the setup section does not say that the setup has not finished"
+  # PBI-1.29: step 0 is in the copy itself, in the bootstrapper's README
+  # that the project's page shows until the setup has run; nothing points
+  # to the template.
+  grep -qF '`.github/README.md`' <<<"$body" || die "the setup section does not name .github/README.md"
+  grep -qiF 'step 0' <<<"$body" || die "the setup section does not name step 0"
+  ! grep -qF 'ai-project-template-v2' <<<"$body" || die "the setup section points to the template"
 }
 
 test_stub_readme_setup_section_has_no_pack_table_and_no_numbered_steps() {
   local body
-  body="$(section_of "$STUB_README" '## After bootstrapping (delete this section when done)' '^## ')"
+  body="$(section_of "$STUB_README" '## Finishing the setup' '^## ')"
   ! grep -qE '^ *\|' <<<"$body" || die "the setup section still has a table"
   ! grep -qE '^ *[1-9]\. ' <<<"$body" || die "the setup section still has numbered steps"
   [ -z "$(placement_rows "$STUB_README")" ] || { placement_rows "$STUB_README" >&2; die "the stub README still has a placement table row"; }
@@ -12437,12 +12451,83 @@ test_readme_commands_are_the_ones_the_script_prints() {
   grep -qF -- "say_command \"$SIGN_IN_LINE\"" "$SCRIPT" || die "the script no longer prints the README's sign-in line"
 }
 
+# ---------- PBI-1.29: what the setup removes, and the READMEs ----------
+
+test_the_setup_pr_says_it_removed_the_bootstrappers_own_readme() {
+  local body
+  body="$( load_script
+    IN_WITH_DEPLOY="" IN_LICENSE=mit IN_COPYRIGHT_HOLDER=Me IN_PROJECT_NAME=app IN_PACK=python
+    pr_body; printf '%s\n' "$PR_BODY" )"
+  [ "$(grep -F -- '- Removed:' <<<"$body" | grep -cF '.github/README.md' || true)" -eq 1 ] \
+    || { printf '%s\n' "$body" >&2; die "the setup PR's Removed: line does not name .github/README.md"; }
+}
+
+test_a_refused_project_is_pointed_to_the_runbook_not_to_a_readme() {
+  # No README lists the steps still open; the runbook in the project's
+  # docs/DEV_INFRASTRUCTURE.md is what is written down for finishing by hand.
+  local out
+  out="$( load_script; IN_OWNER=me; IN_NAME=app; RESTART_CMD=bootstrap-project.sh RESTART_ARGS=" --name app"
+    refuse_project "Title." "Why." 2>&1 )" || true
+  grep -qF 'docs/DEV_INFRASTRUCTURE.md' <<<"$out" || { printf '%s\n' "$out" >&2; die "the guide does not point to docs/DEV_INFRASTRUCTURE.md"; }
+  grep -qF 'how to protect its main version by hand' <<<"$out" || { printf '%s\n' "$out" >&2; die "the guide does not say what the runbook is for"; }
+  ! grep -qF 'the README of the bootstrapper lists them' <<<"$out" || die "the guide still sends the reader to the bootstrapper's README for open steps"
+}
+
+# readme_asks_to_be_edited: stdin's prose lines that ask the reader to
+# delete, remove or edit part of the README (Adam's rule, PBI-1.29).
+readme_asks_to_be_edited() {
+  prose_of | grep -niE '(delete|remove|edit) this (section|part|line|file|readme)|\((delete|remove|edit)[^)]*when done\)' || true
+}
+
+test_no_readme_asks_the_reader_to_edit_it() {
+  local f hits
+  for f in "$STUB_README" "$TEMPLATE_README" "$REPO/bootstrap/bootstrapper-README.md"; do
+    hits="$(readme_asks_to_be_edited <"$f")"
+    [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "$f asks the reader to edit it"; }
+  done
+}
+
+test_the_edit_request_check_catches_the_old_heading() {
+  local hits
+  hits="$(printf '%s\n' '## After bootstrapping (delete this section when done)' 'Delete this section once done.' 'Edit the file.' | readme_asks_to_be_edited)"
+  [ "$(grep -c . <<<"$hits" || true)" -eq 2 ] || { printf '%s\n' "$hits" >&2; die "want the 2 planted lines"; }
+}
+
+test_bootstrapper_readme_draft_has_no_banned_words_and_the_stubs_resume_command() {
+  local f="$REPO/bootstrap/bootstrapper-README.md" hits want
+  hits="$(prose_of <"$f" | awk '{ print NR ": " $0 }' | banned_hits)"
+  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "banned word without its explanation in the bootstrapper's README"; }
+  want="$ONE_COMMAND --resume --owner OWNER --name NAME"
+  [ "$(grep -cxF -- "$want" "$f" || true)" -eq 1 ] || die "the bootstrapper's README lacks the line: $want"
+  [ "$(sed 's/^ *//' "$STUB_README" | grep -cxF -- "$want" || true)" -eq 1 ] || die "the stub README lacks the line: $want"
+}
+
+test_stub_readme_working_from_another_computer() {
+  # PBI-1.29 item 7: written steps for another computer: step 0 of the
+  # bootstrapper's README, never its step 1, a copy with gh repo clone,
+  # git's name and email in that copy, then the Claude app.
+  local body hits
+  body="$(section_of "$STUB_README" '### Working from another computer' '^##')"
+  grep -qiF 'step 0' <<<"$body" || die "the section does not name step 0"
+  grep -qF 'https://github.com/factoincognito/ai-project-bootstrap' <<<"$body" || die "the section does not link the bootstrapper"
+  grep -qF 'Do not do its step 1' <<<"$body" || die "the section does not warn against step 1"
+  grep -qxF '   gh repo clone OWNER/NAME' <<<"$body" || die "the section lacks gh repo clone OWNER/NAME on a line of its own"
+  grep -qF 'git config user.name' <<<"$body" || die "the section does not set git's name"
+  grep -qF 'git config user.email' <<<"$body" || die "the section does not set git's email"
+  [ "$(tr '\n' ' ' <<<"$body" | sed 's/  */ /g' | grep -cF 'not add capacity or let work run in parallel' || true)" -eq 1 ] \
+    || die "the section does not say what another computer is not for"
+  ! grep -qF -- "$ONE_COMMAND" <<<"$body" || die "the section has the command that creates a new project"
+  ! grep -qF 'ai-project-template-v2' <<<"$body" || die "the section points to the template"
+  hits="$(prose_of <<<"$body" | awk '{ print NR ": " $0 }' | banned_hits)"
+  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "banned word without its explanation in Working from another computer"; }
+}
+
 test_readme_setup_text_has_no_banned_words() {
   # The same banned-word rule as the script's messages, over the prose of
   # the new README text (commands and file names left out).
   local hits
   hits="$( {
-    section_of "$STUB_README" '## After bootstrapping (delete this section when done)' '^## '
+    section_of "$STUB_README" '## Finishing the setup' '^## '
     section_of "$TEMPLATE_README" '### Creating a project from the template' '^##'
   } | prose_of | awk '{ print NR ": " $0 }' | banned_hits)"
   [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "banned word without its explanation in the README setup text"; }

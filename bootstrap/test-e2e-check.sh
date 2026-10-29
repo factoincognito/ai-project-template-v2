@@ -389,7 +389,7 @@ expect_only_fail() {
 reason_of() { grep -E "^[A-Z]+ $2: " "$1/out" | sed -E "s/^[A-Z]+ $2: //"; }
 
 GITHUB_CHECKS="project template merge-settings setup-change build history setup-branch protection decision-row"
-LOCAL_CHECKS="copy changelog pack lockfile placeholders readme-section languages pack-links licence no-script line-endings no-keys"
+LOCAL_CHECKS="copy changelog pack lockfile placeholders readme-section own-readme languages pack-links licence no-script line-endings no-keys"
 SKIP_CHECKS="resume docs guides unaided ci-gate exempt-pr bot-comments"
 
 # expect_all_pass <d>
@@ -446,7 +446,7 @@ test_finished_node_run_passes_every_check() {
   d="$(tmpdir)"; finished "$d" node mit
   run_check "$d"
   expect_all_pass "$d"
-  grep -qE '^Result: 21 passed, 0 failed, 7 skipped\.$' "$d/out" || { cat "$d/out" >&2; die "summary line"; }
+  grep -qE '^Result: 22 passed, 0 failed, 7 skipped\.$' "$d/out" || { cat "$d/out" >&2; die "summary line"; }
   # The checker did look at GitHub and at the copy.
   [ -s "$d/gh.log" ] && [ -s "$d/git.log" ] || die "no gh or git calls logged"
 }
@@ -476,7 +476,7 @@ test_every_line_of_a_check_has_one_status_and_a_plain_reason() {
   d="$(tmpdir)"; finished "$d" web mit
   run_check "$d"
   n="$(grep -cE '^(PASS|FAIL|SKIP) [a-z-]+: [^ ].*[.)]$' "$d/out")"
-  [ "$n" = 28 ] || { cat "$d/out" >&2; die "$n check lines in the form '<STATUS> <id>: <reason>.', want 28"; }
+  [ "$n" = 29 ] || { cat "$d/out" >&2; die "$n check lines in the form '<STATUS> <id>: <reason>.', want 29"; }
   # No raw tool text: no HTTP status lines, JSON or gh's own words.
   ! grep -nE 'HTTP/|\{"|^gh: |fatal:' "$d/out" >&2 || die "raw tool text in the output"
 }
@@ -1044,8 +1044,26 @@ test_licence_placeholders_left_fail() {
 test_readme_section_left_fails() {
   local d
   d="$(tmpdir)"; finished "$d" node mit
-  change_setup "$d" 'printf "\n%s\n\nSteps.\n" "## After bootstrapping (delete this section when done)" >>README.md'
+  change_setup "$d" 'printf "\n%s\n\nSteps.\n" "## Finishing the setup" >>README.md'
   run_check "$d"; expect_only_fail "$d" readme-section
+}
+
+test_bootstrapper_readme_left_fails() {
+  # PBI-1.29: the bootstrapper's own README would show on the project's
+  # page instead of the project's README.
+  local d
+  d="$(tmpdir)"; finished "$d" node mit
+  change_setup "$d" 'mkdir -p .github && printf "# The bootstrapper\n" >.github/README.md'
+  run_check "$d"; expect_only_fail "$d" own-readme
+}
+
+test_readme_section_check_matches_the_whole_heading() {
+  # A heading that only starts like the setup's is a project's own
+  # section, not the setup's.
+  local d
+  d="$(tmpdir)"; finished "$d" node mit
+  change_setup "$d" 'printf "\n%s\n\nText.\n" "## Finishing the setup: notes" >>README.md'
+  run_check "$d"; expect_rc "$d" 0
 }
 
 test_languages_not_pruned_fails() {
