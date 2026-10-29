@@ -45,6 +45,49 @@ In the Claude app, start a new chat inside the project's Claude Project
 `CLAUDE.md`. The first thing you say is the first thing
 that matters.
 
+### Working from another computer
+You can work on this project from more than one computer, for example
+a computer at home and a laptop for travel. Another computer does not
+add capacity or let work run in parallel: it is the same work, done
+from another place. The project itself is kept on GitHub, so nothing
+has to be moved from one computer to the other.
+
+On the other computer, once:
+
+1. Install gh and sign in to GitHub: step 0 under "Start here" in the
+   bootstrapper's README, https://github.com/factoincognito/ai-project-bootstrap.
+   Do not do its step 1: step 1 creates a new project.
+2. In the same window, go to the folder that should hold the copy of
+   this project. This line makes one named projects in your home folder
+   and goes there:
+
+   ```
+   mkdir -p ~/projects && cd ~/projects
+   ```
+
+   Then get a copy of this project, with OWNER and NAME taken from this
+   project's web address, https://github.com/OWNER/NAME:
+
+   ```
+   gh repo clone OWNER/NAME
+   ```
+
+   The copy is in a new folder named NAME.
+3. Tell git your name and email address for this copy, the same ones
+   you gave the setup on your first computer (git records them with
+   each change):
+
+   ```
+   cd NAME
+   git config user.name "Your Name"
+   git config user.email "you@example.com"
+   ```
+
+4. In the Claude app, sign in with the same Claude account and open
+   this project's Claude Project, as on your first computer. The Claude
+   app needs nothing else on this computer; the copy is for working in
+   VS Code with Claude Code.
+
 ## The team
 
 | Role | Who | Surface |

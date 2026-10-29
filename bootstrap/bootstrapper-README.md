@@ -77,8 +77,8 @@ To work on the project with Claude afterwards:
 
 ## Start here
 
-Do step 0 once on each computer. Then step 1 sets up a project; do it
-again for each new project.
+Step 0 prepares your computer. Step 1 sets up the project. For another
+project later, step 1 is all you do again.
 
 {{TEMPLATE_README_SETUP}}
 

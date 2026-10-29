@@ -29,7 +29,7 @@ copying long commands out of that window is harder. If the window where
 you type commands stops reacting after you selected text in it, press
 Ctrl-Q (hold Ctrl and press Q).
 
-**Step 0: install gh and sign in (once per computer).**
+**Step 0: install gh and sign in.**
 
 1. Install the tools.
    - **Windows:** open https://git-scm.com/download/win in your browser,
@@ -167,7 +167,9 @@ same `cd`: the one you ran, with every answer in it.
   start a chat inside the Claude Project; the project's instructions for
   Claude (the file `CLAUDE.md`) do the rest. A Claude Project is a
   workspace in the Claude app that keeps the chats and files of one
-  project together. If the Claude GitHub App on your account is limited
+  project together. To work from another computer later, follow
+  "Working from another computer" in the new project's README. If the
+  Claude GitHub App on your account is limited
   to selected projects, add the new one on GitHub first: your picture, top right, then
   Settings, Applications, Configure next to the Claude app, and add the
   project under the choice
