@@ -175,7 +175,7 @@ Written 2026-10-02 so the order does not have to be re-derived. "Clead" is the n
 | Release v2.7.0 verified | done 2026-10-27: release prep #244 (`cb595de`), tag `v2.7.0` by Adam; tag run 40510633524 green including `publish`; bootstrapper `main` and its tag `v2.7.0` at `7774973`, script stamped `v2.7.0`/`cb595de`, executable, LF | |
 | Release v2.8.0 verified | done 2026-10-27: #247, #248, #252; release prep #251 (`72da0d4`), tag `v2.8.0` by Adam; tag run 40558089914 green including `publish`; bootstrapper `main` and its tag `v2.8.0` at `9d6266c`, script stamped `v2.8.0`/`72da0d4`, executable, LF | |
 | Release v2.8.1 verified | done 2026-10-28: #255, #256, #257; release prep #258; tag `v2.8.1` by Adam on `2ff2459`; tag run 40638092458 green including `publish`; bootstrapper `main` and its tag `v2.8.1` at `91c192c`, script stamped `v2.8.1`/`2ff2459`, executable, LF | |
-| End-to-end runs on throwaway repos; PBI-1.17 to `[DONE]` | Adam runs, in the order of to-do 2 (runs 1 to 4 done; next: run 5); Clead reads the `e2e-check.sh` output; PBI-1.17 done 2026-10-29 | A tester for run 5 |
+| End-to-end runs on throwaway repos; PBI-1.17 to `[DONE]` | Adam runs, in the order of to-do 2 (runs 1 to 4 done; next: run 5); Clead reads the `e2e-check.sh` output; PBI-1.17 done 2026-10-29 | PBI-1.29 released (Adam, 2026-10-29: before run 5), and a tester for run 5 |
 | acuteping created | Adam | The end-to-end runs |
 
 ---
