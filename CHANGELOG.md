@@ -16,6 +16,9 @@ A bootstrapped project records the tag it was built from.
 - The README and the stub README that ships to projects have a section "Working without Claude": what works without Claude, what does not, and how a team of people works with the project (product office PO-62) (PR #277)
 - Backlog: PBI-1.24, a setup option for whether a project includes Claude support (PR #278)
 - Backlog: PBI-1.25, CI that costs less per change without loosening the testing requirement (PR #279)
+- Backlog: PBI-1.26, exclude macOS for now while keeping its code working, and PBI-1.27, re-enable it (PR #281)
+- Backlog: PBI-1.28, the setup checks that the computer meets the minimum versions of everything it needs to finish (PR #282)
+- Backlog: PBI-1.27 brings macOS back together with PBI-1.28's minimum-version checks (PR #284)
 
 ## [2.8.2] — 2026-10-28
 
