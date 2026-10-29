@@ -22,6 +22,7 @@ It asks for what it needs and explains each question. First you need
 two tools: `gh`, the GitHub command-line tool, and, on Windows, Git for
 Windows.
 
+<!-- bootstrapper-readme: start -->
 A physical keyboard is recommended, though not required. On a touch
 screen with the on-screen keyboard, typing symbols such as `@` and
 copying long commands out of that window is harder. If the window where
@@ -140,23 +141,34 @@ again, or one that continues the setup. If you run the command to
 continue and the project was not created yet, the script says so and
 prints the command to start again.
 
-The command to continue and the command to start again carry your
-answers along, so you are not asked again. The script saves your
-answers in a small file next to it, `.bootstrap-project.again`, and the
-command it prints reads them back with `--again`. That command also
-goes to the folder you started the script in, so it works from any
-window, also in a new window, which starts in your home folder. With
-the folder of step 1 it reads
-`cd ~/projects && bash bootstrap-project.sh --again`. Once the project
-exists on GitHub, that command includes `--resume` as well: the saved
-answers carry it, and it tells the script to continue the project that
-is there instead of creating a new one. Each stop saves the answers
-anew, and the first line that `--again` prints names the project they
-are for, so a file left from another project is easy to spot. The file
-is removed when the setup has finished. When there is nothing to save
-yet, or the answers cannot be saved (for example an answer of more
-than one line), the script prints the full command instead, after the
-same `cd`: the one you ran, with every answer in it.
+**What only this README covers.**
+
+- Step 0 above: the script cannot download or start without `gh`.
+- After the script: in the Claude app, create a Claude Project for the
+  new GitHub project, add the GitHub project to that Claude Project, and
+  start a chat inside the Claude Project; the project's instructions for
+  Claude (the file `CLAUDE.md`) do the rest. A Claude Project is a
+  workspace in the Claude app that keeps the chats and files of one
+  project together. If the Claude GitHub App on your account is limited
+  to selected projects, add the new one on GitHub first: your picture, top right, then
+  Settings, Applications, Configure next to the Claude app, and add the
+  project under the choice
+  Only select repositories (the projects it may read).
+  This last part has not been checked yet.
+- Organisation and billing settings: in an organisation, only its
+  owners can allow members to create projects (Settings, Member
+  privileges) and turn on GitHub Actions (Settings, Actions, General).
+  A plan that protects private projects is chosen in your account's
+  Settings, Billing and plans.
+- Deleting a project you made to try things out: on the project's page,
+  Settings, then at the bottom the button
+  Delete this repository (GitHub's word for a project).
+  Or in the same window, run
+  `gh auth refresh -h github.com -s delete_repo` once (if gh asks
+  "Authenticate Git with your GitHub credentials?", answer Yes; if the
+  browser does not open, open https://github.com/login/device yourself
+  and enter the code there, after signing in to GitHub if it asks), then `gh repo delete OWNER/NAME --yes`. The script never deletes a
+  project.
 
 **What the script guides you through.** When something is missing, the
 script prints numbered steps for your system (what to do, the page to
@@ -231,32 +243,25 @@ here first:
     or another version): move the folder away, or make it match, then
     continue. The script never deletes your work.
 
-**What only this README covers.**
+**If the setup stops.** The command to continue and the command to
+start again carry your answers along, so you are not asked again. The
+script saves your answers in a small file next to it, `.bootstrap-project.again`, and the
+command it prints reads them back with `--again`. That command also
+goes to the folder you started the script in, so it works from any
+window, also in a new window, which starts in your home folder. With
+the folder of step 1 it reads
+`cd ~/projects && bash bootstrap-project.sh --again`. Once the project
+exists on GitHub, that command includes `--resume` as well: the saved
+answers carry it, and it tells the script to continue the project that
+is there instead of creating a new one. Each stop saves the answers
+anew, and the first line that `--again` prints names the project they
+are for, so a file left from another project is easy to spot. The file
+is removed when the setup has finished. When there is nothing to save
+yet, or the answers cannot be saved (for example an answer of more
+than one line), the script prints the full command instead, after the
+same `cd`: the one you ran, with every answer in it.
 
-- Step 0 above: the script cannot download or start without `gh`.
-- After the script: in the Claude app, create a Claude Project for the
-  new GitHub project, add the GitHub project to that Claude Project, and
-  start a chat inside the Claude Project; `CLAUDE.md` does the rest. If
-  the Claude GitHub App on your account is limited to selected projects,
-  add the new one on GitHub first: your picture, top right, then
-  Settings, Applications, Configure next to the Claude app, and add the
-  project under the choice
-  Only select repositories (the projects it may read).
-  This last part has not been checked yet.
-- Organisation and billing settings: in an organisation, only its
-  owners can allow members to create projects (Settings, Member
-  privileges) and turn on GitHub Actions (Settings, Actions, General).
-  A plan that protects private projects is chosen in your account's
-  Settings, Billing and plans.
-- Deleting a project you made to try things out: on the project's page,
-  Settings, then at the bottom the button
-  Delete this repository (GitHub's word for a project).
-  Or in the same window, run
-  `gh auth refresh -h github.com -s delete_repo` once (if gh asks
-  "Authenticate Git with your GitHub credentials?", answer Yes; if the
-  browser does not open, open https://github.com/login/device yourself
-  and enter the code there, after signing in to GitHub if it asks), then `gh repo delete OWNER/NAME --yes`. The script never deletes a
-  project.
+<!-- bootstrapper-readme: end -->
 
 A project can also be made with the "Use this template" button on the
 bootstrapper's GitHub page. Its README then has a short section, near

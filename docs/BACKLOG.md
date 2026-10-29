@@ -898,7 +898,7 @@ get a working project in any supported language.
 
   **Rules that apply.** Script and test changes are code: test-first (red run in the PR), reviewed by Crog on Opus.
 
-- **[NEXT] PBI-1.29** (Adam, 2026-10-29, from a product office session; Adam chose Clead's recommendation; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — The bootstrapper and the projects it makes need nothing from the template to work.
+- **[NEXT] PBI-1.29** (Adam, 2026-10-29, from a product office session; Adam chose Clead's recommendation; the WHAT is Adam's, the HOW is Clead's; specced in PR #304, waiting for Adam's confirmation of the spec and the README draft) — The bootstrapper and the projects it makes need nothing from the template to work.
 
   **Why (Adam, 2026-10-29).** Someone about to bootstrap a project meets the bootstrapper, not the template, which is our development repo. Adam questioned whether the deliverable should depend on the template project at all.
 
@@ -914,6 +914,60 @@ get a working project in any supported language.
   **Order.** Before end-to-end run 5, because it changes what the newcomer reads; released, then run 5 on that release.
 
   **Rules that apply.** Build-script and test changes are code: test first, reviewed by the role that did not write it. Changes to process documents that ship are reviewed by Crog.
+
+  **Spec (Clead, 2026-10-29, PR #304; reviewed by a Crog agent; nothing is built until Adam confirms this spec and the README draft in chat).**
+
+  1. **Two READMEs.**
+     - **The bootstrapper's own README.** Its source is `bootstrap/bootstrapper-README.md`, in the template only (`bootstrap/` does not ship). The release build writes it to `.github/README.md` in the bootstrapper. GitHub shows a README in `.github/` before one at the root (GitHub's documented order: `.github/`, the root, `docs/`). Not re-read in this session: docs.github.com is not reachable from the cloud session. It is the first check of part 2 (see "Checks"); if it does not hold, the fallback is the swap below.
+     - **The README a new project starts with** stays `bootstrap/stubs/README.md`, at the root, with its placeholders. GitHub copies both files into every new project, whether the script makes it (`gh repo create --template`) or the "Use this template" button does. The setup's tidy-up deletes `.github/README.md`, as it deletes `bootstrap-project.sh`, and the setup PR's "Removed:" line names it. A set-up project then shows its own README. Until then (a project made with the button, or a setup that stopped before its PR was merged) its GitHub page shows the bootstrapper's README, whose section "A project whose setup has not finished" gives the `--resume` command.
+     - **Why not swap the two at the root.** The `--resume` checks read the setup section of the root `README.md` (the heading, the carriage-return checks, the "set up already" state). With the project's README left at the root they stay as they are; the `.github/` file only needs the build to write it and the tidy-up to delete it. The swap (the bootstrapper's README at the root, the project's README shipped under another name and moved into place by the setup) changes those checks too, so it is only the fallback.
+
+  2. **The build copies the steps, so they exist in one place (r5r-a).**
+     - The template's `README.md` marks the part that ships with two lines, `<!-- bootstrapper-readme: start -->` and `<!-- bootstrapper-readme: end -->`. The marked part: the keyboard note, step 0, step 1, "What only this README covers", "What the script guides you through" and "If the setup stops".
+     - That is wider than step 0 alone, which Adam named; Adam to confirm. Why: the script's messages send the reader to "step 0 of the README", "step 1 of the README" and "the README of the bootstrapper" for the steps still open, so the bootstrapper's README needs all of them, and the template's README tests (S19 in `bootstrap/test-bootstrap-project.sh`: every guide in its group, every question, the commands the script prints, the banned words) already pin exactly this part. Copying all of it keeps one copy, and those tests guard what ships.
+     - The draft has one line `{{TEMPLATE_README_SETUP}}`. The build replaces it with the marked lines (without the two marker lines) and writes the result to `.github/README.md` in its output. It fails, writing nothing, when the source is missing, the placeholder is not on exactly one line of its own, the markers are not each there exactly once on a line of their own with start before end, or the marked part is empty. The existing checks then apply to the new file too: no `{{TEMPLATE_` left, the forbidden strings, and the output list (which adds `.github/README.md`). There is no stub at `bootstrap/stubs/.github/README.md`.
+     - Done in this PR, as prose: the markers; the order of the marked part changed for a newcomer ("What only this README covers", which says what to do after the script, now comes before the list of guides; the paragraph on how the command to continue saves the answers moved to the end as "If the setup stops"); "Claude Project" explained where it is first used (r5r-d).
+     - In part 2: the template README's paragraph on the "Use this template" button (outside the marked part) says that such a project's page shows the bootstrapper's README until its setup has finished.
+
+  3. **The project's README (r5r-g).** The setup section's heading becomes `## Finishing the setup`, with no "(delete this section when done)": no README asks the reader to change or delete any part of it (Adam's rule). The setup still removes the section by itself. `SETUP_HEADING` in the script and in `bootstrap/e2e-check.sh` changes with it. Projects made by an older version need no handling: `--resume` already refuses a project made by another version. The section's text becomes:
+
+     > If you see this, the setup of this project has not finished. Until it has, this project's GitHub page shows the bootstrapper's README (the file `.github/README.md`): do its step 0 to install gh and sign in, then run the command below in Git Bash (Windows) or a terminal (macOS, Linux), with OWNER and NAME taken from this project's web address, https://github.com/OWNER/NAME:
+     >
+     > (the same `--resume` command as now)
+     >
+     > The setup then finishes, and removes this section and `.github/README.md`.
+
+     The rest of the project's README is not changed by this PBI.
+
+  4. **Each pointer to the template in what ships** (checked on main at `b98f48e`):
+     - **The project README's step 0 line** ("step 0 in the README of https://github.com/factoincognito/ai-project-template-v2"): the content is brought in. The line points to `.github/README.md` in the same project, which holds step 0 until the setup has run (text in 3).
+     - **The bootstrapper README's step 0 pointer:** the content is brought in, by the build (2).
+     - **`docs/DEV_INFRASTRUCTURE.md`** (one file serves the template and every project, shipped unchanged):
+       - Section 4, "(see the README of https://github.com/factoincognito/ai-project-template-v2)": dropped. In a project the setup has already run, and the steps by hand follow in the same section.
+       - Section 4, the paragraph "In the template repo." (the template's two required checks and its release workflow): dropped from the shipped file and moved to the "Branch protection" section of the template's `README.md`, which does not ship. Projects do not have that pipeline.
+       - Section 5, the sentence "In the template repository itself `ci.yml` is not the stub ...": moved the same way, for the same reason.
+       - Part 2's opening, "if that folder has been deleted after setup, the same file is in the template repo at ...": dropped. The setup keeps the pack's `code-standards.md` in `languages/<pack>/`.
+       - Part 2's links to the other packs' `code-standards.md`, which the setup now rewrites to links into the template: dropped, with the sections around them. The setup removes Part 2's section of each pack the project does not use (from its `### ... (\`<pack>\` pack)` heading to the next heading). A project has one pack; those sections describe nothing in it. The check `pack-links` in `bootstrap/e2e-check.sh` becomes: no section and no link for another pack. The script's `TEMPLATE_URL` is then unused and goes.
+       - "made from this template" (the opening) and "made from the template" (section 3): reworded to "made with the bootstrapper". Not pointers, but they read as the template in a project.
+     - **`languages/README.md`:** not shipped, so its pointers go with it. Checked: the setup already deletes it from every project (`tidy_up`), so it is read only in the bootstrapper and in a copy before the setup. It is for whoever adds or changes a pack, which is work in the template, and the script does not read it. The manifest gets a line `exclude languages/README.md`; the build fails when an excluded path does not exist or is not inside a listed folder, and checks that it is not in the output.
+     - **`docs/ROUTINES.md`**, "The design, the dead ends already investigated and the related backlog items are in the template repo: ... (`memory/decisions.md`, "Path B")": the pointer is dropped; "Neither is built or tested yet." stays. Building it is work in the template and would reach projects with a later release; a project's own `memory/decisions.md` never had "Path B". In the template, `CLAUDE.md`'s table leads to `memory/decisions.md`.
+     - **Kept, as the record of origin:** the project's `CHANGELOG.md` ("built from factoincognito/ai-project-template-v2@<commit>"), the script's `--version`, and the spec link in the script's header comment. Also checked and left, as they link nowhere: "Project just bootstrapped from the template." in the stub `docs/NEXT_SESSION.md`, and the history in `docs/decisions/0001-rebuild-workflow.md`.
+
+  5. **No README asks to be edited (r5r-g).** Checked on main: the stub's setup heading is the only such text in the template README, the stub README and the draft. Part 2 adds a test that none of the three asks the reader to delete, remove or edit part of it.
+
+  6. **The bootstrapper's README (r5r-b to r5r-f).** The draft is `bootstrap/bootstrapper-README.md` in PR #304: what the bootstrapper is and what the reader gets (r5r-c), where to start (r5r-c), what each tool is for and what it costs (r5r-e), the two roles named once in plain words (r5r-d), a section for a project whose setup has not finished, and a short "Without Claude". Branch protection, the team table and the details of working without Claude stay in the project's own README and are not on the bootstrapper's page (r5r-f). Its prose passes the same banned-word check as the README setup text (part 2 adds the test). The placeholders of the project's README no longer show on the bootstrapper's page (r5r-b).
+
+  7. **Not in this PBI.** The project's README still names "Cowork" and `docs/decisions/0001-rebuild-workflow.md` §6 in "Working setup" (r5r-d saw them on the bootstrapper's page, which they leave); recorded in `docs/NEXT_SESSION.md` with the r5r entries in part 2.
+
+  8. **Part 2, in this order, each PR test first with a red run, reviewed by the role that did not write it:** (a) the build writes `.github/README.md` and leaves out `languages/README.md` (`bootstrap/test.sh`), with the template README's "Use this template" paragraph; (b) the script: the tidy-up deletes `.github/README.md`, the new heading and section text (`bootstrap/test-bootstrap-project.sh`, `bootstrap/e2e-check.sh` and its tests); (c) the pointers in 4 (`docs/DEV_INFRASTRUCTURE.md`, `docs/ROUTINES.md`, the template README, the setup's Part 2 cut, `pack-links`). Then the CHANGELOG, the r5r entries in `docs/NEXT_SESSION.md`, and the release prep for v2.8.4.
+
+  9. **Checks.** Before (a) is built: GitHub's README order, from GitHub's documentation or by looking at a page that has both files. After the release: the bootstrapper's page shows its own README with steps 0 and 1; a project made by the script shows its own README and has no `.github/README.md`; `e2e-check.sh` passes with its new checks; run 5 is then done from the bootstrapper's page alone.
+
+- **[LATER] PBI-1.30** (Adam, 2026-10-29, during the PBI-1.29 spec session; not specced) — The Claude parts of a bootstrapped project become an add-on.
+
+  **Why (Adam, 2026-10-29).** A bootstrapped project's instructions are built around Claude. Without Claude, the project is still a well set-up project with GitHub's checks and balances (the project README's "Working without Claude"). For a WHAT person like Adam that is never enough; for someone with a lot of HOW knowledge it may well be, and bring value. "The more I think about it, the more I see the Claude parts of a bootstrapped project as an add-on."
+
+  **For now (Adam, 2026-10-29).** The setup script keeps its Claude parts built in as they are. Done iteratively, when there is value in it; nothing is built until Adam takes it up.
 ---
 
 ## Phase 2 — Validate unproven pieces
