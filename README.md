@@ -331,8 +331,9 @@ on top of it.
 
 - Clead and Crog, and everything they do: specs, reviews, merges,
   session start and end, `..wrap` and pins.
-- `CLAUDE.md`, `memory/roles.md` and `memory/context.md` are written
-  for Clead and Crog. Without Claude, nobody reads them as instructions.
+- `CLAUDE.md` and `memory/roles.md` are written for Clead and Crog, and
+  `memory/context.md` is Clead's session notes. Without Claude, nobody
+  reads them as instructions.
   The other files under `memory/` hold the project's own data, such as
   its description and decisions, and stay useful.
 - The texts the setup leaves for the first session with Clead: the
@@ -347,7 +348,8 @@ on top of it.
 written for Clead and Crog, as they apply to a team of people only:
 
 - Every change goes through a pull request; branch protection enforces
-  it.
+  it, except in a project set up with `--allow-unprotected`, where the
+  team keeps to it without that check.
 - Write the test first and see it fail. The test-first check fails a
   code change without a test; a change no test can check says why in a
   `Test-exempt:` trailer line.
