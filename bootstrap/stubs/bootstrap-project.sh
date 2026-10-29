@@ -2136,7 +2136,10 @@ gh_install_steps() {
         guide_step "Run this command; it uses winget, the installer that comes with Windows:"
         if [ "$1" = upgrade ]; then offered winget-gh-upgrade show; OFFER=winget-gh-upgrade; else offered winget-gh show; OFFER=winget-gh; fi
       else
-        guide_step "Open https://cli.github.com in your browser, click Download for Windows, and run the downloaded installer, keeping the default choices."
+        # The page's Windows options read "Windows - WinGet" and "Windows -
+        # Download MSI" (end-to-end run 3, r3b; there is no "Download for
+        # Windows" button any more).
+        guide_step "Open https://cli.github.com in your browser, choose the Windows option that says Download MSI (not the one that says WinGet), and run the downloaded installer, keeping the default choices."
       fi
       guide_step "Close this window, open Git Bash again from the Start menu, and start the script there, so that it finds the new gh."
       ;;

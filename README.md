@@ -36,8 +36,9 @@ Ctrl-Q (hold Ctrl and press Q).
      questions, one screen at a time: keep every choice as it is on
      every screen, the editor (Vim) included. Click Next on each
      screen, then Install on the last one. The setup script in step 1
-     never opens that editor. Then open https://cli.github.com, click
-     Download for Windows and run that installer too. Then open
+     never opens that editor. Then open https://cli.github.com, choose
+     the Windows option that says **Download MSI** (not the one that
+     says WinGet) and run the downloaded installer too. Then open
      **Git Bash**: press
      the Windows key, type `Git Bash` and press Enter (or click the
      Start button and choose Git Bash from the list of apps). A window

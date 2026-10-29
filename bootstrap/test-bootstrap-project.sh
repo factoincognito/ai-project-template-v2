@@ -4305,6 +4305,22 @@ test_each_offered_command_is_the_one_shown_in_the_guide() {
   done
 }
 
+test_the_gh_guide_on_windows_without_winget_names_the_msi_download() {
+  # End-to-end run 3, r3b: cli.github.com no longer has a "Download for
+  # Windows" button; its Windows options are "Windows - WinGet" and
+  # "Windows - Download MSI" (fetched by Clead, 2026-10-29). Without
+  # winget the guide names the option the page shows, the MSI.
+  local d
+  d="$(tmpdir)"
+  on_os "$d" windows
+  make_stub_gh "$d/gh"; echo 1 >"$d/gh-missing"; working_git "$d"
+  printf 'yes\n' >"$d/tty"; printf '\n' >"$d/in"
+  pre "$d" preflight_gh
+  expect_nothing_ran "$d"
+  expect_out "$d" "Open https://cli.github.com in your browser, choose the Windows option that says Download MSI (not the one that says WinGet), and run the downloaded installer, keeping the default choices."
+  expect_no_out "$d" "Download for Windows"
+}
+
 test_no_offer_without_brew_or_winget_and_never_on_linux() {
   # Without brew (macOS) or winget (Windows) the guide points to a web
   # page. On Linux the package-manager line needs sudo, so it is only
