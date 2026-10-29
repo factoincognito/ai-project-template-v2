@@ -1004,7 +1004,11 @@ get a working project in any supported language.
 
   **Why (Adam, 2026-10-29).** The packs pin exact versions; nothing tells us when they fall behind. PBI-1.6 refreshed the node pack's versions once, by hand.
 
-  **Clead's thoughts (2026-10-29, not decided; Adam asked for them, the spec settles them):**
+  **The WHAT (Adam, 2026-10-29).** The template's components are updated regularly when updates are available. The mechanism and the timing are Clead's to decide (HOW).
+
+  **Urgent updates (Adam asked, 2026-10-29; Clead's answer).** Yes, they need their own path: an update that fixes a security vulnerability (a GitHub security advisory or a CVE against a pinned version) goes in at once, with its own release, not with the monthly batch. A bug fix that is not about security but breaks something the packs use is treated the same way when it affects the template or new projects; otherwise it waits for the batch.
+
+  **Clead's thoughts (2026-10-29; the spec settles them):**
   - Cadence: check weekly, bring updates in as one PR per pack about once a month, and a security fix at once. Each update runs the full CI and needs a release before projects get it, and the packs pin exact versions on purpose.
   - Tool: GitHub's Dependabot can find new versions and open the PRs without Claude and without using Adam's usage (npm, pip, NuGet and GitHub Actions). Whether it handles the packs' layout (`languages/<pack>/`) is not checked. A Claude scheduled task adds judgement where it is needed: major versions, release notes, breaking changes, and the runtimes and SDKs Dependabot does not cover. Possibly both: Dependabot finds, a session judges and bundles.
   - Not in scope unless Adam says so: bringing the updates into projects already bootstrapped.
