@@ -4351,8 +4351,9 @@ check_texts_left() {
 
 # expected_change <git status code> <path>: true when the setup changes
 # that path that way: it deletes the script, the bootstrapper's own
-# README (.github/README.md) and the languages/ files it does not keep, changes the bootstrapper's files it fills in or edits,
-# and adds the pack's files, the lockfile and the licence files.
+# README (.github/README.md) and the languages/ files it does not keep,
+# changes the bootstrapper's files it fills in or edits, and adds the
+# pack's files, the lockfile and the licence files.
 expected_change() {
   local code="$1" path="$2" f t
   case "$code" in
