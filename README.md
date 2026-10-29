@@ -378,7 +378,8 @@ written for Clead and Crog, as they apply to a team of people only:
 ## Branch protection
 
 `main` in this template repo is protected: nothing merges without a pull
-request and a green `build` check, and the rule applies to admins too.
+request and green required checks (below), and the rule applies to
+admins too.
 In a project created with the setup script, the script turns this on.
 What it enforces, how to check it works, and how to turn it on by hand:
 `docs/DEV_INFRASTRUCTURE.md`, "Branch protection runbook".

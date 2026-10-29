@@ -8080,11 +8080,18 @@ expect_setup_tree() {
       /^ *```/ { fence = !fence }
       !fence && skip && (/^### / || /^## /) { skip = 0 }
       !fence && /^### / && substr($0, length($0) - length(ENVIRON["HEAD_END"]) + 1) == ENVIRON["HEAD_END"] { skip = 1 }
-      !skip { print }' "$d/dev" >"$d/dev2"
+      skip { next }
+      /^$/ { blanks++; next }
+      { while (blanks > 0) { print ""; blanks-- } print }' "$d/dev" >"$d/dev2"
     mv "$d/dev2" "$d/dev"
     ! grep -qE "(^|[^/])languages/$other/" "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: a link to the removed $other pack is left"
     ! grep -qF "(\`$other\` pack)" "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: the section of the removed $other pack is left"
+    # Part 2 (the packs' own sections) no longer speaks of another pack.
+    ! sed -n '/^## Part 2/,$p' "$c/docs/DEV_INFRASTRUCTURE.md" | grep -F "\`$other\` pack" >&2 \
+      || die "$p$deploy: Part 2 still refers to the removed $other pack"
   done
+  [ -z "$(tail -c 1 "$c/docs/DEV_INFRASTRUCTURE.md")" ] && [ -n "$(tail -n 1 "$c/docs/DEV_INFRASTRUCTURE.md")" ] \
+    || die "$p$deploy: DEV_INFRASTRUCTURE.md ends with a blank line"
   ! grep -qF 'ai-project-template-v2' "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: DEV_INFRASTRUCTURE.md points to the template"
   expect_same "$p$deploy: DEV_INFRASTRUCTURE.md" "$d/dev" "$c/docs/DEV_INFRASTRUCTURE.md"
   grep -qF "\`languages/$p/code-standards.md\`" "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: the link to its own pack was rewritten"
@@ -12593,6 +12600,33 @@ test_remove_pack_section_cuts_to_the_next_heading_outside_a_code_block() {
   rc=0; ( load_script; remove_pack_section "$d/b" web ) || rc=$?
   [ "$rc" -eq 1 ] || die "no web section: returned $rc, want 1"
   cmp -s "$d/b0" "$d/b" || die "no web section: the file changed"
+  # A "## " heading ends a section too; an indented code block hides its
+  # # lines; a pack heading inside a kept section's code block is not a
+  # heading; no blank line is left at the end.
+  printf '%s\n' '# Doc' '### Web (`web` pack)' 'Web text.' '  ```' '  ### x' '  ## y' '  ```' 'More web.' '## Next' 'Next text.' \
+    '### Node (`node` pack)' 'Node text.' '```' '### Py (`python` pack)' '```' '' '### Mobile (`react-native` pack)' 'RN text.' >"$d/c"
+  ( load_script; remove_pack_section "$d/c" web ) || die "web: returned $?"
+  ( load_script; remove_pack_section "$d/c" python ) && die "python: a heading inside a code block was taken for the section"
+  ( load_script; remove_pack_section "$d/c" react-native ) || die "react-native: returned $?"
+  printf '%s\n' '# Doc' '## Next' 'Next text.' '### Node (`node` pack)' 'Node text.' '```' '### Py (`python` pack)' '```' >"$d/want"
+  expect_same "the ## end, the code blocks and the last blank line" "$d/want" "$d/c"
+}
+
+test_the_tidy_up_goes_on_when_another_packs_section_is_missing() {
+  # A doc without one of the other packs' sections (edited by hand, or a
+  # rerun) does not stop the setup; the other sections are still cut.
+  local d
+  d="$(tmpdir)"
+  mkdir -p "$d/c/docs" "$d/c/languages/node" "$d/c/languages/web" "$d/c/.github"
+  printf '%s\n' '# App' '## Finishing the setup' 'x' '## Setup' 'y' >"$d/c/README.md"
+  printf '%s\n' 'standards' >"$d/c/languages/node/code-standards.md"
+  printf '%s\n' 'web' >"$d/c/languages/web/code-standards.md"
+  printf '%s\n' '# Doc' '## Part 2' '### Node (`node` pack)' 'Node text.' '### Mobile (`react-native` pack)' 'RN text.' >"$d/c/docs/DEV_INFRASTRUCTURE.md"
+  ( load_script; IN_DIR="$d/c"; IN_PACK=node; LP_KEPT=code-standards.md; tidy_up ) >"$d/out" 2>&1 \
+    || { cat "$d/out" >&2; die "the tidy-up stopped on a doc without the web and python sections"; }
+  printf '%s\n' '# Doc' '## Part 2' '### Node (`node` pack)' 'Node text.' >"$d/want"
+  expect_same "DEV_INFRASTRUCTURE.md" "$d/want" "$d/c/docs/DEV_INFRASTRUCTURE.md"
+  [ ! -e "$d/c/languages/web" ] || die "the other pack's folder is left"
 }
 
 test_dev_infrastructure_says_the_script_turns_protection_on() {

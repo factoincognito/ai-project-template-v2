@@ -76,8 +76,8 @@ GitHub does not let authors approve their own PRs. Review happens as a
 verdict comment instead (see `CLAUDE.md`, "Change execution model").
 
 **Turning it on in a new project.** The setup script,
-`bootstrap-project.sh`, does this:
-it protects `main` right after it creates the project, and adds `build`
+`bootstrap-project.sh`, does this: it protects `main` right after it
+creates the project, and adds `build`
 as a required check once the setup pull request's `build` has passed.
 It then reads the protection back and reports it. The steps below are
 the fallback, for a project set up without the script or whose
@@ -246,9 +246,12 @@ commands: `languages/node/code-standards.md`.
 
 ### Static web page (`web` pack)
 
-Everything in the `node` pack, plus a Vite build into one
-self-contained HTML file and Playwright browser tests. Setup, commands
-and the optional Cloudflare deploy: `languages/web/code-standards.md`.
+Node.js 24, Biome, TypeScript strict mode and Jest with an 80% line
+coverage gate, plus a Vite build into one self-contained HTML file and
+Playwright browser tests. The first `npm install` creates
+`package-lock.json`, which the project commits, because CI installs with
+`npm ci`. Setup, commands and the optional Cloudflare deploy:
+`languages/web/code-standards.md`.
 
 ### Mobile app (`react-native` pack)
 

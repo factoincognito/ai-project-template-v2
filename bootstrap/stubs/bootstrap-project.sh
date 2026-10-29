@@ -3814,8 +3814,9 @@ remove_setup_section() {
 # remove_pack_section <file> <pack>: deletes the section of that pack
 # from a doc: from its heading, a "### " line that ends with
 # "(`<pack>` pack)", up to the next line that starts with "### " or "## "
-# outside a code block (``` lines), or the end of the file. Returns 1,
-# changing nothing, when there is none.
+# outside a code block (``` lines), or the end of the file. Empty lines
+# are written only before a line that stays, so none is left at the end.
+# Returns 1, changing nothing, when there is none.
 remove_pack_section() {
   local tmp
   tmp="$(make_temp)"
@@ -3823,7 +3824,9 @@ remove_pack_section() {
     /^ *```/ { fence = !fence }
     !fence && skip && (/^### / || /^## /) { skip = 0 }
     !fence && /^### / && substr($0, length($0) - length(ENVIRON["HEAD_END"]) + 1) == ENVIRON["HEAD_END"] { skip = 1; found = 1 }
-    !skip { print }
+    skip { next }
+    /^$/ { blanks++; next }
+    { while (blanks > 0) { print ""; blanks-- } print }
     END { exit !found }' <"$1" >"$tmp"; then
     rm -f "$tmp"
     return 1
