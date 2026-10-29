@@ -993,6 +993,23 @@ get a working project in any supported language.
   **Why (Adam, 2026-10-29).** A bootstrapped project's instructions are built around Claude. Without Claude, the project is still a well set-up project with GitHub's checks and balances (the project README's "Working without Claude"). For a WHAT person like Adam that is never enough; for someone with a lot of HOW knowledge it may well be, and bring value. "The more I think about it, the more I see the Claude parts of a bootstrapped project as an add-on."
 
   **For now (Adam, 2026-10-29).** The setup script keeps its Claude parts built in as they are. Done iteratively, when there is value in it; nothing is built until Adam takes it up.
+
+- **[NEXT] PBI-1.32** (Adam, 2026-10-29, product office PO-64; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — The product office's "For you" rule in `CLAUDE.md`, so it reaches every bootstrapped project: every reply from a session ends with a "For you" block (each item marked Now, When you have time or Later; "For you: nothing" when there is nothing), and instructions for the product owner appear only there.
+
+  **Why (Adam, 2026-10-29).** A code session's task list (steps with empty circles) read to Adam as choices he had to make. A "For you" block says plainly when something is for him. The product office owns the rule (its `CLAUDE.md`, "Reply format"); the template carries it to new projects, as with the ground rule against loose ends (product office PO-47).
+
+  **Rules that apply.** A change to `CLAUDE.md` that carries out a rule the product owner has decided: reviewed by Crog.
+
+- **[LATER] PBI-1.33** (Adam, 2026-10-29, from a product office session; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — A regular check for new versions of the language packs' components (tools, libraries, GitHub Actions, the SDKs and runtimes they pin), so that updates are brought into the template.
+
+  **Why (Adam, 2026-10-29).** The packs pin exact versions; nothing tells us when they fall behind. PBI-1.6 refreshed the node pack's versions once, by hand.
+
+  **Clead's thoughts (2026-10-29, not decided; Adam asked for them, the spec settles them):**
+  - Cadence: check weekly, bring updates in as one PR per pack about once a month, and a security fix at once. Each update runs the full CI and needs a release before projects get it, and the packs pin exact versions on purpose.
+  - Tool: GitHub's Dependabot can find new versions and open the PRs without Claude and without using Adam's usage (npm, pip, NuGet and GitHub Actions). Whether it handles the packs' layout (`languages/<pack>/`) is not checked. A Claude scheduled task adds judgement where it is needed: major versions, release notes, breaking changes, and the runtimes and SDKs Dependabot does not cover. Possibly both: Dependabot finds, a session judges and bundles.
+  - Not in scope unless Adam says so: bringing the updates into projects already bootstrapped.
+
+  **Rules that apply.** Workflow and config changes are code: test first, reviewed by the role that did not write it.
 ---
 
 ## Phase 2 — Validate unproven pieces
