@@ -855,6 +855,34 @@ get a working project in any supported language.
 
   **Rules that apply.** Harness, test and workflow changes are code and config: test-first (red run in the PR), reviewed by Crog on Opus. Part 3 changes which tests the required check `bootstrapper-test` runs, so it needs Adam's intent approval of its spec before it merges.
 
+
+- **[NEXT] PBI-1.26** (Adam, 2026-10-29, from a product office session; Adam chose Clead's recommendation; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — Exclude macOS as a supported platform for now, keeping the macOS code working so it can come back (PBI-1.27).
+
+  **Why (Adam, 2026-10-29).** Mac users are out of scope for now. Facts behind it (Clead, checked 2026-10-29): the macOS leg does not set CI's wall time (the slowest Windows shard does), but it has failed runs when GitHub had no free macOS runner (PR #197 on 2026-10-26; run 40716513430, three full attempts). On macOS, the Claude desktop app and Claude Code need macOS 13 or later, and Node.js 24 needs 13.5 or later (code.claude.com/docs/en/setup, support.claude.com article 10065433, Node's v24.x `BUILDING.md`).
+
+  **Scope (Clead's recommendation, chosen by Adam).**
+  1. The way in closes: on a real Mac (`uname -s` is `Darwin`), the setup script stops at once with a plain message that macOS is not supported, before it changes anything.
+  2. The macOS code stays and is maintained: the macOS branches of the script (the Homebrew and bash guides among them) and their tests, which already fake `uname` and so keep running on the other OS legs. New script changes keep them passing, as for Linux and Windows.
+  3. bash 3.2 compatibility stays and is checked: a CI leg runs the suite under bash 3.2 on Linux. First check that bash 3.2 builds and runs there; if it cannot, this part stops for Adam.
+  4. The macOS leg leaves the Bootstrapper matrix and `check-shards.sh`, and the macOS steps leave the README, the stub README and the docs, which say macOS is not supported.
+  5. The end-to-end run plan (`docs/NEXT_SESSION.md`, Adam's to-do 2, run 3) no longer names macOS.
+  6. The removal is one PR, so its diff is the exact list for PBI-1.27.
+
+  **Not covered while macOS is out.** Behaviour only a real Mac shows, mainly where Apple's command-line tools differ from Linux's. PBI-1.27 finds it when the macOS leg returns.
+
+  **Open (for the spec).** Whether this waits for the end-to-end runs, as PBI-1.23 part 2 does, since it changes the bootstrap script the runs test. How it fits PBI-1.25 part 1 (shards per OS).
+
+  **Rules that apply.** Script, test and workflow changes are code: test-first (red run in the PR), reviewed by Crog on Opus. Removing the macOS leg changes what the required check `bootstrapper-test` covers, so the spec needs Adam's intent approval.
+
+- **[LATER] PBI-1.27** (Adam, 2026-10-29, from a product office session; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — Re-enable macOS as a supported platform, after PBI-1.26.
+
+  **Scope (Clead's recommendation, chosen by Adam).**
+  1. Open the way in again: remove PBI-1.26's stop.
+  2. Put the macOS leg back in the Bootstrapper matrix and `check-shards.sh`, and fix what it finds that the faked-`uname` tests and the bash 3.2 leg could not.
+  3. Put the macOS steps back in the README, the stub README and the docs, starting from what PBI-1.26's removal PR took out.
+  4. A human-run end-to-end run on a Mac with macOS 13.5 or later (Node.js 24's minimum).
+
+  **Rules that apply.** As for PBI-1.26; adding the leg back changes what `bootstrapper-test` covers, so the spec needs Adam's intent approval.
 ---
 
 ## Phase 2 — Validate unproven pieces
