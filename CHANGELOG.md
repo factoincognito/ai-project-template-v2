@@ -6,6 +6,8 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.8.3] — 2026-10-29
+
 ### Added
 - Release prep for v2.8.2 (PR #270)
 - Recorded in NEXT_SESSION, `STATUS.md` and CHANGELOG that v2.8.2 is released and verified (PR #272)
@@ -24,6 +26,12 @@ A bootstrapped project records the tag it was built from.
 - Recorded end-to-end runs 3 and 4 on v2.8.2 in NEXT_SESSION and `STATUS.md`: run 3 (python, Windows, Git Bash) stopped at finding r3f, the python project's `build` failing; run 4 (react-native, `--non-interactive`) passed (PR #287)
 - End-to-end run 3, r3f: the chain test (`packs.yml`) builds each pack's project with the files the setup keeps in `languages/<pack>/`, as the setup does, and the python pack's `code-standards.md` now passes ruff's format check, which failed `build` in every python project set up with v2.8.2 (PR #288)
 - Recorded in NEXT_SESSION that r3f is fixed on main (PR #289)
+- End-to-end run 3, r3d: a no at "Proceed?" stops like every other stop: it saves the answers and shows the command to start again with `--again` (with `--resume`, the command to continue), so an Enter by accident no longer means typing every answer again (PR #291)
+- End-to-end run 3, r3e: the note under the wait for the project's checks says on its own what the limit is ("The script waits at most 20 minutes for build to pass. ...") (PR #292)
+- End-to-end run 4, r4a: on Windows the npm guide says why Git Bash must be opened again from the Start menu: a window opened from an existing one keeps the old list of folders where programs are found, so it would not find the new npm (PR #293)
+- End-to-end run 3, r3a: README step 0 says every choice of the Git for Windows installer is kept as it is, the editor (Vim) included, Next on each screen and Install on the last one; the setup script never opens that editor (PR #294)
+- End-to-end run 3, r3b: README step 0 and the script's gh guide (Windows without winget) name the option cli.github.com shows: Download MSI, not WinGet (PR #295)
+- Recorded in NEXT_SESSION what was checked in the script for r3c (the Git Bash window that stopped responding at the git check); no cause found, left open (PR #296)
 
 ## [2.8.2] — 2026-10-28
 
