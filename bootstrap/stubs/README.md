@@ -52,6 +52,10 @@ add capacity or let work run in parallel: it is the same work, done
 from another place. The project itself is kept on GitHub, so nothing
 has to be moved from one computer to the other.
 
+If you work only in the Claude app, step 4 is all you need on the other
+computer. Steps 1 to 3 give you a copy of the project to work on in VS
+Code with Claude Code.
+
 On the other computer, once:
 
 1. Install gh and sign in to GitHub: step 0 under "Start here" in the
@@ -73,15 +77,22 @@ On the other computer, once:
    ```
 
    The copy is in a new folder named NAME.
-3. Tell git your name and email address for this copy, the same ones
-   you gave the setup on your first computer (git records them with
-   each change):
+3. Tell git your name and email address for this copy, with your own
+   name and email address in place of Your Name and you@example.com:
+   the same ones you gave the setup on your first computer. Git records
+   them with each change, and anyone who can see the project can see
+   them. If you do not remember them, run `git config user.email` (and
+   `git config user.name`) in the copy on your first computer.
 
    ```
    cd NAME
    git config user.name "Your Name"
    git config user.email "you@example.com"
    ```
+
+   To work on the copy in VS Code, this computer also needs what the
+   project's kind of code runs on, and its first-time setup:
+   `docs/DEV_INFRASTRUCTURE.md`, "New machine setup", steps 2 and 4.
 
 4. In the Claude app, sign in with the same Claude account and open
    this project's Claude Project, as on your first computer. The Claude

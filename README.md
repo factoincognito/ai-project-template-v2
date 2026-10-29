@@ -167,14 +167,14 @@ same `cd`: the one you ran, with every answer in it.
   start a chat inside the Claude Project; the project's instructions for
   Claude (the file `CLAUDE.md`) do the rest. A Claude Project is a
   workspace in the Claude app that keeps the chats and files of one
-  project together. To work from another computer later, follow
-  "Working from another computer" in the new project's README. If the
-  Claude GitHub App on your account is limited
+  project together. If the Claude GitHub App on your account is limited
   to selected projects, add the new one on GitHub first: your picture, top right, then
   Settings, Applications, Configure next to the Claude app, and add the
   project under the choice
   Only select repositories (the projects it may read).
   This last part has not been checked yet.
+- Working from another computer later: follow "Working from another
+  computer" in the new project's README.
 - Organisation and billing settings: in an organisation, only its
   owners can allow members to create projects (Settings, Member
   privileges) and turn on GitHub Actions (Settings, Actions, General).
