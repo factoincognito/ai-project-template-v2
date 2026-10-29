@@ -1088,6 +1088,14 @@ test_other_pack_links_not_rewritten_fail() {
   run_check "$d"; expect_only_fail "$d" pack-links
 }
 
+test_another_packs_section_left_fails() {
+  # PBI-1.29: the setup removes Part 2's sections of the other packs.
+  local d
+  d="$(tmpdir)"; finished "$d" node mit
+  change_setup "$d" 'printf "\n%s\n\n%s\n" "### Python (\`python\` pack)" "Text." >>docs/DEV_INFRASTRUCTURE.md'
+  run_check "$d"; expect_only_fail "$d" pack-links
+}
+
 test_licence_not_as_chosen_fails() {
   local d
   d="$(tmpdir)"; finished "$d" node mit

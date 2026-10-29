@@ -8067,16 +8067,25 @@ expect_setup_tree() {
   sed '/^## Finishing the setup/,/^## Setup$/{/^## Setup$/!d;}' "$BUILT/README.md" >"$d/readme"
   [ "$(wc -l <"$d/readme")" -lt "$(wc -l <"$BUILT/README.md")" ] || die "the test's README expectation removed nothing"
   expect_filled "$d" "$p" "$deploy" README.md "$d/readme" "$c/README.md"
-  # docs/DEV_INFRASTRUCTURE.md: the links to the other packs'
-  # code-standards.md point to the template on GitHub; its own stays.
+  # docs/DEV_INFRASTRUCTURE.md (PBI-1.29): Part 2's sections of the other
+  # packs are gone, each from its heading to the next ### or ## heading
+  # outside a code block (or the end of the file); its own stays, and
+  # nothing points to the template. A second statement of the cut, on
+  # purpose (the script's is remove_pack_section).
   cp "$BUILT/docs/DEV_INFRASTRUCTURE.md" "$d/dev"
   for other in node web python react-native; do
     [ "$other" != "$p" ] || continue
-    grep -qF "\`languages/$other/code-standards.md\`" "$d/dev" || die "the doc has no link to $other (test is stale)"
-    sed "s|\`languages/$other/code-standards.md\`|https://github.com/factoincognito/ai-project-template-v2/blob/main/languages/$other/code-standards.md|g" "$d/dev" >"$d/dev2"
+    grep -qF "(\`$other\` pack)" "$d/dev" || die "the doc has no section for $other (test is stale)"
+    HEAD_END="(\`$other\` pack)" awk '
+      /^ *```/ { fence = !fence }
+      !fence && skip && (/^### / || /^## /) { skip = 0 }
+      !fence && /^### / && substr($0, length($0) - length(ENVIRON["HEAD_END"]) + 1) == ENVIRON["HEAD_END"] { skip = 1 }
+      !skip { print }' "$d/dev" >"$d/dev2"
     mv "$d/dev2" "$d/dev"
     ! grep -qE "(^|[^/])languages/$other/" "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: a link to the removed $other pack is left"
+    ! grep -qF "(\`$other\` pack)" "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: the section of the removed $other pack is left"
   done
+  ! grep -qF 'ai-project-template-v2' "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: DEV_INFRASTRUCTURE.md points to the template"
   expect_same "$p$deploy: DEV_INFRASTRUCTURE.md" "$d/dev" "$c/docs/DEV_INFRASTRUCTURE.md"
   grep -qF "\`languages/$p/code-standards.md\`" "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: the link to its own pack was rewritten"
   # CHANGELOG.md (step 11): filled in, then the pack, the licence and
@@ -8330,15 +8339,15 @@ test_the_awk_helpers_take_a_path_named_like_a_setting() {
   local d
   d="$(tmpdir)"
   mkdir -p "$d/a=b"
-  printf '%s\n' '# App' '## Finishing the setup' 'x' '## Setup' 'see languages/node/x' >"$d/a=b/README.md"
+  printf '%s\n' '# App' '## Finishing the setup' 'x' '## Setup' 'see x' '### Node (`node` pack)' 'node text' >"$d/a=b/README.md"
   printf '%s\n' 'dist/' >"$d/a=b/gitignore"
   printf '%s\n' 'node_modules/' >"$d/a=b/.gitignore"
   printf '%s\n' 'FROM-STDIN' >"$d/in"
   ( load_script; cd "$d"
     remove_setup_section a=b/README.md
-    replace_text a=b/README.md languages/node/x URL
+    remove_pack_section a=b/README.md node
     add_missing_lines a=b/gitignore a=b/.gitignore ) <"$d/in" >"$d/out" 2>"$d/err" || { cat "$d/err" >&2; die "a helper failed"; }
-  printf '%s\n' '# App' '## Setup' 'see URL' >"$d/want"
+  printf '%s\n' '# App' '## Setup' 'see x' >"$d/want"
   expect_same "README" "$d/want" "$d/a=b/README.md"
   printf '%s\n' node_modules/ dist/ >"$d/want"
   expect_same ".gitignore" "$d/want" "$d/a=b/.gitignore"
@@ -12364,6 +12373,10 @@ test_template_readme_branch_protection_has_no_step_reference() {
   body="$(section_of "$TEMPLATE_README" '## Branch protection' '^## ')"
   grep -qF '`docs/DEV_INFRASTRUCTURE.md`' <<<"$body" \
     || die "the template README's Branch protection section does not point to docs/DEV_INFRASTRUCTURE.md"
+  # PBI-1.29: the template's own checks moved here from the shipped doc.
+  for t in bootstrapper-test bootstrapper.yml check-shards.sh packs.yml; do
+    grep -qF -- "$t" <<<"$body" || die "the template README's Branch protection section does not describe the template's own checks: $t"
+  done
 }
 
 test_readme_resume_sentence_matches_what_the_script_prints() {
@@ -12557,6 +12570,29 @@ test_readme_banned_word_check_reads_the_real_list_lines() {
   ! cmp -s "$TEMPLATE_README" "$d/README.md" || die "nothing was planted (test is stale)"
   hits="$(section_of "$d/README.md" '### Creating a project from the template' '^##' | prose_of | awk '{ print NR ": " $0 }' | banned_hits)"
   grep -qF 'clone the repo' <<<"$hits" || die "the planted word was not caught"
+}
+
+test_remove_pack_section_cuts_to_the_next_heading_outside_a_code_block() {
+  # PBI-1.29: the setup removes Part 2's section of each pack the project
+  # does not use. A # line inside a code block is not a heading, and the
+  # last section runs to the end of the file.
+  local d rc
+  d="$(tmpdir)"
+  printf '%s\n' '# Doc' '## Part 2' '### Python (`python` pack)' 'Py text.' '```bash' '# macOS / Linux' '## not a heading' '```' 'More py.' \
+    '### Node (`node` pack)' 'Node text.' '### Mobile (`react-native` pack)' 'RN text.' >"$d/a"
+  ( load_script; remove_pack_section "$d/a" python ) || die "python: returned $?"
+  printf '%s\n' '# Doc' '## Part 2' '### Node (`node` pack)' 'Node text.' '### Mobile (`react-native` pack)' 'RN text.' >"$d/want"
+  expect_same "the python section" "$d/want" "$d/a"
+  ( load_script; remove_pack_section "$d/a" react-native ) || die "react-native: returned $?"
+  printf '%s\n' '# Doc' '## Part 2' '### Node (`node` pack)' 'Node text.' >"$d/want"
+  expect_same "the last section" "$d/want" "$d/a"
+  # No such section: nothing changes, and it says so. A line that only
+  # mentions the pack is not its heading.
+  printf '%s\n' '# Doc' 'See the (`web` pack) notes.' '### Web notes (`web` pack) and more' >"$d/b"
+  cp "$d/b" "$d/b0"
+  rc=0; ( load_script; remove_pack_section "$d/b" web ) || rc=$?
+  [ "$rc" -eq 1 ] || die "no web section: returned $rc, want 1"
+  cmp -s "$d/b0" "$d/b" || die "no web section: the file changed"
 }
 
 test_dev_infrastructure_says_the_script_turns_protection_on() {

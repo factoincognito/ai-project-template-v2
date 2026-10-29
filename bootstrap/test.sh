@@ -289,6 +289,18 @@ test_real_build_ships_the_generic_docs() {
     || die "DEV_INFRASTRUCTURE.md shipped altered"
 }
 
+test_real_build_points_to_the_template_only_in_the_record_of_origin() {
+  # PBI-1.29: what ships needs nothing from the template. The project's
+  # CHANGELOG.md and the script's --version and spec link name where it
+  # came from; nothing else names the template's repository.
+  local out="$WORK/real.$RANDOM" hits
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  hits="$(cd "$out" && grep -rlF 'ai-project-template-v2' . | sed 's|^\./||' | grep -vxE 'CHANGELOG\.md|bootstrap-project\.sh' || true)"
+  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "these shipped files point to the template"; }
+  ! grep -niE 'this template|from the template|template repo' "$out/docs/DEV_INFRASTRUCTURE.md" >&2 \
+    || die "the shipped DEV_INFRASTRUCTURE.md speaks of the template"
+}
+
 test_real_build_ships_the_status_stub() {
   # Every project gets STATUS.md at its root, in the fixed format the
   # product owner's status overview reads, with its update rule in an
