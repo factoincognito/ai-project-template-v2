@@ -909,6 +909,8 @@ get a working project in any supported language.
 
   **Scope (Clead's recommendation, chosen by Adam).** Keep 3, as a record of origin. Make 1 self-contained: the release build copies step 0 from the template's README into the bootstrapper's README, so the steps exist in one place and cannot drift apart. For each pointer in 2: bring the content in or drop the pointer, decided in the spec, item by item.
 
+  **Widened (Adam, 2026-10-29, on Clead's recommendation, from his run 5 rehearsal, `docs/NEXT_SESSION.md` r5r-a to r5r-g).** The bootstrapper gets its own README, written for someone who knows what they want but not how: what the bootstrapper is and does for them, where to start (the command that starts a new setup), what each prerequisite is for and what it costs (a paid Claude plan for Claude Code; Git for Windows and gh on Windows), in plain words, with what a newcomer does not need first left out or placed later. The README a new project starts with stays a separate file; its placeholders are fine, since the setup fills them. Rule (Adam): the user is never required to edit a README in any way, so no heading or text asks the reader to change or delete part of it.
+
   **Order.** Before end-to-end run 5, because it changes what the newcomer reads; released, then run 5 on that release.
 
   **Rules that apply.** Build-script and test changes are code: test first, reviewed by the role that did not write it. Changes to process documents that ship are reviewed by Crog.
