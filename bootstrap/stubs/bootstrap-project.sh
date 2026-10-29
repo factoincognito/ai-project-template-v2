@@ -3219,7 +3219,10 @@ show_plan() {
 
 # confirm_plan: "Proceed?", unless --yes. The default is no, because it
 # is the safe answer: a stray Enter must create or change nothing, and
-# the explanation says so. A no stops with nothing created (exit 1).
+# the explanation says so. A no stops with nothing created (exit 1), like
+# every other stop: it saves the answers and shows the command to start
+# again, or to continue with --resume (end-to-end run 3, r3d: an Enter
+# by accident would otherwise mean typing every answer again).
 # --non-interactive without --yes never gets here: cmd_setup refuses it
 # with the other option problems. Keys typed during the checks before it
 # are discarded (discard_typeahead, finding r1f): the answer is one typed
@@ -3232,15 +3235,21 @@ confirm_plan() {
       "If you answer yes, the script continues the setup as described above; if you answer no, it stops and changes nothing. Pressing Enter alone answers no, so nothing is changed by accident; type yes to go on." \
       "Proceed? (yes or no)" no
     [ "$CHECKED" != yes ] || return 0
+    shown_command
+    say "$CONTINUE_INTRO"
+    say_shown_command
     fail 1 "You answered no, so the script stopped, and nothing was changed." \
-      "To continue the setup, run the script again and answer yes."
+      "Run the command shown to continue the setup, and answer yes."
   fi
   prompt_for check_yes_no \
     "If you answer yes, the script creates the project on GitHub and carries out the plan above; if you answer no, it stops and creates nothing. Pressing Enter alone answers no, so nothing is created by accident; type yes to go on." \
     "Proceed? (yes or no)" no
   [ "$CHECKED" != yes ] || return 0
+  shown_command
+  say "$START_AGAIN_INTRO"
+  say_shown_command
   fail 1 "You answered no, so the script stopped, and nothing was created." \
-    "To set up the project, start the script again and answer yes."
+    "Run the command shown to start again, and answer yes."
 }
 
 # show_advance_command: after the yes (or --yes) and before the first
