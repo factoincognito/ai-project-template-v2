@@ -2,6 +2,7 @@
 # One path per line, relative to the repo root. Blank lines and lines
 # starting with # are ignored. No globs. A directory is copied
 # recursively. A listed path that does not exist is a build error.
+# A line "exclude <path>" leaves that path, inside a listed folder, out.
 # Files that must ship with clean content live in bootstrap/stubs/.
 # Spec: docs/BACKLOG.md, PBI-1.10.
 
@@ -28,4 +29,8 @@ docs/ROUTINES.md
 docs/SPEC.md
 docs/decisions/0001-rebuild-workflow.md
 
+# The language packs. languages/README.md is for whoever adds or changes
+# a pack, which is work in this repo; the setup deletes it from every
+# project anyway (PBI-1.29).
 languages
+exclude languages/README.md
