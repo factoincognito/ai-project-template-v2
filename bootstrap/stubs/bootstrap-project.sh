@@ -4832,7 +4832,9 @@ wait_for_build() {
   duration_words $((IN_CI_TIMEOUT * 60))
   limit="$DURATION"
   step_start "Waiting for the project's check build to pass on the proposed change, for at most $limit"
-  say_note "That is the limit: if build has not passed after $limit, the script stops, leaves the proposed change open and shows how to continue (--ci-timeout sets a different limit)."
+  # The note says on its own what the limit is (end-to-end run 3, r3e):
+  # it is in another colour than the line above it.
+  say_note "The script waits at most $limit for build to pass. If build has not passed by then, the script stops, leaves the proposed change open and shows how to continue (--ci-timeout sets a different limit)."
   say_note "You can follow the check here: $PR_URL/checks"
   max=$((IN_CI_TIMEOUT * 60 / CHECKS_DELAY))
   while :; do
