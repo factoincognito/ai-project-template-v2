@@ -828,7 +828,7 @@ get a working project in any supported language.
 
   **Done when.** Written when specced.
 
-- **[LATER] PBI-1.25** (Adam, 2026-10-29, from a product office session; Adam chose Clead's recommendation; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — Make the template's CI cost less per change, without loosening the testing requirement. Follows PBI-1.22.
+- **[NEXT] PBI-1.25** (Adam, 2026-10-29, from a product office session; Adam chose Clead's recommendation; `NEXT` and in the unattended batch the same day (Adam, on Clead's recommendation); the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — Make the template's CI cost less per change, without loosening the testing requirement. Follows PBI-1.22.
 
   **Why (Adam, 2026-10-29).** Even the smallest change to the template runs a lot of testing. The requirement on testing stays as strict as it is; the process gets more efficient.
 
@@ -847,7 +847,7 @@ get a working project in any supported language.
 
   **Not done, because it would loosen the requirement or cannot work here.** Running macOS and Windows only for "OS-sensitive" files (text handling differs between the systems, as the line-ending tests show). A merge queue (it needs GraphQL, which sessions cannot use, so merges by Crog would break).
 
-  **Order (Clead's proposal, not decided).** After the end-to-end runs (`docs/NEXT_SESSION.md`, Adam's to-do 2), unless Adam moves it earlier. Parts 1 and 2 do not touch the bootstrap script.
+  **Order (Adam, 2026-10-29, on Clead's recommendation).** It does not wait for the end-to-end runs: it changes CI, the tests and the shards, none of which ship in the bootstrap script, so it does not change what the runs test. It is part of the unattended batch (product office `DECISIONS.md`, 2026-10-29). Parts 1, 2 and 4 go ahead; part 3 goes ahead once Adam has approved its spec.
 
   **Done when.**
   - A before/after table from job timestamps, as in PBI-1.22: wall time, and per OS the longest shard and the sum of shard times, for a doc-only change that tests read (like #277) and for a script change.
