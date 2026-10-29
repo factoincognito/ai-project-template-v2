@@ -10,7 +10,12 @@ A bootstrapped project records the tag it was built from.
 - Release prep for v2.8.2 (PR #270)
 - Recorded in NEXT_SESSION, `STATUS.md` and CHANGELOG that v2.8.2 is released and verified (PR #272)
 - The C# base language pack, part 1 (PBI-1.23): `languages/csharp/`, a class library, a console app and an xUnit v3 test project on .NET 10, with `dotnet format`, a build with nullable reference types and every warning an error, and an 80% line coverage gate over every project under `src/`; its job in `packs.yml` and its rows in the layout table. The setup does not offer it yet (part 2) (PR #271)
+- Backlog: PBI-1.23 part 1 merged, review note N8 kept for part 2 (PR #273)
+- Backlog: PBI-1.23 blocked while part 2 waits on the end-to-end runs (PR #275)
 - A check that `STATUS.md` and the shipped stub keep the headings the product owner's overview reads (`tools/check-status.sh`, run in the `build` job; NEXT_SESSION item 15) (PR #276)
+- The README and the stub README that ships to projects have a section "Working without Claude": what works without Claude, what does not, and how a team of people works with the project (product office PO-62) (PR #277)
+- Backlog: PBI-1.24, a setup option for whether a project includes Claude support (PR #278)
+- Backlog: PBI-1.25, CI that costs less per change without loosening the testing requirement (PR #279)
 
 ## [2.8.2] — 2026-10-28
 
