@@ -963,7 +963,27 @@ get a working project in any supported language.
 
   9. **Checks.** Before (a) is built: GitHub's README order, from GitHub's documentation or by looking at a page that has both files. After the release: the bootstrapper's page shows its own README with steps 0 and 1; a project made by the script shows its own README and has no `.github/README.md`; `e2e-check.sh` passes with its new checks; run 5 is then done from the bootstrapper's page alone.
 
-- **[LATER] PBI-1.30** (Adam, 2026-10-29, during the PBI-1.29 spec session; not specced) — The Claude parts of a bootstrapped project become an add-on.
+- **[NEXT] PBI-1.30** (Adam, 2026-10-29, from a product office session; Adam chose Clead's recommendation; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — A newcomer persona, run on a small AI model, as a pre-check before each human end-to-end run.
+
+  **Why (Adam, 2026-10-29).** Adam asked whether an AI persona with limited intelligence, run on a simple model at low effort and told exactly how to be and act, could do run 5.
+
+  **What it is and is not (Clead, 2026-10-29; Adam chose this).** A standing pre-check, run before each human run, not run 5 itself: run 5 stays with a person who has never used gh or a terminal (PBI-1.14 Done when 7). Reasons: a model still knows what a terminal, git and gh are and fills gaps from that knowledge, which are exactly the gaps run 5 looks for; a weak model fails differently from a newcomer (it misreads or invents rather than getting stuck where a person would); and it cannot do the physical part (installing on Windows, the browser sign-in with a code, a window that freezes), where run 3 showed people get stuck.
+
+  **The persona (confirmed by Adam, 2026-10-29), as one fixed file used the same way every time:**
+  - Role: someone with an idea for a small app who wants a project set up to build it.
+  - Qualities: uses Windows, a browser and email daily; reads carefully; follows written steps one at a time.
+  - Lacks: has never used a terminal, git, gh or GitHub; does not know words like repo, branch, PR or CI; does not know what Claude Code is.
+  - Rules of behaviour: uses only what is written on the page or printed by the script; stops at every word or step it cannot follow and reports it with the exact text; never fills a gap from its own knowledge.
+
+  **What it reads:** the bootstrapper's README (from PBI-1.29 on, its own README) and every message the setup script prints, in the order a newcomer meets them. Its findings are recorded like a human run's, in `docs/NEXT_SESSION.md`.
+
+  **Open (for the spec).** Which model and effort, how the script's messages are given to it (a recorded run's output, or the script's message texts), and where the persona file lives.
+
+  **Order.** After PBI-1.29 is released and before run 5: the persona checks that release first.
+
+  **Rules that apply.** The persona file and its prompt are process documents: reviewed by Crog. Any script or test that runs it is code: test first, reviewed by the role that did not write it.
+
+- **[LATER] PBI-1.31** (Adam, 2026-10-29, during the PBI-1.29 spec session; not specced) — The Claude parts of a bootstrapped project become an add-on.
 
   **Why (Adam, 2026-10-29).** A bootstrapped project's instructions are built around Claude. Without Claude, the project is still a well set-up project with GitHub's checks and balances (the project README's "Working without Claude"). For a WHAT person like Adam that is never enough; for someone with a lot of HOW knowledge it may well be, and bring value. "The more I think about it, the more I see the Claude parts of a bootstrapped project as an add-on."
 
