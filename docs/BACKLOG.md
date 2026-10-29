@@ -897,6 +897,21 @@ get a working project in any supported language.
   **Scope (for the spec).** For each tool the setup runs on the user's computer: its minimum version, how the script reads it, and a guide when it is too old, as gh has today. Where a minimum depends on the operating system (as Node.js 24 does on macOS), the guide says so.
 
   **Rules that apply.** Script and test changes are code: test-first (red run in the PR), reviewed by Crog on Opus.
+
+- **[NEXT] PBI-1.29** (Adam, 2026-10-29, from a product office session; Adam chose Clead's recommendation; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — The bootstrapper and the projects it makes need nothing from the template to work.
+
+  **Why (Adam, 2026-10-29).** Someone about to bootstrap a project meets the bootstrapper, not the template, which is our development repo. Adam questioned whether the deliverable should depend on the template project at all.
+
+  **Where things stand (Clead, checked in the published bootstrapper v2.8.3, `d7f0fc0`).** It refers to the template in three ways:
+  1. Needed to finish the setup: the README's "After bootstrapping" section sends the user to step 0 of the template's README to install gh and sign in.
+  2. Pointers in a created project to the template's content: `docs/DEV_INFRASTRUCTURE.md` (the other packs' code standards, which the setup rewrites to links into the template, and the template's own CI and protection), `languages/README.md` (how the template tests its packs), `docs/ROUTINES.md` (the "Path B" design kept in the template). Nothing breaks without them.
+  3. Where it came from: the project's `CHANGELOG.md` and the script's `--version` name the template commit it was built from (PBI-1.10).
+
+  **Scope (Clead's recommendation, chosen by Adam).** Keep 3, as a record of origin. Make 1 self-contained: the release build copies step 0 from the template's README into the bootstrapper's README, so the steps exist in one place and cannot drift apart. For each pointer in 2: bring the content in or drop the pointer, decided in the spec, item by item.
+
+  **Order.** Before end-to-end run 5, because it changes what the newcomer reads; released, then run 5 on that release.
+
+  **Rules that apply.** Build-script and test changes are code: test first, reviewed by the role that did not write it. Changes to process documents that ship are reviewed by Crog.
 ---
 
 ## Phase 2 — Validate unproven pieces
