@@ -1,9 +1,21 @@
 # AI project bootstrapper
 
-This sets up a new software project for you, ready to be built
-together with Claude. You answer a few questions; a script does the
-rest. You do not need to have typed commands before: this page gives
-every command to copy.
+**For people who know what they want built, but not how to build it.**
+
+You bring the what: the idea, what it should do, what matters most.
+Claude brings the how: it turns your idea into a plan, writes the
+code and tests it. You stay in charge: nothing is built until you have
+said yes to the plan, and you can stop any change.
+
+For that to work, the project has to be set up the way a careful
+developer would set it up: checks that catch mistakes before they get
+in, rules that stop a change nobody checked, and files where Claude
+keeps the plan and the decisions, so it picks up where it left off
+next time. Doing that by hand takes knowledge of exactly the how that
+you want to leave to Claude. This bootstrapper does it for you: you
+answer a few questions, and a script sets everything up. You do not
+need to have typed commands before: this page gives every command to
+copy.
 
 ## What you get
 
@@ -20,12 +32,12 @@ computer. In it:
   the project, so nothing depends on a chat being remembered.
 
 Then the work goes like this: you say what you want, in a chat in the
-Claude app. Claude plans it and asks you to confirm it. Claude Code (a
-version of Claude that writes code) builds it, writing the test first,
-and each change is reviewed by the other Claude before it goes in. You
-decide what gets built and can stop any change. The project's files
-call these two roles Clead (the one that plans and reviews) and Crog
-(the one that writes the code).
+Claude app. Claude writes it down as a plan and asks you to confirm
+it. Claude Code (a version of Claude that writes code) builds it,
+writing the test first, and each change is reviewed by the other
+Claude before it goes in. The project's files call these two roles
+Clead (the one that plans and reviews) and Crog (the one that writes
+the code).
 
 ## What you need, and what it costs
 
