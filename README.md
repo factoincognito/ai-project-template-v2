@@ -32,9 +32,13 @@ Ctrl-Q (hold Ctrl and press Q).
 
 1. Install the tools.
    - **Windows:** open https://git-scm.com/download/win in your browser,
-     download Git for Windows and run the installer, keeping the default
-     choices. Then open https://cli.github.com, click Download for
-     Windows and run that installer too. Then open **Git Bash**: press
+     download Git for Windows and run the installer. It asks many
+     questions, one screen at a time: keep every choice as it is on
+     every screen, the editor (Vim) included. Click Next on each
+     screen, then Install on the last one. The setup script in step 1
+     never opens that editor. Then open https://cli.github.com, click
+     Download for Windows and run that installer too. Then open
+     **Git Bash**: press
      the Windows key, type `Git Bash` and press Enter (or click the
      Start button and choose Git Bash from the list of apps). A window
      opens with a line that ends in `$`; you type every command below
