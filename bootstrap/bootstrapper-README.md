@@ -9,13 +9,13 @@ said yes to the plan, and you can stop any change.
 
 For that to work, the project has to be set up the way a careful
 developer would set it up: checks that catch mistakes before they get
-in, rules that stop a change nobody checked, and files where Claude
-keeps the plan and the decisions, so it picks up where it left off
-next time. Doing that by hand takes knowledge of exactly the how that
+in, rules that stop a change whose checks have not passed, and files
+where Claude keeps the plan and the decisions, so it picks up where it
+left off next time. Doing that by hand takes knowledge of exactly the how that
 you want to leave to Claude. This bootstrapper does it for you: you
 answer a few questions, and a script sets everything up. You do not
 need to have typed commands before: this page gives every command to
-copy.
+copy. To begin, go to "Start here" below.
 
 ## What you get
 
@@ -45,9 +45,12 @@ To set up the project (step 0 below installs the tools):
 
 - **A computer** with Windows, macOS or Linux.
 - **A GitHub account.** Free. Make one at https://github.com/signup.
-  On a free account, a public project gets full protection of its main
-  version; a private one cannot, and the script then offers you three
-  ways on.
+  Anyone can see the files of a public project; only you, and the
+  people you invite, can see a private one. On a free account, a public
+  project gets full protection of its main version; protecting a
+  private one needs a paid GitHub plan (https://github.com/pricing). If
+  you choose a private project on a free account, the script offers you
+  three ways on.
 - **On Windows: Git for Windows.** Free. It gives you Git, which keeps
   track of every change to the project's files, and Git Bash, the
   window where you type the commands from this page.
@@ -56,16 +59,17 @@ To set up the project (step 0 below installs the tools):
 - **gh, GitHub's tool for the command line.** Free. The script uses it
   to create the project on GitHub for you, signed in as you.
 - **Only for a website, a TypeScript program or a mobile app: Node.js.**
-  Free. If it is missing, the script says so and shows how to install
-  it.
+  Free. It runs the tools these kinds of project are built and checked
+  with, and the script uses it to set them up. If it is missing, the
+  script says so and shows how to install it.
 
 To work on the project with Claude afterwards:
 
 - **A paid Claude plan.** Claude Code, which writes the code, is not in
   the Free plan. The cheapest plan with it is Pro: 17 US dollars a
   month when paid for a year at once (200 dollars), or 20 dollars a
-  month when paid monthly (prices as https://claude.com/pricing showed
-  them on 2026-10-29).
+  month when paid monthly, plus tax where it applies (prices as
+  https://claude.com/pricing showed them on 2026-10-29).
 - **The Claude app** (https://claude.ai), where you plan and decide.
 - Later, if you want to watch or run the coding part yourself: VS Code
   (a free program for editing code) with its Claude Code extension.

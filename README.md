@@ -141,6 +141,24 @@ again, or one that continues the setup. If you run the command to
 continue and the project was not created yet, the script says so and
 prints the command to start again.
 
+**If the setup stops.** The command to continue and the command to
+start again carry your answers along, so you are not asked again. The
+script saves your answers in a small file next to it, `.bootstrap-project.again`, and the
+command it prints reads them back with `--again`. That command also
+goes to the folder you started the script in, so it works from any
+window, also in a new window, which starts in your home folder. With
+the folder of step 1 it reads
+`cd ~/projects && bash bootstrap-project.sh --again`. Once the project
+exists on GitHub, that command includes `--resume` as well: the saved
+answers carry it, and it tells the script to continue the project that
+is there instead of creating a new one. Each stop saves the answers
+anew, and the first line that `--again` prints names the project they
+are for, so a file left from another project is easy to spot. The file
+is removed when the setup has finished. When there is nothing to save
+yet, or the answers cannot be saved (for example an answer of more
+than one line), the script prints the full command instead, after the
+same `cd`: the one you ran, with every answer in it.
+
 **What only this README covers.**
 
 - Step 0 above: the script cannot download or start without `gh`.
@@ -242,24 +260,6 @@ here first:
   - the copy on this computer does not match GitHub (unsaved changes,
     or another version): move the folder away, or make it match, then
     continue. The script never deletes your work.
-
-**If the setup stops.** The command to continue and the command to
-start again carry your answers along, so you are not asked again. The
-script saves your answers in a small file next to it, `.bootstrap-project.again`, and the
-command it prints reads them back with `--again`. That command also
-goes to the folder you started the script in, so it works from any
-window, also in a new window, which starts in your home folder. With
-the folder of step 1 it reads
-`cd ~/projects && bash bootstrap-project.sh --again`. Once the project
-exists on GitHub, that command includes `--resume` as well: the saved
-answers carry it, and it tells the script to continue the project that
-is there instead of creating a new one. Each stop saves the answers
-anew, and the first line that `--again` prints names the project they
-are for, so a file left from another project is easy to spot. The file
-is removed when the setup has finished. When there is nothing to save
-yet, or the answers cannot be saved (for example an answer of more
-than one line), the script prints the full command instead, after the
-same `cd`: the one you ran, with every answer in it.
 
 <!-- bootstrapper-readme: end -->
 
