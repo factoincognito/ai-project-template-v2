@@ -865,12 +865,14 @@ get a working project in any supported language.
   2. The macOS code stays and is maintained: the macOS branches of the script (the Homebrew and bash guides among them) and their tests, which already fake `uname` and so keep running on the other OS legs. New script changes keep them passing, as for Linux and Windows.
   3. bash 3.2 compatibility stays and is checked: a CI leg runs the suite under bash 3.2 on Linux. First check that bash 3.2 builds and runs there; if it cannot, this part stops for Adam.
   4. The macOS leg leaves the Bootstrapper matrix and `check-shards.sh`, and the macOS steps leave the README, the stub README and the docs, which say macOS is not supported.
-  5. The end-to-end run plan (`docs/NEXT_SESSION.md`, Adam's to-do 2, run 3) no longer names macOS.
+  5. The end-to-end run plan (`docs/NEXT_SESSION.md`, Adam's to-do 2, run 3) no longer names macOS (done 2026-10-29: Adam moved run 3 to Windows).
   6. The removal is one PR, so its diff is the exact list for PBI-1.27.
 
   **Not covered while macOS is out.** Behaviour only a real Mac shows, mainly where Apple's command-line tools differ from Linux's. PBI-1.27 finds it when the macOS leg returns.
 
-  **Open (for the spec).** Whether this waits for the end-to-end runs, as PBI-1.23 part 2 does, since it changes the bootstrap script the runs test. How it fits PBI-1.25 part 1 (shards per OS).
+  **Order (Adam, 2026-10-29, on Clead's recommendation).** It does not wait for the end-to-end runs: it changes nothing on Windows or Linux, where the runs now take place. It is part of the unattended batch (product office `DECISIONS.md`, 2026-10-29); its spec still needs Adam's intent approval.
+
+  **Open (for the spec).** How it fits PBI-1.25 part 1 (shards per OS).
 
   **Rules that apply.** Script, test and workflow changes are code: test-first (red run in the PR), reviewed by Crog on Opus. Removing the macOS leg changes what the required check `bootstrapper-test` covers, so the spec needs Adam's intent approval.
 
