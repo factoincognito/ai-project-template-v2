@@ -6570,6 +6570,46 @@ test_proceed_says_why_its_default_is_no() {
   done
 }
 
+test_a_no_at_proceed_saves_the_answers_and_shows_the_command_to_start_again() {
+  # End-to-end run 3, r3d: Enter at "Proceed?" answered no by accident,
+  # and the stop printed no command, so every question would be asked
+  # again. A no stops like every other stop: it saves the answers and
+  # shows the short command (the README says a stop prints the exact
+  # command to run next). Nothing is created.
+  local d f
+  # First run, answers typed at the questions: the command to start again.
+  d="$(tmpdir)"
+  working_git "$d"
+  use_built "$d"
+  printf '%s\n' "${ANSWERS_IN[@]}" no >"$d/in"
+  whole "$d"
+  expect_rc 1 "$d"
+  grep -q '^What happened: You answered no' "$d/err" || { cat "$d/err" >&2; die "did not stop as a no"; }
+  expect_out "$d" "To start again, run this command:"
+  expect_short_command "$d" "To start again, run this command:"
+  expect_again_file "$d" --owner octo-user --name my-app --project-name my-app --description "Lends tools." \
+    --po-name "Octo User" --pack python --public --license none --dir ./my-app --git-name "Test Person" \
+    --git-email test@example.com
+  expect_nothing_created "$d"
+  grep -qxF "What to do next: Run the command shown to start again, and answer yes." "$d/err" || { cat "$d/err" >&2; die "the next step does not point at the command shown"; }
+  # A --resume run (the project exists) answered no: the command to
+  # continue, with --resume saved.
+  d="$(tmpdir)"
+  working_git "$d"
+  export STUB_GH_PR_FAIL=broken
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_PR_FAIL
+  printf 'no\n' >"$d/in"
+  setup_run "$d" --resume
+  expect_rc 1 "$d"
+  grep -q '^What happened: You answered no' "$d/err" || { cat "$d/err" >&2; die "--resume: did not stop as a no"; }
+  expect_out "$d" "To continue the setup, run this command:"
+  expect_short_command "$d" "To continue the setup, run this command:"
+  f="$(again_file_of "$d")"
+  grep -qx -- --resume "$f" || { cat "$f" >&2; die "--resume: the saved answers lack --resume"; }
+  grep -qxF "What to do next: Run the command shown to continue the setup, and answer yes." "$d/err" || { cat "$d/err" >&2; die "the next step does not point at the command shown"; }
+}
+
 test_proceed_and_the_guide_pause_are_not_answered_by_keys_typed_before_them() {
   # r1f: an Enter pressed during the checks before "Proceed?" would stop
   # the setup as a no, and one pressed during a check before the pause of
