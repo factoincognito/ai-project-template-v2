@@ -266,8 +266,10 @@ here first:
 <!-- bootstrapper-readme: end -->
 
 A project can also be made with the "Use this template" button on the
-bootstrapper's GitHub page. Its README then has a short section, near
-the top, that gives the same command with `--resume`, which finishes the setup.
+bootstrapper's GitHub page. Until its setup has finished, that
+project's GitHub page shows the bootstrapper's README, whose section "A
+project whose setup has not finished" gives the same command with
+`--resume`, which finishes the setup.
 
 ### Working setup
 Run the Claude app next to VS Code. In the Claude app, create a Claude
