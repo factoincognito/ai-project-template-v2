@@ -2266,7 +2266,10 @@ guide_npm_missing() {
     windows)
       guide_step "Open https://nodejs.org in your browser and download the version marked LTS (the one with long-term support)."
       guide_step "Run the downloaded installer, keeping the default choices."
-      guide_step "Close this window, open Git Bash again from the Start menu, and start the script there, so that it finds npm."
+      # End-to-end run 4, r4a: a window opened from this one keeps its
+      # PATH, which the installer does not change, so it says why.
+      guide_step "Close this window, open Git Bash again from the Start menu, and start the script there. Use the Start menu, not a new window opened from this one: a window opened from another one keeps that window's old list of the folders where programs are found, so it would not find the new npm either."
+      other="if the script still says that npm is not installed, close this window, open Git Bash again from the Start menu (not from this window), and start the script again there."
       ;;
     *)
       if [ -n "$LINUX_WSL" ]; then

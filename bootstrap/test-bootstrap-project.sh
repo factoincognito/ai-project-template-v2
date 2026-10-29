@@ -4474,8 +4474,11 @@ test_the_npm_guide_on_macos_and_windows_keeps_its_steps() {
   expect_rc 3 "$d"
   expect_out "$d" "1. Open https://nodejs.org in your browser and download the version marked LTS (the one with long-term support)."
   expect_out "$d" "2. Run the downloaded installer, keeping the default choices."
-  expect_out "$d" "3. Close this window, open Git Bash again from the Start menu, and start the script there, so that it finds npm."
-  expect_out "$d" "If you see something else: if the script still says that npm is not installed, close this window, open a new one, and start the script again there."
+  # End-to-end run 4, r4a: a Git Bash window opened from the old one kept
+  # its old program search list, so npm was still not found; the step
+  # says why it must be the Start menu, and so does the line after it.
+  expect_out "$d" "3. Close this window, open Git Bash again from the Start menu, and start the script there. Use the Start menu, not a new window opened from this one: a window opened from another one keeps that window's old list of the folders where programs are found, so it would not find the new npm either."
+  expect_out "$d" "If you see something else: if the script still says that npm is not installed, close this window, open Git Bash again from the Start menu (not from this window), and start the script again there."
 }
 
 test_in_wsl_the_windows_npm_counts_as_no_npm_and_its_guide_says_why() {
