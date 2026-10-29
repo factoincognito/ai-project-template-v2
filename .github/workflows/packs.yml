@@ -15,7 +15,10 @@
 # script's own list (LP_KEPT), read by sourcing the built script and
 # laying the pack out once more in a temporary folder; the pack's CI
 # runs on them as in a project (r3f: ruff formats the Python blocks in
-# the python pack's code-standards.md). The
+# the python pack's code-standards.md). That read starts with `set -e`
+# because errexit is off inside $( ), so a failure in the layout stops
+# it at once. The kept files are plain names directly in the pack folder
+# (no spaces, no subfolders), which the copy loop relies on. The
 # steps below copy the pack's ci.yml commands verbatim;
 # tools/test-layout-pack.sh fails if they drift apart. The template has
 # no lockfile, so the npm-based packs (node, web, react-native) first
@@ -79,7 +82,7 @@ jobs:
         run: |
           set -euo pipefail
           PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh node pack
-          kept="$(set -- && . bootstrapper/bootstrap-project.sh && layout_into node bootstrapper/languages "$(mktemp -d)/pack" strict >/dev/null && printf '%s\n' "$LP_KEPT")"
+          kept="$(set -e; set --; . bootstrapper/bootstrap-project.sh; layout_into node bootstrapper/languages "$(mktemp -d)/pack" strict >/dev/null; printf '%s\n' "$LP_KEPT")"
           [ -n "$kept" ]
           cp -a bootstrapper project
           git -C project init -q -b main
@@ -165,7 +168,7 @@ jobs:
         run: |
           set -euo pipefail
           PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh web pack
-          kept="$(set -- && . bootstrapper/bootstrap-project.sh && layout_into web bootstrapper/languages "$(mktemp -d)/pack" strict >/dev/null && printf '%s\n' "$LP_KEPT")"
+          kept="$(set -e; set --; . bootstrapper/bootstrap-project.sh; layout_into web bootstrapper/languages "$(mktemp -d)/pack" strict >/dev/null; printf '%s\n' "$LP_KEPT")"
           [ -n "$kept" ]
           cp -a bootstrapper project
           git -C project init -q -b main
@@ -265,7 +268,7 @@ jobs:
         run: |
           set -euo pipefail
           PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh python pack
-          kept="$(set -- && . bootstrapper/bootstrap-project.sh && layout_into python bootstrapper/languages "$(mktemp -d)/pack" strict >/dev/null && printf '%s\n' "$LP_KEPT")"
+          kept="$(set -e; set --; . bootstrapper/bootstrap-project.sh; layout_into python bootstrapper/languages "$(mktemp -d)/pack" strict >/dev/null; printf '%s\n' "$LP_KEPT")"
           [ -n "$kept" ]
           cp -a bootstrapper project
           git -C project init -q -b main
@@ -351,7 +354,7 @@ jobs:
         run: |
           set -euo pipefail
           PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh react-native pack
-          kept="$(set -- && . bootstrapper/bootstrap-project.sh && layout_into react-native bootstrapper/languages "$(mktemp -d)/pack" strict >/dev/null && printf '%s\n' "$LP_KEPT")"
+          kept="$(set -e; set --; . bootstrapper/bootstrap-project.sh; layout_into react-native bootstrapper/languages "$(mktemp -d)/pack" strict >/dev/null; printf '%s\n' "$LP_KEPT")"
           [ -n "$kept" ]
           cp -a bootstrapper project
           git -C project init -q -b main
@@ -432,7 +435,7 @@ jobs:
         run: |
           set -euo pipefail
           PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack.sh csharp pack
-          kept="$(set -- && . bootstrapper/bootstrap-project.sh && layout_into csharp bootstrapper/languages "$(mktemp -d)/pack" strict >/dev/null && printf '%s\n' "$LP_KEPT")"
+          kept="$(set -e; set --; . bootstrapper/bootstrap-project.sh; layout_into csharp bootstrapper/languages "$(mktemp -d)/pack" strict >/dev/null; printf '%s\n' "$LP_KEPT")"
           [ -n "$kept" ]
           cp -a bootstrapper project
           git -C project init -q -b main
