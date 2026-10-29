@@ -378,10 +378,38 @@ written for Clead and Crog, as they apply to a team of people only:
 ## Branch protection
 
 `main` in this template repo is protected: nothing merges without a pull
-request and a green `build` check, and the rule applies to admins too.
+request and green required checks (below), and the rule applies to
+admins too.
 In a project created with the setup script, the script turns this on.
 What it enforces, how to check it works, and how to turn it on by hand:
 `docs/DEV_INFRASTRUCTURE.md`, "Branch protection runbook".
+
+**This repo's own checks** (they do not ship, so they are described
+here and not in `docs/DEV_INFRASTRUCTURE.md`). `main` has two required
+checks: `build` and `bootstrapper-test`. The second tests the release
+pipeline, which projects do not have. Its workflow
+(`bootstrapper.yml`) runs on pull requests to `main` and pushed `v*`
+tags only, not on branch pushes, and a newer push to a pull request
+cancels the older run. Each OS leg of the bootstrap script's tests runs
+as 4 parallel shards (`BOOTSTRAP_TEST_SHARD`), and `bootstrapper-test`
+fails unless every shard succeeded and, for every OS, the shards
+together ran every test exactly once (`bootstrap/check-shards.sh`).
+After a merge, that workflow does not run on `main`: the required
+checks are not strict ("require branches to be up to date" is off), so
+a pull request's run can predate another pull request's merge, and the
+workflow's suites and its OS matrix do not run on the combined tree
+until a `v*` tag, whose run still gates the release. This repo's
+`ci.yml` and `packs.yml` do run on `main` after every merge, because
+they trigger on pushes to any branch. Retargeting a stacked pull
+request's base to `main` is an `edited` event, which is not among the
+default `pull_request` event types, so `bootstrapper-test` stays
+missing (and the merge blocked) until a new push or a close and
+reopen. A project sets its own required checks and does not copy
+these.
+
+This repo's `ci.yml` is not the stub a new project starts with: its
+`build` runs the same test-first check as the packs' CI, with patterns
+for this repo's scripts, workflows and pack files.
 
 ## Reference implementation
 

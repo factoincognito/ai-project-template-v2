@@ -3685,7 +3685,6 @@ check_actions() {
 # self-check, saving, sending and proposing the change".
 
 SETUP_BRANCH=bootstrap-setup
-TEMPLATE_URL=https://github.com/factoincognito/ai-project-template-v2
 PACKS="node web python react-native"
 
 # clone_project: spec step 4. gh repo clone gives no HTTP status, so a
@@ -3812,21 +3811,26 @@ remove_setup_section() {
   rm -f "$tmp"
 }
 
-# replace_text <file> <text> <new text>: replaces every <text> in the file
-# with <new text>, literally (awk index(), values passed through ENVIRON:
-# never read as a pattern, and no sed -i, which differs on macOS).
-replace_text() {
+# remove_pack_section <file> <pack>: deletes the section of that pack
+# from a doc: from its heading, a "### " line that ends with
+# "(`<pack>` pack)", up to the next line that starts with "### " or "## "
+# outside a code block (``` lines), or the end of the file. Empty lines
+# are written only before a line that stays, so none is left at the end.
+# Returns 1, changing nothing, when there is none.
+remove_pack_section() {
   local tmp
   tmp="$(make_temp)"
-  RT_FROM="$2" RT_TO="$3" awk_run 'BEGIN { from = ENVIRON["RT_FROM"]; to = ENVIRON["RT_TO"] }
-    {
-      out = ""; line = $0
-      while ((i = index(line, from)) > 0) {
-        out = out substr(line, 1, i - 1) to
-        line = substr(line, i + length(from))
-      }
-      print out line
-    }' <"$1" >"$tmp"
+  if ! HEAD_END="(\`$2\` pack)" awk_run '
+    /^ *```/ { fence = !fence }
+    !fence && skip && (/^### / || /^## /) { skip = 0 }
+    !fence && /^### / && substr($0, length($0) - length(ENVIRON["HEAD_END"]) + 1) == ENVIRON["HEAD_END"] { skip = 1; found = 1 }
+    skip { next }
+    /^$/ { blanks++; next }
+    { while (blanks > 0) { print ""; blanks-- } print }
+    END { exit !found }' <"$1" >"$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
   cat "$tmp" >"$1"
   rm -f "$tmp"
 }
@@ -3871,10 +3875,9 @@ check_copy_fits() {
 
 # tidy_up: spec step 9. The README's setup section goes; languages/ keeps
 # only the chosen pack's files that were not laid out (LP_KEPT); the
-# links in docs/DEV_INFRASTRUCTURE.md to the other packs' code-standards.md
-# point to the template on GitHub; the script's own copy and the
-# bootstrapper's own README (.github/README.md) go; licenses/
-# and everything else stay.
+# sections of docs/DEV_INFRASTRUCTURE.md for the other packs go; the
+# script's own copy and the bootstrapper's own README (.github/README.md)
+# go; licenses/ and everything else stay.
 tidy_up() {
   local keep f p
   step_start "Removing what only the setup needed from the copy"
@@ -3892,8 +3895,7 @@ tidy_up() {
   rmdir "$keep"
   for p in $PACKS; do
     [ "$p" != "$IN_PACK" ] || continue
-    replace_text "$IN_DIR/docs/DEV_INFRASTRUCTURE.md" "\`languages/$p/code-standards.md\`" \
-      "$TEMPLATE_URL/blob/main/languages/$p/code-standards.md"
+    remove_pack_section "$IN_DIR/docs/DEV_INFRASTRUCTURE.md" "$p" || true
   done
   rm -f "$IN_DIR/bootstrap-project.sh" "$IN_DIR/.github/README.md"
   step_end "The setup section of README.md, the bootstrapper's own README (.github/README.md), the other language packs and the setup script itself are gone from the copy."

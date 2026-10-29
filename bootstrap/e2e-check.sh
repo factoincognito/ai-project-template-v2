@@ -41,7 +41,6 @@ POLYFORM_TEXT=licenses/PolyForm-Noncommercial-1.0.0.md
 READBACK_JQ='"contexts=\(.required_status_checks.contexts // [] | join(","))", "strict=\(.required_status_checks.strict)", "enforce_admins=\(.enforce_admins.enabled)", "approvals=\(.required_pull_request_reviews.required_approving_review_count)", "restrictions=\(.restrictions)", "allow_force_pushes=\(.allow_force_pushes.enabled)", "allow_deletions=\(.allow_deletions.enabled)"'
 REQUIRE_READBACK="contexts=build strict=false enforce_admins=true approvals=0 restrictions=null allow_force_pushes=false allow_deletions=false"
 PACKS="node web python react-native"
-TEMPLATE_URL=https://github.com/factoincognito/ai-project-template-v2
 
 # The other GitHub answers read, through gh's --jq.
 REPO_JQ='"\(.full_name)|\(.private)|\(.template_repository.full_name // "-")|\(.delete_branch_on_merge)|\(.allow_squash_merge)"'
@@ -651,12 +650,14 @@ check_pack_links() {
   file_text docs/DEV_INFRASTRUCTURE.md
   for p in $PACKS; do
     [ "$p" != "$PACK" ] || continue
-    case "$TEXT" in *"\`languages/$p/code-standards.md\`"*) bad="${bad:+$bad, }languages/$p/code-standards.md" ;; esac
+    case "$TEXT" in
+      *"languages/$p/"* | *"(\`$p\` pack)"*) bad="${bad:+$bad, }$p" ;;
+    esac
   done
   if [ -n "$bad" ]; then
-    result FAIL pack-links "docs/DEV_INFRASTRUCTURE.md still points into the project for packs it no longer has: $bad (the run points them to $TEMPLATE_URL)."
+    result FAIL pack-links "docs/DEV_INFRASTRUCTURE.md still has a section or a link for packs the project does not use: $bad (the run removes their sections)."
   else
-    result PASS pack-links "docs/DEV_INFRASTRUCTURE.md points to the template on GitHub for the other packs' code standards."
+    result PASS pack-links "docs/DEV_INFRASTRUCTURE.md has no section or link for packs the project does not use."
   fi
 }
 
