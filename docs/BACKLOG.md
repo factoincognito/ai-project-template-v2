@@ -898,7 +898,7 @@ get a working project in any supported language.
 
   **Rules that apply.** Script and test changes are code: test-first (red run in the PR), reviewed by Crog on Opus.
 
-- **[NEXT] PBI-1.29** (Adam, 2026-10-29, from a product office session; Adam chose Clead's recommendation; the WHAT is Adam's, the HOW is Clead's; specced in PR #304, waiting for Adam's confirmation of the spec and the README draft) — The bootstrapper and the projects it makes need nothing from the template to work.
+- **[NEXT] PBI-1.29** (Adam, 2026-10-29, from a product office session; Adam chose Clead's recommendation; the WHAT is Adam's, the HOW is Clead's; specced in PR #304; spec and README draft confirmed by Adam 2026-10-29, recorded on #304; part 2 being built) — The bootstrapper and the projects it makes need nothing from the template to work.
 
   **Why (Adam, 2026-10-29).** Someone about to bootstrap a project meets the bootstrapper, not the template, which is our development repo. Adam questioned whether the deliverable should depend on the template project at all.
 
@@ -915,7 +915,7 @@ get a working project in any supported language.
 
   **Rules that apply.** Build-script and test changes are code: test first, reviewed by the role that did not write it. Changes to process documents that ship are reviewed by Crog.
 
-  **Spec (Clead, 2026-10-29, PR #304; approved by a Crog agent in review round 2; nothing is built until Adam confirms this spec and the README draft in chat).**
+  **Spec (Clead, 2026-10-29, PR #304; approved by a Crog agent in review rounds 2 and 3; confirmed by Adam 2026-10-29, with the open points as proposed).**
 
   1. **Two READMEs.**
      - **The bootstrapper's own README.** Its source is `bootstrap/bootstrapper-README.md`, in the template only (`bootstrap/` does not ship). The release build writes it to `.github/README.md` in the bootstrapper. GitHub shows a README in `.github/` before one at the root (GitHub's documented order: `.github/`, the root, `docs/`). Not re-read in this session: docs.github.com is not reachable from the cloud session. It is the first check of part 2 (see "Checks"); if it does not hold, the fallback is the swap below.
