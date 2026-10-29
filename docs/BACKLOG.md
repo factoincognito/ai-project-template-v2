@@ -808,6 +808,26 @@ get a working project in any supported language.
 
   **Rules that apply.** Code and config: test-first, reviewed by the role that did not write it.
 
+- **[LATER] PBI-1.24** (Adam, 2026-10-29, from a product office session on PO-62; the WHAT is Adam's, the HOW is Clead's; not yet specced, reviewed or intent-approved) — A setup option for whether a project includes Claude support.
+
+  **Why (Adam, 2026-10-29).** The person setting up a project chooses whether the AI files are included in the GitHub project. A project without Claude support is the conventional development project that "Working without Claude" in the README describes (PO-62, PR #277).
+
+  **Approach (Adam chose Clead's recommendation, 2026-10-29).** Files that a project needs either way are written in role-neutral wording, so one version works with and without Claude. The option then only leaves out the files that exist only for Claude. There are not two versions of each file.
+
+  **Facts (Clead, checked 2026-10-29 at main e9fa8cd).**
+  - Files that exist only for Claude, so the option can leave them out: `CLAUDE.md`, `memory/roles.md`, `memory/context.md`, `docs/CROG_ONBOARDING.md`, `docs/ROUTINES.md`, `docs/NEXT_SESSION.md`, `.github/workflows/review.yml`, `.github/workflows/changelog.yml`.
+  - Files a project needs either way that name Claude, Clead or Crog, so they need role-neutral wording: `README.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `memory/standards.md`, `docs/SPEC.md`, `docs/BACKLOG.md`, `docs/DEV_INFRASTRUCTURE.md`, `docs/decisions/0001-rebuild-workflow.md`, `CHANGELOG.md`, `licenses/NOTICE`, `languages/README.md`, every pack's `code-standards.md`, and the script's closing messages (`say_left_for_clead` and the "What to do next" text).
+  - The script already removes files at setup: `tidy_up` drops the README's setup section and every pack but the chosen one. Leaving out more files uses the same step.
+  - What it touches beyond that: the fill table, the answer file that `--again` and `--resume` read, `bootstrap/e2e-check.sh`, the tests in `bootstrap/test-bootstrap-project.sh`, and the end-to-end run plan, which gets a second variant.
+
+  **Open (Clead, for the spec).** The option's name and default, and how the interactive question words it. What "Working without Claude" says in a project set up without Claude support. Whether a project set up without Claude support can add it later, and how.
+
+  **Order (Clead's proposal, not decided).** After the end-to-end runs (`docs/NEXT_SESSION.md`, Adam's to-do 2) have passed, because the option changes the bootstrap script that the runs test.
+
+  **Rules that apply.** The spec needs Adam's intent approval. Script, test and workflow changes are code: test-first, reviewed by Crog on Opus. Wording changes to process documents are reviewed by Crog.
+
+  **Done when.** Written when specced.
+
 ---
 
 ## Phase 2 — Validate unproven pieces
