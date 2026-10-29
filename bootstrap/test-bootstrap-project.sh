@@ -4479,6 +4479,7 @@ test_the_npm_guide_on_macos_and_windows_keeps_its_steps() {
   # says why it must be the Start menu, and so does the line after it.
   expect_out "$d" "3. Close this window, open Git Bash again from the Start menu, and start the script there. Use the Start menu, not a new window opened from this one: a window opened from another one keeps that window's old list of the folders where programs are found, so it would not find the new npm either."
   expect_out "$d" "If you see something else: if the script still says that npm is not installed, close this window, open Git Bash again from the Start menu (not from this window), and start the script again there."
+  expect_no_out "$d" "close this window, open a new one"
 }
 
 test_in_wsl_the_windows_npm_counts_as_no_npm_and_its_guide_says_why() {
