@@ -19,6 +19,11 @@ A bootstrapped project records the tag it was built from.
 - Backlog: PBI-1.26, exclude macOS for now while keeping its code working, and PBI-1.27, re-enable it (PR #281)
 - Backlog: PBI-1.28, the setup checks that the computer meets the minimum versions of everything it needs to finish (PR #282)
 - Backlog: PBI-1.27 brings macOS back together with PBI-1.28's minimum-version checks (PR #284)
+- End-to-end run 3 moves from macOS to Windows (Git Bash) in NEXT_SESSION and `STATUS.md`; backlog: PBI-1.26 does not wait for the end-to-end runs (PR #285)
+- Backlog: PBI-1.25 to NEXT, in the unattended batch; it does not wait for the end-to-end runs (PR #286)
+- Recorded end-to-end runs 3 and 4 on v2.8.2 in NEXT_SESSION and `STATUS.md`: run 3 (python, Windows, Git Bash) stopped at finding r3f, the python project's `build` failing; run 4 (react-native, `--non-interactive`) passed (PR #287)
+- End-to-end run 3, r3f: the chain test (`packs.yml`) builds each pack's project with the files the setup keeps in `languages/<pack>/`, as the setup does, and the python pack's `code-standards.md` now passes ruff's format check, which failed `build` in every python project set up with v2.8.2 (PR #288)
+- Recorded in NEXT_SESSION that r3f is fixed on main (PR #289)
 
 ## [2.8.2] — 2026-10-28
 
