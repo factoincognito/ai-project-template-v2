@@ -84,7 +84,7 @@ names only: whether a test exercises the code is for review.
 Building a `MagicMock(spec=socket.socket)` inside a `with patch("socket.socket"):` block raises `InvalidSpecError: Cannot spec a Mock object`, because by then `socket.socket` is itself a mock. Build the mock first, then patch:
 
 ```python
-mock_sock = MagicMock(spec=socket.socket)   # before the patch
+mock_sock = MagicMock(spec=socket.socket)  # before the patch
 with patch("socket.socket", return_value=mock_sock):
     ...
 ```
