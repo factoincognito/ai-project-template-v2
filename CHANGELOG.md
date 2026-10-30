@@ -6,6 +6,8 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.8.4] — 2026-10-30
+
 ### Added
 - Release prep for v2.8.3 (PR #297)
 - Recorded in NEXT_SESSION that winget stays in the script's gh guide (r3b) (PR #298)
@@ -21,6 +23,7 @@ A bootstrapped project records the tag it was built from.
 - Backlog: PBI-1.33, Adam's WHAT and the path for urgent updates (PR #308)
 - The setup section of the README a new project starts with is headed "Finishing the setup", with nothing asking the reader to delete it; the setup removes `.github/README.md`; `e2e-check.sh` checks that it is gone (PBI-1.29) (PR #309)
 - What ships no longer points to the template outside the record of origin: `docs/DEV_INFRASTRUCTURE.md` and `docs/ROUTINES.md` lose their template pointers, and the setup removes the other packs' sections from `docs/DEV_INFRASTRUCTURE.md` instead of linking them to the template (PBI-1.29) (PR #310)
+- Recorded in NEXT_SESSION that the run 5 rehearsal findings r5r-a to r5r-g are addressed by PBI-1.29, with r5r-d's leftover in the project README kept for later (PR #311)
 
 ## [2.8.3] — 2026-10-29
 
