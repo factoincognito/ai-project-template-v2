@@ -1039,6 +1039,16 @@ get a working project in any supported language.
   - Not checked: how much of Adam's plan usage a scheduled task's session draws; measured on the first runs and reported.
 
   **Rules that apply.** The procedure is a process document: reviewed by Crog. Any script, workflow or test is code: test first, reviewed by the role that did not write it. The scheduled task's prompt follows the product office's rules for scheduled tasks (it runs without asking for approval; its setting is reported).
+
+- **[LATER] PBI-1.35** (Adam, 2026-10-30, from a product office session: "as per your recommendation"; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — Keep the clean-session checklist, drop the `..wrap` ritual and the PIN workflow.
+
+  **Why (2026-10-30).** Adam has not used `..wrap` in a long time. Decisions are now written to the repo through a PR when they are made, the stop hook flags uncommitted and unpushed work after each turn, and the weekly loose-ends sweep catches what is left across the repos; `..wrap` rarely finds anything those missed. Pins live only in a chat and are not used.
+
+  **The WHAT (Adam, 2026-10-30, Clead's recommendation).** The seven conditions of "Clean session end state" stay. A session checks them itself whenever it reports work as done, or when Adam says he is stopping, in any words; no stop word is needed. `..wrap` and the PIN workflow come out of `CLAUDE.md`, in the template and so in every new project.
+
+  **For the spec.** Where `CLAUDE.md` names `..wrap` or pins (the "Session end" section, the graduation rule, the PIN workflow, condition 7) and any other file that does (search the repo, `bootstrap/stubs/` included); whether projects already bootstrapped get the change (not in scope unless Adam says so); the product office's own `CLAUDE.md` and memory notes that mention `..wrap`, through the product office.
+
+  **Rules that apply.** A process change to `CLAUDE.md`: reviewed by Crog. Any check or test that pins the text is code: test first.
 ---
 
 ## Phase 2 — Validate unproven pieces
