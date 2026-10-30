@@ -209,10 +209,13 @@ here first:
   - gh installed, but too old for the script;
   - Node.js and npm not installed (only for the node, web and
     react-native packs; the guide points to https://nodejs.org). On
-    Linux, and in Linux on Windows (WSL), only a window opened after the
-    install finds the new npm, so this one does not go on with Enter:
-    type `q`, then start the script again in a new window with the
-    command it shows;
+    Linux, in Linux on Windows (WSL) and on Windows (Git Bash), only a
+    window opened after the install finds the new npm, so this one does
+    not go on with Enter: type `q`, copy the command it shows, close the
+    window, and run that command in a new window. On Windows, open that
+    window from the Start menu, not from the window you are closing: a
+    window opened from another one keeps the old list of the folders
+    where programs are found;
   - only the Windows npm found in Linux on Windows (WSL): a project in
     Linux should not use it, and the guide shows how to install Node.js
     in Linux, then start again in a new window, as above;

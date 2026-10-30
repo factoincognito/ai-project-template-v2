@@ -4499,9 +4499,26 @@ test_the_npm_guide_on_macos_and_windows_keeps_its_steps() {
   # End-to-end run 4, r4a: a Git Bash window opened from the old one kept
   # its old program search list, so npm was still not found; the step
   # says why it must be the Start menu, and so does the line after it.
-  expect_out "$d" "3. Close this window, open Git Bash again from the Start menu, and start the script there. Use the Start menu, not a new window opened from this one: a window opened from another one keeps that window's old list of the folders where programs are found, so it would not find the new npm either."
-  expect_out "$d" "If you see something else: if the script still says that npm is not installed, close this window, open Git Bash again from the Start menu (not from this window), and start the script again there."
+  # p2.8.4-c (newcomer pre-check on v2.8.4): as on Linux and in WSL, the
+  # command to start again is shown only after q, so step 3 says to type
+  # q first and copy it, and the line after it says the same.
+  expect_out "$d" "3. When the installer has finished, type q here if the script waits, and copy the command it shows to start again. Then close this window, open Git Bash again from the Start menu, and run that command there. Use the Start menu, not a new window opened from this one: a window opened from another one keeps that window's old list of the folders where programs are found, so it would not find the new npm either."
+  expect_out "$d" "If you see something else: if the script still says that npm is not installed, type q if the script waits and copy the command it shows; then close this window, open Git Bash again from the Start menu (not from this window), and run that command there."
   expect_no_out "$d" "close this window, open a new one"
+  expect_no_out "$d" "and start the script there"
+  expect_no_out "$d" "and start the script again there"
+  expect_out "$d" "To start again, run this command:"
+  expect_nothing_ran "$d"
+  # Without --non-interactive the script waits; after q it shows the
+  # command to start again, as step 3 says.
+  d="$(tmpdir)"
+  on_os "$d" windows
+  missing "$d" npm
+  printf 'q\n' >"$d/in"
+  pre "$d" with_pack node preflight_npm
+  expect_rc 3 "$d"
+  expect_out "$d" "Press Enter to check again, or type q to stop:"
+  expect_out "$d" "To start again, run this command:"
 }
 
 test_in_wsl_the_windows_npm_counts_as_no_npm_and_its_guide_says_why() {
@@ -12318,6 +12335,22 @@ test_template_readme_lists_every_guide_in_its_group() {
       guide_gh | guide_npm | guide_dir | guide_project | guide_published_version) continue ;; # pick one of the guides above
     esac
     grep -q "^$g|" <<<"$README_GUIDES" || die "the script's guide $g is not in README_GUIDES (add it to the README and here)"
+  done
+}
+
+test_template_readme_says_for_windows_too_to_type_q_before_closing_the_window() {
+  # p2.8.4-c (newcomer pre-check on v2.8.4): the README's bullet for
+  # Node.js and npm said that on Linux and in WSL the window does not go
+  # on with Enter and q shows the command to start again; on Windows the
+  # guide has the same pause, so the bullet says the same for Windows,
+  # and keeps the reason for the Start menu.
+  local bullet t
+  bullet="$(guide_group recheck | tr '\n' ' ' | sed 's/  */ /g')"
+  bullet="${bullet#*- Node.js and npm not installed}"
+  bullet="${bullet%%- only the Windows npm*}"
+  [ -n "$bullet" ] || die "the Node.js and npm bullet was not found (test is stale)"
+  for t in 'on Windows (Git Bash)' 'type `q`, copy the command it shows' 'from the Start menu, not from the window you are closing' 'keeps the old list of the folders where programs are found'; do
+    grep -qF -- "$t" <<<"$bullet" || die "the README's Node.js and npm bullet lacks: $t"
   done
 }
 
