@@ -12671,6 +12671,21 @@ first_line_of() {
   printf '%s\n' "$n"
 }
 
+# with_answers <stream> <answers> <counts>: prints the stream as a
+# terminal would show it: every question has its answer after it. The
+# script ends each question with a colon and a space and, as its input
+# is not a terminal, with a line break of its own, in place of the Enter
+# that ends what a person types; so the answer goes at the end of that
+# line. <counts> gets "<questions> <answers>": the same number, when
+# every question was answered and no answer was left.
+with_answers() {
+  tr -d '\r' <"$1" | awk -v counts="$3" '
+    NR == FNR { answer[++n] = $0; next }
+    /: $/ { k++; print $0 answer[k]; next }
+    { print }
+    END { print k + 0, n + 0 >counts }' <(tr -d '\r' <"$2") -
+}
+
 # The answers of the newcomer, fixed (docs/NEWCOMER_PRECHECK.md). An
 # empty one is Enter, which takes the answer the script suggests.
 NEWCOMER_FIRST_RUN=(tool-share 'Tool Share' 'Lets neighbours lend each other tools.' '' '' web '' '' mit '' '' '' '' q)
@@ -12684,7 +12699,7 @@ test_the_screen_of_the_setup_a_newcomer_meets_is_written_for_the_precheck() {
   # shows, in a new window with npm present, goes through. The files
   # written to BOOTSTRAP_NEWCOMER_SCREEN (a folder of your choice; if it
   # is not set, a folder of this test) are what the persona is given.
-  local d s dest cmd a b c
+  local d s dest cmd line a b c
   d="$(tmpdir)"
   dest="${BOOTSTRAP_NEWCOMER_SCREEN:-$d/screen}"
   mkdir -p "$dest" || die "cannot make the folder $dest"
@@ -12737,9 +12752,51 @@ test_the_screen_of_the_setup_a_newcomer_meets_is_written_for_the_precheck() {
   [ "$(calls_from_create "$d" | sed -n 1p)" = 'repo create octo-user/tool-share --template factoincognito/ai-project-bootstrap --public --description Lets neighbours lend each other tools.' ] \
     || { cat "$d/gh.log" >&2; die "the project was not created from the answers"; }
 
-  # The two texts the persona is given.
+  # The two texts the persona is given: the screen of both runs, each
+  # answer after its question, and the README the build wrote.
+  printf '%s\n' "${NEWCOMER_FIRST_RUN[@]}" >"$d/answers1"
+  with_answers "$d/stream1" "$d/answers1" "$d/counts1" >"$d/shown1"
+  with_answers "$d/stream2" "$d/in2" "$d/counts2" >"$d/shown2"
+  [ "$(cat "$d/counts1")" = "${#NEWCOMER_FIRST_RUN[@]} ${#NEWCOMER_FIRST_RUN[@]}" ] \
+    || { cat "$d/stream1" >&2; die "the first run asked $(cut -d' ' -f1 <"$d/counts1") questions, with ${#NEWCOMER_FIRST_RUN[@]} answers given (a question at the terminal needs its answer in the test too)"; }
+  [ "$(cat "$d/counts2")" = "${#NEWCOMER_SECOND_RUN[@]} ${#NEWCOMER_SECOND_RUN[@]}" ] \
+    || { cat "$d/stream2" >&2; die "the second run asked $(cut -d' ' -f1 <"$d/counts2") questions, with ${#NEWCOMER_SECOND_RUN[@]} answers given"; }
+  {
+    cat "$d/shown1"
+    printf '\n%s\n\n' '----- The first window is closed. In a new Git Bash window, opened from the Start menu, the command above is run: -----'
+    cat "$d/shown2"
+  } >"$dest/screen.txt"
+  cp "$BUILT/.github/README.md" "$dest/README.md"
   [ -s "$dest/screen.txt" ] || die "screen.txt was not written to $dest"
   [ -s "$dest/README.md" ] || die "README.md was not written to $dest"
+  expect_same "README.md" "$BUILT/.github/README.md" "$dest/README.md"
+
+  # Each question is followed by its answer; an Enter leaves the end of
+  # the line as the script printed it.
+  for line in \
+    'Project name: tool-share' \
+    'Display name [tool-share]: Tool Share' \
+    'Description: Lets neighbours lend each other tools.' \
+    'Owner [octo-user]: ' \
+    'Language pack (type the number or the name): web' \
+    'Add the publishing files? (yes or no) [no]: ' \
+    'Licence (type the number or the name): mit' \
+    'Folder [./tool-share]: ' \
+    'Press Enter to check again, or type q to stop: q' \
+    'Proceed? (yes or no) [no]: yes'; do
+    [ "$(grep -cxF -- "$line" "$dest/screen.txt")" -eq 1 ] \
+      || { cat "$dest/screen.txt" >&2; die "the screen lacks, once, the line: $line"; }
+  done
+  # The two runs, in order, with the marker between them.
+  a="$(first_line_of "$dest/screen.txt" 'npm (part of Node.js) is not installed.')"
+  b="$(first_line_of "$dest/screen.txt" '----- The first window is closed.')"
+  c="$(first_line_of "$dest/screen.txt" 'The setup is finished.')"
+  [ "$a" -lt "$b" ] && [ "$b" -lt "$c" ] || { cat "$dest/screen.txt" >&2; die "the runs are not in order on the screen"; }
+  # The stop of the first run, printed to stderr, is on the screen after
+  # the command printed to stdout and before the second run.
+  a="$(first_line_of "$dest/screen.txt" 'To start again, run this command:')"
+  c="$(first_line_of "$dest/screen.txt" 'What happened: npm (part of Node.js) is not installed.')"
+  [ "$((a + 1))" -lt "$c" ] && [ "$c" -lt "$b" ] || { cat "$dest/screen.txt" >&2; die "the stop is not between the command and the second run"; }
 }
 
 # ---------- run ----------
