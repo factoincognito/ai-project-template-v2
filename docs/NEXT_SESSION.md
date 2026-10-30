@@ -193,7 +193,8 @@ Written 2026-10-02 so the order does not have to be re-derived. "Clead" is the n
 | Release v2.8.0 verified | done 2026-10-27: #247, #248, #252; release prep #251 (`72da0d4`), tag `v2.8.0` by Adam; tag run 40558089914 green including `publish`; bootstrapper `main` and its tag `v2.8.0` at `9d6266c`, script stamped `v2.8.0`/`72da0d4`, executable, LF | |
 | Release v2.8.1 verified | done 2026-10-28: #255, #256, #257; release prep #258; tag `v2.8.1` by Adam on `2ff2459`; tag run 40638092458 green including `publish`; bootstrapper `main` and its tag `v2.8.1` at `91c192c`, script stamped `v2.8.1`/`2ff2459`, executable, LF | |
 | PBI-1.29 built and released as v2.8.4 | spec #304; built in #306, #309, #310; release prep, then Adam tags `v2.8.4` and Clead verifies the release (including GitHub showing `.github/README.md` on the bootstrapper's page) | The release prep merged |
-| End-to-end runs on throwaway repos; PBI-1.17 to `[DONE]` | Adam runs, in the order of to-do 2 (runs 1 to 4 done; next: run 5); Clead reads the `e2e-check.sh` output; PBI-1.17 done 2026-10-29 | PBI-1.29 released (Adam, 2026-10-29: before run 5), and a tester for run 5 |
+| PBI-1.30, the newcomer persona pre-check, on v2.8.4 | Clead, Adam's go of 2026-10-30: spec (#314), then the build, then the run with its findings recorded and fixed; each piece ends merged | v2.8.4 verified |
+| End-to-end runs on throwaway repos; PBI-1.17 to `[DONE]` | Adam runs, in the order of to-do 2 (runs 1 to 4 done; next: run 5); Clead reads the `e2e-check.sh` output; PBI-1.17 done 2026-10-29 | PBI-1.29 released (Adam, 2026-10-29: before run 5), and the PBI-1.30 pre-check passed on it |
 | acuteping created | Adam | The end-to-end runs |
 
 ---

@@ -18,7 +18,7 @@ Build and release: the turn-key bootstrap script is built (v2.4.0); the fixes fo
 PBI-1.29 is built and merged (#306, #309, #310): the bootstrapper has its own README, the setup removes that README and the other packs' sections from each new project, and nothing that ships points to the template outside the record of origin. Release prep for v2.8.4 is done; after the tag, check that GitHub shows the bootstrapper's own README on its page. Runs 1 to 4 have passed. The C# base language pack (PBI-1.23): part 1 is done; part 2 (the bootstrap script offers the pack) waits until the end-to-end runs pass.
 
 ## Next step
-Adam tags v2.8.4 on 8047976; Clead checks the release. Then the newcomer persona pre-check (PBI-1.30), then run 5.
+Clead checks the v2.8.4 release (tagged by Adam on 3200842). Then the newcomer persona pre-check (PBI-1.30), in three pieces that each end merged: the spec (#314), the build, the persona's run on v2.8.4 with its findings fixed. Then run 5.
 
 ## Blockers
 None. acuteping waits until run 5 passes.
