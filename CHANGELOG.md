@@ -6,6 +6,22 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Added
+- Release prep for v2.8.3 (PR #297)
+- Recorded in NEXT_SESSION that winget stays in the script's gh guide (r3b) (PR #298)
+- Recorded in NEXT_SESSION and `STATUS.md` that v2.8.3 is released and verified; run 3 next on it (PR #299)
+- Recorded run 3 on v2.8.3 as passed; PBI-1.17 done; run 5 next (PR #300)
+- Backlog: PBI-1.29, the bootstrapper needs nothing from the template (PR #301)
+- NEXT_SESSION: Adam rehearses run 5 first, on v2.8.3 (PR #302)
+- Recorded the run 5 rehearsal findings r5r-a to r5r-g; PBI-1.29 widened to the bootstrapper's own README (PR #303)
+- PBI-1.29 spec, confirmed by Adam, and the draft of the bootstrapper's own README; the template README's setup part marked for the build to copy and ordered for a newcomer; "Working from another computer" in the README a new project starts with; backlog PBI-1.31, the Claude parts of a project as an add-on (`[LATER]`) (PR #304)
+- Backlog: PBI-1.30, a newcomer persona as a pre-check before human runs (PR #305)
+- The bootstrapper gets its own README: the release build writes `.github/README.md` from `bootstrap/bootstrapper-README.md` with the template README's setup part copied in, so the steps exist in one place; `languages/README.md` no longer ships (PBI-1.29) (PR #306)
+- Backlog: PBI-1.32, the product office's "For you" rule in `CLAUDE.md` for every bootstrapped project, and PBI-1.33, a regular check for new versions of the language packs' components (PR #307)
+- Backlog: PBI-1.33, Adam's WHAT and the path for urgent updates (PR #308)
+- The setup section of the README a new project starts with is headed "Finishing the setup", with nothing asking the reader to delete it; the setup removes `.github/README.md`; `e2e-check.sh` checks that it is gone (PBI-1.29) (PR #309)
+- What ships no longer points to the template outside the record of origin: `docs/DEV_INFRASTRUCTURE.md` and `docs/ROUTINES.md` lose their template pointers, and the setup removes the other packs' sections from `docs/DEV_INFRASTRUCTURE.md` instead of linking them to the template (PBI-1.29) (PR #310)
+
 ## [2.8.3] — 2026-10-29
 
 ### Added
