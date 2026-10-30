@@ -1022,6 +1022,23 @@ get a working project in any supported language.
   - Not in scope unless Adam says so: bringing the updates into projects already bootstrapped.
 
   **Rules that apply.** Workflow and config changes are code: test first, reviewed by the role that did not write it.
+
+- **[LATER] PBI-1.34** (Adam, 2026-10-30, from a product office session; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — The newcomer pre-check (PBI-1.30) runs several times, nightly, whenever what a newcomer reads has changed.
+
+  **Why (Adam, 2026-10-30).** The persona is not consistent: a run can read past something that the next run stops at (seen on 2026-10-30: the second run stopped at five lines the first read past). Several runs per change lower the risk of a skipped stop.
+
+  **The WHAT (Adam, 2026-10-30).** A scheduled task is started every night. Its control step first checks whether anything has changed that a persona test would touch; only then does it run the persona test several times (Adam's 5 or 10 are examples, not decided).
+
+  **Clead's thoughts (2026-10-30; the spec settles them):**
+  - The control step compares against the last commit the persona checked, recorded with its results, not against the previous night, so a missed night loses nothing. What it compares: the files that make the two texts (the template README's setup part, `bootstrap/bootstrapper-README.md`, the setup script). Nothing changed: the task ends at once, at little cost.
+  - Changed: the two texts are made once, then N persona runs on Haiku at low effort, in parallel; N starts at 5 and is raised if the last runs still add new stops, lowered if they never do.
+  - The persona agents read the prompt from a file, so the session that runs the task does not paste it N times; the instruction's "use no tools" allows that one read, and the quote check stays (a procedure change to `docs/NEWCOMER_PRECHECK.md`, reviewed by Crog).
+  - The stops of all runs are merged into one list, with how many runs hit each one (a signal of how likely a person is to stop there); each quote is checked against the texts; the findings, with Clead's verdicts, go into `docs/NEXT_SESSION.md` through a PR.
+  - The same N runs become the pre-check before each release tag.
+  - Limits: more runs lower random misses, not a blind spot that every run of the same model shares; the human run stays.
+  - Not checked: how much of Adam's plan usage a scheduled task's session draws; measured on the first runs and reported.
+
+  **Rules that apply.** The procedure is a process document: reviewed by Crog. Any script, workflow or test is code: test first, reviewed by the role that did not write it. The scheduled task's prompt follows the product office's rules for scheduled tasks (it runs without asking for approval; its setting is reported).
 ---
 
 ## Phase 2 — Validate unproven pieces
