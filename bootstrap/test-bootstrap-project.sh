@@ -4327,6 +4327,55 @@ test_the_gh_guide_on_windows_without_winget_names_the_msi_download() {
   expect_no_out "$d" "Download for Windows"
 }
 
+test_the_git_and_gh_guides_on_windows_have_you_type_q_first() {
+  # p2.8.4-e (found in the review of #318): as the npm guide before
+  # p2.8.4-c, the last step of the Windows git guide and gh guides said
+  # to close the window and "start the script there", before the Enter/q
+  # pause: only q shows the command to start again, so a newcomer who
+  # closes the window as told never sees it. The step now says to type q
+  # first and copy the command, then close the window, open Git Bash
+  # again from the Start menu and run that command; with and without
+  # winget. The gh guides' "If you see something else" line says the same
+  # on Windows. Other systems keep their wording.
+  local d tool with step again
+  for tool in git gh-missing gh-old; do
+    for with in "" winget; do
+      d="$(tmpdir)"
+      on_os "$d" windows
+      [ -z "$with" ] || fake_tool "$d" winget
+      case "$tool" in
+        git)
+          missing "$d" git
+          pre "$d" ni preflight_git
+          step="When the install has finished, type q here if the script waits, and copy the command it shows to start again. Then close this window, open Git Bash again from the Start menu, and run that command there, so that it finds git."
+          ;;
+        *)
+          make_stub_gh "$d/gh"; echo 9999 >"$d/$tool"; working_git "$d"
+          pre "$d" ni preflight_gh
+          step="When the install has finished, type q here if the script waits, and copy the command it shows to start again. Then close this window, open Git Bash again from the Start menu, and run that command there, so that it finds the new gh."
+          if [ "$tool" = gh-old ]; then again="if the script still says that gh is too old"; else again="if the script still says that gh is not installed"; fi
+          ;;
+      esac
+      expect_rc 3 "$d"
+      expect_out "$d" ". $step"
+      expect_no_out "$d" "and start the script there"
+      expect_out "$d" "To start again, run this command:"
+      if [ "$tool" != git ]; then
+        expect_out "$d" "${again}, type q if the script waits and copy the command it shows; then close this window, open Git Bash again from the Start menu (not from this window), and run that command there."
+        expect_no_out "$d" "close this window, open a new one"
+      fi
+    done
+  done
+  # Other systems keep their steps.
+  d="$(tmpdir)"
+  on_os "$d" macos
+  make_stub_gh "$d/gh"; echo 9999 >"$d/gh-missing"; working_git "$d"
+  pre "$d" ni preflight_gh
+  expect_rc 3 "$d"
+  expect_out "$d" "if the script still says that gh is not installed, close this window, open a new one, and start the script again there."
+  expect_no_out "$d" "type q here if the script waits"
+}
+
 test_no_offer_without_brew_or_winget_and_never_on_linux() {
   # Without brew (macOS) or winget (Windows) the guide points to a web
   # page. On Linux the package-manager line needs sudo, so it is only
