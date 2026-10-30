@@ -6332,7 +6332,7 @@ FINISHED='The setup is finished.'
 # The last two lines of every report (end-to-end run 1, finding 10): the
 # one next step, the same after a new setup and after --resume, and then
 # where to go when stuck, as the very last line.
-WHAT_NEXT='What to do next: in the Claude app, create a Claude Project for this project, add the project on GitHub, https://github.com/octo-user/my-app, to that Claude Project, and start a chat inside the Claude Project. The file CLAUDE.md in the project tells Claude the rest.'
+WHAT_NEXT='What to do next: in the Claude app, create a Claude Project for this project (how: https://support.claude.com/en/articles/9519177-how-can-i-create-and-manage-projects), add the project on GitHub, https://github.com/octo-user/my-app, to that Claude Project (how: https://support.claude.com/en/articles/10167454-using-the-github-integration), and start a chat inside the Claude Project. The file CLAUDE.md in the project tells Claude the rest.'
 ASK_CLEAD="If you ever feel stuck and do not know how to go on, Clead (Claude, the project's Tech Owner) is always there to help: just ask Clead for help, a recommendation or advice in the chat."
 
 # built_bootstrapper: BUILT is a bootstrapper made by bootstrap/build.sh
@@ -12411,6 +12411,32 @@ test_readmes_say_to_chat_inside_a_claude_project_as_the_script_does() {
     grep -qF "start a new chat inside the project's Claude Project" <<<"$body" \
       || die "$f: Starting later sessions does not start the chat inside the project's Claude Project"
   done
+}
+
+test_after_the_script_points_to_claudes_help_pages_and_names_the_github_steps() {
+  # p2.8.4-a and p2.8.4-d (newcomer pre-check on v2.8.4): "create a Claude
+  # Project ... add the GitHub project to it" gave no steps. The README's
+  # "After the script" and the script's closing line link Claude's help
+  # pages: creating a Project (its steps are not described: they were not
+  # verified) and the GitHub integration. The README names the steps that
+  # page gives (checked 2026-10-30) and the private-project case, and the
+  # GitHub App sentence that "has not been checked yet" is gone.
+  local body t create github
+  create='https://support.claude.com/en/articles/9519177-how-can-i-create-and-manage-projects'
+  github='https://support.claude.com/en/articles/10167454-using-the-github-integration'
+  body="$(section_of "$TEMPLATE_README" '### Creating a project from the template' '^##' | tr '\n' ' ' | sed 's/  */ /g')"
+  body="${body#*After the script: }"
+  body="${body%% - Working from another computer*}"
+  for t in "$create" "$github" 'How can I create and manage projects?' 'the "+" button at the top right of the project knowledge section' 'then "GitHub"' 'search for the project or paste its web address' 'choose the files' 'GitHub App'; do
+    grep -qF -- "$t" <<<"$body" || die "the README's After the script lacks: $t"
+  done
+  ! grep -qF 'has not been checked yet' <<<"$body" || die "the README's After the script still says the GitHub App part has not been checked"
+  ! grep -qF 'Only select repositories' <<<"$body" || die "the README's After the script still describes the GitHub App settings by hand"
+  for t in "$create" "$github"; do
+    grep -qF -- "$t" <<<"$WHAT_NEXT" || die "the test's next step lacks: $t (test is stale)"
+    grep -qF -- "$t" "$SCRIPT" || die "the script's closing line lacks: $t"
+  done
+  [ "$(wc -c <<<"$WHAT_NEXT")" -lt 520 ] || die "the closing line grew past 520 characters: the README carries the detail"
 }
 
 test_template_readme_branch_protection_has_no_step_reference() {
