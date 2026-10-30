@@ -12603,7 +12603,7 @@ test_remove_pack_section_cuts_to_the_next_heading_outside_a_code_block() {
   # A "## " heading ends a section too; an indented code block hides its
   # # lines; a pack heading inside a kept section's code block is not a
   # heading; no blank line is left at the end.
-  printf '%s\n' '# Doc' '### Web (`web` pack)' 'Web text.' '  ```' '  ### x' '  ## y' '  ```' 'More web.' '## Next' 'Next text.' \
+  printf '%s\n' '# Doc' '### Web (`web` pack)' 'Web text.' '  ```' '### x' '## y' '  ```' 'More web.' '## Next' 'Next text.' \
     '### Node (`node` pack)' 'Node text.' '```' '### Py (`python` pack)' '```' '' '### Mobile (`react-native` pack)' 'RN text.' >"$d/c"
   ( load_script; remove_pack_section "$d/c" web ) || die "web: returned $?"
   ( load_script; remove_pack_section "$d/c" python ) && die "python: a heading inside a code block was taken for the section"
@@ -12615,15 +12615,19 @@ test_remove_pack_section_cuts_to_the_next_heading_outside_a_code_block() {
 test_the_tidy_up_goes_on_when_another_packs_section_is_missing() {
   # A doc without one of the other packs' sections (edited by hand, or a
   # rerun) does not stop the setup; the other sections are still cut.
-  local d
+  local d rc
   d="$(tmpdir)"
   mkdir -p "$d/c/docs" "$d/c/languages/node" "$d/c/languages/web" "$d/c/.github"
   printf '%s\n' '# App' '## Finishing the setup' 'x' '## Setup' 'y' >"$d/c/README.md"
   printf '%s\n' 'standards' >"$d/c/languages/node/code-standards.md"
   printf '%s\n' 'web' >"$d/c/languages/web/code-standards.md"
   printf '%s\n' '# Doc' '## Part 2' '### Node (`node` pack)' 'Node text.' '### Mobile (`react-native` pack)' 'RN text.' >"$d/c/docs/DEV_INFRASTRUCTURE.md"
-  ( load_script; IN_DIR="$d/c"; IN_PACK=node; LP_KEPT=code-standards.md; tidy_up ) >"$d/out" 2>&1 \
-    || { cat "$d/out" >&2; die "the tidy-up stopped on a doc without the web and python sections"; }
+  # Not on the left of ||: there bash would ignore errexit in the
+  # subshell, and a failing step would not stop the tidy-up.
+  rc=0
+  ( load_script; IN_DIR="$d/c"; IN_PACK=node; LP_KEPT=code-standards.md; tidy_up ) >"$d/out" 2>&1 &
+  wait "$!" || rc=$?
+  [ "$rc" -eq 0 ] || { cat "$d/out" >&2; die "the tidy-up stopped on a doc without the web and python sections"; }
   printf '%s\n' '# Doc' '## Part 2' '### Node (`node` pack)' 'Node text.' >"$d/want"
   expect_same "DEV_INFRASTRUCTURE.md" "$d/want" "$d/c/docs/DEV_INFRASTRUCTURE.md"
   [ ! -e "$d/c/languages/web" ] || die "the other pack's folder is left"
