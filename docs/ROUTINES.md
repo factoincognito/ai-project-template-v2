@@ -29,10 +29,7 @@ Remote Control from a cloud Clead session: not reachable).
   Crog's token held as an Actions secret so it never appears in any
   Claude context.
 
-Neither is built or tested yet. The design, the dead ends already
-investigated and the related backlog items are in the template repo:
-https://github.com/factoincognito/ai-project-template-v2 (`memory/decisions.md`,
-"Path B").
+Neither is built or tested yet.
 
 ## Review Routine — input contract (hard constraint)
 

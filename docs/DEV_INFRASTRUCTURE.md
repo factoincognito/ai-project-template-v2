@@ -1,6 +1,6 @@
 # Development Infrastructure
 
-How a project made from this template is set up, built and checked: a
+How a project made with the bootstrapper is set up, built and checked: a
 new machine, CI, branch protection, commits, and the setup for each
 language pack. The rules for code in each language live in the pack's
 `code-standards.md`; this file covers everything around the code.
@@ -42,8 +42,8 @@ handles it (section 3).
 
 ### 3. Scaffolding every project has from day one
 
-Both of these ship with every project made from the template. They are
-part of the starting files, not something to add later.
+Both of these ship with every project made with the bootstrapper. They
+are part of the starting files, not something to add later.
 
 **`.gitattributes`** at the repo root sets `* text=auto eol=lf`: LF line
 endings in the repo and in every checkout, on every OS. Why it is
@@ -76,14 +76,12 @@ GitHub does not let authors approve their own PRs. Review happens as a
 verdict comment instead (see `CLAUDE.md`, "Change execution model").
 
 **Turning it on in a new project.** The setup script,
-`bootstrap-project.sh` (see the README of
-https://github.com/factoincognito/ai-project-template-v2), does this:
-it protects `main` right after it creates the project, and adds `build`
-as a required check once the setup pull request's `build` has passed.
-It then reads the protection back and reports it. The steps below are
-the fallback, for a project set up without the script or whose
-protection was changed by hand (repo owner, once, after the first push
-of the pack's `ci.yml`):
+`bootstrap-project.sh`, does this: it protects `main` right after it
+creates the project, and adds `build` as a required check once the setup
+pull request's `build` has passed. It then reads the protection back and
+reports it. The steps below are the fallback, for a project set up
+without the script or whose protection was changed by hand (repo owner,
+once, after the first push of the pack's `ci.yml`):
 
 1. Push a branch and let CI run once. The required-checks picker only
    offers checks that have run in the repo recently.
@@ -103,40 +101,13 @@ failing test: the merge button must stay blocked until the check is
 green. Then close it without merging. A setting that shows as "on" is
 not proof on its own.
 
-**In the template repo.** The template's own `main`
-(https://github.com/factoincognito/ai-project-template-v2) is protected the
-same way, with two required checks: `build` and `bootstrapper-test`.
-The second tests the template's release pipeline, which projects do not
-have. Its workflow (`bootstrapper.yml`) runs on pull requests to `main`
-and pushed `v*` tags only, not on branch pushes, and a newer push to a
-pull request cancels the older run. Each OS leg of the bootstrap
-script's tests runs as 4 parallel shards (`BOOTSTRAP_TEST_SHARD`), and
-`bootstrapper-test` fails unless every shard succeeded and, for every
-OS, the shards together ran every test exactly once
-(`bootstrap/check-shards.sh`). After a merge, that workflow does
-not run on `main`: the required checks are not strict ("require
-branches to be up to date" is off), so a pull request's run can predate
-another pull request's merge, and the workflow's suites and its OS
-matrix do not run on the combined tree until a `v*` tag, whose run
-still gates the release. The template's `ci.yml` and `packs.yml` do run
-on `main` after every merge, because they trigger on pushes to any
-branch. Retargeting a stacked
-pull request's base to `main` is an `edited` event, which is not among
-the default `pull_request` event types, so `bootstrapper-test` stays
-missing (and the merge blocked) until a new push or a close and reopen.
-A project sets its own required checks and does not copy the
-template's.
-
 ### 5. CI/CD
 
 **CI runs on every push to any branch and on every pull request to
 `main`** (GitHub Actions, `.github/workflows/ci.yml`). A new project
 starts with a stub `ci.yml` that only checks out the code; the language
 pack's `ci.yml` replaces it. The stub has no test-first check because,
-with no pack, there is no `src/` to define code by. In the template
-repository itself `ci.yml` is not the stub: its `build` runs the same
-check, with patterns for the template's scripts, workflows and pack
-files.
+with no pack, there is no `src/` to define code by.
 
 The rules every pack's CI follows:
 
@@ -196,9 +167,7 @@ management (until there is a secret).
 ## Part 2: Per language
 
 Each pack's `code-standards.md` is the reference for its rules and
-commands. It sits in `languages/<pack>/` in a new project; if that
-folder has been deleted after setup, the same file is in the template
-repo at https://github.com/factoincognito/ai-project-template-v2/tree/main/languages.
+commands. It sits in `languages/<pack>/` in a new project.
 
 ### Python (`python` pack)
 
@@ -276,9 +245,12 @@ commands: `languages/node/code-standards.md`.
 
 ### Static web page (`web` pack)
 
-Everything in the `node` pack, plus a Vite build into one
-self-contained HTML file and Playwright browser tests. Setup, commands
-and the optional Cloudflare deploy: `languages/web/code-standards.md`.
+Node.js 24, Biome, TypeScript strict mode and Jest with an 80% line
+coverage gate, plus a Vite build into one self-contained HTML file and
+Playwright browser tests. The first `npm install` creates
+`package-lock.json`, which the project commits, because CI installs with
+`npm ci`. Setup, commands and the optional Cloudflare deploy:
+`languages/web/code-standards.md`.
 
 ### Mobile app (`react-native` pack)
 
