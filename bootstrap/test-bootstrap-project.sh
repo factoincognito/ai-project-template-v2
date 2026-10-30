@@ -12642,6 +12642,106 @@ test_dev_infrastructure_says_the_script_turns_protection_on() {
   grep -qF 'Settings, Branches' <<<"$body" || die "the manual steps are gone"
 }
 
+# ---------- the screen a newcomer meets (PBI-1.30) ----------
+# docs/NEWCOMER_PRECHECK.md: before each human end-to-end run, a persona
+# on a small model reads two texts made by the build of the commit
+# checked: the bootstrapper's README and the screen of the interactive
+# setup. This test makes both, and checks the setup it ran.
+
+# in_one_stream <dir> <answers> <stream> <command...>: runs the command
+# in the environment of <dir> (in_env), stdin from the file <answers>,
+# with stdout and stderr in one file, <stream>, in the order they were
+# printed (one open file, not two that are put together afterwards).
+# RC is the exit status of the command.
+in_one_stream() {
+  local d="$1" answers="$2" stream="$3"
+  shift 3
+  set +e
+  ( in_env "$d"; "$@" ) <"$answers" >"$stream" 2>&1
+  RC=$?
+  set -e
+}
+
+# first_line_of <file> <text>: the number of the first line of the file
+# that has the text in it; dies when there is none.
+first_line_of() {
+  local n
+  n="$(grep -nF -- "$2" "$1" | head -1 | cut -d: -f1 || true)"
+  [ -n "$n" ] || { cat "$1" >&2; die "no line with: $2"; }
+  printf '%s\n' "$n"
+}
+
+# The answers of the newcomer, fixed (docs/NEWCOMER_PRECHECK.md). An
+# empty one is Enter, which takes the answer the script suggests.
+NEWCOMER_FIRST_RUN=(tool-share 'Tool Share' 'Lets neighbours lend each other tools.' '' '' web '' '' mit '' '' '' '' q)
+NEWCOMER_SECOND_RUN=(yes)
+
+test_the_screen_of_the_setup_a_newcomer_meets_is_written_for_the_precheck() {
+  # PBI-1.30. Two runs of the built script, as on Windows in Git Bash,
+  # starting where the README leaves a newcomer, with Node.js not
+  # installed: the first shows the Windows guide for Node.js and stops at
+  # its pause with q; the second, started with the command that stop
+  # shows, in a new window with npm present, goes through. The files
+  # written to BOOTSTRAP_NEWCOMER_SCREEN (a folder of your choice; if it
+  # is not set, a folder of this test) are what the persona is given.
+  local d s dest cmd a b c
+  d="$(tmpdir)"
+  dest="${BOOTSTRAP_NEWCOMER_SCREEN:-$d/screen}"
+  mkdir -p "$dest" || die "cannot make the folder $dest"
+  dest="$(cd "$dest" && pwd)"
+  on_os "$d" windows
+  working_git "$d"
+  missing "$d" npm
+  use_built "$d"
+  prepare "$d"
+  # A question asked at the terminal would read this empty file, never
+  # the terminal of whoever runs the test, and counts as one with no
+  # answer below.
+  : >"$d/tty"
+  s="$RUN_SCRIPT"
+
+  # The capture keeps the order of stdout and stderr: a line printed to
+  # stderr between two printed to stdout stays between them.
+  three_lines() { echo one; echo two >&2; echo three; }
+  in_one_stream "$d" "$d/in" "$d/order" three_lines
+  [ "$(tr '\n' ' ' <"$d/order")" = "one two three " ] \
+    || { cat "$d/order" >&2; die "stdout and stderr are not one stream in the order printed"; }
+
+  # The first run: every question answered, then the guide, and q.
+  printf '%s\n' "${NEWCOMER_FIRST_RUN[@]}" >"$d/in"
+  in_one_stream "$d" "$d/in" "$d/stream1" "$BASH" "$s"
+  [ "$RC" -eq 3 ] || { cat "$d/stream1" >&2; die "the first run ended with $RC, want 3"; }
+  grep -qxF 'npm (part of Node.js) is not installed.' "$d/stream1" || { cat "$d/stream1" >&2; die "the first run shows no Node.js guide"; }
+  # The lines printed to stderr come after the ones printed to stdout
+  # before them: the command to start again, then what happened.
+  a="$(first_line_of "$d/stream1" 'To start again, run this command:')"
+  b="$(first_line_of "$d/stream1" 'What happened: npm (part of Node.js) is not installed.')"
+  c="$(first_line_of "$d/stream1" 'What to do next: ')"
+  [ "$((a + 1))" -lt "$b" ] && [ "$b" -lt "$c" ] \
+    || { cat "$d/stream1" >&2; die "the stop is not in the order printed"; }
+  [ -z "$(calls_from_create "$d")" ] || { cat "$d/gh.log" >&2; die "the project was created in the first run"; }
+  cmd="$(sed -n "$((a + 1))p" "$d/stream1")"
+  case "$cmd" in
+    "    cd "*" && bash "*" --again") ;;
+    *) cat "$d/stream1" >&2; die "no command to start again under its line: $cmd" ;;
+  esac
+
+  # The second run: a new window (npm is there now), the command shown.
+  rm "$d/npm-fails"
+  fake_tool "$d" npm 10.9.2
+  printf '%s\n' "${NEWCOMER_SECOND_RUN[@]}" >"$d/in2"
+  bash() { "$BASH" "$@"; }
+  in_one_stream "$d" "$d/in2" "$d/stream2" eval "$cmd"
+  [ "$RC" -eq 0 ] || { cat "$d/stream2" >&2; die "the second run ended with $RC, want 0"; }
+  grep -qxF 'The setup is finished.' "$d/stream2" || { cat "$d/stream2" >&2; die "the second run did not finish the setup"; }
+  [ "$(calls_from_create "$d" | sed -n 1p)" = 'repo create octo-user/tool-share --template factoincognito/ai-project-bootstrap --public --description Lets neighbours lend each other tools.' ] \
+    || { cat "$d/gh.log" >&2; die "the project was not created from the answers"; }
+
+  # The two texts the persona is given.
+  [ -s "$dest/screen.txt" ] || die "screen.txt was not written to $dest"
+  [ -s "$dest/README.md" ] || die "README.md was not written to $dest"
+}
+
 # ---------- run ----------
 
 TESTS=$(declare -F | awk '{print $3}' | grep '^test_')
