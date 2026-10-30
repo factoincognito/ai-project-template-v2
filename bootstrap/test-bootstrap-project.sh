@@ -12736,10 +12736,11 @@ test_the_screen_of_the_setup_a_newcomer_meets_is_written_for_the_precheck() {
     || { cat "$d/stream1" >&2; die "the stop is not in the order printed"; }
   [ -z "$(calls_from_create "$d")" ] || { cat "$d/gh.log" >&2; die "the project was created in the first run"; }
   cmd="$(sed -n "$((a + 1))p" "$d/stream1")"
-  case "$cmd" in
-    "    cd "*" && bash "*" --again") ;;
-    *) cat "$d/stream1" >&2; die "no command to start again under its line: $cmd" ;;
-  esac
+  # The form the README shows (step 1 saves the script in the folder
+  # the newcomer is in, and runs it there): the folder after cd is the
+  # only part that comes from the test.
+  [ "$cmd" = "    cd '$d/cwd' && bash bootstrap-project.sh --again" ] \
+    || { cat "$d/stream1" >&2; die "the command to start again is not the one the README shows: $cmd"; }
 
   # The second run: a new window (npm is there now), the command shown.
   rm "$d/npm-fails"
