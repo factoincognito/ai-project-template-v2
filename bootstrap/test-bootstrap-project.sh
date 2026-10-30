@@ -12748,7 +12748,9 @@ test_the_screen_of_the_setup_a_newcomer_meets_is_written_for_the_precheck() {
   # The form the README shows (step 1 saves the script in the folder
   # the newcomer is in, and runs it there): the folder after cd is the
   # only part that comes from the test.
-  [ "$cmd" = "    cd '$d/cwd' && bash bootstrap-project.sh --again" ] \
+  # The folder is the one the script was started in, as pwd writes it
+  # (not as $d is written: macOS's TMPDIR ends in a /, so $d has a //).
+  [ "$cmd" = "    cd '$(cd "$d/cwd" && pwd)' && bash bootstrap-project.sh --again" ] \
     || { cat "$d/stream1" >&2; die "the command to start again is not the one the README shows: $cmd"; }
 
   # The second run: a new window (npm is there now), the command shown.
