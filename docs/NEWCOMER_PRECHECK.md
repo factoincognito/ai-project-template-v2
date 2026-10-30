@@ -53,10 +53,12 @@ window was closed and a new one opened; the script did not print it.
 Go through TEXT 1 first, and then TEXT 2, in order, from the first line
 to the end, as the persona would: read carefully and follow the written
 steps one at a time. Where a text tells you to do something outside the
-two texts (open a web page, install a program, sign in), assume you did
-it and that it worked as the text says, and go on. Stop where the persona
-would stop: at every word or step you cannot follow, or cannot do from
-what is written. Never fill a gap from what you know.
+two texts (open a web page, install a program, sign in): if its words
+tell you enough to do it, count it as done, with the result the text
+says, and go on; if they do not, that is a stop. Never assume a result
+the text does not state. Stop where the persona would stop: at every
+word or step you cannot follow, or cannot do from what is written. Never
+fill a gap from what you know.
 
 When you have gone through both texts, report every stop, in the order
 you met them, in exactly this format, and write nothing else:
@@ -94,12 +96,22 @@ Clead does this.
    the build ships or that the test uses; otherwise a branch from the tag
    with the test added.
 2. **Make the two texts** from that commit, in a new folder given as an
-   absolute path (the test runs the whole harness; a full run takes some
-   minutes):
+   absolute path. Only the one test is run, by the harness's own
+   switches: `BOOTSTRAP_TEST_SHARD=i/n` with n the number of tests and i
+   the place of this test in the list runs exactly that test (it takes a
+   few seconds, the whole harness more than an hour). i changes from commit
+   to commit, so work it out each time:
 
    ```
-   BOOTSTRAP_NEWCOMER_SCREEN=/absolute/path/to/folder bash bootstrap/test-bootstrap-project.sh
+   T=test_the_screen_of_the_setup_a_newcomer_meets_is_written_for_the_precheck
+   n=$(BOOTSTRAP_TEST_LIST=1 bash bootstrap/test-bootstrap-project.sh | wc -l | tr -d ' ')
+   i=$(BOOTSTRAP_TEST_LIST=1 bash bootstrap/test-bootstrap-project.sh | grep -n -x "$T" | cut -d: -f1)
+   BOOTSTRAP_TEST_SHARD=$i/$n BOOTSTRAP_NEWCOMER_SCREEN=/absolute/path/to/folder \
+     bash bootstrap/test-bootstrap-project.sh
    ```
+
+   Check that the run says `1 passed, 0 failed` (an empty `i` or a
+   different count means the test was not run).
 
    The test builds the bootstrapper from the commit with the harness's
    stand-ins, runs the built script twice as a newcomer meets it, and
@@ -124,9 +136,14 @@ Clead does this.
    the check must not do.
 4. **Discard or keep the run.** The agent tool cannot stop the persona
    from using what it knows, so every text quoted in its report is
-   searched for in `README.md` and `screen.txt` (`grep -F`). A run whose
-   report quotes anything that is in neither is discarded and repeated
-   from step 3; so is a run whose report is not in the format.
+   searched for in `README.md` and `screen.txt`. The README is wrapped
+   in lines and the screen is indented, so the quote and the two texts
+   are compared with every run of spaces and line breaks made one space
+   (`tr -s '[:space:]' ' '`), for example
+   `grep -F -- "$(printf '%s' "$quote" | tr -s '[:space:]' ' ')" <(tr -s '[:space:]' ' ' <README.md)`
+   (and the same with `screen.txt`). A run whose report quotes anything
+   that is in neither is discarded and repeated from step 3; so is a run
+   whose report is not in the format.
 5. **Record each stop** in `docs/NEXT_SESSION.md`, like the findings of a
    human run: `p<version>-a`, `-b` and so on (the version checked), with
    the exact text, the persona's problem and Clead's verdict: a defect to
@@ -149,8 +166,10 @@ these values; a stop at one of them is a stand-in artefact:
 - the stand-in `gh`, whose version (`0.0.0`) the screen does not show;
 - the bash version in the first check, which is the one that ran the
   test;
-- the folders in the commands the script shows (`cd '...'`), which are
-  the test's temporary folders, not a newcomer's own;
+- the folder after `cd` in the command the script shows to start again
+  (`cd '...' && bash bootstrap-project.sh --again`), which is the test's
+  temporary folder, not a newcomer's own; it is the only part of that
+  command that comes from the test;
 - the screen has no colours, though the script's colour key names them;
 - the README is Markdown text, not the page as GitHub shows it;
 - the checks of GitHub are instant, so the wait for `build` shows no
