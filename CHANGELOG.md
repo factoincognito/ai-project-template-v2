@@ -6,6 +6,22 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.8.5] — 2026-10-30
+
+### Added
+- Release prep for v2.8.4 (PR #312)
+- `STATUS.md`: the newcomer persona pre-check comes before run 5; the run 5 tester is no longer a blocker (PR #313)
+- PBI-1.30 spec: the newcomer persona pre-check (PR #314)
+- Recorded in NEXT_SESSION and `STATUS.md` that v2.8.4 is released and verified, with GitHub showing the bootstrapper's own README (PR #316)
+- The newcomer persona pre-check (PBI-1.30): `docs/NEWCOMER_PRECHECK.md` (the persona, its fixed instruction, the procedure, the stand-in values, the pass rule) and the harness test that writes the screen of the setup a newcomer meets (PR #315)
+- Recorded in NEXT_SESSION the pre-check on v2.8.4, findings p2.8.4-a to -d (PR #317)
+- Recorded in NEXT_SESSION that p2.8.4-c is fixed and p2.8.4-e found; the PBI-1.30 entry follows #318's wording (PR #320)
+
+### Changed
+- On Windows, the guide for a missing Node.js says to type `q` at the pause and copy the command it shows, then close the window, open Git Bash from the Start menu and run that command; the README says the same (p2.8.4-c) (PR #318)
+- After the setup, the README and the script's closing lines say how to create a Claude Project and add the GitHub project to it, with links to Claude's help pages (p2.8.4-a, p2.8.4-d) (PR #319)
+- On Windows, the guides for a missing git and a missing or old gh end the same way as the Node.js guide (p2.8.4-e) (PR #321)
+
 ## [2.8.4] — 2026-10-30
 
 ### Added
