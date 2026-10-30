@@ -2028,7 +2028,9 @@ guide_git() {
       else
         guide_step "Open https://git-scm.com/download/win in your browser, download Git for Windows and run the installer, keeping the default choices."
       fi
-      guide_step "Close this window, open Git Bash again from the Start menu, and start the script there, so that it finds git."
+      # p2.8.4-e: the command to start again is shown only after q (see
+      # the npm guide, p2.8.4-c).
+      guide_step "When the install has finished, type q here if the script waits, and copy the command it shows to start again. Then close this window, open Git Bash again from the Start menu, and run that command there, so that it finds git."
       guide_end "the script says \"Done. git is installed.\"" \
         "if the script still says that git is not installed, check that you opened Git Bash again after the install." \
         "it runs git --version, which works only when git is installed."
@@ -2105,8 +2107,9 @@ guide_gh_missing() {
   guide_begin "The GitHub command-line tool (gh) is not installed." \
     "The script uses gh to talk to GitHub for you: to create your project there and to check it."
   gh_install_steps install
+  gh_see_something_else "not installed"
   guide_end "the script says \"Done. gh is installed and can create a project from a template.\"" \
-    "if the script still says that gh is not installed, close this window, open a new one, and start the script again there." \
+    "$GH_ELSE" \
     "it runs gh --version, which works only when gh is installed."
 }
 
@@ -2114,9 +2117,21 @@ guide_gh_old() {
   guide_begin "The GitHub command-line tool (gh) on this computer is too old." \
     "The script needs a gh that can create a project from a template, read its checks and add a proposed change, which older versions of gh cannot do."
   gh_install_steps upgrade
+  gh_see_something_else "too old"
   guide_end "the script says \"Done. gh is installed and can create a project from a template.\"" \
-    "if the script still says that gh is too old, close this window, open a new one, and start the script again there." \
+    "$GH_ELSE" \
     "it checks that gh's commands for creating a project, for reading its checks and for adding a proposed change offer the options the script uses: --template, --json and --match-head-commit."
+}
+
+# gh_see_something_else <what>: sets GH_ELSE, the "If you see something
+# else" line of both gh guides. On Windows it says what the last step
+# says (p2.8.4-e).
+GH_ELSE=""
+gh_see_something_else() {
+  case "$OS_KIND" in
+    windows) GH_ELSE="if the script still says that gh is $1, type q if the script waits and copy the command it shows; then close this window, open Git Bash again from the Start menu (not from this window), and run that command there." ;;
+    *) GH_ELSE="if the script still says that gh is $1, close this window, open a new one, and start the script again there." ;;
+  esac
 }
 
 # gh_install_steps install|upgrade: the steps both gh guides share.
@@ -2141,7 +2156,8 @@ gh_install_steps() {
         # Windows" button any more).
         guide_step "Open https://cli.github.com in your browser, choose the Windows option that says Download MSI (not the one that says WinGet), and run the downloaded installer, keeping the default choices."
       fi
-      guide_step "Close this window, open Git Bash again from the Start menu, and start the script there, so that it finds the new gh."
+      # p2.8.4-e: as in the git and npm guides, q first.
+      guide_step "When the install has finished, type q here if the script waits, and copy the command it shows to start again. Then close this window, open Git Bash again from the Start menu, and run that command there, so that it finds the new gh."
       ;;
     linux)
       guide_step "Open https://github.com/cli/cli/blob/trunk/docs/install_linux.md in your browser and follow the steps for your system; the gh in your system's own software list may be too old."
