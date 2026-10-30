@@ -29,6 +29,12 @@
 #   BOOTSTRAP_TEST_MANIFEST=f  write the name of each test run to file f
 #                              (relative to where this starts), one per
 #                              line; bootstrap/check-shards.sh reads it.
+#   BOOTSTRAP_NEWCOMER_SCREEN=<folder>  the test of the newcomer's screen
+#                              (PBI-1.30) writes screen.txt and README.md
+#                              there, the two texts of the pre-check in
+#                              docs/NEWCOMER_PRECHECK.md (an absolute path
+#                              or relative to where this starts; unset:
+#                              a folder of the test, deleted with it).
 #
 # Template-only: bootstrap/ is not in bootstrap/manifest.txt, so this
 # file never ships. It runs on bash 3.2 (macOS /bin/bash) and Git for
@@ -12640,6 +12646,161 @@ test_dev_infrastructure_says_the_script_turns_protection_on() {
   grep -qF 'bootstrap-project.sh' <<<"$body" || die "it does not say the setup script does this"
   grep -qiF 'fallback' <<<"$body" || die "the manual steps are not called the fallback"
   grep -qF 'Settings, Branches' <<<"$body" || die "the manual steps are gone"
+}
+
+# ---------- the screen a newcomer meets (PBI-1.30) ----------
+# docs/NEWCOMER_PRECHECK.md: before each human end-to-end run, a persona
+# on a small model reads two texts made by the build of the commit
+# checked: the bootstrapper's README and the screen of the interactive
+# setup. This test makes both, and checks the setup it ran.
+
+# in_one_stream <dir> <answers> <stream> <command...>: runs the command
+# in the environment of <dir> (in_env), stdin from the file <answers>,
+# with stdout and stderr in one file, <stream>, in the order they were
+# printed (one open file, not two that are put together afterwards).
+# RC is the exit status of the command.
+in_one_stream() {
+  local d="$1" answers="$2" stream="$3"
+  shift 3
+  set +e
+  ( in_env "$d"; "$@" ) <"$answers" >"$stream" 2>&1
+  RC=$?
+  set -e
+}
+
+# first_line_of <file> <text>: the number of the first line of the file
+# that has the text in it; dies when there is none.
+first_line_of() {
+  local n
+  n="$(grep -nF -- "$2" "$1" | head -1 | cut -d: -f1 || true)"
+  [ -n "$n" ] || { cat "$1" >&2; die "no line with: $2"; }
+  printf '%s\n' "$n"
+}
+
+# with_answers <stream> <answers> <counts>: prints the stream as a
+# terminal would show it: every question has its answer after it. The
+# script ends each question with a colon and a space and, as its input
+# is not a terminal, with a line break of its own, in place of the Enter
+# that ends what a person types; so the answer goes at the end of that
+# line. <counts> gets "<questions> <answers>": the same number, when
+# every question was answered and no answer was left.
+with_answers() {
+  tr -d '\r' <"$1" | awk -v counts="$3" '
+    NR == FNR { answer[++n] = $0; next }
+    /: $/ { k++; print $0 answer[k]; next }
+    { print }
+    END { print k + 0, n + 0 >counts }' <(tr -d '\r' <"$2") -
+}
+
+# The answers of the newcomer, fixed (docs/NEWCOMER_PRECHECK.md). An
+# empty one is Enter, which takes the answer the script suggests.
+NEWCOMER_FIRST_RUN=(tool-share 'Tool Share' 'Lets neighbours lend each other tools.' '' '' web '' '' mit '' '' '' '' q)
+NEWCOMER_SECOND_RUN=(yes)
+
+test_the_screen_of_the_setup_a_newcomer_meets_is_written_for_the_precheck() {
+  # PBI-1.30. Two runs of the built script, as on Windows in Git Bash,
+  # starting where the README leaves a newcomer, with Node.js not
+  # installed: the first shows the Windows guide for Node.js and stops at
+  # its pause with q; the second, started with the command that stop
+  # shows, in a new window with npm present, goes through. The files
+  # written to BOOTSTRAP_NEWCOMER_SCREEN (a folder of your choice; if it
+  # is not set, a folder of this test) are what the persona is given.
+  local d dest cmd line a b c
+  d="$(tmpdir)"
+  dest="${BOOTSTRAP_NEWCOMER_SCREEN:-$d/screen}"
+  mkdir -p "$dest" || die "cannot make the folder $dest"
+  dest="$(cd "$dest" && pwd)"
+  on_os "$d" windows
+  working_git "$d"
+  missing "$d" npm
+  use_built "$d"
+  prepare "$d"
+  # A question asked at the terminal would read this empty file, never
+  # the terminal of whoever runs the test, and counts as one with no
+  # answer below.
+  : >"$d/tty"
+  # README step 1 saves the script in the folder the newcomer is in and
+  # runs it there with bash bootstrap-project.sh, so the screen shows
+  # that form (and so does the command to start again).
+  cp "$RUN_SCRIPT" "$d/cwd/bootstrap-project.sh"
+
+  # The capture keeps the order of stdout and stderr: a line printed to
+  # stderr between two printed to stdout stays between them.
+  three_lines() { echo one; echo two >&2; echo three; }
+  in_one_stream "$d" "$d/in" "$d/order" three_lines
+  [ "$(tr '\n' ' ' <"$d/order")" = "one two three " ] \
+    || { cat "$d/order" >&2; die "stdout and stderr are not one stream in the order printed"; }
+
+  # The first run: every question answered, then the guide, and q.
+  printf '%s\n' "${NEWCOMER_FIRST_RUN[@]}" >"$d/in"
+  in_one_stream "$d" "$d/in" "$d/stream1" "$BASH" bootstrap-project.sh
+  [ "$RC" -eq 3 ] || { cat "$d/stream1" >&2; die "the first run ended with $RC, want 3"; }
+  grep -qxF 'npm (part of Node.js) is not installed.' "$d/stream1" || { cat "$d/stream1" >&2; die "the first run shows no Node.js guide"; }
+  # The lines printed to stderr come after the ones printed to stdout
+  # before them: the command to start again, then what happened.
+  a="$(first_line_of "$d/stream1" 'To start again, run this command:')"
+  b="$(first_line_of "$d/stream1" 'What happened: npm (part of Node.js) is not installed.')"
+  c="$(first_line_of "$d/stream1" 'What to do next: ')"
+  [ "$((a + 1))" -lt "$b" ] && [ "$b" -lt "$c" ] \
+    || { cat "$d/stream1" >&2; die "the stop is not in the order printed"; }
+  [ -z "$(calls_from_create "$d")" ] || { cat "$d/gh.log" >&2; die "the project was created in the first run"; }
+  cmd="$(sed -n "$((a + 1))p" "$d/stream1")"
+  # The form the README shows (step 1 saves the script in the folder
+  # the newcomer is in, and runs it there): the folder after cd is the
+  # only part that comes from the test.
+  # The folder is the one the script was started in, as pwd writes it
+  # (not as $d is written: macOS's TMPDIR ends in a /, so $d has a //).
+  [ "$cmd" = "    cd '$(cd "$d/cwd" && pwd)' && bash bootstrap-project.sh --again" ] \
+    || { cat "$d/stream1" >&2; die "the command to start again is not the one the README shows: $cmd"; }
+
+  # The second run: a new window (npm is there now), the command shown.
+  rm "$d/npm-fails"
+  fake_tool "$d" npm 10.9.2
+  printf '%s\n' "${NEWCOMER_SECOND_RUN[@]}" >"$d/in2"
+  bash() { "$BASH" "$@"; }
+  in_one_stream "$d" "$d/in2" "$d/stream2" eval "$cmd"
+  [ "$RC" -eq 0 ] || { cat "$d/stream2" >&2; die "the second run ended with $RC, want 0"; }
+  grep -qxF 'The setup is finished.' "$d/stream2" || { cat "$d/stream2" >&2; die "the second run did not finish the setup"; }
+  [ "$(calls_from_create "$d" | sed -n 1p)" = 'repo create octo-user/tool-share --template factoincognito/ai-project-bootstrap --public --description Lets neighbours lend each other tools.' ] \
+    || { cat "$d/gh.log" >&2; die "the project was not created from the answers"; }
+
+  # The two texts the persona is given: the screen of both runs, each
+  # answer after its question, and the README the build wrote.
+  printf '%s\n' "${NEWCOMER_FIRST_RUN[@]}" >"$d/answers1"
+  with_answers "$d/stream1" "$d/answers1" "$d/counts1" >"$d/shown1"
+  with_answers "$d/stream2" "$d/in2" "$d/counts2" >"$d/shown2"
+  [ "$(cat "$d/counts1")" = "${#NEWCOMER_FIRST_RUN[@]} ${#NEWCOMER_FIRST_RUN[@]}" ] \
+    || { cat "$d/stream1" >&2; die "the first run asked $(cut -d' ' -f1 <"$d/counts1") questions, with ${#NEWCOMER_FIRST_RUN[@]} answers given (a question at the terminal needs its answer in the test too)"; }
+  [ "$(cat "$d/counts2")" = "${#NEWCOMER_SECOND_RUN[@]} ${#NEWCOMER_SECOND_RUN[@]}" ] \
+    || { cat "$d/stream2" >&2; die "the second run asked $(cut -d' ' -f1 <"$d/counts2") questions, with ${#NEWCOMER_SECOND_RUN[@]} answers given"; }
+  {
+    cat "$d/shown1"
+    printf '\n%s\n\n' '----- The first window is closed. In a new Git Bash window, opened from the Start menu, the command above is run: -----'
+    cat "$d/shown2"
+  } >"$dest/screen.txt"
+  cp "$BUILT/.github/README.md" "$dest/README.md"
+  [ -s "$dest/screen.txt" ] || die "screen.txt was not written to $dest"
+  [ -s "$dest/README.md" ] || die "README.md was not written to $dest"
+
+  # Each question is followed by its answer; an Enter leaves the end of
+  # the line as the script printed it.
+  for line in \
+    'Project name: tool-share' \
+    'Display name [tool-share]: Tool Share' \
+    'Description: Lets neighbours lend each other tools.' \
+    'Owner [octo-user]: ' \
+    'Language pack (type the number or the name): web' \
+    'Add the publishing files? (yes or no) [no]: ' \
+    'Licence (type the number or the name): mit' \
+    'Folder [./tool-share]: ' \
+    'Press Enter to check again, or type q to stop: q' \
+    'Proceed? (yes or no) [no]: yes'; do
+    [ "$(grep -cxF -- "$line" "$dest/screen.txt")" -eq 1 ] \
+      || { cat "$dest/screen.txt" >&2; die "the screen lacks, once, the line: $line"; }
+  done
+  # Both runs are in the file, from their own streams.
+  grep -qxF 'npm (part of Node.js) is not installed.' "$dest/screen.txt" || { cat "$dest/screen.txt" >&2; die "the screen lacks the Node.js guide"; }
+  grep -qxF 'The setup is finished.' "$dest/screen.txt" || { cat "$dest/screen.txt" >&2; die "the screen lacks the end of the second run"; }
 }
 
 # ---------- run ----------

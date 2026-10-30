@@ -20,6 +20,7 @@
 CHANGELOG.md
 STATUS.md
 docs/BACKLOG.md
+docs/NEWCOMER_PRECHECK.md
 docs/NEXT_SESSION.md
 docs/RELEASE_NOTES.md
 memory/context.md
