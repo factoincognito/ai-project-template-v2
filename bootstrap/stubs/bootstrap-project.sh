@@ -5083,7 +5083,7 @@ finish_copy() {
 # script prints, where to go when stuck (end-to-end run 1, finding 10).
 # One text for every ending of report, so the endings cannot drift.
 say_what_next() {
-  say "What to do next: in the Claude app, create a Claude Project for this project, add the project on GitHub, https://github.com/$IN_OWNER/$IN_NAME, to that Claude Project, and start a chat inside the Claude Project. The file CLAUDE.md in the project tells Claude the rest."
+  say "What to do next: in the Claude app, create a Claude Project for this project (how: https://support.claude.com/en/articles/9519177-how-can-i-create-and-manage-projects), add the project on GitHub, https://github.com/$IN_OWNER/$IN_NAME, to that Claude Project (how: https://support.claude.com/en/articles/10167454-using-the-github-integration), and start a chat inside the Claude Project. The file CLAUDE.md in the project tells Claude the rest."
   say "If you ever feel stuck and do not know how to go on, Clead (Claude, the project's Tech Owner) is always there to help: just ask Clead for help, a recommendation or advice in the chat."
 }
 

@@ -167,12 +167,19 @@ same `cd`: the one you ran, with every answer in it.
   start a chat inside the Claude Project; the project's instructions for
   Claude (the file `CLAUDE.md`) do the rest. A Claude Project is a
   workspace in the Claude app that keeps the chats and files of one
-  project together. If the Claude GitHub App on your account is limited
-  to selected projects, add the new one on GitHub first: your picture, top right, then
-  Settings, Applications, Configure next to the Claude app, and add the
-  project under the choice
-  Only select repositories (the projects it may read).
-  This last part has not been checked yet.
+  project together. Claude's help pages say how:
+  - To create a Claude Project: "How can I create and manage projects?",
+    https://support.claude.com/en/articles/9519177-how-can-i-create-and-manage-projects
+  - To add the GitHub project to it: the help page on the GitHub
+    integration,
+    https://support.claude.com/en/articles/10167454-using-the-github-integration
+    It gives these steps: in the Claude Project, click the "+" button at
+    the top right of the project knowledge section, then "GitHub", then
+    search for the project or paste its web address (the script prints
+    it), then choose the files. If Claude cannot reach a private project
+    after you paste its address, the page links to the Claude GitHub App,
+    where someone who administers the project on GitHub gives Claude
+    access to it.
 - Working from another computer later: follow "Working from another
   computer" in the new project's README.
 - Organisation and billing settings: in an organisation, only its
