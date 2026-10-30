@@ -18,7 +18,7 @@ Build and release: the turn-key bootstrap script is built (v2.4.0); the fixes fo
 PBI-1.29 is built and merged (#306, #309, #310): the bootstrapper has its own README, the setup removes that README and the other packs' sections from each new project, and nothing that ships points to the template outside the record of origin. v2.8.4 is released and verified; GitHub shows the bootstrapper's own README on its page. Runs 1 to 4 have passed. The C# base language pack (PBI-1.23): part 1 is done; part 2 (the bootstrap script offers the pack) waits until the end-to-end runs pass.
 
 ## Next step
-The fixes for the pre-check's findings on v2.8.4 are merged (#318, #319, #321) and v2.8.5 is prepared. Clead runs the newcomer pre-check again on `main`; when it passes, Adam tags v2.8.5. Then run 5.
+Adam tags v2.8.5 on `main` (the release prep is #322; the newcomer pre-check passed on it); Clead checks the release. Then run 5.
 
 ## Blockers
 None. acuteping waits until run 5 passes.
