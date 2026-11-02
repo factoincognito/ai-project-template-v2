@@ -1002,7 +1002,7 @@ get a working project in any supported language.
 
   **For now (Adam, 2026-10-29).** The setup script keeps its Claude parts built in as they are. Done iteratively, when there is value in it; nothing is built until Adam takes it up.
 
-- **[NEXT] PBI-1.32** (Adam, 2026-10-29, product office PO-64; the WHAT is Adam's, the HOW is Clead's; not yet specced or reviewed) — The product office's "For you" rule in `CLAUDE.md`, so it reaches every bootstrapped project: every reply from a session ends with a "For you" block (each item marked Now, When you have time or Later; "For you: nothing" when there is nothing), and instructions for the product owner appear only there.
+- **[DONE] PBI-1.32** (Adam, 2026-10-29, product office PO-64; the WHAT is Adam's, the HOW is Clead's; done 2026-11-02: `CLAUDE.md` "Both agents: reply format", reviewed by Crog) — The product office's "For you" rule in `CLAUDE.md`, so it reaches every bootstrapped project: every reply from a session ends with a "For you" block (each item marked Now, When you have time or Later; "For you: nothing" when there is nothing), and instructions for the product owner appear only there.
 
   **Why (Adam, 2026-10-29).** A code session's task list (steps with empty circles) read to Adam as choices he had to make. A "For you" block says plainly when something is for him. The product office owns the rule (its `CLAUDE.md`, "Reply format"); the template carries it to new projects, as with the ground rule against loose ends (product office PO-47).
 

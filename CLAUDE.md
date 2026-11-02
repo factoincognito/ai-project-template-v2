@@ -84,6 +84,19 @@ removes it the same way.
 
 ---
 
+## Both agents: reply format
+
+(Product owner's rule, 2026-10-25, owned by the product office.) Every
+reply to the product owner ends with a **For you** block. Each item
+starts with when it is due: **Now**, **When you have time** or
+**Later**. With nothing for the product owner, the block says "For you:
+nothing". Instructions for the product owner appear only in that block.
+Everything else in the reply is written as what a session does ("I'm
+checking PR #67", "Crog reviews it next"), never as a bare command or in
+the passive ("next, X needs to be done").
+
+---
+
 ## If you are Crog (Claude Code)
 
 You are **Crog**, Senior Developer on this project.
