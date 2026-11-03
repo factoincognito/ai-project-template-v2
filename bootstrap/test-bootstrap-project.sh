@@ -7196,6 +7196,106 @@ test_again_runs_with_the_saved_answers_and_adds_the_options_after_them() {
   expect_out "$d" "This was a dry run (--dry-run)"
 }
 
+# ---------- the stop on a real Mac (PBI-1.26, PR 2) ----------
+# macOS is not supported for now: on a Mac (uname Darwin) the setup stops
+# at once, before it changes anything. The tests fake uname through
+# on_os and run the whole script.
+
+MACOS_STOP_WHAT="What happened: This computer runs macOS, which the setup does not support for now. Nothing was changed."
+MACOS_STOP_NEXT="What to do next: Set up the project on a computer with Windows or Linux. Step 0 of the README says how to prepare it."
+
+# expect_macos_stop <dir>: exit 1, the two lines (and no others) on
+# stderr, and nothing done: no gh call, no git call, nothing in the
+# folder the run started in, no colour key on stdout.
+expect_macos_stop() {
+  local d="$1" lines
+  expect_rc 1 "$d"
+  lines="$(grep -v '^$' "$d/err" || true)"
+  [ "$lines" = "$MACOS_STOP_WHAT
+$MACOS_STOP_NEXT" ] || { cat "$d/err" >&2; die "stderr is not exactly the two lines of the macOS stop"; }
+  [ ! -s "$d/gh.log" ] || { cat "$d/gh.log" >&2; die "gh was called"; }
+  ! grep -qE '^git ' "$d/tools.log" 2>/dev/null || { cat "$d/tools.log" >&2; die "git was called"; }
+  [ -z "$(ls -A "$d/cwd")" ] || die "something was created in the folder the run started in"
+  ! grep -qi 'colour' "$d/out" || { cat "$d/out" >&2; die "a colour key was shown"; }
+}
+
+test_the_setup_stops_on_macos_before_it_changes_anything() {
+  local d f
+  # The plain command.
+  d="$(tmpdir)"; working_git "$d"; on_os "$d" macos
+  whole "$d"
+  expect_macos_stop "$d"
+  # Every answer given, nothing to ask.
+  d="$(tmpdir)"; working_git "$d"; on_os "$d" macos
+  whole "$d" --non-interactive --yes "${REQUIRED_OPTS[@]}"
+  expect_macos_stop "$d"
+  # --resume.
+  d="$(tmpdir)"; working_git "$d"; on_os "$d" macos
+  whole "$d" --resume --owner octo-user --name my-app
+  expect_macos_stop "$d"
+  # --again, with an answers file saved by an earlier stop on Linux: the
+  # file is not written again and not changed.
+  d="$(tmpdir)"; working_git "$d"; use_built "$d"
+  export STUB_GH_EXISTING="octo-user/my-app"
+  printf '%s\n' "${ANSWERS_IN[@]}" q >"$d/in"
+  whole "$d"
+  unset STUB_GH_EXISTING
+  expect_rc 3 "$d"
+  f="$(again_file_of "$d")"
+  [ -f "$f" ] || die "no saved file to start from"
+  cp "$f" "$d/again-before"
+  : >"$d/gh.log"; : >"$d/tools.log"
+  on_os "$d" macos
+  : >"$d/in"
+  whole "$d" --again
+  expect_macos_stop "$d"
+  cmp -s "$d/again-before" "$f" || die "the saved answers were changed"
+  # A plain run on a Mac writes no saved file at all.
+  d="$(tmpdir)"; working_git "$d"; on_os "$d" macos
+  whole "$d"
+  [ ! -e "$(again_file_of "$d")" ] || die "a saved file was written"
+}
+
+test_help_and_version_still_work_on_macos() {
+  local d m opt
+  for opt in --help --version; do
+    d="$(tmpdir)"; on_os "$d" linux
+    whole "$d" "$opt"
+    expect_rc 0 "$d"
+    m="$(tmpdir)"; on_os "$m" macos
+    whole "$m" "$opt"
+    expect_rc 0 "$m"
+    [ -s "$m/out" ] || die "$opt printed nothing on macOS"
+    cmp -s "$d/out" "$m/out" || { diff "$d/out" "$m/out" >&2 || true; die "$opt prints something else on macOS"; }
+  done
+}
+
+test_the_macos_stop_is_not_shown_on_linux_or_windows() {
+  local d os
+  for os in linux windows; do
+    d="$(tmpdir)"; working_git "$d"; on_os "$d" "$os"
+    whole "$d" --non-interactive
+    ! grep -qF "which the setup does not support for now" "$d/err" "$d/out" || { cat "$d/err" >&2; die "the macOS stop is shown on $os"; }
+  done
+}
+
+test_the_readmes_say_macos_is_not_supported_for_now() {
+  local f
+  grep -qxF '   - **macOS:** not supported for now: the setup stops on a Mac. Use a computer with Windows or Linux.' "$TEMPLATE_README" \
+    || die "README.md step 0 lacks the macOS line"
+  grep -qxF '  - a bash that is too old (Windows: install the current Git for Windows);' "$TEMPLATE_README" \
+    || die "README.md lacks the bash line without macOS"
+  grep -qxF -- '- **A computer** with Windows or Linux. macOS is not supported for now: the setup stops on a Mac.' "$REPO/bootstrap/bootstrapper-README.md" \
+    || die "the bootstrapper README lacks the computer line"
+  grep -qF -- '- **On Linux: Git.**' "$REPO/bootstrap/bootstrapper-README.md" || die "the bootstrapper README lacks the Git line for Linux"
+  grep -qF 'in Git Bash (Windows) or a terminal (Linux; the setup does not support macOS for now)' "$STUB_README" \
+    || die "the stub README lacks the terminal line"
+  for f in "$STUB_README" "$TEMPLATE_README" "$REPO/bootstrap/bootstrapper-README.md"; do
+    grep -qi 'macos is not supported for now\|macos:\*\* not supported for now\|does not support macos for now' "$f" || die "$f does not say macOS is not supported for now"
+    ! grep -qE 'brew install gh|Download for Mac|/bin/bash|Terminal app' "$f" || { grep -nE 'brew install gh|Download for Mac|/bin/bash|Terminal app' "$f" >&2; die "$f still has a macOS step"; }
+  done
+}
+
 test_again_without_a_saved_file_stops_with_a_plain_error_and_runs_nothing() {
   local d f
   for how in none folder; do
