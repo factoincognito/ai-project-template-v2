@@ -24,7 +24,7 @@
 #   bootstrapper-test, a required check, passes only if all of them did.
 #   Each OS leg runs as shards (PBI-1.18; one leg took up to 76 min
 #   on Windows), as many as that OS's total test time needs (PBI-1.25:
-#   3 on ubuntu, 5 on macOS, 8 on Windows, whose tests take about 2.5
+#   4 on ubuntu, 5 on macOS, 8 on Windows, whose tests take about 2.5
 #   times as long as ubuntu's), split by the measured time of each test on that OS
 #   (bootstrap/test-durations.txt, PBI-1.22); each shard records the
 #   tests it ran; bootstrapper-test also fails unless, for every OS,
@@ -128,9 +128,10 @@ jobs:
         # of every OS. bootstrapper-test fails if a shard of 1..of of an
         # OS did not report.
         include:
-          - { os: ubuntu-latest, shard: 1, of: 3 }
-          - { os: ubuntu-latest, shard: 2, of: 3 }
-          - { os: ubuntu-latest, shard: 3, of: 3 }
+          - { os: ubuntu-latest, shard: 1, of: 4 }
+          - { os: ubuntu-latest, shard: 2, of: 4 }
+          - { os: ubuntu-latest, shard: 3, of: 4 }
+          - { os: ubuntu-latest, shard: 4, of: 4 }
           - { os: macos-latest, shard: 1, of: 5 }
           - { os: macos-latest, shard: 2, of: 5 }
           - { os: macos-latest, shard: 3, of: 5 }
