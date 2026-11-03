@@ -16,6 +16,7 @@
 | [BLOCKED] | Waiting on dependency or decision |
 | [DONE] | Completed and merged |
 | [SUPERSEDED] | No longer needed; the reason is given inline |
+| [MOVED] | Tracked elsewhere from now on; where is given inline |
 
 ---
 
