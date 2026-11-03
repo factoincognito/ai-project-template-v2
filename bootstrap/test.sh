@@ -2328,6 +2328,17 @@ test_workflow_bash32_leg_gets_bash_3_2_before_it_runs_the_tests_with_it() {
   [ "$a" -lt "$b" ] && [ "$b" -lt "$c" ] && [ "$c" -lt "$d" ] || die "the bash 3.2 steps are out of order ($a $b $c $d)"
 }
 
+test_workflow_bash32_leg_has_the_shards_its_measured_time_needs() {
+  # Measured on GitHub's runner (run 41730239312, 4 shards): the tests
+  # under bash 3.2 took 1061 to 1271 s a shard, about 2.4 times ubuntu's,
+  # against Windows' 11 min wall time. To stay near 12 min wall time
+  # (PBI-1.26, item 6) the leg has at least 8 shards.
+  local n
+  n="$(wf_legs | awk '$1 == "ubuntu-bash32" { print $4; exit }')"
+  [ -n "$n" ] || die "no ubuntu-bash32 leg"
+  [ "$n" -ge 8 ] || die "the bash 3.2 leg has $n shards; its measured time needs at least 8"
+}
+
 test_workflow_bash32_step_checks_for_bash_3_2_and_runs_the_tests_with_it() {
   # Runs the test step's actual script with a fake bash in RUNNER_TEMP/bash32
   # and a stub test file: 3.2 passes and runs the tests, 5.2 fails.
