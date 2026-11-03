@@ -1079,12 +1079,13 @@ matrix_job() {
   printf '%s\n' "$jobs" | head -n 1
 }
 
-# wf_legs: the legs of the test matrix, one "<os> <shard> <of>" line per
-# entry of its include: list, which has the form
-#   - { os: <os>, shard: <i>, of: <n> }
-# (PBI-1.25: each OS has the shard count its total time needs).
+# wf_legs: the legs of the test matrix, one "<leg> <os> <shard> <of>" line
+# per entry of its include: list, which has the form
+#   - { leg: <leg>, os: <os>, shard: <i>, of: <n> }
+# (PBI-1.25: each leg has the shard count its total time needs; PBI-1.26:
+# a leg is not always an OS, the bash 3.2 leg runs on ubuntu-latest).
 wf_legs() {
-  wf_job "$(matrix_job)" | sed -nE 's/^          - \{ os: ([a-z0-9-]+), shard: ([0-9]+), of: ([0-9]+) \}[[:space:]]*$/\1 \2 \3/p'
+  wf_job "$(matrix_job)" | sed -nE 's/^          - \{ leg: ([a-z0-9-]+), os: ([a-z0-9-]+), shard: ([0-9]+), of: ([0-9]+) \}[[:space:]]*$/\1 \2 \3 \4/p'
 }
 
 # wf_on: the workflow's on: block, without comments and blank lines.
@@ -1183,7 +1184,7 @@ test_workflow_matrix_cannot_drop_an_os() {
   local j job o
   j="$(matrix_job)"; job="$(wf_job "$j")"
   ! printf '%s\n' "$job" | grep -nE '^[[:space:]]+exclude[[:space:]]*:' >&2 || die "$j has a matrix exclude"
-  for o in ubuntu-latest macos-latest windows-latest; do
+  for o in ubuntu-latest ubuntu-bash32 macos-latest windows-latest; do
     [ -n "$(wf_legs | awk -v o="$o" '$1 == o { print }')" ] || die "$o has no leg in the matrix"
   done
 }
@@ -1875,12 +1876,14 @@ test_workflow_shard_counts_keep_every_legs_slowest_shard_short() {
   # slowest shard (the sum of its tests' times) is above 11 min of test
   # time, and Windows, whose tests take the longest, has more shards than
   # ubuntu. Aim (PBI-1.25): about 12 min wall time with the set-up.
-  local os n i tot worst legs
+  local leg os n i tot worst legs
   legs="$(wf_legs)"
   [ -n "$legs" ] || die "no matrix legs"
-  for os in ubuntu-latest macos-latest windows-latest; do
-    n="$(printf '%s\n' "$legs" | awk -v os="$os" '$1 == os { print $3; exit }')"
-    [ -n "$n" ] || die "$os has no leg"
+  for leg in ubuntu-latest ubuntu-bash32 macos-latest windows-latest; do
+    n="$(printf '%s\n' "$legs" | awk -v leg="$leg" '$1 == leg { print $4; exit }')"
+    [ -n "$n" ] || die "$leg has no leg"
+    # A leg is weighed by the durations of the OS it runs on.
+    os="$(printf '%s\n' "$legs" | awk -v leg="$leg" '$1 == leg { print $2; exit }')"
     worst=0
     i=1
     while [ "$i" -le "$n" ]; do
@@ -1891,9 +1894,9 @@ test_workflow_shard_counts_keep_every_legs_slowest_shard_short() {
       [ "$tot" -le "$worst" ] || worst="$tot"
       i=$((i + 1))
     done
-    [ "$worst" -le 660 ] || die "$os with $n shards: the slowest shard is $worst s of tests, above 660"
+    [ "$worst" -le 660 ] || die "$leg with $n shards: the slowest shard is $worst s of tests, above 660"
   done
-  [ "$(printf '%s\n' "$legs" | awk '$1 == "windows-latest" { print $3; exit }')" -gt "$(printf '%s\n' "$legs" | awk '$1 == "ubuntu-latest" { print $3; exit }')" ] \
+  [ "$(printf '%s\n' "$legs" | awk '$1 == "windows-latest" { print $4; exit }')" -gt "$(printf '%s\n' "$legs" | awk '$1 == "ubuntu-latest" { print $4; exit }')" ] \
     || die "Windows does not have more shards than ubuntu"
 }
 
@@ -2083,7 +2086,7 @@ echo "stub harness: only list mode is emulated" >&2; exit 64
 STUB
   [ -f "$CHECK_SHARDS" ] || die "no bootstrap/check-shards.sh"
   cp "$CHECK_SHARDS" "$d/bootstrap/check-shards.sh"
-  for os in ubuntu-latest macos-latest windows-latest; do
+  for os in ubuntu-latest ubuntu-bash32 macos-latest windows-latest; do
     for i in 1 2 3 4; do
       printf 'test_%s\n' one two three four five | awk -v i="$i" '(NR - 1) % 4 == i - 1' >"$d/shard-list/$os-$i-of-4.txt"
     done
@@ -2121,7 +2124,7 @@ test_workflow_bootstrapper_test_fails_when_a_shard_or_leg_did_not_report() {
   step="$(wf_step bootstrapper-test '^ *run: [|]')"
   script="$WORK/gate.$RANDOM.sh"
   printf '%s\n' "$step" | wf_run_block >"$script"
-  for f in windows-latest-2-of-4.txt macos-latest-4-of-4.txt ubuntu-latest-1-of-4.txt; do
+  for f in windows-latest-2-of-4.txt macos-latest-4-of-4.txt ubuntu-latest-1-of-4.txt ubuntu-bash32-3-of-4.txt; do
     d="$WORK/gate.$f"; gate_fixture "$d"
     rm "$d/shard-list/$f"
     if ( cd "$d" && RESULTS="success success" bash "$script" ) >"$WORK/out" 2>&1; then
@@ -2135,6 +2138,15 @@ test_workflow_bootstrapper_test_fails_when_a_shard_or_leg_did_not_report() {
     die "passed with the macOS leg missing"
   fi
   grep -qF 'macos-latest: no shard reported' "$WORK/out" || { cat "$WORK/out" >&2; die "the missing macOS leg is not named"; }
+  d="$WORK/gate.bash32"; gate_fixture "$d"
+  rm "$d/shard-list/ubuntu-bash32-"*
+  if ( cd "$d" && RESULTS="success success" bash "$script" ) >"$WORK/out" 2>&1; then
+    die "passed with the bash 3.2 leg missing"
+  fi
+  grep -qF 'ubuntu-bash32: no shard reported' "$WORK/out" || { cat "$WORK/out" >&2; die "the missing bash 3.2 leg is not named"; }
+  # The call names the bash 3.2 leg, so a gate that was not told to
+  # expect it cannot pass without it.
+  grep -qE 'bash bootstrap/check-shards[.]sh shard-list all-tests[.]txt .*ubuntu-bash32' <<<"$step" || die "the gate call does not name ubuntu-bash32"
 }
 
 test_workflow_every_os_leg_is_sharded_and_records_what_it_ran() {
@@ -2145,28 +2157,28 @@ test_workflow_every_os_leg_is_sharded_and_records_what_it_ran() {
   local j job os n legs agg
   j="$(matrix_job)"; job="$(wf_job "$j")"
   legs="$(wf_legs)"
-  [ -n "$legs" ] || die "$j has no matrix legs (- { os: <os>, shard: <i>, of: <n> })"
-  for os in ubuntu-latest macos-latest windows-latest; do
-    n="$(printf '%s\n' "$legs" | awk -v os="$os" '$1 == os { print $3 }' | sort -u)"
+  [ -n "$legs" ] || die "$j has no matrix legs (- { leg: <leg>, os: <os>, shard: <i>, of: <n> })"
+  for os in ubuntu-latest ubuntu-bash32 macos-latest windows-latest; do
+    n="$(printf '%s\n' "$legs" | awk -v os="$os" '$1 == os { print $4 }' | sort -u)"
     [ "$(printf '%s\n' "$n" | grep -c .)" = 1 ] || die "$os: its legs do not agree on one shard count: $n"
     [ "$n" -ge 2 ] || die "$os is not sharded (n = $n)"
-    [ "$(printf '%s\n' "$legs" | awk -v os="$os" '$1 == os { print $2 }' | paste -sd, -)" = "$(seq -s, 1 "$n")" ] \
+    [ "$(printf '%s\n' "$legs" | awk -v os="$os" '$1 == os { print $3 }' | paste -sd, -)" = "$(seq -s, 1 "$n")" ] \
       || die "$os: its shards are not 1..$n, each once"
   done
   # Every entry under include: is in the one-line form wf_legs reads, so
   # none can hide from these tests.
   printf '%s\n' "$job" | awk '/^        include:[[:space:]]*$/ { p = 1; next } p && /^          / { print; next } p && !/^[[:space:]]*(#|$)/ { p = 0 }' >"$WORK/include-lines"
   [ -s "$WORK/include-lines" ] || die "$j has no include: entries"
-  ! grep -vE '^          - \{ os: [a-z0-9-]+, shard: [0-9]+, of: [0-9]+ \}[[:space:]]*$' "$WORK/include-lines" >&2 \
-    || die "an include: entry is not in the form - { os: <os>, shard: <i>, of: <n> } (listed above)"
+  ! grep -vE '^          - \{ leg: [a-z0-9-]+, os: [a-z0-9-]+, shard: [0-9]+, of: [0-9]+ \}[[:space:]]*$' "$WORK/include-lines" >&2 \
+    || die "an include: entry is not in the form - { leg: <leg>, os: <os>, shard: <i>, of: <n> } (listed above)"
   [ "$(wc -l <"$WORK/include-lines" | tr -d ' ')" = "$(printf '%s\n' "$legs" | grep -c .)" ] || die "wf_legs does not read every include: entry"
   grep -qxF '      BOOTSTRAP_TEST_SHARD: ${{ matrix.shard }}/${{ matrix.of }}' <<<"$job" \
     || die "the shard setting is not matrix.shard/matrix.of"
-  grep -qxF '      BOOTSTRAP_TEST_MANIFEST: shard-list/${{ matrix.os }}-${{ matrix.shard }}-of-${{ matrix.of }}.txt' <<<"$job" \
-    || die "the shards do not record what they ran as shard-list/<os>-<i>-of-<n>.txt"
+  grep -qxF '      BOOTSTRAP_TEST_MANIFEST: shard-list/${{ matrix.leg }}-${{ matrix.shard }}-of-${{ matrix.of }}.txt' <<<"$job" \
+    || die "the shards do not record what they ran as shard-list/<leg>-<i>-of-<n>.txt"
   grep -qE '^        uses: actions/upload-artifact@v[0-9]+$|^      - uses: actions/upload-artifact@v[0-9]+$' <<<"$job" \
     || die "the shards do not upload what they ran"
-  grep -qxF '          name: bootstrap-tests-${{ matrix.os }}-${{ matrix.shard }}' <<<"$job" || die "unexpected artifact name"
+  grep -qxF '          name: bootstrap-tests-${{ matrix.leg }}-${{ matrix.shard }}' <<<"$job" || die "unexpected artifact name"
   grep -qxF '          path: shard-list/' <<<"$job" || die "the upload is not shard-list/"
   grep -qxF '          if-no-files-found: error' <<<"$job" || die "an upload with no manifest does not fail"
   agg="$(wf_job bootstrapper-test)"
@@ -2215,12 +2227,14 @@ test_workflow_bootstrapper_test_gates_the_e2e_check_tests() {
   wf_job "$job" | grep -xE '    runs-on: ubuntu-latest' >/dev/null || die "$job does not run on ubuntu-latest"
 }
 
-test_workflow_bootstrap_project_tests_run_on_ubuntu_macos_and_windows() {
+test_workflow_bootstrap_project_tests_run_on_ubuntu_bash32_macos_and_windows() {
   local j job oses
   j="$(matrix_job)"; job="$(wf_job "$j")"
   grep -qxF '    runs-on: ${{ matrix.os }}' <<<"$job" || die "$j does not run on matrix.os"
   oses="$(wf_legs | awk '{ print $1 }' | LC_ALL=C sort -u | tr '\n' ' ')"
-  [ "$oses" = "macos-latest ubuntu-latest windows-latest " ] || die "matrix os is '$oses'"
+  [ "$oses" = "macos-latest ubuntu-bash32 ubuntu-latest windows-latest " ] || die "matrix legs are '$oses'"
+  # The bash 3.2 leg runs on Linux (PBI-1.26).
+  [ "$(wf_legs | awk '$1 == "ubuntu-bash32" { print $2 }' | sort -u)" = ubuntu-latest ] || die "the ubuntu-bash32 leg does not run on ubuntu-latest"
   # All three results show, even when one leg fails first.
   grep -qxF '      fail-fast: false' <<<"$job" || die "$j does not set fail-fast: false"
 }
@@ -2248,9 +2262,333 @@ test_workflow_macos_leg_runs_the_tests_with_bin_bash_3_2() {
   grep -qE 'PATH=' <<<"$mac" || die "the macOS step does not put that link first on PATH"
   grep -qF 'BASH_VERSINFO' <<<"$mac" && grep -qF '3.2' <<<"$mac" \
     || die "the macOS step does not check that bash is 3.2"
-  other="$(wf_step "$j" "^        if: runner[.]os != 'macOS'\$")"
+  other="$(wf_step "$j" "^        if: runner[.]os != 'macOS' && matrix[.]leg != 'ubuntu-bash32'\$")"
   grep -qE '^ +run: bash bootstrap/test-bootstrap-project\.sh *$' <<<"$other" \
     || die "no step runs the tests with bash on the other legs"
+}
+
+# ---------- the bash 3.2 leg on Linux (PBI-1.26, PR 1) ----------
+
+CACHEWF="$REPO/.github/workflows/bash32-cache.yml"
+BASH32="$HERE/bash32.sh"
+BASH32_SHA256_PINNED="3fa9daf85ebf35068f090ce51283ddeeb3c75eb5bc70b1a4a7cb05868bfe06a4"
+BASH32_KEY='bash-3.2.57-'"$BASH32_SHA256_PINNED"'-${{ runner.os }}-${{ steps.image.outputs.image }}-gcc${{ steps.image.outputs.gcc }}'
+
+# wf_file_step <file> <regex>: like wf_step, for the steps of another
+# workflow file (steps start at "      - ").
+wf_file_step() {
+  awk -v re="$2" '
+    /^      - / { if (hit) printf "%s", buf; buf = ""; hit = 0; instep = 1 }
+    /^    [A-Za-z]/ { if (hit) printf "%s", buf; buf = ""; hit = 0; instep = 0 }
+    instep { buf = buf $0 "\n"; if ($0 ~ re) hit = 1 }
+    END { if (hit) printf "%s", buf }' "$1"
+}
+
+# step_line <file> <name-regex>: the line number of the first step whose
+# "- name:" line matches, so the order of steps can be checked.
+step_line() {
+  grep -nE "^      - name: $2" "$1" | head -n 1 | cut -d: -f1
+}
+
+# b32_test_step: the bash 3.2 leg's test step in the matrix job.
+b32_test_step() {
+  wf_step "$(matrix_job)" "^        if: matrix[.]leg == 'ubuntu-bash32'\$" | awk '/^      - name: Test /,0'
+}
+
+test_workflow_bash32_leg_gets_bash_3_2_before_it_runs_the_tests_with_it() {
+  local j get restore image test_step a b c d
+  j="$(matrix_job)"
+  image="$(wf_step "$j" '^        id: image$')"
+  [ -n "$image" ] || die "no step with id: image in $j"
+  grep -qxF "        if: matrix.leg == 'ubuntu-bash32'" <<<"$image" || die "the image step is not for the bash 3.2 leg only"
+  restore="$(wf_step "$j" '^        uses: actions/cache/restore@v[0-9]+$')"
+  [ -n "$restore" ] || die "no step restores the bash 3.2 cache"
+  grep -qxF "        if: matrix.leg == 'ubuntu-bash32'" <<<"$restore" || die "the restore is not for the bash 3.2 leg only"
+  grep -qxF "        id: cache" <<<"$restore" || die "the restore step has no id: cache"
+  grep -qxF '          path: ${{ runner.temp }}/bash32' <<<"$restore" || die "the restored path is not RUNNER_TEMP/bash32"
+  grep -qxF "          key: $BASH32_KEY" <<<"$restore" || die "the restore key is not $BASH32_KEY"
+  get="$(wf_step "$j" '^      - name: Get bash 3[.]2$')"
+  [ -n "$get" ] || die "no step named Get bash 3.2 in $j"
+  grep -qxF "        if: matrix.leg == 'ubuntu-bash32' && steps.cache.outputs.cache-hit != 'true'" <<<"$get" \
+    || die "Get bash 3.2 does not run only on a cache miss of the bash 3.2 leg"
+  grep -qE '^ +run: bash bootstrap/bash32[.]sh "[$]RUNNER_TEMP/bash32" *$' <<<"$get" \
+    || die "Get bash 3.2 does not run bootstrap/bash32.sh into RUNNER_TEMP/bash32"
+  test_step="$(b32_test_step)"
+  [ -n "$test_step" ] || die "no test step for the bash 3.2 leg"
+  grep -qE '^ +bash bootstrap/test-bootstrap-project\.sh *$' <<<"$test_step" \
+    || die "the bash 3.2 step does not run the tests with the bash on PATH"
+  grep -qF 'PATH="$RUNNER_TEMP/bash32:$PATH"' <<<"$test_step" || die "the bash 3.2 step does not put RUNNER_TEMP/bash32 first on PATH"
+  grep -qF 'BASH_VERSINFO' <<<"$test_step" && grep -qF '3.2' <<<"$test_step" || die "the bash 3.2 step does not check that bash is 3.2"
+  # Order: the image, the restore, the build, then the tests.
+  a="$(step_line "$BWF" 'Identify the runner image')"
+  b="$(step_line "$BWF" 'Restore bash 3[.]2')"
+  c="$(step_line "$BWF" 'Get bash 3[.]2')"
+  d="$(step_line "$BWF" 'Test bootstrap-project[.]sh with bash 3[.]2')"
+  [ -n "$a" ] && [ -n "$b" ] && [ -n "$c" ] && [ -n "$d" ] || die "a bash 3.2 step is missing ($a $b $c $d)"
+  [ "$a" -lt "$b" ] && [ "$b" -lt "$c" ] && [ "$c" -lt "$d" ] || die "the bash 3.2 steps are out of order ($a $b $c $d)"
+}
+
+test_workflow_bash32_leg_has_the_shards_its_measured_time_needs() {
+  # Measured on GitHub's runner (run 41730239312, 4 shards): the tests
+  # under bash 3.2 took 1061 to 1271 s a shard, about 2.4 times ubuntu's,
+  # against Windows' 11 min wall time. To stay near 12 min wall time
+  # (PBI-1.26, item 6) the leg has at least 8 shards.
+  local n
+  n="$(wf_legs | awk '$1 == "ubuntu-bash32" { print $4; exit }')"
+  [ -n "$n" ] || die "no ubuntu-bash32 leg"
+  [ "$n" -ge 8 ] || die "the bash 3.2 leg has $n shards; its measured time needs at least 8"
+}
+
+test_workflow_bash32_step_checks_for_bash_3_2_and_runs_the_tests_with_it() {
+  # Runs the test step's actual script with a fake bash in RUNNER_TEMP/bash32
+  # and a stub test file: 3.2 passes and runs the tests, 5.2 fails.
+  local step script d v out rc
+  step="$(b32_test_step)"
+  [ -n "$step" ] || die "no test step for the bash 3.2 leg"
+  script="$WORK/b32step.$RANDOM.sh"
+  printf '%s\n' "$step" | wf_run_block >"$script"
+  [ -s "$script" ] || die "empty run script"
+  for v in 3.2.57 5.2.21; do
+    d="$WORK/b32step.$v.$RANDOM"; mkdir -p "$d/bootstrap" "$d/tmp/bash32"
+    printf 'echo STUB TESTS RAN\n' >"$d/bootstrap/test-bootstrap-project.sh"
+    cat >"$d/tmp/bash32/bash" <<'FB'
+#!/bin/sh
+case "$1" in
+  --version) echo "GNU bash, version $FAKE_BASH_VERSION(1)-release"; exit 0 ;;
+  -c) case "$2" in *BASH_VERSINFO*) echo "$FAKE_BASH_VERSION" | cut -d. -f1-2; exit 0 ;; esac ;;
+esac
+exec "$REAL_BASH" "$@"
+FB
+    chmod +x "$d/tmp/bash32/bash"
+    set +e
+    out="$(cd "$d" && RUNNER_TEMP="$d/tmp" REAL_BASH="$BASH" FAKE_BASH_VERSION="$v" \
+      "$BASH" --noprofile --norc -eo pipefail "$script" 2>&1)"
+    rc=$?
+    set -e
+    case "$v" in
+      3.2.*)
+        [ "$rc" -eq 0 ] || { printf '%s\n' "$out" >&2; die "check failed on bash $v"; }
+        grep -qxF 'STUB TESTS RAN' <<<"$out" || { printf '%s\n' "$out" >&2; die "tests not run on bash $v"; } ;;
+      *)
+        [ "$rc" -ne 0 ] || { printf '%s\n' "$out" >&2; die "check passed on bash $v"; }
+        grep -qF '::error::' <<<"$out" || { printf '%s\n' "$out" >&2; die "no ::error:: on bash $v"; }
+        ! grep -qxF 'STUB TESTS RAN' <<<"$out" || die "tests ran on bash $v" ;;
+    esac
+  done
+}
+
+test_workflow_main_saves_the_bash32_cache_under_the_key_the_shards_restore() {
+  local save restore get
+  [ -f "$CACHEWF" ] || die "no .github/workflows/bash32-cache.yml"
+  # Runs on pushes to main and by hand, nothing else.
+  [ "$(awk '/^on:/ { p = 1; next } /^[^ #]/ { p = 0 } p' "$CACHEWF" | grep -vE '^[[:space:]]*(#|$)' | tr -d ' \n')" = 'push:branches:[main]workflow_dispatch:' ] \
+    || die "bash32-cache.yml does not run on pushes to main and workflow_dispatch only"
+  restore="$(wf_file_step "$CACHEWF" '^        uses: actions/cache/restore@v[0-9]+$')"
+  save="$(wf_file_step "$CACHEWF" '^        uses: actions/cache/save@v[0-9]+$')"
+  [ -n "$restore" ] || die "bash32-cache.yml restores nothing"
+  [ -n "$save" ] || die "bash32-cache.yml saves nothing"
+  # The same key and the same path as the shards (the cache version is made from the path).
+  grep -qxF "          key: $BASH32_KEY" <<<"$save" || die "the save key is not $BASH32_KEY"
+  grep -qxF "          key: $BASH32_KEY" <<<"$restore" || die "the restore key in bash32-cache.yml is not $BASH32_KEY"
+  grep -qxF '          path: ${{ runner.temp }}/bash32' <<<"$save" || die "the saved path is not RUNNER_TEMP/bash32"
+  grep -qxF '          path: ${{ runner.temp }}/bash32' <<<"$restore" || die "the restored path is not RUNNER_TEMP/bash32"
+  # It builds only on a miss, and saves only what it built.
+  grep -qxF "        id: cache" <<<"$restore" || die "the restore step has no id: cache"
+  grep -qxF "        if: steps.cache.outputs.cache-hit != 'true'" <<<"$save" || die "the save is not only on a miss"
+  get="$(wf_file_step "$CACHEWF" '^      - name: Get bash 3[.]2$')"
+  grep -qE '^ +run: bash bootstrap/bash32[.]sh "[$]RUNNER_TEMP/bash32" *$' <<<"$get" \
+    || die "bash32-cache.yml does not build with bootstrap/bash32.sh into RUNNER_TEMP/bash32"
+  # The pinned hash in the key is the one the script checks.
+  grep -qF "$BASH32_SHA256_PINNED" "$BASH32" || die "bash32.sh does not pin $BASH32_SHA256_PINNED"
+}
+
+test_workflow_bash32_key_comes_from_an_image_step_not_the_env_context() {
+  # ImageOS is inherited by the runner, not set by the workflow, so
+  # ${{ env.ImageOS }} is empty; a step reads it in the shell instead.
+  local f a b step
+  for f in "$BWF" "$CACHEWF"; do
+    [ -f "$f" ] || die "no $f"
+    ! grep -qF 'env.ImageOS' "$f" || die "$f uses env.ImageOS"
+    grep -qF 'steps.image.outputs.image' "$f" && grep -qF 'steps.image.outputs.gcc' "$f" || die "$f does not use the image step's outputs"
+    a="$(step_line "$f" 'Identify the runner image')"
+    b="$(grep -nE '^        uses: actions/cache/restore@' "$f" | head -n 1 | cut -d: -f1)"
+    [ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ] || die "$f: the image step does not come before the cache step"
+    step="$(wf_file_step "$f" '^        id: image$')"
+    grep -qE '^ +run: [|]' <<<"$step" || die "$f: the step with id: image has no run block"
+  done
+}
+
+test_workflow_image_step_fails_without_imageos_or_gcc_and_writes_both_outputs() {
+  local f step script fake d out rc
+  for f in "$BWF" "$CACHEWF"; do
+    step="$(wf_file_step "$f" '^        id: image$')"
+    [ -n "$step" ] || die "$f has no step with id: image"
+    script="$WORK/image.$RANDOM.sh"
+    printf '%s\n' "$step" | wf_run_block >"$script"
+    [ -s "$script" ] || die "$f: empty image run script"
+    fake="$WORK/fakegcc.$RANDOM"; mkdir -p "$fake"
+    printf '#!/bin/sh\nif [ "$1" = -dumpfullversion ]; then printf "%%s\\n" "$FAKE_GCC"; fi\nexit 0\n' >"$fake/gcc"
+    chmod +x "$fake/gcc"
+    d="$WORK/image.d.$RANDOM"; mkdir -p "$d"
+    # ImageOS unset.
+    : >"$d/out1"
+    set +e
+    out="$(cd "$d" && env -u ImageOS PATH="$fake:$PATH" FAKE_GCC=13.3.0 GITHUB_OUTPUT="$d/out1" "$BASH" --noprofile --norc -eo pipefail "$script" 2>&1)"
+    rc=$?
+    set -e
+    [ "$rc" -ne 0 ] || die "$f: the image step passed without ImageOS"
+    grep -qF '::error::' <<<"$out" || die "$f: no ::error:: without ImageOS"
+    # gcc prints nothing.
+    : >"$d/out2"
+    set +e
+    out="$(cd "$d" && ImageOS=ubuntu24 PATH="$fake:$PATH" FAKE_GCC= GITHUB_OUTPUT="$d/out2" "$BASH" --noprofile --norc -eo pipefail "$script" 2>&1)"
+    rc=$?
+    set -e
+    [ "$rc" -ne 0 ] || die "$f: the image step passed with no gcc version"
+    grep -qF '::error::' <<<"$out" || die "$f: no ::error:: without a gcc version"
+    # Both set.
+    : >"$d/out3"
+    ( cd "$d" && ImageOS=ubuntu24 PATH="$fake:$PATH" FAKE_GCC=13.3.0 GITHUB_OUTPUT="$d/out3" "$BASH" --noprofile --norc -eo pipefail "$script" ) >/dev/null 2>&1 \
+      || die "$f: the image step failed with both set"
+    grep -qxF 'image=ubuntu24' "$d/out3" || { cat "$d/out3" >&2; die "$f: no image=ubuntu24 output"; }
+    grep -qxF 'gcc=13.3.0' "$d/out3" || { cat "$d/out3" >&2; die "$f: no gcc=13.3.0 output"; }
+  done
+}
+
+# b32_fixture <dir> <bash version the fake build makes>: a fake curl and a
+# tarball whose configure and make "build" a bash that reports the
+# version, so bootstrap/bash32.sh runs in a second.
+b32_fixture() {
+  local d="$1" ver="$2"
+  mkdir -p "$d/fake" "$d/src/bash-3.2.57" "$d/out"
+  cat >"$d/src/bash-3.2.57/fakebash" <<FB
+#!/bin/sh
+case "\$1" in
+  --version) echo "GNU bash, version $ver(1)-release" ;;
+  -c) echo "$(printf '%s' "$ver" | cut -d. -f1-2)" ;;
+esac
+FB
+  chmod +x "$d/src/bash-3.2.57/fakebash"
+  cat >"$d/src/bash-3.2.57/configure" <<'CFG'
+#!/bin/sh
+echo "CC=$CC CFLAGS=$CFLAGS ARGS=$*" >>"$FAKE_CONFIGURE_LOG"
+printf 'bash:\n\tcp fakebash bash\n' >Makefile
+CFG
+  chmod +x "$d/src/bash-3.2.57/configure"
+  ( cd "$d/src" && tar -czf "$d/fake.tar.gz" bash-3.2.57 )
+  # A fake curl: records the URL; fails for URLs containing FAKE_CURL_FAIL.
+  cat >"$d/fake/curl" <<'CURL'
+#!/bin/sh
+for a in "$@"; do url="$a"; done
+prev=
+for a in "$@"; do if [ "$prev" = -o ]; then dest="$a"; fi; prev="$a"; done
+echo "$url" >>"$FAKE_CURL_LOG"
+if [ -n "$FAKE_CURL_FAIL" ]; then case "$url" in *"$FAKE_CURL_FAIL"*) exit 22 ;; esac; fi
+cp "$FAKE_TARBALL" "$dest"
+CURL
+  chmod +x "$d/fake/curl"
+}
+
+# b32_run <dir> <hash-mode> [VAR=value...]: runs bootstrap/bash32.sh into
+# <dir>/out/bash32 with the fakes first on PATH. hash-mode is "fake" (the
+# fake tarball's hash is the one to expect) or "pinned" (the real pin).
+# Sets rc and out.
+b32_run() {
+  local d="$1" mode="$2" hash
+  shift 2
+  hash="$(cd "$d" && cksum_sha256 fake.tar.gz)"
+  set +e
+  if [ "$mode" = fake ]; then
+    out="$(cd "$d" && env PATH="$d/fake:$PATH" FAKE_TARBALL="$d/fake.tar.gz" FAKE_CURL_LOG="$d/curl.log" \
+      FAKE_CONFIGURE_LOG="$d/configure.log" BASH32_SHA256="$hash" "$@" "$BASH" "$BASH32" "$d/out/bash32" 2>&1)"
+  else
+    out="$(cd "$d" && env PATH="$d/fake:$PATH" FAKE_TARBALL="$d/fake.tar.gz" FAKE_CURL_LOG="$d/curl.log" \
+      FAKE_CONFIGURE_LOG="$d/configure.log" "$@" "$BASH" "$BASH32" "$d/out/bash32" 2>&1)"
+  fi
+  rc=$?
+  set -e
+}
+
+cksum_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi
+}
+
+test_bash32_script_builds_and_installs_a_bash_that_reports_3_2() {
+  local d="$WORK/b32.ok" out rc
+  [ -f "$BASH32" ] || die "no bootstrap/bash32.sh"
+  b32_fixture "$d" 3.2.57
+  b32_run "$d" fake FAKE_CURL_FAIL=
+  [ "$rc" -eq 0 ] || { printf '%s\n' "$out" >&2; die "failed with a bash 3.2 build"; }
+  [ -x "$d/out/bash32/bash" ] || die "no bash installed in the folder"
+  [ "$("$d/out/bash32/bash" -c x)" = 3.2 ] || die "the installed bash is not the built one"
+  grep -qF -- '--without-bash-malloc' "$d/configure.log" || { cat "$d/configure.log" >&2; die "configure without --without-bash-malloc"; }
+  grep -qF -- '-std=gnu89' "$d/configure.log" || { cat "$d/configure.log" >&2; die "configure without -std=gnu89"; }
+  # In the compiler command itself, not only CFLAGS: bash's build tools
+  # (support/bashversion.c) are compiled with CC_FOR_BUILD and no CFLAGS,
+  # and fail under the default C standard of gcc 15 (seen on ubuntu-26.04,
+  # run 41729021082).
+  grep -qE '(^|[[:space:]])CC=gcc -std=gnu89([[:space:]]|$)' "$d/configure.log" || { cat "$d/configure.log" >&2; die "configure without CC=\"gcc -std=gnu89\""; }
+  [ "$(head -n 1 "$d/curl.log")" = 'https://ftp.gnu.org/gnu/bash/bash-3.2.57.tar.gz' ] \
+    || die "the first download is not from ftp.gnu.org: $(head -n 1 "$d/curl.log")"
+}
+
+test_bash32_script_uses_the_mirror_when_the_first_server_fails() {
+  local d="$WORK/b32.mirror" out rc
+  [ -f "$BASH32" ] || die "no bootstrap/bash32.sh"
+  b32_fixture "$d" 3.2.57
+  b32_run "$d" fake FAKE_CURL_FAIL=ftp.gnu.org
+  [ "$rc" -eq 0 ] || { printf '%s\n' "$out" >&2; die "failed although the mirror works"; }
+  [ -x "$d/out/bash32/bash" ] || die "no bash installed"
+  grep -qxF 'https://ftpmirror.gnu.org/gnu/bash/bash-3.2.57.tar.gz' "$d/curl.log" || { cat "$d/curl.log" >&2; die "the mirror was not tried"; }
+}
+
+test_bash32_script_names_the_download_when_neither_server_answers() {
+  local d="$WORK/b32.nodl" out rc err
+  [ -f "$BASH32" ] || die "no bootstrap/bash32.sh"
+  b32_fixture "$d" 3.2.57
+  b32_run "$d" fake FAKE_CURL_FAIL=gnu.org
+  [ "$rc" -ne 0 ] || die "passed with no download"
+  err="$(grep -F '::error::' <<<"$out" || true)"
+  grep -qi 'download' <<<"$err" || { printf '%s\n' "$out" >&2; die "no ::error:: line naming the download"; }
+  [ ! -e "$d/out/bash32/bash" ] || die "a bash was left in the folder"
+  [ ! -e "$d/configure.log" ] || die "a build ran without a download"
+}
+
+test_bash32_script_refuses_a_file_with_another_hash_and_leaves_no_bash() {
+  local d="$WORK/b32.hash" out rc err
+  [ -f "$BASH32" ] || die "no bootstrap/bash32.sh"
+  b32_fixture "$d" 3.2.57
+  # No hash override: the fake file is not the pinned one.
+  b32_run "$d" pinned FAKE_CURL_FAIL=
+  [ "$rc" -ne 0 ] || die "accepted a file with another hash"
+  err="$(grep -F '::error::' <<<"$out" || true)"
+  grep -q 'SHA-256' <<<"$err" || { printf '%s\n' "$out" >&2; die "no ::error:: line naming the hash"; }
+  [ ! -e "$d/out/bash32/bash" ] || die "a bash was left in the folder"
+  [ ! -e "$d/configure.log" ] || die "the refused file was built"
+}
+
+test_bash32_script_fails_when_the_built_bash_is_not_3_2() {
+  local d="$WORK/b32.v52" out rc err
+  [ -f "$BASH32" ] || die "no bootstrap/bash32.sh"
+  b32_fixture "$d" 5.2.21
+  b32_run "$d" fake FAKE_CURL_FAIL=
+  [ "$rc" -ne 0 ] || die "passed with a bash 5.2 build"
+  err="$(grep -F '::error::' <<<"$out" || true)"
+  grep -q '5[.]2' <<<"$err" || { printf '%s\n' "$out" >&2; die "no ::error:: line naming the version"; }
+  [ ! -e "$d/out/bash32/bash" ] || die "a bash 5.2 was left in the folder"
+}
+
+test_bash32_script_fails_naming_the_build_when_configure_fails() {
+  local d="$WORK/b32.build" out rc err
+  [ -f "$BASH32" ] || die "no bootstrap/bash32.sh"
+  b32_fixture "$d" 3.2.57
+  printf '#!/bin/sh\nexit 1\n' >"$d/src/bash-3.2.57/configure"
+  ( cd "$d/src" && tar -czf "$d/fake.tar.gz" bash-3.2.57 )
+  b32_run "$d" fake FAKE_CURL_FAIL=
+  [ "$rc" -ne 0 ] || die "passed although configure failed"
+  err="$(grep -F '::error::' <<<"$out" || true)"
+  grep -qi 'build' <<<"$err" || { printf '%s\n' "$out" >&2; die "no ::error:: line naming the build"; }
+  [ ! -e "$d/out/bash32/bash" ] || die "a bash was left in the folder"
 }
 
 test_real_build_does_not_ship_the_bootstrap_project_tests() {
