@@ -855,6 +855,8 @@ get a working project in any supported language.
 
   **Part 1 (Crog agent, PR #328; ubuntu 4, macOS 5, Windows 8 shards, durations for all tests).** Windows leg wall time 23.2 min to 12.5 min. Still open for "Done when": the before/after table for a doc-only change that tests read (like #277) against a script change; today every change runs all tests, so both look the same until part 3.
 
+  **Progress 2026-11-03 (Clead, unattended batch).** Part 2 merged: #329 (`30abdee`), CI and the pack checks run on pull requests and pushes to `main` only; the first push to `main` after it started both. Part 1 merged: #328 (`f4e8335`). Both reviewed by an Opus agent in the Clead review role and approved (#328 in round 2; its red run is a local one, reproduced by the reviewer, since the CI red run was cancelled by the next push). Part 4 is being built. Part 3's spec is not written yet; it waits for Adam's intent approval once it is.
+
   **Rules that apply.** Harness, test and workflow changes are code and config: test-first (red run in the PR), reviewed by Crog on Opus. Part 3 changes which tests the required check `bootstrapper-test` runs, so it needs Adam's intent approval of its spec before it merges.
 
 
