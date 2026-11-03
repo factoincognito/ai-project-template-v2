@@ -410,7 +410,8 @@ a pull request's run can predate another pull request's merge, and the
 workflow's suites and its OS matrix do not run on the combined tree
 until a `v*` tag, whose run still gates the release. This repo's
 `ci.yml` and `packs.yml` do run on `main` after every merge, because
-they trigger on pushes to any branch. Retargeting a stacked pull
+they trigger on pull requests and on pushes to `main`, not on pushes to
+other branches. Retargeting a stacked pull
 request's base to `main` is an `edited` event, which is not among the
 default `pull_request` event types, so `bootstrapper-test` stays
 missing (and the merge blocked) until a new push or a close and

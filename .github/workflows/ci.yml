@@ -12,12 +12,15 @@
 # runs here, not in the Bootstrapper workflow's test jobs, because those
 # skip a change that touches only STATUS.md (bootstrap/not-read-by-tests.txt).
 # Both checks' own tests run in a job that the required bootstrapper-test
-# check needs (.github/workflows/bootstrapper.yml).
+# check needs (.github/workflows/bootstrapper.yml). Its third step checks
+# that this file and packs.yml run on pull requests and on pushes to main
+# only (tools/test-ci-triggers.sh, PBI-1.25 part 2): a push trigger on every
+# branch runs them twice for each push to a pull request branch.
 name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -33,3 +36,5 @@ jobs:
         run: bash .github/scripts/require-test-change.sh --code '*.sh' 'bootstrap/*' 'tools/*' '.github/workflows/*' '.github/scripts/*' 'languages/*' '.gitattributes' '.gitignore' --test 'bootstrap/test.sh' 'bootstrap/test-*.sh' 'tools/test-*.sh' 'languages/*.test.ts' 'languages/*.test.tsx' 'languages/*.spec.ts' 'languages/*.spec.tsx' 'languages/*__tests__/*' 'languages/*/src/tests/*' 'languages/*/starter/tests/*' 'languages/*/test_*.py' 'languages/*.e2e.ts' --ignore '*.md' 'bootstrap/stubs/licenses/*'
       - name: Check the STATUS.md format
         run: bash tools/check-status.sh
+      - name: Check the triggers of ci.yml and packs.yml
+        run: bash tools/test-ci-triggers.sh
