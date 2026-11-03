@@ -9,7 +9,7 @@ all projects reads them.
 
 # Status
 
-Last update: 2026-10-30
+Last update: 2026-11-03
 
 ## Phase
 Build and release: the turn-key bootstrap script is built (v2.4.0); the fixes for end-to-end run 1 are released (v2.5.0, 2026-10-26), v2.6.0 adds `STATUS.md` to every new project, v2.7.0 (2026-10-27) the fixes for the repeated run 1, `--version` and a colour key, and v2.8.0 (2026-10-27, the fixes for run 1 on v2.7.0: typed-ahead keys dropped, four colours, plain stars, a blank line after questions), and v2.8.1 (2026-10-28) the fixes for run 2: two README steps and the npm check in WSL. v2.8.2 (2026-10-28) the fixes for the tablet run: a WSL step, GitHub's sign-in on a new device, the npm guide on Linux and in WSL, a keyboard note and the short restart command `--again`. v2.8.3 (2026-10-29) the fixes for runs 3 and 4, and v2.8.4 (2026-10-30) the bootstrapper's own README (PBI-1.29). v2.8.5 (2026-10-30) the fixes from the newcomer pre-check (PBI-1.30). v2.8.5 is published to the bootstrapper.
@@ -21,4 +21,4 @@ PBI-1.29 is built and merged (#306, #309, #310): the bootstrapper has its own RE
 Run 5 on v2.8.5: someone who has never used a terminal or gh sets up a project from the bootstrapper's README alone. The newcomer pre-check passed on v2.8.5.
 
 ## Blockers
-None. acuteping waits until run 5 passes.
+Product Owner: intent approval of the spec of PBI-1.25 part 3 (per-test selection of the CI tests), and whether part 3 goes ahead as specced given its measurement (PR #334). acuteping waits until run 5 passes.
