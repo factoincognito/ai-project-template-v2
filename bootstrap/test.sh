@@ -2460,7 +2460,7 @@ FB
   chmod +x "$d/src/bash-3.2.57/fakebash"
   cat >"$d/src/bash-3.2.57/configure" <<'CFG'
 #!/bin/sh
-echo "CFLAGS=$CFLAGS ARGS=$*" >>"$FAKE_CONFIGURE_LOG"
+echo "CC=$CC CFLAGS=$CFLAGS ARGS=$*" >>"$FAKE_CONFIGURE_LOG"
 printf 'bash:\n\tcp fakebash bash\n' >Makefile
 CFG
   chmod +x "$d/src/bash-3.2.57/configure"
@@ -2512,6 +2512,11 @@ test_bash32_script_builds_and_installs_a_bash_that_reports_3_2() {
   [ "$("$d/out/bash32/bash" -c x)" = 3.2 ] || die "the installed bash is not the built one"
   grep -qF -- '--without-bash-malloc' "$d/configure.log" || { cat "$d/configure.log" >&2; die "configure without --without-bash-malloc"; }
   grep -qF -- '-std=gnu89' "$d/configure.log" || { cat "$d/configure.log" >&2; die "configure without -std=gnu89"; }
+  # In the compiler command itself, not only CFLAGS: bash's build tools
+  # (support/bashversion.c) are compiled with CC_FOR_BUILD and no CFLAGS,
+  # and fail under the default C standard of gcc 15 (seen on ubuntu-26.04,
+  # run 41729021082).
+  grep -qE '(^|[[:space:]])CC=gcc -std=gnu89([[:space:]]|$)' "$d/configure.log" || { cat "$d/configure.log" >&2; die "configure without CC=\"gcc -std=gnu89\""; }
   [ "$(head -n 1 "$d/curl.log")" = 'https://ftp.gnu.org/gnu/bash/bash-3.2.57.tar.gz' ] \
     || die "the first download is not from ftp.gnu.org: $(head -n 1 "$d/curl.log")"
 }
