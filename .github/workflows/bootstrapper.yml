@@ -27,8 +27,9 @@
 #   bootstrapper-test, a required check, passes only if all of them did.
 #   Each leg runs as shards (PBI-1.18; one leg took up to 76 min
 #   on Windows), as many as that OS's total test time needs (PBI-1.25:
-#   4 on ubuntu, 5 on macOS, 8 on Windows, whose tests take about 2.5
-#   times as long as ubuntu's), split by the measured time of each test on that OS
+#   4 on ubuntu, 8 on the bash 3.2 leg, whose tests took 1061 to 1271 s a
+#   shard with 4 (about 2.4 times ubuntu's), 5 on macOS, 8 on Windows,
+#   whose tests take about 2.5 times as long as ubuntu's), split by the measured time of each test on that OS
 #   (bootstrap/test-durations.txt, PBI-1.22); each shard records the
 #   tests it ran; bootstrapper-test also fails unless, for every OS,
 #   its shards together ran every test exactly once
@@ -137,10 +138,14 @@ jobs:
           - { leg: ubuntu-latest, os: ubuntu-latest, shard: 2, of: 4 }
           - { leg: ubuntu-latest, os: ubuntu-latest, shard: 3, of: 4 }
           - { leg: ubuntu-latest, os: ubuntu-latest, shard: 4, of: 4 }
-          - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 1, of: 4 }
-          - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 2, of: 4 }
-          - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 3, of: 4 }
-          - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 4, of: 4 }
+          - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 1, of: 8 }
+          - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 2, of: 8 }
+          - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 3, of: 8 }
+          - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 4, of: 8 }
+          - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 5, of: 8 }
+          - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 6, of: 8 }
+          - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 7, of: 8 }
+          - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 8, of: 8 }
           - { leg: macos-latest, os: macos-latest, shard: 1, of: 5 }
           - { leg: macos-latest, os: macos-latest, shard: 2, of: 5 }
           - { leg: macos-latest, os: macos-latest, shard: 3, of: 5 }
