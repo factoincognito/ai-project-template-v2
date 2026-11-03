@@ -74,10 +74,13 @@ if [ "$actual" != "$SHA256" ]; then
 fi
 
 # Build. -std=gnu89: bash 3.2.57 is pre-C99 code, which newer gcc versions
-# reject (implicit function declarations are errors from gcc 14).
+# reject (implicit function declarations are errors from gcc 14, and gcc 15
+# compiles as C23 by default). It is part of CC, not only of CFLAGS: bash's
+# build tools (support/bashversion.c, mkbuiltins.c) are compiled with
+# CC_FOR_BUILD, which takes CC and not CFLAGS.
 tar -xzf "$WORK/bash.tar.gz" -C "$WORK" || fail "The build failed: bash-$VERSION.tar.gz does not unpack."
 cd "$WORK/bash-$VERSION" || fail "The build failed: no bash-$VERSION folder in the download."
-if ! CFLAGS="-g -O2 -std=gnu89" ./configure --without-bash-malloc >"$WORK/configure.log" 2>&1; then
+if ! CC="gcc -std=gnu89" CFLAGS="-g -O2 -std=gnu89" ./configure --without-bash-malloc >"$WORK/configure.log" 2>&1; then
   tail -n 40 "$WORK/configure.log"
   fail "The build failed: ./configure."
 fi
