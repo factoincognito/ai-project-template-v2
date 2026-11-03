@@ -1864,6 +1864,10 @@ test_durations_file_has_a_time_for_every_test_on_every_os() {
   awk 'NR > 1 && $2 > 0 && $3 > 0 && $4 > 0 { print $1 }' "$DURATIONS" | LC_ALL=C sort >"$listed"
   LC_ALL=C comm -23 "$want" "$listed" | head -n 20 >&2
   [ -z "$(LC_ALL=C comm -23 "$want" "$listed")" ] || die "tests have no measured time on every OS (listed above, at most 20)"
+  # And no stale entry: the file lists exactly the tests of the harness.
+  awk 'NR > 1 { print $1 }' "$DURATIONS" | LC_ALL=C sort >"$WORK/listed-all"
+  LC_ALL=C comm -13 "$want" "$WORK/listed-all" | head -n 20 >&2
+  [ -z "$(LC_ALL=C comm -13 "$want" "$WORK/listed-all")" ] || die "the durations file lists tests the harness does not have (listed above, at most 20)"
 }
 
 test_workflow_shard_counts_keep_every_legs_slowest_shard_short() {
@@ -2149,6 +2153,13 @@ test_workflow_every_os_leg_is_sharded_and_records_what_it_ran() {
     [ "$(printf '%s\n' "$legs" | awk -v os="$os" '$1 == os { print $2 }' | paste -sd, -)" = "$(seq -s, 1 "$n")" ] \
       || die "$os: its shards are not 1..$n, each once"
   done
+  # Every entry under include: is in the one-line form wf_legs reads, so
+  # none can hide from these tests.
+  printf '%s\n' "$job" | awk '/^        include:[[:space:]]*$/ { p = 1; next } p && /^          / { print; next } p && !/^[[:space:]]*(#|$)/ { p = 0 }' >"$WORK/include-lines"
+  [ -s "$WORK/include-lines" ] || die "$j has no include: entries"
+  ! grep -vE '^          - \{ os: [a-z0-9-]+, shard: [0-9]+, of: [0-9]+ \}[[:space:]]*$' "$WORK/include-lines" >&2 \
+    || die "an include: entry is not in the form - { os: <os>, shard: <i>, of: <n> } (listed above)"
+  [ "$(wc -l <"$WORK/include-lines" | tr -d ' ')" = "$(printf '%s\n' "$legs" | grep -c .)" ] || die "wf_legs does not read every include: entry"
   grep -qxF '      BOOTSTRAP_TEST_SHARD: ${{ matrix.shard }}/${{ matrix.of }}' <<<"$job" \
     || die "the shard setting is not matrix.shard/matrix.of"
   grep -qxF '      BOOTSTRAP_TEST_MANIFEST: shard-list/${{ matrix.os }}-${{ matrix.shard }}-of-${{ matrix.of }}.txt' <<<"$job" \
