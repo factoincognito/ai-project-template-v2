@@ -21,9 +21,11 @@
 #   (tools/test-require-test-change.sh) and of the STATUS.md format check
 #   (tools/test-check-status.sh) on ubuntu, and the tests of the
 #   bootstrap script (bootstrap/test-bootstrap-project.sh) on ubuntu,
-#   macOS (Apple's /bin/bash 3.2) and Windows (Git for Windows bash).
+#   ubuntu with GNU bash 3.2.57 built from source (PBI-1.26; the cache of
+#   that build is saved by bash32-cache.yml), macOS (Apple's /bin/bash 3.2)
+#   and Windows (Git for Windows bash).
 #   bootstrapper-test, a required check, passes only if all of them did.
-#   Each OS leg runs as shards (PBI-1.18; one leg took up to 76 min
+#   Each leg runs as shards (PBI-1.18; one leg took up to 76 min
 #   on Windows), as many as that OS's total test time needs (PBI-1.25:
 #   4 on ubuntu, 5 on macOS, 8 on Windows, whose tests take about 2.5
 #   times as long as ubuntu's), split by the measured time of each test on that OS
@@ -124,32 +126,38 @@ jobs:
       # Every OS and shard reports, even when one fails first.
       fail-fast: false
       matrix:
-        # Each OS has the shard count its total test time needs
+        # Each leg has the shard count its total test time needs
         # (PBI-1.25; times in bootstrap/test-durations.txt): shards 1..of
-        # of every OS. bootstrapper-test fails if a shard of 1..of of an
-        # OS did not report.
+        # of every leg. bootstrapper-test fails if a shard of 1..of of a
+        # leg did not report. A leg is an OS, except ubuntu-bash32 (PBI-1.26):
+        # Linux with GNU bash 3.2.57 built from source, split by ubuntu's
+        # times (os is the runner and the column of the durations file).
         include:
-          - { os: ubuntu-latest, shard: 1, of: 4 }
-          - { os: ubuntu-latest, shard: 2, of: 4 }
-          - { os: ubuntu-latest, shard: 3, of: 4 }
-          - { os: ubuntu-latest, shard: 4, of: 4 }
-          - { os: macos-latest, shard: 1, of: 5 }
-          - { os: macos-latest, shard: 2, of: 5 }
-          - { os: macos-latest, shard: 3, of: 5 }
-          - { os: macos-latest, shard: 4, of: 5 }
-          - { os: macos-latest, shard: 5, of: 5 }
-          - { os: windows-latest, shard: 1, of: 8 }
-          - { os: windows-latest, shard: 2, of: 8 }
-          - { os: windows-latest, shard: 3, of: 8 }
-          - { os: windows-latest, shard: 4, of: 8 }
-          - { os: windows-latest, shard: 5, of: 8 }
-          - { os: windows-latest, shard: 6, of: 8 }
-          - { os: windows-latest, shard: 7, of: 8 }
-          - { os: windows-latest, shard: 8, of: 8 }
+          - { leg: ubuntu-latest, os: ubuntu-latest, shard: 1, of: 4 }
+          - { leg: ubuntu-latest, os: ubuntu-latest, shard: 2, of: 4 }
+          - { leg: ubuntu-latest, os: ubuntu-latest, shard: 3, of: 4 }
+          - { leg: ubuntu-latest, os: ubuntu-latest, shard: 4, of: 4 }
+          - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 1, of: 4 }
+          - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 2, of: 4 }
+          - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 3, of: 4 }
+          - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 4, of: 4 }
+          - { leg: macos-latest, os: macos-latest, shard: 1, of: 5 }
+          - { leg: macos-latest, os: macos-latest, shard: 2, of: 5 }
+          - { leg: macos-latest, os: macos-latest, shard: 3, of: 5 }
+          - { leg: macos-latest, os: macos-latest, shard: 4, of: 5 }
+          - { leg: macos-latest, os: macos-latest, shard: 5, of: 5 }
+          - { leg: windows-latest, os: windows-latest, shard: 1, of: 8 }
+          - { leg: windows-latest, os: windows-latest, shard: 2, of: 8 }
+          - { leg: windows-latest, os: windows-latest, shard: 3, of: 8 }
+          - { leg: windows-latest, os: windows-latest, shard: 4, of: 8 }
+          - { leg: windows-latest, os: windows-latest, shard: 5, of: 8 }
+          - { leg: windows-latest, os: windows-latest, shard: 6, of: 8 }
+          - { leg: windows-latest, os: windows-latest, shard: 7, of: 8 }
+          - { leg: windows-latest, os: windows-latest, shard: 8, of: 8 }
     runs-on: ${{ matrix.os }}
     env:
       BOOTSTRAP_TEST_SHARD: ${{ matrix.shard }}/${{ matrix.of }}
-      BOOTSTRAP_TEST_MANIFEST: shard-list/${{ matrix.os }}-${{ matrix.shard }}-of-${{ matrix.of }}.txt
+      BOOTSTRAP_TEST_MANIFEST: shard-list/${{ matrix.leg }}-${{ matrix.shard }}-of-${{ matrix.of }}.txt
       # Split by the measured time of each test on this OS (PBI-1.22).
       BOOTSTRAP_TEST_WEIGHTS: bootstrap/test-durations.txt:${{ matrix.os }}
     defaults:
@@ -160,9 +168,52 @@ jobs:
       - uses: actions/checkout@v7
       - name: Delete the files no test reads
         run: bash bootstrap/changed-inputs.sh remove
+      - name: Identify the runner image
+        id: image
+        if: matrix.leg == 'ubuntu-bash32'
+        run: |
+          # The key of the bash 3.2 cache holds the image name and the gcc
+          # version: a new image or compiler builds bash again, so a build
+          # a newer gcc breaks shows at "Get bash 3.2" instead of being
+          # hidden by an old cache. ImageOS is set by the runner, not by
+          # this workflow, and the env context holds only what the workflow
+          # sets, so it is read here in the shell.
+          image="${ImageOS:-}"
+          gcc_version="$(gcc -dumpfullversion 2>/dev/null || true)"
+          if [ -z "$image" ] || [ -z "$gcc_version" ]; then
+            echo "::error::Could not read the runner image name (ImageOS: '$image') or the gcc version ('$gcc_version'); the bash 3.2 cache key needs both."
+            exit 1
+          fi
+          echo "image=$image" >>"$GITHUB_OUTPUT"
+          echo "gcc=$gcc_version" >>"$GITHUB_OUTPUT"
+      - name: Restore bash 3.2 from the cache
+        id: cache
+        if: matrix.leg == 'ubuntu-bash32'
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/bash32
+          key: bash-3.2.57-3fa9daf85ebf35068f090ce51283ddeeb3c75eb5bc70b1a4a7cb05868bfe06a4-${{ runner.os }}-${{ steps.image.outputs.image }}-gcc${{ steps.image.outputs.gcc }}
+      - name: Get bash 3.2
+        if: matrix.leg == 'ubuntu-bash32' && steps.cache.outputs.cache-hit != 'true'
+        run: bash bootstrap/bash32.sh "$RUNNER_TEMP/bash32"
       - name: Test bootstrap-project.sh
-        if: runner.os != 'macOS'
+        if: runner.os != 'macOS' && matrix.leg != 'ubuntu-bash32'
         run: bash bootstrap/test-bootstrap-project.sh
+      - name: Test bootstrap-project.sh with bash 3.2 built on Linux
+        if: matrix.leg == 'ubuntu-bash32'
+        run: |
+          # The tests start the script and build.sh with plain bash, so put
+          # the bash 3.2 first on PATH, as the macOS step does with Apple's
+          # /bin/bash. A plain bash started inside a test run is the
+          # runner's own (bootstrap-project.sh itself runs on 3.2).
+          export PATH="$RUNNER_TEMP/bash32:$PATH"
+          v="$(bash -c 'echo "${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"')"
+          echo "bash on PATH: $(command -v bash), version $v"
+          if [ "$v" != "3.2" ]; then
+            echo "::error::Expected bash 3.2 on PATH, got $v."
+            exit 1
+          fi
+          bash bootstrap/test-bootstrap-project.sh
       - name: Test bootstrap-project.sh with macOS /bin/bash 3.2
         if: runner.os == 'macOS'
         run: |
@@ -182,7 +233,7 @@ jobs:
       - name: Upload the list of tests this shard ran
         uses: actions/upload-artifact@v7
         with:
-          name: bootstrap-tests-${{ matrix.os }}-${{ matrix.shard }}
+          name: bootstrap-tests-${{ matrix.leg }}-${{ matrix.shard }}
           path: shard-list/
           if-no-files-found: error
           retention-days: 1
@@ -221,7 +272,7 @@ jobs:
             exit 0
           fi
           BOOTSTRAP_TEST_LIST=1 bash bootstrap/test-bootstrap-project.sh >all-tests.txt
-          bash bootstrap/check-shards.sh shard-list all-tests.txt ubuntu-latest macos-latest windows-latest
+          bash bootstrap/check-shards.sh shard-list all-tests.txt ubuntu-latest ubuntu-bash32 macos-latest windows-latest
 
   packs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
