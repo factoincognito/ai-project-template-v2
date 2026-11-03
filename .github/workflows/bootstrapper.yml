@@ -22,11 +22,13 @@
 #   bootstrap script (bootstrap/test-bootstrap-project.sh) on ubuntu,
 #   macOS (Apple's /bin/bash 3.2) and Windows (Git for Windows bash).
 #   bootstrapper-test, a required check, passes only if all of them did.
-#   Each OS leg runs as 4 shards (PBI-1.18; one leg took up to 76 min
-#   on Windows), split by the measured time of each test on that OS
+#   Each OS leg runs as shards (PBI-1.18; one leg took up to 76 min
+#   on Windows), as many as that OS's total test time needs (PBI-1.25:
+#   3 on ubuntu, 5 on macOS, 8 on Windows, whose tests take about 2.5
+#   times as long as ubuntu's), split by the measured time of each test on that OS
 #   (bootstrap/test-durations.txt, PBI-1.22); each shard records the
 #   tests it ran; bootstrapper-test also fails unless, for every OS,
-#   the 4 shards together ran every test exactly once
+#   its shards together ran every test exactly once
 #   (bootstrap/check-shards.sh).
 # - A pull request that changes only files no test reads
 #   (bootstrap/not-read-by-tests.txt, judged by the base branch's copy
@@ -121,15 +123,31 @@ jobs:
       # Every OS and shard reports, even when one fails first.
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        # Shards 1..n of every OS leg. n is also in BOOTSTRAP_TEST_SHARD
-        # and BOOTSTRAP_TEST_MANIFEST below; bootstrapper-test fails if
-        # a shard of 1..n did not report.
-        shard: [1, 2, 3, 4]
+        # Each OS has the shard count its total test time needs
+        # (PBI-1.25; times in bootstrap/test-durations.txt): shards 1..of
+        # of every OS. bootstrapper-test fails if a shard of 1..of of an
+        # OS did not report.
+        include:
+          - { os: ubuntu-latest, shard: 1, of: 3 }
+          - { os: ubuntu-latest, shard: 2, of: 3 }
+          - { os: ubuntu-latest, shard: 3, of: 3 }
+          - { os: macos-latest, shard: 1, of: 5 }
+          - { os: macos-latest, shard: 2, of: 5 }
+          - { os: macos-latest, shard: 3, of: 5 }
+          - { os: macos-latest, shard: 4, of: 5 }
+          - { os: macos-latest, shard: 5, of: 5 }
+          - { os: windows-latest, shard: 1, of: 8 }
+          - { os: windows-latest, shard: 2, of: 8 }
+          - { os: windows-latest, shard: 3, of: 8 }
+          - { os: windows-latest, shard: 4, of: 8 }
+          - { os: windows-latest, shard: 5, of: 8 }
+          - { os: windows-latest, shard: 6, of: 8 }
+          - { os: windows-latest, shard: 7, of: 8 }
+          - { os: windows-latest, shard: 8, of: 8 }
     runs-on: ${{ matrix.os }}
     env:
-      BOOTSTRAP_TEST_SHARD: ${{ matrix.shard }}/4
-      BOOTSTRAP_TEST_MANIFEST: shard-list/${{ matrix.os }}-${{ matrix.shard }}-of-4.txt
+      BOOTSTRAP_TEST_SHARD: ${{ matrix.shard }}/${{ matrix.of }}
+      BOOTSTRAP_TEST_MANIFEST: shard-list/${{ matrix.os }}-${{ matrix.shard }}-of-${{ matrix.of }}.txt
       # Split by the measured time of each test on this OS (PBI-1.22).
       BOOTSTRAP_TEST_WEIGHTS: bootstrap/test-durations.txt:${{ matrix.os }}
     defaults:
