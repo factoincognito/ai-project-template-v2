@@ -43,7 +43,7 @@ the code).
 
 To set up the project (step 0 below installs the tools):
 
-- **A computer** with Windows, macOS or Linux.
+- **A computer** with Windows or Linux. macOS is not supported for now: the setup stops on a Mac.
 - **A GitHub account.** Free. Make one at https://github.com/signup.
   Anyone can see the files of a public project; only you, and the
   people you invite, can see a private one. On a free account, a public
@@ -54,7 +54,7 @@ To set up the project (step 0 below installs the tools):
 - **On Windows: Git for Windows.** Free. It gives you Git, which keeps
   track of every change to the project's files, and Git Bash, the
   window where you type the commands from this page.
-- **On macOS and Linux: Git.** Free, and often there already. If it is
+- **On Linux: Git.** Free, and often there already. If it is
   missing, the script says so and shows how to install it.
 - **gh, GitHub's tool for the command line.** Free. The script uses it
   to create the project on GitHub for you, signed in as you.

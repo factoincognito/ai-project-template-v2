@@ -2193,7 +2193,8 @@ test_workflow_bootstrap_project_tests_run_on_ubuntu_bash32_and_windows() {
   # macOS is not supported for now (PBI-1.26): no leg for it, no step for
   # it. PBI-1.27 puts both back.
   ! grep -qiE 'macos' <<<"$job" || { grep -niE 'macos' <<<"$job" >&2; die "$j still mentions macOS"; }
-  ! grep -qF 'macos-latest' "$BWF" || { grep -nF 'macos-latest' "$BWF" >&2; die "bootstrapper.yml still names macos-latest"; }
+  # (Comments may name it: the header says the durations file keeps its column.)
+  ! grep -vE '^[[:space:]]*#' "$BWF" | grep -F 'macos-latest' >&2 || die "bootstrapper.yml still names macos-latest outside comments"
   # The plain step is for every leg but the bash 3.2 one, which has its own.
   local plain
   plain="$(wf_step "$j" "^        if: matrix[.]leg != 'ubuntu-bash32'\$")"

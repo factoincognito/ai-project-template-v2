@@ -7250,7 +7250,9 @@ test_the_setup_stops_on_macos_before_it_changes_anything() {
   whole "$d" --again
   expect_macos_stop "$d"
   cmp -s "$d/again-before" "$f" || die "the saved answers were changed"
-  # A plain run on a Mac writes no saved file at all.
+  # A plain run on a Mac writes no saved file at all (not the built script
+  # of the run above: the copy of the template's script in a folder of its own).
+  RUN_SCRIPT=""
   d="$(tmpdir)"; working_git "$d"; on_os "$d" macos
   whole "$d"
   [ ! -e "$(again_file_of "$d")" ] || die "a saved file was written"
