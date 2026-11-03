@@ -6,6 +6,18 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Added
+- Release prep for v2.8.5 (PR #322)
+- Recorded in NEXT_SESSION that the newcomer pre-check passed on the v2.8.5 candidate (PR #323)
+- Recorded v2.8.5 as released and verified; run 5 next (PR #324)
+- Backlog: PBI-1.34, several nightly persona runs when what a newcomer reads has changed (PR #325)
+- Backlog: PBI-1.35, keep the clean-session checklist, drop `..wrap` and pins (PR #326)
+- `CLAUDE.md`: every reply to the product owner ends with a "For you" block (PBI-1.32) (PR #327)
+
+### Changed
+- CI and the pack checks run on pull requests and on pushes to `main` only, not twice per branch push; a check in the `build` job keeps it so (PBI-1.25 part 2) (PR #329)
+- The Bootstrapper tests run in a shard count per OS (ubuntu 4, macOS 5, Windows 8), with measured durations for every test; the Windows leg's wall time fell from about 23 to about 12.5 minutes (PBI-1.25 part 1) (PR #328)
+
 ## [2.8.5] — 2026-10-30
 
 ### Added
