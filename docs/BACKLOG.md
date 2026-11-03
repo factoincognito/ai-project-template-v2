@@ -853,6 +853,8 @@ get a working project in any supported language.
   - A before/after table from job timestamps, as in PBI-1.22: wall time, and per OS the longest shard and the sum of shard times, for a doc-only change that tests read (like #277) and for a script change.
   - Every test still runs on all three OS legs for every change it reads, and the full suite runs at every `v*` tag.
 
+  **Part 1 (Crog agent, PR #328; ubuntu 4, macOS 5, Windows 8 shards, durations for all tests).** Windows leg wall time 23.2 min to 12.5 min. Still open for "Done when": the before/after table for a doc-only change that tests read (like #277) against a script change; today every change runs all tests, so both look the same until part 3.
+
   **Rules that apply.** Harness, test and workflow changes are code and config: test-first (red run in the PR), reviewed by Crog on Opus. Part 3 changes which tests the required check `bootstrapper-test` runs, so it needs Adam's intent approval of its spec before it merges.
 
 

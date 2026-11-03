@@ -1079,6 +1079,14 @@ matrix_job() {
   printf '%s\n' "$jobs" | head -n 1
 }
 
+# wf_legs: the legs of the test matrix, one "<os> <shard> <of>" line per
+# entry of its include: list, which has the form
+#   - { os: <os>, shard: <i>, of: <n> }
+# (PBI-1.25: each OS has the shard count its total time needs).
+wf_legs() {
+  wf_job "$(matrix_job)" | sed -nE 's/^          - \{ os: ([a-z0-9-]+), shard: ([0-9]+), of: ([0-9]+) \}[[:space:]]*$/\1 \2 \3/p'
+}
+
 # wf_on: the workflow's on: block, without comments and blank lines.
 wf_on() {
   awk '/^on:/ { p = 1; next } /^[^ #]/ { p = 0 } p' "$BWF" | grep -vE '^[[:space:]]*(#|$)' || true
@@ -1171,12 +1179,12 @@ test_workflow_continue_on_error_check_catches_the_bare_and_quoted_key() {
 
 test_workflow_matrix_cannot_drop_an_os() {
   # An exclude: entry would remove a leg and the aggregate would never
-  # see it. include: cannot remove one, so only exclude is refused.
+  # see it. The legs are an include: list, so every OS needs an entry.
   local j job o
   j="$(matrix_job)"; job="$(wf_job "$j")"
   ! printf '%s\n' "$job" | grep -nE '^[[:space:]]+exclude[[:space:]]*:' >&2 || die "$j has a matrix exclude"
   for o in ubuntu-latest macos-latest windows-latest; do
-    printf '%s\n' "$job" | grep -E '^        os: \[' | grep -E "(\[|, *)$o *(,|\])" >/dev/null || die "$o missing from the matrix os list"
+    [ -n "$(wf_legs | awk -v o="$o" '$1 == o { print }')" ] || die "$o has no leg in the matrix"
   done
 }
 
@@ -1847,6 +1855,48 @@ test_durations_from_logs_reads_the_times_between_result_lines() {
   ! bash "$tool" ubuntu-latest="$d/empty.log" >/dev/null 2>&1 || die "a log with no test results was taken"
 }
 
+test_durations_file_has_a_time_for_every_test_on_every_os() {
+  # PBI-1.25: a test with no time (or a 0) is weighed at the median, which
+  # unbalances the shards. Every test of the harness has a measured time
+  # in each OS column.
+  local want="$WORK/want" listed="$WORK/listed"
+  harness_tests >"$want"
+  awk 'NR > 1 && $2 > 0 && $3 > 0 && $4 > 0 { print $1 }' "$DURATIONS" | LC_ALL=C sort >"$listed"
+  LC_ALL=C comm -23 "$want" "$listed" | head -n 20 >&2
+  [ -z "$(LC_ALL=C comm -23 "$want" "$listed")" ] || die "tests have no measured time on every OS (listed above, at most 20)"
+  # And no stale entry: the file lists exactly the tests of the harness.
+  awk 'NR > 1 { print $1 }' "$DURATIONS" | LC_ALL=C sort >"$WORK/listed-all"
+  LC_ALL=C comm -13 "$want" "$WORK/listed-all" | head -n 20 >&2
+  [ -z "$(LC_ALL=C comm -13 "$want" "$WORK/listed-all")" ] || die "the durations file lists tests the harness does not have (listed above, at most 20)"
+}
+
+test_workflow_shard_counts_keep_every_legs_slowest_shard_short() {
+  # With each OS's own shard count and the durations file, no OS leg's
+  # slowest shard (the sum of its tests' times) is above 11 min of test
+  # time, and Windows, whose tests take the longest, has more shards than
+  # ubuntu. Aim (PBI-1.25): about 12 min wall time with the set-up.
+  local os n i tot worst legs
+  legs="$(wf_legs)"
+  [ -n "$legs" ] || die "no matrix legs"
+  for os in ubuntu-latest macos-latest windows-latest; do
+    n="$(printf '%s\n' "$legs" | awk -v os="$os" '$1 == os { print $3; exit }')"
+    [ -n "$n" ] || die "$os has no leg"
+    worst=0
+    i=1
+    while [ "$i" -le "$n" ]; do
+      run_harness "$WORK/w.$os.$i" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD="$i/$n" BOOTSTRAP_TEST_WEIGHTS="$DURATIONS:$os" \
+        || die "list mode failed ($os, $i/$n)"
+      tot="$(awk -v col="$os" 'NR == FNR { if (FNR == 1) { for (k = 2; k <= NF; k++) if ($k == col) c = k; next } w[$1] = $c; next }
+        { s += w[$1] } END { printf "%d\n", s }' "$DURATIONS" "$WORK/w.$os.$i")"
+      [ "$tot" -le "$worst" ] || worst="$tot"
+      i=$((i + 1))
+    done
+    [ "$worst" -le 660 ] || die "$os with $n shards: the slowest shard is $worst s of tests, above 660"
+  done
+  [ "$(printf '%s\n' "$legs" | awk '$1 == "windows-latest" { print $3; exit }')" -gt "$(printf '%s\n' "$legs" | awk '$1 == "ubuntu-latest" { print $3; exit }')" ] \
+    || die "Windows does not have more shards than ubuntu"
+}
+
 test_harness_fails_when_its_shard_selects_no_test() {
   # A valid setting can select nothing (shard i of n with i above the
   # number of tests). A run that ran no test fails, so it is never taken
@@ -1912,6 +1962,19 @@ test_check_shards_passes_when_every_need_succeeded_and_every_shard_ran_all_tests
   # One shard per OS is a complete run too.
   d="$WORK/fx1"; shard_fixture "$d" 1 os-a
   check_shards "$d" "success" os-a || { cat "$d/out" >&2; die "refused one shard of one"; }
+}
+
+test_check_shards_passes_with_a_shard_count_of_its_own_for_each_os() {
+  # PBI-1.25: the OS legs have different shard counts. Each is judged by
+  # its own count: complete passes, a missing shard of the larger one fails.
+  local d="$WORK/fxm"
+  shard_fixture "$d" 2 os-a
+  shard_fixture "$WORK/fxm2" 5 os-b
+  cp "$WORK/fxm2/shards/"os-b-* "$d/shards/"
+  check_shards "$d" "success success" os-a os-b || { cat "$d/out" >&2; die "refused a complete run with 2 shards for one OS and 5 for the other"; }
+  grep -qF 'os-a: 2 shards ran all' "$d/out" && grep -qF 'os-b: 5 shards ran all' "$d/out" || { cat "$d/out" >&2; die "each OS is not judged by its own count"; }
+  rm "$d/shards/os-b-5-of-5.txt"
+  expect_shards_refused "$d" "success success" "os-b: shard 5 of 5 did not report" os-a os-b
 }
 
 test_check_shards_fails_unless_every_need_succeeded() {
@@ -2075,20 +2138,32 @@ test_workflow_bootstrapper_test_fails_when_a_shard_or_leg_did_not_report() {
 }
 
 test_workflow_every_os_leg_is_sharded_and_records_what_it_ran() {
-  # The matrix job runs shards 1..n of every OS, each recording the
-  # tests it ran into shard-list/ and uploading that; bootstrapper-test
-  # downloads them all into shard-list/ before its step runs.
-  local j job n list agg
+  # The matrix job runs shards 1..n of every OS, n being the OS's own
+  # count (PBI-1.25), each recording the tests it ran into shard-list/
+  # and uploading that; bootstrapper-test downloads them all into
+  # shard-list/ before its step runs.
+  local j job os n legs agg
   j="$(matrix_job)"; job="$(wf_job "$j")"
-  list="$(printf '%s\n' "$job" | grep -E '^        shard: \[' | sed -E 's/^        shard: \[//; s/\][[:space:]]*$//' | tr -d ' ' || true)"
-  [ -n "$list" ] || die "$j has no matrix shard list"
-  n="$(printf '%s\n' "$list" | tr ',' '\n' | grep -c .)"
-  [ "$list" = "$(seq -s, 1 "$n")" ] || die "the shard list is not 1..$n: $list"
-  [ "$n" -ge 2 ] || die "the legs are not sharded (n = $n)"
-  grep -qxF "      BOOTSTRAP_TEST_SHARD: \${{ matrix.shard }}/$n" <<<"$job" \
-    || die "the shard setting is not matrix.shard/$n"
-  grep -qxF "      BOOTSTRAP_TEST_MANIFEST: shard-list/\${{ matrix.os }}-\${{ matrix.shard }}-of-$n.txt" <<<"$job" \
-    || die "the shards do not record what they ran as shard-list/<os>-<i>-of-$n.txt"
+  legs="$(wf_legs)"
+  [ -n "$legs" ] || die "$j has no matrix legs (- { os: <os>, shard: <i>, of: <n> })"
+  for os in ubuntu-latest macos-latest windows-latest; do
+    n="$(printf '%s\n' "$legs" | awk -v os="$os" '$1 == os { print $3 }' | sort -u)"
+    [ "$(printf '%s\n' "$n" | grep -c .)" = 1 ] || die "$os: its legs do not agree on one shard count: $n"
+    [ "$n" -ge 2 ] || die "$os is not sharded (n = $n)"
+    [ "$(printf '%s\n' "$legs" | awk -v os="$os" '$1 == os { print $2 }' | paste -sd, -)" = "$(seq -s, 1 "$n")" ] \
+      || die "$os: its shards are not 1..$n, each once"
+  done
+  # Every entry under include: is in the one-line form wf_legs reads, so
+  # none can hide from these tests.
+  printf '%s\n' "$job" | awk '/^        include:[[:space:]]*$/ { p = 1; next } p && /^          / { print; next } p && !/^[[:space:]]*(#|$)/ { p = 0 }' >"$WORK/include-lines"
+  [ -s "$WORK/include-lines" ] || die "$j has no include: entries"
+  ! grep -vE '^          - \{ os: [a-z0-9-]+, shard: [0-9]+, of: [0-9]+ \}[[:space:]]*$' "$WORK/include-lines" >&2 \
+    || die "an include: entry is not in the form - { os: <os>, shard: <i>, of: <n> } (listed above)"
+  [ "$(wc -l <"$WORK/include-lines" | tr -d ' ')" = "$(printf '%s\n' "$legs" | grep -c .)" ] || die "wf_legs does not read every include: entry"
+  grep -qxF '      BOOTSTRAP_TEST_SHARD: ${{ matrix.shard }}/${{ matrix.of }}' <<<"$job" \
+    || die "the shard setting is not matrix.shard/matrix.of"
+  grep -qxF '      BOOTSTRAP_TEST_MANIFEST: shard-list/${{ matrix.os }}-${{ matrix.shard }}-of-${{ matrix.of }}.txt' <<<"$job" \
+    || die "the shards do not record what they ran as shard-list/<os>-<i>-of-<n>.txt"
   grep -qE '^        uses: actions/upload-artifact@v[0-9]+$|^      - uses: actions/upload-artifact@v[0-9]+$' <<<"$job" \
     || die "the shards do not upload what they ran"
   grep -qxF '          name: bootstrap-tests-${{ matrix.os }}-${{ matrix.shard }}' <<<"$job" || die "unexpected artifact name"
@@ -2144,8 +2219,7 @@ test_workflow_bootstrap_project_tests_run_on_ubuntu_macos_and_windows() {
   local j job oses
   j="$(matrix_job)"; job="$(wf_job "$j")"
   grep -qxF '    runs-on: ${{ matrix.os }}' <<<"$job" || die "$j does not run on matrix.os"
-  oses="$(printf '%s\n' "$job" | grep -E '^        os: \[' | sed -E 's/^        os: \[//; s/\][[:space:]]*$//' \
-    | tr ',' '\n' | sed -E 's/^ +//; s/ +$//' | LC_ALL=C sort | tr '\n' ' ')"
+  oses="$(wf_legs | awk '{ print $1 }' | LC_ALL=C sort -u | tr '\n' ' ')"
   [ "$oses" = "macos-latest ubuntu-latest windows-latest " ] || die "matrix os is '$oses'"
   # All three results show, even when one leg fails first.
   grep -qxF '      fail-fast: false' <<<"$job" || die "$j does not set fail-fast: false"
