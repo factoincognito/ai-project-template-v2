@@ -497,6 +497,16 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 
 ---
 
+### 19. Follow-ups from the review of PBI-1.26 PR 1 (#337) — new (2026-11-04)
+
+Optional points from Crog's review of #337 (comment 6617962290), not blocking, recorded so they are not lost. Each becomes a backlog item, is folded into PBI-1.26 PR 2 where it touches the same files, or is dropped with a reason.
+
+1. **Total run time.** In run 41733862836, 20 jobs started at once and 6 waited 7 to 10 minutes, so the run took 21.7 minutes, not the "about 12.5 minutes, set by Windows" of the PBI-1.26 spec, item 6. It looks like a cap on concurrent jobs; GitHub's limits were not checked. Check whether removing the macOS leg (PR 2) brings the run back under it.
+2. **The shard-time test does not guard the bash 3.2 leg.** It weighs that leg by ubuntu's times, which are about 2.4 times too fast for it, and the fixed minimum of 8 shards will not grow as tests are added.
+3. **The `BASH32_SHA256` test hook** lets an environment variable replace the pinned hash; a fake `sha256sum` in the tests would remove that bypass from the script.
+4. **No time limits on the bash 3.2 download:** `curl` has no `--max-time` and the jobs have no `timeout-minutes`, so a stalled download holds a shard until GitHub's default timeout.
+5. **Not seen yet:** a pull request run restoring the cache that `bash32-cache.yml` saves on `main`; the first PR after #337's merge shows it.
+
 ## Items that do not change
 
 - Every change goes through a PR; reviews follow the kind of change; merges are delegated to Crog once review passes and CI is green (CLAUDE.md, "Change execution model").
