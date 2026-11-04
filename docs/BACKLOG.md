@@ -863,7 +863,7 @@ get a working project in any supported language.
   **Rules that apply.** Harness, test and workflow changes are code and config: test-first (red run in the PR), reviewed by Crog on Opus. Part 3 changes which tests the required check `bootstrapper-test` runs, so it needs Adam's intent approval of its spec before it merges.
 
 
-- **[NEXT] PBI-1.26** (Adam, 2026-10-29, from a product office session; Adam chose Clead's recommendation; the WHAT is Adam's, the HOW is Clead's; specced in PR #333, waiting for Adam's intent approval) — Exclude macOS as a supported platform for now, keeping the macOS code working so it can come back (PBI-1.27).
+- **[DONE] PBI-1.26** (done 2026-11-04: PR 1 #337, `09a198a`, and PR 2 #340, `9f9167d`, merged; Adam, 2026-10-29, from a product office session; Adam chose Clead's recommendation; the WHAT is Adam's, the HOW is Clead's; specced in PR #333, Adam's intent approval 2026-11-03 recorded there) — Exclude macOS as a supported platform for now, keeping the macOS code working so it can come back (PBI-1.27).
 
   **Why (Adam, 2026-10-29).** Mac users are out of scope for now. Facts behind it (Clead, checked 2026-10-29): the macOS leg does not set CI's wall time (the slowest Windows shard does), but it has failed runs when GitHub had no free macOS runner (PR #197 on 2026-10-26; run 40716513430, three full attempts). On macOS, the Claude desktop app and Claude Code need macOS 13 or later, and Node.js 24 needs 13.5 or later (code.claude.com/docs/en/setup, support.claude.com article 10065433, Node's v24.x `BUILDING.md`).
 
@@ -982,8 +982,8 @@ get a working project in any supported language.
 
   **Scope (Clead's recommendation, chosen by Adam).**
   1. Open the way in again: remove PBI-1.26's stop.
-  2. Put the macOS leg back in the Bootstrapper matrix and `check-shards.sh`, and fix what it finds that the faked-`uname` tests and the bash 3.2 leg could not.
-  3. Put the macOS steps back in the README, the stub README and the docs, starting from what PBI-1.26's removal PR took out.
+  2. Put the macOS leg back in the Bootstrapper matrix and `check-shards.sh`, and fix what it finds that the faked-`uname` tests and the bash 3.2 leg could not. PBI-1.26's removal PR is #340 (`9f9167d`): its diff is the list of what goes back (the matrix entries, the macOS step, the two removed workflow tests, the leg lists in `bootstrap/test.sh`).
+  3. Put the macOS steps back in the README, the stub README and the docs, starting from what PBI-1.26's removal PR (#340, `9f9167d`) took out.
   4. A human-run end-to-end run on a Mac with macOS 13.5 or later (Node.js 24's minimum).
 
   **Together with PBI-1.28 (Adam, 2026-10-29).** macOS returns with PBI-1.28's minimum-version checks in place, so the setup on any Mac goes ahead with what that computer can run and says what it cannot (for example: Node.js 24, and so the node, web and react-native packs, needs macOS 13.5 or later). PBI-1.28 is done first, or in the same step.
