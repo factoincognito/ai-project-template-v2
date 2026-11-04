@@ -2449,17 +2449,28 @@ CURL
 }
 
 # b32_run <dir> <hash-mode> [VAR=value...]: runs bootstrap/bash32.sh into
-# <dir>/out/bash32 with the fakes first on PATH. hash-mode is "fake" (the
-# fake tarball's hash is the one to expect) or "pinned" (the real pin).
-# Sets rc and out.
+# <dir>/out/bash32 with the fakes first on PATH. hash-mode is "fake" (a
+# fake sha256sum and shasum, first on PATH, report the pinned hash for the
+# download, so the fake tarball passes the script's own check) or
+# "pinned" (the real hashers: the fake tarball is not the pinned file).
+# The script has no way to be told another hash (PBI-1.36), so the tests
+# fake the hasher, as they fake curl. Sets rc and out.
 b32_run() {
-  local d="$1" mode="$2" hash
+  local d="$1" mode="$2" h
   shift 2
-  hash="$(cd "$d" && cksum_sha256 fake.tar.gz)"
   set +e
   if [ "$mode" = fake ]; then
-    out="$(cd "$d" && env PATH="$d/fake:$PATH" FAKE_TARBALL="$d/fake.tar.gz" FAKE_CURL_LOG="$d/curl.log" \
-      FAKE_CONFIGURE_LOG="$d/configure.log" BASH32_SHA256="$hash" "$@" "$BASH" "$BASH32" "$d/out/bash32" 2>&1)"
+    mkdir -p "$d/fakehash"
+    for h in sha256sum shasum; do
+      # Prints "<pinned hash>  <last argument>", as both tools do.
+      printf '#!/bin/sh
+for a in "$@"; do f="$a"; done
+printf "%%s  %%s\\n" "%s" "$f"
+' "$BASH32_SHA256_PINNED" >"$d/fakehash/$h"
+      chmod +x "$d/fakehash/$h"
+    done
+    out="$(cd "$d" && env PATH="$d/fakehash:$d/fake:$PATH" FAKE_TARBALL="$d/fake.tar.gz" FAKE_CURL_LOG="$d/curl.log" \
+      FAKE_CONFIGURE_LOG="$d/configure.log" "$@" "$BASH" "$BASH32" "$d/out/bash32" 2>&1)"
   else
     out="$(cd "$d" && env PATH="$d/fake:$PATH" FAKE_TARBALL="$d/fake.tar.gz" FAKE_CURL_LOG="$d/curl.log" \
       FAKE_CONFIGURE_LOG="$d/configure.log" "$@" "$BASH" "$BASH32" "$d/out/bash32" 2>&1)"
@@ -2524,6 +2535,27 @@ test_bash32_script_refuses_a_file_with_another_hash_and_leaves_no_bash() {
   grep -q 'SHA-256' <<<"$err" || { printf '%s\n' "$out" >&2; die "no ::error:: line naming the hash"; }
   [ ! -e "$d/out/bash32/bash" ] || die "a bash was left in the folder"
   [ ! -e "$d/configure.log" ] || die "the refused file was built"
+}
+
+test_bash32_script_takes_no_hash_from_the_environment() {
+  # PBI-1.36: no environment variable replaces the pinned hash. With
+  # BASH32_SHA256 set to the fake tarball's real hash (the old test
+  # hook), the file is still refused and nothing is built; and neither
+  # the script nor a workflow names that variable.
+  local d="$WORK/b32.env" out rc err hash f
+  [ -f "$BASH32" ] || die "no bootstrap/bash32.sh"
+  b32_fixture "$d" 3.2.57
+  hash="$(cd "$d" && cksum_sha256 fake.tar.gz)"
+  [ "$hash" != "$BASH32_SHA256_PINNED" ] || die "the fake tarball has the pinned hash"
+  b32_run "$d" pinned FAKE_CURL_FAIL= BASH32_SHA256="$hash"
+  [ "$rc" -ne 0 ] || die "BASH32_SHA256 replaced the pinned hash: the fake file was accepted"
+  err="$(grep -F '::error::' <<<"$out" || true)"
+  grep -qF "$BASH32_SHA256_PINNED" <<<"$err" || { printf '%s\n' "$out" >&2; die "the refusal does not name the pinned hash"; }
+  [ ! -e "$d/out/bash32/bash" ] || die "a bash was left in the folder"
+  [ ! -e "$d/configure.log" ] || die "the refused file was built"
+  for f in "$BASH32" "$BWF" "$CACHEWF"; do
+    ! grep -nF 'BASH32_SHA256' "$f" >&2 || die "$f names BASH32_SHA256"
+  done
 }
 
 test_bash32_script_fails_when_the_built_bash_is_not_3_2() {

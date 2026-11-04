@@ -14,8 +14,8 @@
 # version) and exits 1 with nothing left in <folder>: the bash is
 # installed only after the built one reports 3.2.
 #
-# Test hook: BASH32_SHA256 replaces the pinned hash, so the tests can
-# serve a fake tarball. The workflows never set it.
+# Nothing replaces the pinned hash (PBI-1.36): the tests serve a fake
+# tarball by putting a fake sha256sum and shasum first on PATH.
 set -euo pipefail
 
 VERSION=3.2.57
@@ -23,7 +23,7 @@ VERSION=3.2.57
 # (bash-3.2.57.tar.gz.sig, made by Chet Ramey, key BB5869F064EA74AB in
 # https://ftp.gnu.org/gnu/gnu-keyring.gpg) on 2026-11-03 before it was
 # pinned here.
-SHA256="${BASH32_SHA256:-3fa9daf85ebf35068f090ce51283ddeeb3c75eb5bc70b1a4a7cb05868bfe06a4}"
+SHA256=3fa9daf85ebf35068f090ce51283ddeeb3c75eb5bc70b1a4a7cb05868bfe06a4
 # GNU's server first, then its mirror redirector.
 SERVERS="https://ftp.gnu.org/gnu/bash https://ftpmirror.gnu.org/gnu/bash"
 
