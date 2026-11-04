@@ -18,6 +18,11 @@
 | [SUPERSEDED] | No longer needed; the reason is given inline |
 | [MOVED] | Tracked elsewhere from now on; where is given inline |
 
+The format of this file, and what a backlog visualiser can read from it, is
+set out in vizi's format spec:
+https://github.com/factoincognito/vizi/blob/main/docs/BACKLOG-FORMAT.md
+(linked, not copied).
+
 ---
 
 ## Phase 1 — Language packs and bootstrap wizard
