@@ -345,3 +345,13 @@ comments. Private information means credentials, tokens and secret
 URLs, personal or client data, and notes belonging to a private
 project. Keep it in a private repo or outside git, and put only a
 pointer to it here if one is needed. Applies to both Crog and Clead.
+
+## Third-party code and IP
+
+This repo follows the Product Office policy on third-party code and IP (`policies/third-party-ip.md` in factoincognito/product-office). Claude is responsible for making sure it is followed here.
+
+- Before using any code, firmware, design or asset we didn't write, record its source, exact version, licence, intended use and mode (depend / copy / clean room / avoid). Use the `third-party-code-policy` skill.
+- Copy only permissively licensed material, and list everything third-party in `THIRD-PARTY-NOTICES.md`.
+- Anything we may not copy is reused only through the clean-room process, with a record in `docs/provenance/`.
+- Stop and escalate to Adam when the policy says *escalate*, or when unsure. Never work around it to save time.
+- Report any non-compliant material you find in this repo, including code that is already merged or shipped.
