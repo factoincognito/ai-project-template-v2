@@ -34,7 +34,8 @@
 #     languages/ folder next to this script.
 #
 # Exit codes: 0 done (or a --dry-run that passed its checks), 1 failed or
-# stopped (also at once on a Mac: macOS is not supported for now), 2 usage error, unknown pack, or an input that is missing or
+# stopped (also at once on a Mac: macOS is not supported for now), 2 usage
+# error, unknown pack, or an input that is missing or
 # cannot be used, 3 a check of this computer or on GitHub did not pass, or
 # a step on GitHub was refused: its steps were shown, with the command to
 # start again (or, once the project exists, to continue with --resume).
@@ -5687,9 +5688,6 @@ run_steps() {
   report
 }
 
-# cmd_setup <options...>: the setup. The options are checked first, then
-# the checks that need no answer (the tools, the GitHub sign-in and the
-# current version), so that nothing is asked in vain; the npm, folder,
 # stop_on_macos: macOS is not supported for now, so on a Mac the setup
 # stops at once, before it changes anything. It comes straight after
 # detect_os, before the checks, the colour key and every preflight; all
@@ -5701,6 +5699,9 @@ stop_on_macos() {
   [ "$OS_KIND" != macos ] || fail 1 "$MACOS_WHAT" "$MACOS_NEXT"
 }
 
+# cmd_setup <options...>: the setup. The options are checked first, then
+# the checks that need no answer (the tools, the GitHub sign-in and the
+# current version), so that nothing is asked in vain; the npm, folder,
 # permission and name checks need answers, so they follow the questions.
 # Then a new setup shows its plan, asks "Proceed?" and creates the
 # project; --resume works out where the setup stopped and goes on from

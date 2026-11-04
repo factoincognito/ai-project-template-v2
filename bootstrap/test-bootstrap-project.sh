@@ -7216,7 +7216,9 @@ $MACOS_STOP_NEXT" ] || { cat "$d/err" >&2; die "stderr is not exactly the two li
   [ ! -s "$d/gh.log" ] || { cat "$d/gh.log" >&2; die "gh was called"; }
   ! grep -qE '^git ' "$d/tools.log" 2>/dev/null || { cat "$d/tools.log" >&2; die "git was called"; }
   [ -z "$(ls -A "$d/cwd")" ] || die "something was created in the folder the run started in"
-  ! grep -qi 'colour' "$d/out" || { cat "$d/out" >&2; die "a colour key was shown"; }
+  # Nothing on stdout but --again's own first line: no colour key, no
+  # command to start again.
+  [ -z "$(grep -v '^$' "$d/out" | grep -v '^Using the answers saved when the script stopped last time' || true)" ] || { cat "$d/out" >&2; die "stdout is not empty (a colour key or a command to start again?)"; }
 }
 
 test_the_setup_stops_on_macos_before_it_changes_anything() {
