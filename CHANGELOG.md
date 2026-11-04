@@ -13,10 +13,19 @@ A bootstrapped project records the tag it was built from.
 - Backlog: PBI-1.34, several nightly persona runs when what a newcomer reads has changed (PR #325)
 - Backlog: PBI-1.35, keep the clean-session checklist, drop `..wrap` and pins (PR #326)
 - `CLAUDE.md`: every reply to the product owner ends with a "For you" block (PBI-1.32) (PR #327)
+- Backlog: PBI-1.25 progress, parts 1 and 2 merged (PR #331)
+- Backlog: PBI-1.25 part 4 measured, outside scope for its target (PR #332)
+- PBI-1.26 spec: exclude macOS as a supported platform for now (PR #333)
+- Backlog: PBI-1.25 part 4 dropped (PR #335)
+- Backlog: PBI-1.25 done, part 3 dropped (PR #336)
+- Backlog legend: the MOVED marker (PR #338)
+- NEXT_SESSION: follow-ups from the review of PBI-1.26 PR 1 (PR #339)
+- The bash 3.2 leg of the Bootstrapper tests on Linux: GNU bash 3.2.57 built from source by `bootstrap/bash32.sh`, cached by `bash32-cache.yml`, run in 8 shards, judged by the shard gate (PBI-1.26 PR 1) (PR #337)
 
 ### Changed
 - CI and the pack checks run on pull requests and on pushes to `main` only, not twice per branch push; a check in the `build` job keeps it so (PBI-1.25 part 2) (PR #329)
 - The Bootstrapper tests run in a shard count per OS (ubuntu 4, macOS 5, Windows 8), with measured durations for every test; the Windows leg's wall time fell from about 23 to about 12.5 minutes (PBI-1.25 part 1) (PR #328)
+- On a Mac the setup stops at once with a plain message, before it changes anything, and the macOS leg and the macOS steps in the READMEs are out of the Bootstrapper tests and docs: macOS is not supported for now (PBI-1.26 PR 2; PBI-1.27 brings it back) (PR #340)
 
 ## [2.8.5] — 2026-10-30
 
