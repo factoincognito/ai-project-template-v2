@@ -1,6 +1,6 @@
 # [PROJECT NAME] — Next Session Planning
 
-**Last Updated:** 2026-10-30
+**Last Updated:** 2026-11-04
 **Author:** Clead (Tech Owner)
 **Purpose:** Staging area for reasoning, revised assumptions, and plan-adaptation thoughts that aren't yet mature enough to be a PBI, a decision, a strategy update, or a vision-doc change. Complements `docs/BACKLOG.md` — it does not replace it. Discrete, scoped, actionable work belongs in the backlog as a PBI, not here.
 
@@ -189,6 +189,7 @@ Written 2026-10-02 so nothing depends on anyone remembering. **Each Clead sessio
    - **Lesson (2026-10-27):** a closing keyword before a PR number ("fix #247") in a merged PR's description closes that PR: notes PR #249 closed #247 and #248 (reopened). Write "addressed in #N" or "PR #N". The agents' briefs say so.
    - **Learned on the way:** "Re-run failed jobs" on a `bootstrapper-test` run works with the shard gate (#199 and #204: a macOS shard was cancelled by the runner, its re-run made the gate green).
 4. **If an agent has to change files in your connected PC folder,** it asks for delete permission once per session (a failed pull left a stale `.git/index.lock` last time). Your PC clone of the template is behind main and its `origin` points at the org; the session fast-forwards it after you grant that.
+5. **When you have time: delete the branch `spec-pbi-1.25-part3`** (the repo's Branches page on GitHub). It has no open PR (#334 was closed unmerged on 2026-11-03), so it is not a claim; agents get 403 on branch deletion. Found 2026-11-04.
 
 ---
 
@@ -497,15 +498,22 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 
 ---
 
-### 19. Follow-ups from the review of PBI-1.26 PR 1 (#337) — new (2026-11-04)
+### 20. Optional review points from PBI-1.36 (#348 to #350) — new (2026-11-04)
 
-Optional points from Crog's review of #337 (comment 6617962290), not blocking, recorded so they are not lost. Each becomes a backlog item, is folded into PBI-1.26 PR 2 where it touches the same files, or is dropped with a reason.
+Item 19 is resolved: points 1 and 5 were answered (#343), points 2 to 4 became PBI-1.36 and were built in #348, #349 and #350 (merged and verified 2026-11-04). Its reviews approved each PR with no required fixes and left these optional points, recorded so they are not lost. Each becomes a backlog item, is folded into a later PR that touches the same lines, or is dropped with a reason.
 
-1. **Total run time. Answered (2026-11-04, Crog's review of #340, comment 6618975693).** The Bootstrapper run on #340's head (41743484711) took 15.4 minutes wall clock, against 21.7 for run 41733862836. One Windows shard waited 246 s for a runner and every other job at most 54 s; without that wait the last shard ended at about 12 minutes. Removing the macOS leg did bring the run near the spec's "about 12.5 minutes"; the remaining variation is waiting for runners. Nothing to do.
-2. **The shard-time test does not guard the bash 3.2 leg.** It weighs that leg by ubuntu's times, which are about 2.4 times too fast for it, and the fixed minimum of 8 shards will not grow as tests are added.
-3. **The `BASH32_SHA256` test hook** lets an environment variable replace the pinned hash; a fake `sha256sum` in the tests would remove that bypass from the script.
-4. **No time limits on the bash 3.2 download:** `curl` has no `--max-time` and the jobs have no `timeout-minutes`, so a stalled download holds a shard until GitHub's default timeout.
-5. **Resolved (2026-11-04, Crog's review of #340):** a pull request run does restore the cache that `bash32-cache.yml` saves on `main`. All 8 bash 3.2 shards of run 41743484711 logged "Cache restored successfully" for the key `bash-3.2.57-3fa9daf8...-Linux-ubuntu26-gcc15.2.0`, and "Get bash 3.2" was skipped on all 8; the save came from `bash32-cache.yml` run 41738122295 on `main` (`09a198a`). The cache itself was not read through the caches API (refused through the session's proxy).
+- **#348 N1** (comment 6635347264): `durations-from-logs.sh` starts a log's first test time at the first non-action `##[group]Run ` line ("Delete the files no test reads"), not at the test step; on the bash 3.2 leg a cache miss would put the bash build into the first test's time. The checked-in column came from a run where all 8 shards hit the cache. Older than this PBI.
+- **#348 N2:** wording in `bootstrap/test.sh` still says OS where it means leg: the comment of `test_durations_from_logs_reads_the_times_between_result_lines`, and the names `..._for_each_os` and `..._on_every_os`.
+- **#348 N3:** `test_workflow_shard_counts_keep_every_legs_slowest_shard_short` loops over three hard-coded legs, not `wf_legs`; it covers every leg only because another test pins the legs to those three (relevant when PBI-1.27 brings macOS back).
+- **#348 N4:** the `bootstrapper.yml` header comment still explains the 8 bash 3.2 shards by the old 4-shard times; the count is now held by the leg's own column.
+- **#348, not a review point:** the `ubuntu-bash32` column is one run's sample; later runs can be averaged in with the same tool.
+- **#349 N1** (comment 6636174845): the new test catches the old variable name only; one line asserting that `bash32.sh` has the literal `SHA256=<pin>` would catch a hook under another name.
+- **#349 N2:** one row of the PR's coverage table claims a little more than the test shows (`..._names_the_download_when_neither_server_answers` fails before any hash is computed). Wording only.
+- **#349 N3:** a failing `sha256sum`/`shasum` makes `bash32.sh` exit with no `::error::` line. Older than this PBI.
+- **#349 N4:** the new file loop passes silently if a workflow file is missing; another test already fails then.
+- **#350 N1** (comment 6636321060): the fake curl exits 22 on a forced failure; 28 (curl's timeout) would model this PBI's case. No result changes.
+- **#350 N2:** `--max-time 120` also stops a download that is slow but moving (below about 21 KB/s); `--speed-limit`/`--speed-time` would stop only stalls.
+- **#350 N3:** `changes`, `scripts-test`, `bootstrapper-test`, `packs` and `publish` in `bootstrapper.yml` keep GitHub's 6-hour default.
 
 ## Items that do not change
 

@@ -22,11 +22,20 @@ A bootstrapped project records the tag it was built from.
 - NEXT_SESSION: follow-ups from the review of PBI-1.26 PR 1 (PR #339)
 - The bash 3.2 leg of the Bootstrapper tests on Linux: GNU bash 3.2.57 built from source by `bootstrap/bash32.sh`, cached by `bash32-cache.yml`, run in 8 shards, judged by the shard gate (PBI-1.26 PR 1) (PR #337)
 - `CLAUDE.md`: "Both agents: third-party code and IP", the product office rule on using code, firmware, designs and assets the project did not write (PR #345)
+- Backlog: PBI-1.26 done; PBI-1.27's scope names #340 (PR #341)
+- CHANGELOG: PRs #331 to #340 (PR #342)
+- NEXT_SESSION: item 19, points 1 and 5 answered (PR #343)
+- Backlog header: link to vizi's backlog format spec (PR #344)
+- CHANGELOG: PR #345 (PR #346)
+- Backlog: PBI-1.36, harden the bash 3.2 leg of the Bootstrapper tests (PR #347)
 
 ### Changed
 - CI and the pack checks run on pull requests and on pushes to `main` only, not twice per branch push; a check in the `build` job keeps it so (PBI-1.25 part 2) (PR #329)
 - The Bootstrapper tests run in a shard count per OS (ubuntu 4, macOS 5, Windows 8), with measured durations for every test; the Windows leg's wall time fell from about 23 to about 12.5 minutes (PBI-1.25 part 1) (PR #328)
 - On a Mac the setup stops at once with a plain message, before it changes anything, and the macOS leg and the macOS steps in the READMEs are out of the Bootstrapper tests and docs: macOS is not supported for now (PBI-1.26 PR 2; PBI-1.27 brings it back) (PR #340)
+- The Bootstrapper's bash 3.2 leg is split and held to the shard-time limit by its own measured durations (a new `ubuntu-bash32` column), not ubuntu's; the fixed floor of 8 shards is gone (PBI-1.36 part 1) (PR #348)
+- `bootstrap/bash32.sh` takes no hash from the environment: the `BASH32_SHA256` test hook is gone, and the tests fake the hasher instead (PBI-1.36 part 2) (PR #349)
+- Time limits on getting bash 3.2: `curl --max-time` on each download, and `timeout-minutes` on the "Get bash 3.2" steps and on the jobs that run them (PBI-1.36 part 3) (PR #350)
 
 ## [2.8.5] — 2026-10-30
 
