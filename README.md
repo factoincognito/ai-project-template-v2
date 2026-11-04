@@ -46,9 +46,7 @@ Ctrl-Q (hold Ctrl and press Q).
      opens with a line that ends in `$`; you type every command below
      in that window. If Git Bash was already open, close it and open it
      again, so it finds `gh`.
-   - **macOS:** open the Terminal app. If you have Homebrew, run
-     `brew install gh`; otherwise open https://cli.github.com, click
-     Download for Mac, open the downloaded file and follow the installer.
+   - **macOS:** not supported for now: the setup stops on a Mac. Use a computer with Windows or Linux.
    - **Linux:** open a terminal and follow the steps for your system at
      https://github.com/cli/cli/blob/trunk/docs/install_linux.md.
    - **Linux on Windows (WSL):** to work in Linux on a Windows computer,
@@ -233,8 +231,7 @@ here first:
 - Before anything is created, the script stops and you start it again
   with the command it prints, because it cannot check again in the same
   run:
-  - a bash that is too old (Windows: install the current Git for
-    Windows; macOS: use /bin/bash);
+  - a bash that is too old (Windows: install the current Git for Windows);
   - an older version of the script (it shows the command to download
     the current one);
   - gh signs in with a key (a token) set in GH_TOKEN or GITHUB_TOKEN

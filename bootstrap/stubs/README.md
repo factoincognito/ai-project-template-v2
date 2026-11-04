@@ -9,7 +9,7 @@ this repo: `CLAUDE.md` is the entry point.
 
 ## Finishing the setup
 
-If you see this, the setup of this project has not finished. Until it has, this project's GitHub page shows the bootstrapper's README (the file `.github/README.md`): do its step 0 to install gh and sign in, then run the command below in Git Bash (Windows) or a terminal (macOS, Linux), with OWNER and NAME taken from this project's web address, https://github.com/OWNER/NAME:
+If you see this, the setup of this project has not finished. Until it has, this project's GitHub page shows the bootstrapper's README (the file `.github/README.md`): do its step 0 to install gh and sign in, then run the command below in Git Bash (Windows) or a terminal (Linux; the setup does not support macOS for now), with OWNER and NAME taken from this project's web address, https://github.com/OWNER/NAME:
 
 ```
 gh api repos/factoincognito/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh && bash bootstrap-project.sh --resume --owner OWNER --name NAME

@@ -23,7 +23,7 @@
 **Earlier snapshot (state at 2026-10-15 ~11:10 Stockholm time, kept for the record):**
 - PBI-1.14 slices S1 to S18 are merged, all verified through the API on 2026-10-15: S17 = #166 (`ca3b2c8`), S18b = #171 (`6ed3290`), S18a = #169 (`be9d72e`). #165, #167 and #168 (notes) are merged too. The script is built; what is left is the open question in step 3, the release prep (step 4) and Adam's end-to-end runs.
 - (#166 merged after two Opus review rounds, last verdict APPROVE at head `59991d1`.)
-- CI shape: the Bootstrapper workflow runs once per PR push; the Windows leg takes 54 to 72 minutes (macOS about 26, ubuntu about 16). Do not poll in short loops; check every 10 to 15 minutes, or work on something else.
+- CI shape: the Bootstrapper workflow runs once per PR push; the Windows leg takes 54 to 72 minutes (ubuntu about 16). Do not poll in short loops; check every 10 to 15 minutes, or work on something else.
 
 **Next steps, in order:**
 1. Done 2026-10-15: #167, #165 and #166 merged through a Sonnet merge-only agent and verified through the API (merged true, merge commits `f0d41d2`, `498e47a`, `ca3b2c8`, expected changed files).

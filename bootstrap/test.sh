@@ -1184,56 +1184,8 @@ test_workflow_matrix_cannot_drop_an_os() {
   local j job o
   j="$(matrix_job)"; job="$(wf_job "$j")"
   ! printf '%s\n' "$job" | grep -nE '^[[:space:]]+exclude[[:space:]]*:' >&2 || die "$j has a matrix exclude"
-  for o in ubuntu-latest ubuntu-bash32 macos-latest windows-latest; do
+  for o in ubuntu-latest ubuntu-bash32 windows-latest; do
     [ -n "$(wf_legs | awk -v o="$o" '$1 == o { print }')" ] || die "$o has no leg in the matrix"
-  done
-}
-
-test_workflow_macos_bash_check_passes_on_3_2_and_fails_on_5() {
-  # Runs the macOS step's actual script with a fake bash on PATH (put
-  # there by a fake ln standing in for linking /bin/bash), reporting
-  # the version given, and a stub test file, so nothing slow runs.
-  local j step script fake d v out rc
-  j="$(matrix_job)"
-  step="$(wf_step "$j" "^        if: runner[.]os == 'macOS'\$")"
-  [ -n "$step" ] || die "no macOS step in $j"
-  script="$WORK/mac.$RANDOM.sh"
-  printf '%s\n' "$step" | wf_run_block >"$script"
-  [ -s "$script" ] || die "empty macOS run script"
-  fake="$WORK/fakebin.$RANDOM"; mkdir -p "$fake"
-  # The fake ln writes a fake bash at its last argument.
-  cat >"$fake/ln" <<'LN'
-#!/bin/sh
-for a in "$@"; do dest="$a"; done
-cat >"$dest" <<'FB'
-#!/bin/sh
-case "$1" in
-  --version) echo "GNU bash, version $FAKE_BASH_VERSION(1)-release"; exit 0 ;;
-  -c) case "$2" in *BASH_VERSINFO*) echo "$FAKE_BASH_VERSION" | cut -d. -f1-2; exit 0 ;; esac ;;
-esac
-exec "$REAL_BASH" "$@"
-FB
-chmod +x "$dest"
-LN
-  chmod +x "$fake/ln"
-  for v in 3.2.57 5.2.21; do
-    d="$WORK/mac.$v.$RANDOM"; mkdir -p "$d/bootstrap" "$d/tmp"
-    printf 'echo STUB TESTS RAN\n' >"$d/bootstrap/test-bootstrap-project.sh"
-    set +e
-    out="$(cd "$d" && PATH="$fake:$PATH" RUNNER_TEMP="$d/tmp" REAL_BASH="$BASH" FAKE_BASH_VERSION="$v" \
-      "$BASH" --noprofile --norc -eo pipefail "$script" 2>&1)"
-    rc=$?
-    set -e
-    [ -x "$d/tmp/bash32/bash" ] || { printf '%s\n' "$out" >&2; die "the step did not link a bash into RUNNER_TEMP; this test checks nothing"; }
-    case "$v" in
-      3.2.*)
-        [ "$rc" -eq 0 ] || { printf '%s\n' "$out" >&2; die "check failed on bash $v"; }
-        grep -qxF 'STUB TESTS RAN' <<<"$out" || { printf '%s\n' "$out" >&2; die "tests not run on bash $v"; } ;;
-      *)
-        [ "$rc" -ne 0 ] || { printf '%s\n' "$out" >&2; die "check passed on bash $v"; }
-        grep -qF '::error::' <<<"$out" || { printf '%s\n' "$out" >&2; die "no ::error:: on bash $v"; }
-        ! grep -qxF 'STUB TESTS RAN' <<<"$out" || die "tests ran on bash $v" ;;
-    esac
   done
 }
 
@@ -1859,10 +1811,15 @@ test_durations_from_logs_reads_the_times_between_result_lines() {
 test_durations_file_has_a_time_for_every_test_on_every_os() {
   # PBI-1.25: a test with no time (or a 0) is weighed at the median, which
   # unbalances the shards. Every test of the harness has a measured time
-  # in each OS column.
-  local want="$WORK/want" listed="$WORK/listed"
+  # in the column of each OS the matrix runs on. The macos-latest column is
+  # kept for PBI-1.27's first split but not checked while macOS is out
+  # (PBI-1.26): a test added later has 0 there.
+  local want="$WORK/want" listed="$WORK/listed" cols
   harness_tests >"$want"
-  awk 'NR > 1 && $2 > 0 && $3 > 0 && $4 > 0 { print $1 }' "$DURATIONS" | LC_ALL=C sort >"$listed"
+  cols="$(wf_legs | awk '{ print $2 }' | LC_ALL=C sort -u | tr '\n' ' ')"
+  [ "$cols" = "ubuntu-latest windows-latest " ] || die "the matrix runs on '$cols'"
+  awk -v cols="$cols" 'NR == 1 { n = split(cols, w, " "); for (i = 2; i <= NF; i++) for (k = 1; k <= n; k++) if ($i == w[k]) use[i] = 1; next }
+    { ok = 1; for (i in use) if (!($i > 0)) ok = 0; if (ok) print $1 }' "$DURATIONS" | LC_ALL=C sort >"$listed"
   LC_ALL=C comm -23 "$want" "$listed" | head -n 20 >&2
   [ -z "$(LC_ALL=C comm -23 "$want" "$listed")" ] || die "tests have no measured time on every OS (listed above, at most 20)"
   # And no stale entry: the file lists exactly the tests of the harness.
@@ -1879,7 +1836,7 @@ test_workflow_shard_counts_keep_every_legs_slowest_shard_short() {
   local leg os n i tot worst legs
   legs="$(wf_legs)"
   [ -n "$legs" ] || die "no matrix legs"
-  for leg in ubuntu-latest ubuntu-bash32 macos-latest windows-latest; do
+  for leg in ubuntu-latest ubuntu-bash32 windows-latest; do
     n="$(printf '%s\n' "$legs" | awk -v leg="$leg" '$1 == leg { print $4; exit }')"
     [ -n "$n" ] || die "$leg has no leg"
     # A leg is weighed by the durations of the OS it runs on.
@@ -2086,7 +2043,7 @@ echo "stub harness: only list mode is emulated" >&2; exit 64
 STUB
   [ -f "$CHECK_SHARDS" ] || die "no bootstrap/check-shards.sh"
   cp "$CHECK_SHARDS" "$d/bootstrap/check-shards.sh"
-  for os in ubuntu-latest ubuntu-bash32 macos-latest windows-latest; do
+  for os in ubuntu-latest ubuntu-bash32 windows-latest; do
     for i in 1 2 3 4; do
       printf 'test_%s\n' one two three four five | awk -v i="$i" '(NR - 1) % 4 == i - 1' >"$d/shard-list/$os-$i-of-4.txt"
     done
@@ -2124,7 +2081,7 @@ test_workflow_bootstrapper_test_fails_when_a_shard_or_leg_did_not_report() {
   step="$(wf_step bootstrapper-test '^ *run: [|]')"
   script="$WORK/gate.$RANDOM.sh"
   printf '%s\n' "$step" | wf_run_block >"$script"
-  for f in windows-latest-2-of-4.txt macos-latest-4-of-4.txt ubuntu-latest-1-of-4.txt ubuntu-bash32-3-of-4.txt; do
+  for f in windows-latest-2-of-4.txt ubuntu-latest-1-of-4.txt ubuntu-bash32-3-of-4.txt; do
     d="$WORK/gate.$f"; gate_fixture "$d"
     rm "$d/shard-list/$f"
     if ( cd "$d" && RESULTS="success success" bash "$script" ) >"$WORK/out" 2>&1; then
@@ -2133,11 +2090,11 @@ test_workflow_bootstrapper_test_fails_when_a_shard_or_leg_did_not_report() {
     grep -qF 'did not report' "$WORK/out" || { cat "$WORK/out" >&2; die "failed with $f missing, but not for that reason"; }
   done
   d="$WORK/gate.leg"; gate_fixture "$d"
-  rm "$d/shard-list/macos-latest-"*
+  rm "$d/shard-list/windows-latest-"*
   if ( cd "$d" && RESULTS="success success" bash "$script" ) >"$WORK/out" 2>&1; then
-    die "passed with the macOS leg missing"
+    die "passed with the Windows leg missing"
   fi
-  grep -qF 'macos-latest: no shard reported' "$WORK/out" || { cat "$WORK/out" >&2; die "the missing macOS leg is not named"; }
+  grep -qF 'windows-latest: no shard reported' "$WORK/out" || { cat "$WORK/out" >&2; die "the missing Windows leg is not named"; }
   d="$WORK/gate.bash32"; gate_fixture "$d"
   rm "$d/shard-list/ubuntu-bash32-"*
   if ( cd "$d" && RESULTS="success success" bash "$script" ) >"$WORK/out" 2>&1; then
@@ -2158,7 +2115,7 @@ test_workflow_every_os_leg_is_sharded_and_records_what_it_ran() {
   j="$(matrix_job)"; job="$(wf_job "$j")"
   legs="$(wf_legs)"
   [ -n "$legs" ] || die "$j has no matrix legs (- { leg: <leg>, os: <os>, shard: <i>, of: <n> })"
-  for os in ubuntu-latest ubuntu-bash32 macos-latest windows-latest; do
+  for os in ubuntu-latest ubuntu-bash32 windows-latest; do
     n="$(printf '%s\n' "$legs" | awk -v os="$os" '$1 == os { print $4 }' | sort -u)"
     [ "$(printf '%s\n' "$n" | grep -c .)" = 1 ] || die "$os: its legs do not agree on one shard count: $n"
     [ "$n" -ge 2 ] || die "$os is not sharded (n = $n)"
@@ -2227,12 +2184,21 @@ test_workflow_bootstrapper_test_gates_the_e2e_check_tests() {
   wf_job "$job" | grep -xE '    runs-on: ubuntu-latest' >/dev/null || die "$job does not run on ubuntu-latest"
 }
 
-test_workflow_bootstrap_project_tests_run_on_ubuntu_bash32_macos_and_windows() {
+test_workflow_bootstrap_project_tests_run_on_ubuntu_bash32_and_windows() {
   local j job oses
   j="$(matrix_job)"; job="$(wf_job "$j")"
   grep -qxF '    runs-on: ${{ matrix.os }}' <<<"$job" || die "$j does not run on matrix.os"
   oses="$(wf_legs | awk '{ print $1 }' | LC_ALL=C sort -u | tr '\n' ' ')"
-  [ "$oses" = "macos-latest ubuntu-bash32 ubuntu-latest windows-latest " ] || die "matrix legs are '$oses'"
+  [ "$oses" = "ubuntu-bash32 ubuntu-latest windows-latest " ] || die "matrix legs are '$oses'"
+  # macOS is not supported for now (PBI-1.26): no leg for it, no step for
+  # it. PBI-1.27 puts both back.
+  ! grep -qiE 'macos' <<<"$job" || { grep -niE 'macos' <<<"$job" >&2; die "$j still mentions macOS"; }
+  # (Comments may name it: the header says the durations file keeps its column.)
+  ! grep -vE '^[[:space:]]*#' "$BWF" | grep -F 'macos-latest' >&2 || die "bootstrapper.yml still names macos-latest outside comments"
+  # The plain step is for every leg but the bash 3.2 one, which has its own.
+  local plain
+  plain="$(wf_step "$j" "^        if: matrix[.]leg != 'ubuntu-bash32'\$")"
+  grep -qE '^ +run: bash bootstrap/test-bootstrap-project\.sh *$' <<<"$plain" || die "no step runs the tests with bash on the other legs"
   # The bash 3.2 leg runs on Linux (PBI-1.26).
   [ "$(wf_legs | awk '$1 == "ubuntu-bash32" { print $2 }' | sort -u)" = ubuntu-latest ] || die "the ubuntu-bash32 leg does not run on ubuntu-latest"
   # All three results show, even when one leg fails first.
@@ -2246,25 +2212,6 @@ test_workflow_windows_leg_runs_the_tests_in_git_bash() {
   wf_job "$j" | awk '/^    defaults:$/ { d = 1; next } d && /^      run:$/ { r = 1; next }
                      d && r && /^        shell: bash$/ { ok = 1 } /^    [A-Za-z]/ { d = 0; r = 0 }
                      END { exit !ok }' || die "$j does not default to shell: bash"
-}
-
-test_workflow_macos_leg_runs_the_tests_with_bin_bash_3_2() {
-  # Apple's /bin/bash is 3.2. Anything the tests start with plain bash
-  # (the script, build.sh) must be that bash too, not a newer one the
-  # runner image may put first on PATH, and the step proves it is 3.2.
-  local j mac other
-  j="$(matrix_job)"
-  mac="$(wf_step "$j" "^        if: runner[.]os == 'macOS'\$")"
-  [ -n "$mac" ] || die "no step with if: runner.os == 'macOS' in $j"
-  grep -qE '^ +/bin/bash bootstrap/test-bootstrap-project\.sh *$' <<<"$mac" \
-    || die "the macOS step does not run the tests with /bin/bash"
-  grep -qE 'ln -sf? /bin/bash ' <<<"$mac" || die "the macOS step does not link bash to /bin/bash"
-  grep -qE 'PATH=' <<<"$mac" || die "the macOS step does not put that link first on PATH"
-  grep -qF 'BASH_VERSINFO' <<<"$mac" && grep -qF '3.2' <<<"$mac" \
-    || die "the macOS step does not check that bash is 3.2"
-  other="$(wf_step "$j" "^        if: runner[.]os != 'macOS' && matrix[.]leg != 'ubuntu-bash32'\$")"
-  grep -qE '^ +run: bash bootstrap/test-bootstrap-project\.sh *$' <<<"$other" \
-    || die "no step runs the tests with bash on the other legs"
 }
 
 # ---------- the bash 3.2 leg on Linux (PBI-1.26, PR 1) ----------

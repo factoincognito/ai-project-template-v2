@@ -34,7 +34,8 @@
 #     languages/ folder next to this script.
 #
 # Exit codes: 0 done (or a --dry-run that passed its checks), 1 failed or
-# stopped, 2 usage error, unknown pack, or an input that is missing or
+# stopped (also at once on a Mac: macOS is not supported for now), 2 usage
+# error, unknown pack, or an input that is missing or
 # cannot be used, 3 a check of this computer or on GitHub did not pass, or
 # a step on GitHub was refused: its steps were shown, with the command to
 # start again (or, once the project exists, to continue with --resume).
@@ -435,6 +436,9 @@ CONTINUE_INTRO="To continue the setup, run this command:"
 ADVANCE_INTRO="If the setup stops before it finishes, for any reason, also with Ctrl-C or a closed window, continue it with the command below. Copy it now and keep it until the setup has finished:"
 # The line above a command the script offers to run (offer_command).
 OFFER_INTRO="The script can run this command for you:"
+# The stop on a Mac (stop_on_macos): macOS is not supported for now.
+MACOS_WHAT="This computer runs macOS, which the setup does not support for now. Nothing was changed."
+MACOS_NEXT="Set up the project on a computer with Windows or Linux. Step 0 of the README says how to prepare it."
 # The plan and step 10 give it for a public project with no licence.
 NO_LICENCE_WARNING="Warning: the project is public and has no licence: anyone can see its code, but nobody else may copy, change or share it. To add a licence later, see https://choosealicense.com."
 
@@ -5684,6 +5688,17 @@ run_steps() {
   report
 }
 
+# stop_on_macos: macOS is not supported for now, so on a Mac the setup
+# stops at once, before it changes anything. It comes straight after
+# detect_os, before the checks, the colour key and every preflight; all
+# three ways in (the plain command, --again, --resume) reach it. Exit 1:
+# exit 3 promises a command to start again, which does not help on a Mac.
+# No option skips it. The macOS branches of the guides stay, with their
+# tests, which fake uname.
+stop_on_macos() {
+  [ "$OS_KIND" != macos ] || fail 1 "$MACOS_WHAT" "$MACOS_NEXT"
+}
+
 # cmd_setup <options...>: the setup. The options are checked first, then
 # the checks that need no answer (the tools, the GitHub sign-in and the
 # current version), so that nothing is asked in vain; the npm, folder,
@@ -5701,6 +5716,7 @@ cmd_setup() {
   fi
   remember_command "$@"
   detect_os
+  stop_on_macos
   if [ -n "$OPT_NON_INTERACTIVE" ] && [ -z "$OPT_YES$OPT_DRY_RUN" ]; then
     add_problem --yes "With --non-interactive the script asks nothing, so it cannot ask \"Proceed?\" before it creates the project: add --yes to go ahead, or --dry-run to only see the plan."
   fi

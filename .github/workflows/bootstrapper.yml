@@ -3,14 +3,14 @@
 # ships to bootstrapped projects.
 #
 # Runs on pull requests to main and on pushed v* tags only, not on branch
-# pushes, so each push to a PR runs the OS matrix once. Main changes
+# pushes, so each push to a PR runs the test matrix once. Main changes
 # only through pull requests, which are tested on the merge ref; a
 # branch pushed without a PR is not tested here. A newer push to the
 # same PR cancels the older run; a tag run is never cancelled in
 # progress. After a merge, this workflow does not run on main: protection
 # has strict: false, so a PR's merge-ref run can predate another PR's
 # merge, and this workflow's suites (bootstrap/test.sh,
-# bootstrap/test-bootstrap-project.sh on the OS matrix,
+# bootstrap/test-bootstrap-project.sh on the matrix legs,
 # tools/test-require-test-change.sh) do not run on the combined tree
 # until a v* tag, whose run still gates publish. ci.yml and packs.yml do
 # run on main after every merge (they trigger on pull requests and on pushes
@@ -22,16 +22,19 @@
 #   (tools/test-check-status.sh) on ubuntu, and the tests of the
 #   bootstrap script (bootstrap/test-bootstrap-project.sh) on ubuntu,
 #   ubuntu with GNU bash 3.2.57 built from source (PBI-1.26; the cache of
-#   that build is saved by bash32-cache.yml), macOS (Apple's /bin/bash 3.2)
-#   and Windows (Git for Windows bash).
+#   that build is saved by bash32-cache.yml) and Windows (Git for Windows
+#   bash). There is no macOS leg: macOS is not supported for now
+#   (PBI-1.26; PBI-1.27 brings it back), and the bash 3.2 leg keeps the
+#   script checked against the bash 3.2 that Macs ship.
 #   bootstrapper-test, a required check, passes only if all of them did.
 #   Each leg runs as shards (PBI-1.18; one leg took up to 76 min
 #   on Windows), as many as that OS's total test time needs (PBI-1.25:
 #   4 on ubuntu, 8 on the bash 3.2 leg, whose tests took 1061 to 1271 s a
-#   shard with 4 (about 2.4 times ubuntu's), 5 on macOS, 8 on Windows,
-#   whose tests take about 2.5 times as long as ubuntu's), split by the measured time of each test on that OS
-#   (bootstrap/test-durations.txt, PBI-1.22); each shard records the
-#   tests it ran; bootstrapper-test also fails unless, for every OS,
+#   shard with 4 (about 2.4 times ubuntu's), 8 on Windows, whose tests
+#   take about 2.5 times as long as ubuntu's), split by the measured time
+#   of each test on that OS (bootstrap/test-durations.txt, PBI-1.22; its
+#   macos-latest column is kept for PBI-1.27); each shard records the
+#   tests it ran; bootstrapper-test also fails unless, for every leg,
 #   its shards together ran every test exactly once
 #   (bootstrap/check-shards.sh).
 # - A pull request that changes only files no test reads
@@ -124,7 +127,7 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.needed == 'true'
     strategy:
-      # Every OS and shard reports, even when one fails first.
+      # Every leg and shard reports, even when one fails first.
       fail-fast: false
       matrix:
         # Each leg has the shard count its total test time needs
@@ -146,11 +149,6 @@ jobs:
           - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 6, of: 8 }
           - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 7, of: 8 }
           - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 8, of: 8 }
-          - { leg: macos-latest, os: macos-latest, shard: 1, of: 5 }
-          - { leg: macos-latest, os: macos-latest, shard: 2, of: 5 }
-          - { leg: macos-latest, os: macos-latest, shard: 3, of: 5 }
-          - { leg: macos-latest, os: macos-latest, shard: 4, of: 5 }
-          - { leg: macos-latest, os: macos-latest, shard: 5, of: 5 }
           - { leg: windows-latest, os: windows-latest, shard: 1, of: 8 }
           - { leg: windows-latest, os: windows-latest, shard: 2, of: 8 }
           - { leg: windows-latest, os: windows-latest, shard: 3, of: 8 }
@@ -202,15 +200,15 @@ jobs:
         if: matrix.leg == 'ubuntu-bash32' && steps.cache.outputs.cache-hit != 'true'
         run: bash bootstrap/bash32.sh "$RUNNER_TEMP/bash32"
       - name: Test bootstrap-project.sh
-        if: runner.os != 'macOS' && matrix.leg != 'ubuntu-bash32'
+        if: matrix.leg != 'ubuntu-bash32'
         run: bash bootstrap/test-bootstrap-project.sh
       - name: Test bootstrap-project.sh with bash 3.2 built on Linux
         if: matrix.leg == 'ubuntu-bash32'
         run: |
           # The tests start the script and build.sh with plain bash, so put
-          # the bash 3.2 first on PATH, as the macOS step does with Apple's
-          # /bin/bash. A plain bash started inside a test run is the
-          # runner's own (bootstrap-project.sh itself runs on 3.2).
+          # the bash 3.2 first on PATH. A plain bash started inside a test
+          # run is the runner's own (bootstrap-project.sh itself runs on
+          # 3.2).
           export PATH="$RUNNER_TEMP/bash32:$PATH"
           v="$(bash -c 'echo "${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"')"
           echo "bash on PATH: $(command -v bash), version $v"
@@ -219,22 +217,6 @@ jobs:
             exit 1
           fi
           bash bootstrap/test-bootstrap-project.sh
-      - name: Test bootstrap-project.sh with macOS /bin/bash 3.2
-        if: runner.os == 'macOS'
-        run: |
-          # The tests start the script and build.sh with plain bash, so
-          # put Apple's /bin/bash first on PATH: the runner image may
-          # have a newer bash there.
-          mkdir -p "$RUNNER_TEMP/bash32"
-          ln -sf /bin/bash "$RUNNER_TEMP/bash32/bash"
-          export PATH="$RUNNER_TEMP/bash32:$PATH"
-          v="$(bash -c 'echo "${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"')"
-          echo "bash on PATH: $(command -v bash), version $v"
-          if [ "$v" != "3.2" ]; then
-            echo "::error::Expected bash 3.2 on PATH, got $v."
-            exit 1
-          fi
-          /bin/bash bootstrap/test-bootstrap-project.sh
       - name: Upload the list of tests this shard ran
         uses: actions/upload-artifact@v7
         with:
@@ -246,7 +228,7 @@ jobs:
   # The required check. A matrix would rename it, so it is one job that
   # needs the test jobs, always runs (a job skipped because a need failed
   # reports as success) and passes only if every need succeeded and
-  # every shard of every OS leg reported running its tests, which
+  # every shard of every leg reported running its tests, which
   # together are every test exactly once.
   bootstrapper-test:
     if: always()
@@ -277,7 +259,7 @@ jobs:
             exit 0
           fi
           BOOTSTRAP_TEST_LIST=1 bash bootstrap/test-bootstrap-project.sh >all-tests.txt
-          bash bootstrap/check-shards.sh shard-list all-tests.txt ubuntu-latest ubuntu-bash32 macos-latest windows-latest
+          bash bootstrap/check-shards.sh shard-list all-tests.txt ubuntu-latest ubuntu-bash32 windows-latest
 
   packs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
