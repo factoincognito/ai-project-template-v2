@@ -28,6 +28,8 @@ permissions:
 jobs:
   bash32-cache:
     runs-on: ubuntu-latest
+    # PBI-1.36: GitHub's default is 6 hours; a stalled job is stopped.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - name: Identify the runner image
@@ -52,6 +54,8 @@ jobs:
           key: bash-3.2.57-3fa9daf85ebf35068f090ce51283ddeeb3c75eb5bc70b1a4a7cb05868bfe06a4-${{ runner.os }}-${{ steps.image.outputs.image }}-gcc${{ steps.image.outputs.gcc }}
       - name: Get bash 3.2
         if: steps.cache.outputs.cache-hit != 'true'
+        # The download and the build take about 2 min (PBI-1.36).
+        timeout-minutes: 20
         run: bash bootstrap/bash32.sh "$RUNNER_TEMP/bash32"
       - name: Save bash 3.2 to the cache
         if: steps.cache.outputs.cache-hit != 'true'

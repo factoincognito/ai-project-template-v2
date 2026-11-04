@@ -2442,6 +2442,8 @@ for a in "$@"; do url="$a"; done
 prev=
 for a in "$@"; do if [ "$prev" = -o ]; then dest="$a"; fi; prev="$a"; done
 echo "$url" >>"$FAKE_CURL_LOG"
+# All its arguments, on one line, when the test asks for them.
+[ -z "$FAKE_CURL_ARGS_LOG" ] || echo "$*" >>"$FAKE_CURL_ARGS_LOG"
 if [ -n "$FAKE_CURL_FAIL" ]; then case "$url" in *"$FAKE_CURL_FAIL"*) exit 22 ;; esac; fi
 cp "$FAKE_TARBALL" "$dest"
 CURL
@@ -2580,6 +2582,61 @@ test_bash32_script_fails_naming_the_build_when_configure_fails() {
   err="$(grep -F '::error::' <<<"$out" || true)"
   grep -qi 'build' <<<"$err" || { printf '%s\n' "$out" >&2; die "no ::error:: line naming the build"; }
   [ ! -e "$d/out/bash32/bash" ] || die "a bash was left in the folder"
+}
+
+test_bash32_script_limits_the_time_of_each_download() {
+  # PBI-1.36: a stalled download cannot hold a shard. Every curl call has
+  # --max-time, a whole number of seconds from 30 to 600, next to its
+  # --connect-timeout; checked on both servers' calls.
+  local d="$WORK/b32.maxtime" out rc line n calls=0
+  [ -f "$BASH32" ] || die "no bootstrap/bash32.sh"
+  b32_fixture "$d" 3.2.57
+  b32_run "$d" fake FAKE_CURL_FAIL=ftp.gnu.org FAKE_CURL_ARGS_LOG="$d/curl-args.log"
+  [ "$rc" -eq 0 ] || { printf '%s\n' "$out" >&2; die "failed although the mirror works"; }
+  [ -s "$d/curl-args.log" ] || die "curl was not called"
+  while IFS= read -r line; do
+    calls=$((calls + 1))
+    n="$(printf '%s\n' "$line" | sed -nE 's/(^|.* )--max-time ([^ ]+)( .*|$)/\2/p')"
+    [ -n "$n" ] || die "a download has no --max-time: curl $line"
+    case "$n" in "" | *[!0-9]*) die "--max-time is not a whole number of seconds: $n" ;; esac
+    [ "$n" -ge 30 ] && [ "$n" -le 600 ] || die "--max-time $n is not from 30 to 600 seconds"
+    case " $line " in *" --connect-timeout "*) ;; *) die "a download has no --connect-timeout: curl $line" ;; esac
+  done <"$d/curl-args.log"
+  [ "$calls" -eq 2 ] || { cat "$d/curl-args.log" >&2; die "want 2 downloads (the first server fails, then the mirror), got $calls"; }
+}
+
+# timeout_of <text> <indent>: the value of the timeout-minutes: line at
+# exactly that indent in the text (a job's or a step's own), or nothing.
+timeout_of() {
+  printf '%s\n' "$1" | sed -nE "s/^$2timeout-minutes: ([^ #]+)[[:space:]]*(#.*)?\$/\1/p" | head -n 1
+}
+
+test_workflow_getting_bash_3_2_and_its_jobs_have_time_limits() {
+  # PBI-1.36: GitHub's default job limit is 6 hours. "Get bash 3.2" has a
+  # limit of its own (at most 30 min: a download and a build take about
+  # 2), and so do the jobs that run it (at most 60 min, above the step's),
+  # in both workflows.
+  local f job step s j
+  for f in "$BWF" "$CACHEWF"; do
+    [ -f "$f" ] || die "no $f"
+    step="$(wf_file_step "$f" '^      - name: Get bash 3[.]2$')"
+    [ -n "$step" ] || die "$f: no step named Get bash 3.2"
+    s="$(timeout_of "$step" '        ')"
+    [ -n "$s" ] || die "$f: Get bash 3.2 has no timeout-minutes"
+    case "$s" in *[!0-9]*) die "$f: Get bash 3.2 timeout-minutes is not a whole number: $s" ;; esac
+    [ "$s" -ge 1 ] && [ "$s" -le 30 ] || die "$f: Get bash 3.2 timeout-minutes $s is not from 1 to 30"
+    if [ "$f" = "$BWF" ]; then
+      job="$(wf_job "$(matrix_job)")"
+    else
+      job="$(awk '/^[^ #]/ { injobs = ($0 ~ /^jobs:/); inj = 0; next }
+        injobs && /^  [A-Za-z0-9_-]+:/ { inj = ($0 ~ /^  bash32-cache:[[:space:]]*$/) } inj { print }' "$f")"
+    fi
+    [ -n "$job" ] || die "$f: the job that gets bash 3.2 is not found"
+    j="$(timeout_of "$job" '    ')"
+    [ -n "$j" ] || die "$f: the job that gets bash 3.2 has no timeout-minutes"
+    case "$j" in *[!0-9]*) die "$f: the job's timeout-minutes is not a whole number: $j" ;; esac
+    [ "$j" -gt "$s" ] && [ "$j" -le 60 ] || die "$f: the job's timeout-minutes $j is not above the step's $s and at most 60"
+  done
 }
 
 test_real_build_does_not_ship_the_bootstrap_project_tests() {
