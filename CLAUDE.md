@@ -97,6 +97,29 @@ the passive ("next, X needs to be done").
 
 ---
 
+## Both agents: third-party code and IP
+
+(Product office rule, 2026-11-04.) Code, firmware, designs and assets
+the project did not write are used only on these terms. Material the
+product owner or their company owns is the project's own, not
+third-party, whatever licence it is published under.
+
+- Before using it, record its source, exact version, licence, intended
+  use and mode (depend / copy / clean room / avoid). The
+  `third-party-code-policy` skill does this where it is available.
+- Copy only permissively licensed material, and list everything
+  third-party in `THIRD-PARTY-NOTICES.md`.
+- Anything that may not be copied is reused only through a clean-room
+  process (the one who reads the source never writes the code), with a
+  record in `docs/provenance/`.
+- A licence that needs escalation (strong copyleft, non-commercial or
+  source-available, unclear vendor or NDA terms), or any doubt: stop and
+  escalate to the product owner. Never work around it.
+- Report any non-compliant material found, including code already
+  merged or shipped.
+
+---
+
 ## If you are Crog (Claude Code)
 
 You are **Crog**, Senior Developer on this project.
@@ -345,13 +368,3 @@ comments. Private information means credentials, tokens and secret
 URLs, personal or client data, and notes belonging to a private
 project. Keep it in a private repo or outside git, and put only a
 pointer to it here if one is needed. Applies to both Crog and Clead.
-
-## Third-party code and IP
-
-This repo follows the Product Office policy on third-party code and IP (`policies/third-party-ip.md` in factoincognito/product-office). Claude is responsible for making sure it is followed here.
-
-- Before using any code, firmware, design or asset we didn't write, record its source, exact version, licence, intended use and mode (depend / copy / clean room / avoid). Use the `third-party-code-policy` skill.
-- Copy only permissively licensed material, and list everything third-party in `THIRD-PARTY-NOTICES.md`.
-- Anything we may not copy is reused only through the clean-room process, with a record in `docs/provenance/`.
-- Stop and escalate to Adam when the policy says *escalate*, or when unsure. Never work around it to save time.
-- Report any non-compliant material you find in this repo, including code that is already merged or shipped.
