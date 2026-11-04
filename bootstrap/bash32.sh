@@ -56,10 +56,13 @@ version_of() {
   "$1" -c 'echo "${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"'
 }
 
-# Download.
+# Download. --max-time caps each attempt (PBI-1.36): the file is 2.5 MB,
+# so 120 s is far above a normal download, and a stalled one is given up
+# instead of holding the job. With --retry 2 that is at most three
+# attempts per server.
 got=""
 for server in $SERVERS; do
-  if curl -fsSL --retry 2 --connect-timeout 30 -o "$WORK/bash.tar.gz" "$server/bash-$VERSION.tar.gz"; then
+  if curl -fsSL --retry 2 --connect-timeout 30 --max-time 120 -o "$WORK/bash.tar.gz" "$server/bash-$VERSION.tar.gz"; then
     got=1
     break
   fi
