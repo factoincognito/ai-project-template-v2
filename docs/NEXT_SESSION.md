@@ -501,11 +501,11 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 
 Optional points from Crog's review of #337 (comment 6617962290), not blocking, recorded so they are not lost. Each becomes a backlog item, is folded into PBI-1.26 PR 2 where it touches the same files, or is dropped with a reason.
 
-1. **Total run time.** In run 41733862836, 20 jobs started at once and 6 waited 7 to 10 minutes, so the run took 21.7 minutes, not the "about 12.5 minutes, set by Windows" of the PBI-1.26 spec, item 6. It looks like a cap on concurrent jobs; GitHub's limits were not checked. Check whether removing the macOS leg (PR 2) brings the run back under it.
+1. **Total run time. Answered (2026-11-04, Crog's review of #340, comment 6618975693).** The Bootstrapper run on #340's head (41743484711) took 15.4 minutes wall clock, against 21.7 for run 41733862836. One Windows shard waited 246 s for a runner and every other job at most 54 s; without that wait the last shard ended at about 12 minutes. Removing the macOS leg did bring the run near the spec's "about 12.5 minutes"; the remaining variation is waiting for runners. Nothing to do.
 2. **The shard-time test does not guard the bash 3.2 leg.** It weighs that leg by ubuntu's times, which are about 2.4 times too fast for it, and the fixed minimum of 8 shards will not grow as tests are added.
 3. **The `BASH32_SHA256` test hook** lets an environment variable replace the pinned hash; a fake `sha256sum` in the tests would remove that bypass from the script.
 4. **No time limits on the bash 3.2 download:** `curl` has no `--max-time` and the jobs have no `timeout-minutes`, so a stalled download holds a shard until GitHub's default timeout.
-5. **Not seen yet:** a pull request run restoring the cache that `bash32-cache.yml` saves on `main`; the first PR after #337's merge shows it.
+5. **Resolved (2026-11-04, Crog's review of #340):** a pull request run does restore the cache that `bash32-cache.yml` saves on `main`. All 8 bash 3.2 shards of run 41743484711 logged "Cache restored successfully" for the key `bash-3.2.57-3fa9daf8...-Linux-ubuntu26-gcc15.2.0`, and "Get bash 3.2" was skipped on all 8; the save came from `bash32-cache.yml` run 41738122295 on `main` (`09a198a`). The cache itself was not read through the caches API (refused through the session's proxy).
 
 ## Items that do not change
 
