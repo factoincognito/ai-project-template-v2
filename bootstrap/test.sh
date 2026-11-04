@@ -1568,13 +1568,18 @@ test_harness_records_the_tests_it_ran() {
 
 DURATIONS="$HERE/test-durations.txt"
 
+# durations_has_column <name>: the durations file's header names that column.
+durations_has_column() {
+  awk -v c="$1" 'NR == 1 { for (k = 2; k <= NF; k++) if ($k == c) f = 1; exit } END { exit !f }' "$DURATIONS"
+}
+
 test_harness_shards_by_duration_together_run_every_test_exactly_once() {
   # The real durations file and each of its columns, for several shard
   # counts: none left out, none twice.
   local want="$WORK/want" all="$WORK/all" n i col
   harness_tests >"$want"
   [ -f "$DURATIONS" ] || die "no bootstrap/test-durations.txt"
-  for col in ubuntu-latest macos-latest windows-latest; do
+  for col in ubuntu-latest macos-latest windows-latest ubuntu-bash32; do
     for n in 1 2 4 5; do
       : >"$all"
       i=1
@@ -1595,7 +1600,7 @@ test_harness_shards_by_duration_balance_the_measured_time() {
   # The greedy split by the durations file: for each column, the 4
   # shards' totals (by the same file) differ by at most the longest test.
   local col i tot max min longest
-  for col in ubuntu-latest macos-latest windows-latest; do
+  for col in ubuntu-latest macos-latest windows-latest ubuntu-bash32; do
     max=""; min=""
     for i in 1 2 3 4; do
       run_harness "$WORK/b.$col.$i" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD="$i/4" BOOTSTRAP_TEST_WEIGHTS="$DURATIONS:$col" \
@@ -1757,25 +1762,32 @@ test_harness_refuses_weights_it_cannot_read() {
 test_durations_file_lists_every_test_with_a_time_for_each_os() {
   # The checked-in durations cover the harness's tests: a test missing
   # from it still runs (median weight), but a name the harness no longer
-  # has is stale, and every OS leg has its column.
+  # has is stale, and every leg has its column (PBI-1.36: the bash 3.2
+  # leg has its own, after the three OS columns).
   local want="$WORK/want"
   harness_tests >"$want"
   [ -f "$DURATIONS" ] || die "no bootstrap/test-durations.txt"
-  [ "$(sed -n 1p "$DURATIONS")" = 'test ubuntu-latest macos-latest windows-latest' ] || die "unexpected header: $(sed -n 1p "$DURATIONS")"
-  ! awk 'NR > 1 && (NF != 4 || $2 !~ /^[0-9]+(\.[0-9]+)?$/ || $3 !~ /^[0-9]+(\.[0-9]+)?$/ || $4 !~ /^[0-9]+(\.[0-9]+)?$/)' "$DURATIONS" | grep . >&2 \
-    || die "a line of the durations file is not a name and three numbers"
+  [ "$(sed -n 1p "$DURATIONS")" = 'test ubuntu-latest macos-latest windows-latest ubuntu-bash32' ] || die "unexpected header: $(sed -n 1p "$DURATIONS")"
+  ! awk 'NR > 1 && (NF != 5 || $2 !~ /^[0-9]+(\.[0-9]+)?$/ || $3 !~ /^[0-9]+(\.[0-9]+)?$/ || $4 !~ /^[0-9]+(\.[0-9]+)?$/ || $5 !~ /^[0-9]+(\.[0-9]+)?$/)' "$DURATIONS" | grep . >&2 \
+    || die "a line of the durations file is not a name and four numbers"
   awk 'NR > 1 { print $1 }' "$DURATIONS" | LC_ALL=C sort >"$WORK/listed"
   LC_ALL=C comm -13 "$want" "$WORK/listed" | grep . >&2 && die "the durations file lists tests the harness does not have"
   [ -z "$(awk 'NR > 1 { print $1 }' "$DURATIONS" | LC_ALL=C sort | uniq -d)" ] || die "a test is listed twice"
 }
 
-test_workflow_shards_split_by_the_durations_of_their_os() {
+test_workflow_shards_split_by_the_durations_of_their_leg() {
   # The matrix job hands each shard the durations file and the column of
-  # its own OS.
+  # its own leg (PBI-1.36: the bash 3.2 leg runs on ubuntu-latest but is
+  # weighed by its own times; every other leg is named as its OS).
   local job
   job="$(wf_job "$(matrix_job)")"
-  grep -qxF '      BOOTSTRAP_TEST_WEIGHTS: bootstrap/test-durations.txt:${{ matrix.os }}' <<<"$job" \
-    || die "the shards are not split by bootstrap/test-durations.txt for their OS"
+  grep -qxF '      BOOTSTRAP_TEST_WEIGHTS: bootstrap/test-durations.txt:${{ matrix.leg }}' <<<"$job" \
+    || die "the shards are not split by bootstrap/test-durations.txt for their leg"
+  # Each leg has its column in the file's header.
+  local leg
+  for leg in $(wf_legs | awk '{ print $1 }' | LC_ALL=C sort -u); do
+    durations_has_column "$leg" || die "the durations file has no column $leg"
+  done
 }
 
 test_durations_from_logs_reads_the_times_between_result_lines() {
@@ -1783,6 +1795,7 @@ test_durations_from_logs_reads_the_times_between_result_lines() {
   # file from Actions job logs: each test's time is its result line's
   # timestamp minus the result line before (the step start for the
   # first), the mean over the logs of one OS it appears in, in tenths.
+  # The bash 3.2 leg (ubuntu-bash32) is a column of its own, last.
   local d="$WORK/logs" tool="$HERE/durations-from-logs.sh"
   [ -f "$tool" ] || die "no bootstrap/durations-from-logs.sh"
   mkdir -p "$d"
@@ -1798,10 +1811,15 @@ test_durations_from_logs_reads_the_times_between_result_lines() {
   # A second macOS log (another run) where test_c took 6 s: the mean, 5.
   printf '%s\n' '2026-10-27T01:00:00.0000000Z ##[group]Run /bin/bash bootstrap/test-bootstrap-project.sh' \
     '2026-10-27T01:00:06.0000000Z ok   test_c' >"$d/m2.log"
-  bash "$tool" ubuntu-latest="$d/u1.log" macos-latest="$d/m1.log" windows-latest="$d/w1.log" macos-latest="$d/m2.log" >"$d/out" 2>"$d/err" \
+  # A bash 3.2 shard: its test step's run block starts with a comment.
+  printf '%s\n' '2026-11-04T00:22:00.0000000Z ##[group]Run # The tests start the script and build.sh with plain bash, so put' \
+    '2026-11-04T00:22:01.0000000Z bash on PATH: /home/runner/work/_temp/bash32/bash, version 3.2' \
+    '2026-11-04T00:22:07.0000000Z ok   test_a' '2026-11-04T00:22:10.0000000Z ok   test_d' >"$d/b1.log"
+  bash "$tool" ubuntu-latest="$d/u1.log" macos-latest="$d/m1.log" windows-latest="$d/w1.log" macos-latest="$d/m2.log" \
+    ubuntu-bash32="$d/b1.log" >"$d/out" 2>"$d/err" \
     || { cat "$d/err" >&2; die "the tool failed"; }
-  printf '%s\n' 'test ubuntu-latest macos-latest windows-latest' 'test_a 2.5 0 60.0' 'test_b 9.5 0 0' 'test_c 0 5.0 1.0' \
-    'test_d 0 0 0.1' >"$d/want"
+  printf '%s\n' 'test ubuntu-latest macos-latest windows-latest ubuntu-bash32' 'test_a 2.5 0 60.0 7.0' 'test_b 9.5 0 0 0' \
+    'test_c 0 5.0 1.0 0' 'test_d 0 0 0.1 3.0' >"$d/want"
   diff "$d/want" "$d/out" >&2 || die "unexpected durations (want, then got)"
   # A log with no test step is refused: it would give every test 0.
   printf '%s\n' '2026-10-26T22:00:00.0000000Z ##[group]Run actions/checkout@v7' >"$d/empty.log"
@@ -1811,17 +1829,19 @@ test_durations_from_logs_reads_the_times_between_result_lines() {
 test_durations_file_has_a_time_for_every_test_on_every_os() {
   # PBI-1.25: a test with no time (or a 0) is weighed at the median, which
   # unbalances the shards. Every test of the harness has a measured time
-  # in the column of each OS the matrix runs on. The macos-latest column is
+  # in the column of each leg of the matrix (PBI-1.36: the bash 3.2 leg
+  # included, which is weighed by its own column). The macos-latest column is
   # kept for PBI-1.27's first split but not checked while macOS is out
   # (PBI-1.26): a test added later has 0 there.
-  local want="$WORK/want" listed="$WORK/listed" cols
+  local want="$WORK/want" listed="$WORK/listed" cols c
   harness_tests >"$want"
-  cols="$(wf_legs | awk '{ print $2 }' | LC_ALL=C sort -u | tr '\n' ' ')"
-  [ "$cols" = "ubuntu-latest windows-latest " ] || die "the matrix runs on '$cols'"
+  cols="$(wf_legs | awk '{ print $1 }' | LC_ALL=C sort -u | tr '\n' ' ')"
+  [ "$cols" = "ubuntu-bash32 ubuntu-latest windows-latest " ] || die "the matrix has the legs '$cols'"
+  for c in $cols; do durations_has_column "$c" || die "the durations file has no column $c"; done
   awk -v cols="$cols" 'NR == 1 { n = split(cols, w, " "); for (i = 2; i <= NF; i++) for (k = 1; k <= n; k++) if ($i == w[k]) use[i] = 1; next }
     { ok = 1; for (i in use) if (!($i > 0)) ok = 0; if (ok) print $1 }' "$DURATIONS" | LC_ALL=C sort >"$listed"
   LC_ALL=C comm -23 "$want" "$listed" | head -n 20 >&2
-  [ -z "$(LC_ALL=C comm -23 "$want" "$listed")" ] || die "tests have no measured time on every OS (listed above, at most 20)"
+  [ -z "$(LC_ALL=C comm -23 "$want" "$listed")" ] || die "tests have no measured time on every leg (listed above, at most 20)"
   # And no stale entry: the file lists exactly the tests of the harness.
   awk 'NR > 1 { print $1 }' "$DURATIONS" | LC_ALL=C sort >"$WORK/listed-all"
   LC_ALL=C comm -13 "$want" "$WORK/listed-all" | head -n 20 >&2
@@ -1829,25 +1849,28 @@ test_durations_file_has_a_time_for_every_test_on_every_os() {
 }
 
 test_workflow_shard_counts_keep_every_legs_slowest_shard_short() {
-  # With each OS's own shard count and the durations file, no OS leg's
+  # With each leg's own shard count and the durations file, no leg's
   # slowest shard (the sum of its tests' times) is above 11 min of test
   # time, and Windows, whose tests take the longest, has more shards than
-  # ubuntu. Aim (PBI-1.25): about 12 min wall time with the set-up.
-  local leg os n i tot worst legs
+  # ubuntu. Aim (PBI-1.25): about 12 min wall time with the set-up. Each
+  # leg is split and weighed by its own column (PBI-1.36), so the bash 3.2
+  # leg, which runs on ubuntu-latest, is held to the same limit by its
+  # own times, and needs more shards when added tests push it above.
+  local leg n i tot worst legs
   legs="$(wf_legs)"
   [ -n "$legs" ] || die "no matrix legs"
   for leg in ubuntu-latest ubuntu-bash32 windows-latest; do
     n="$(printf '%s\n' "$legs" | awk -v leg="$leg" '$1 == leg { print $4; exit }')"
     [ -n "$n" ] || die "$leg has no leg"
-    # A leg is weighed by the durations of the OS it runs on.
-    os="$(printf '%s\n' "$legs" | awk -v leg="$leg" '$1 == leg { print $2; exit }')"
+    # A leg is weighed by its own column.
+    durations_has_column "$leg" || die "the durations file has no column $leg"
     worst=0
     i=1
     while [ "$i" -le "$n" ]; do
-      run_harness "$WORK/w.$os.$i" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD="$i/$n" BOOTSTRAP_TEST_WEIGHTS="$DURATIONS:$os" \
-        || die "list mode failed ($os, $i/$n)"
-      tot="$(awk -v col="$os" 'NR == FNR { if (FNR == 1) { for (k = 2; k <= NF; k++) if ($k == col) c = k; next } w[$1] = $c; next }
-        { s += w[$1] } END { printf "%d\n", s }' "$DURATIONS" "$WORK/w.$os.$i")"
+      run_harness "$WORK/w.$leg.$i" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD="$i/$n" BOOTSTRAP_TEST_WEIGHTS="$DURATIONS:$leg" \
+        || die "list mode failed ($leg, $i/$n)"
+      tot="$(awk -v col="$leg" 'NR == FNR { if (FNR == 1) { for (k = 2; k <= NF; k++) if ($k == col) c = k; next } w[$1] = $c; next }
+        { s += w[$1] } END { printf "%d\n", s }' "$DURATIONS" "$WORK/w.$leg.$i")"
       [ "$tot" -le "$worst" ] || worst="$tot"
       i=$((i + 1))
     done
@@ -2273,17 +2296,6 @@ test_workflow_bash32_leg_gets_bash_3_2_before_it_runs_the_tests_with_it() {
   d="$(step_line "$BWF" 'Test bootstrap-project[.]sh with bash 3[.]2')"
   [ -n "$a" ] && [ -n "$b" ] && [ -n "$c" ] && [ -n "$d" ] || die "a bash 3.2 step is missing ($a $b $c $d)"
   [ "$a" -lt "$b" ] && [ "$b" -lt "$c" ] && [ "$c" -lt "$d" ] || die "the bash 3.2 steps are out of order ($a $b $c $d)"
-}
-
-test_workflow_bash32_leg_has_the_shards_its_measured_time_needs() {
-  # Measured on GitHub's runner (run 41730239312, 4 shards): the tests
-  # under bash 3.2 took 1061 to 1271 s a shard, about 2.4 times ubuntu's,
-  # against Windows' 11 min wall time. To stay near 12 min wall time
-  # (PBI-1.26, item 6) the leg has at least 8 shards.
-  local n
-  n="$(wf_legs | awk '$1 == "ubuntu-bash32" { print $4; exit }')"
-  [ -n "$n" ] || die "no ubuntu-bash32 leg"
-  [ "$n" -ge 8 ] || die "the bash 3.2 leg has $n shards; its measured time needs at least 8"
 }
 
 test_workflow_bash32_step_checks_for_bash_3_2_and_runs_the_tests_with_it() {
