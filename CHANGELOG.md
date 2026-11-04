@@ -21,6 +21,7 @@ A bootstrapped project records the tag it was built from.
 - Backlog legend: the MOVED marker (PR #338)
 - NEXT_SESSION: follow-ups from the review of PBI-1.26 PR 1 (PR #339)
 - The bash 3.2 leg of the Bootstrapper tests on Linux: GNU bash 3.2.57 built from source by `bootstrap/bash32.sh`, cached by `bash32-cache.yml`, run in 8 shards, judged by the shard gate (PBI-1.26 PR 1) (PR #337)
+- `CLAUDE.md`: "Both agents: third-party code and IP", the product office rule on using code, firmware, designs and assets the project did not write (PR #345)
 
 ### Changed
 - CI and the pack checks run on pull requests and on pushes to `main` only, not twice per branch push; a check in the `build` job keeps it so (PBI-1.25 part 2) (PR #329)
