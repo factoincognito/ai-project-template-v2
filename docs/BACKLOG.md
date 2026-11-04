@@ -1168,6 +1168,20 @@ get a working project in any supported language.
 
   **Done (2026-11-04, unattended).** Each part red in CI first (runs 41861041577, 41862143581, 41862656903, `scripts-test`), then green; each reviewed in round 1 by its own Crog agent on Opus (APPROVE, no required fixes; comments 6635347264, 6636174845, 6636321060); merged by a merge-only agent on Sonnet. Part 1: the bash 3.2 leg's slowest shard is 493 s of tests by its own column with 8 shards (was 610 s measured under ubuntu's split); the new split has not run on a runner yet, the first pull request run after #348 shows it. On #349's head `pack-web` failed once at `npx playwright install --with-deps chromium` (the runner's package install), outside the PR; its re-run passed. The reviews' optional points are in `docs/NEXT_SESSION.md` item 20.
 
+- **[LATER] PBI-1.37** (Adam, 2026-11-05: "as per your recommendation", Clead's grouping of `docs/NEXT_SESSION.md` item 20; the HOW is Clead's; not yet built) — Follow-ups to PBI-1.36 from the optional points of its reviews (#348 comment 6635347264, #349 comment 6636174845, #350 comment 6636321060).
+
+  **Scope.**
+  1. **The shard-time test reads the legs from the workflow** (#348 N3): `test_workflow_shard_counts_keep_every_legs_slowest_shard_short` loops over `wf_legs`, not three hard-coded names, so a leg added later (macOS, PBI-1.27) is held to the limit without another test pinning the list.
+  2. **The pin itself is tested** (#349 N1): a test that `bootstrap/bash32.sh` has the literal `SHA256=<pinned value>`, so a hash override under any variable name fails, not only `BASH32_SHA256`.
+  3. **A failing hasher says why** (#349 N3): when `sha256sum`/`shasum` fails, `bash32.sh` prints an `::error::` line naming it and exits 1, as for its other failures. Older than PBI-1.36.
+  4. **Durations are timed from the test step** (#348 N1): `bootstrap/durations-from-logs.sh` starts a log's first test time at the test step, not at the first non-action step, so a cache-miss bash build or other set-up is not counted as the first test's time. Older than PBI-1.36; the current column came from a run where every bash 3.2 shard hit the cache.
+
+  **Folded in where these PRs touch the same lines** (wording, no behaviour): test names and the comment that still say OS for leg (`..._for_each_os`, `..._on_every_os`, the comment of `test_durations_from_logs_reads_the_times_between_result_lines`; #348 N2); the `bootstrapper.yml` header comment that explains the 8 bash 3.2 shards by the old 4-shard times (#348 N4); the loop over workflow files in `test_bash32_script_takes_no_hash_from_the_environment` fails when a file is missing (#349 N4).
+
+  **Dropped (Adam, 2026-11-05, on Clead's recommendation), with the reason.** #349 N2: wording of a merged PR's description, nothing left to change. #350 N1: the fake curl's exit code (22, not curl's timeout 28) changes no result. #350 N2: `--max-time 120` also stops a slow but moving download; the value stands unless a slow mirror trips it. #350 N3: the other Bootstrapper jobs keep GitHub's 6-hour default; they download nothing, so the stall PBI-1.36 addressed cannot happen there. The single-run sample behind the `ubuntu-bash32` column: later runs are averaged in when the durations are next measured.
+
+  **Rules that apply.** Script, test and workflow changes: test first (red, then green), reviewed by a Crog agent on Opus, one PR per scope point.
+
 ---
 
 ## Phase 2 — Validate unproven pieces

@@ -1,6 +1,6 @@
 # [PROJECT NAME] — Next Session Planning
 
-**Last Updated:** 2026-11-04
+**Last Updated:** 2026-11-05
 **Author:** Clead (Tech Owner)
 **Purpose:** Staging area for reasoning, revised assumptions, and plan-adaptation thoughts that aren't yet mature enough to be a PBI, a decision, a strategy update, or a vision-doc change. Complements `docs/BACKLOG.md` — it does not replace it. Discrete, scoped, actionable work belongs in the backlog as a PBI, not here.
 
@@ -496,23 +496,6 @@ Written on Adam's request to consolidate parallel sessions. Item 9 is the other 
 **Status:** untested. Unchecked: whether anything refuses a tag on an older commit or a version lower than the published one, and whether a tag run on an old commit uses that commit's workflow and still has the secret it needs. Projects already made from a bad release are not changed by a rollback. Once tested, or when a rollback is first needed, this goes into `docs/DEV_INFRASTRUCTURE.md` as the procedure.
 
 ---
-
-### 20. Optional review points from PBI-1.36 (#348 to #350) — new (2026-11-04)
-
-Item 19 is resolved: points 1 and 5 were answered (#343), points 2 to 4 became PBI-1.36 and were built in #348, #349 and #350 (merged and verified 2026-11-04). Its reviews approved each PR with no required fixes and left these optional points, recorded so they are not lost. Each becomes a backlog item, is folded into a later PR that touches the same lines, or is dropped with a reason.
-
-- **#348 N1** (comment 6635347264): `durations-from-logs.sh` starts a log's first test time at the first non-action `##[group]Run ` line ("Delete the files no test reads"), not at the test step; on the bash 3.2 leg a cache miss would put the bash build into the first test's time. The checked-in column came from a run where all 8 shards hit the cache. Older than this PBI.
-- **#348 N2:** wording in `bootstrap/test.sh` still says OS where it means leg: the comment of `test_durations_from_logs_reads_the_times_between_result_lines`, and the names `..._for_each_os` and `..._on_every_os`.
-- **#348 N3:** `test_workflow_shard_counts_keep_every_legs_slowest_shard_short` loops over three hard-coded legs, not `wf_legs`; it covers every leg only because another test pins the legs to those three (relevant when PBI-1.27 brings macOS back).
-- **#348 N4:** the `bootstrapper.yml` header comment still explains the 8 bash 3.2 shards by the old 4-shard times; the count is now held by the leg's own column.
-- **#348, not a review point:** the `ubuntu-bash32` column is one run's sample; later runs can be averaged in with the same tool.
-- **#349 N1** (comment 6636174845): the new test catches the old variable name only; one line asserting that `bash32.sh` has the literal `SHA256=<pin>` would catch a hook under another name.
-- **#349 N2:** one row of the PR's coverage table claims a little more than the test shows (`..._names_the_download_when_neither_server_answers` fails before any hash is computed). Wording only.
-- **#349 N3:** a failing `sha256sum`/`shasum` makes `bash32.sh` exit with no `::error::` line. Older than this PBI.
-- **#349 N4:** the new file loop passes silently if a workflow file is missing; another test already fails then.
-- **#350 N1** (comment 6636321060): the fake curl exits 22 on a forced failure; 28 (curl's timeout) would model this PBI's case. No result changes.
-- **#350 N2:** `--max-time 120` also stops a download that is slow but moving (below about 21 KB/s); `--speed-limit`/`--speed-time` would stop only stalls.
-- **#350 N3:** `changes`, `scripts-test`, `bootstrapper-test`, `packs` and `publish` in `bootstrapper.yml` keep GitHub's 6-hour default.
 
 ## Items that do not change
 
