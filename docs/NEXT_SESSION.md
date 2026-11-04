@@ -189,7 +189,6 @@ Written 2026-10-02 so nothing depends on anyone remembering. **Each Clead sessio
    - **Lesson (2026-10-27):** a closing keyword before a PR number ("fix #247") in a merged PR's description closes that PR: notes PR #249 closed #247 and #248 (reopened). Write "addressed in #N" or "PR #N". The agents' briefs say so.
    - **Learned on the way:** "Re-run failed jobs" on a `bootstrapper-test` run works with the shard gate (#199 and #204: a macOS shard was cancelled by the runner, its re-run made the gate green).
 4. **If an agent has to change files in your connected PC folder,** it asks for delete permission once per session (a failed pull left a stale `.git/index.lock` last time). Your PC clone of the template is behind main and its `origin` points at the org; the session fast-forwards it after you grant that.
-5. **When you have time: delete the branch `spec-pbi-1.25-part3`** (the repo's Branches page on GitHub). It has no open PR (#334 was closed unmerged on 2026-11-03), so it is not a claim; agents get 403 on branch deletion. Found 2026-11-04.
 
 ---
 
