@@ -16,7 +16,7 @@
 #                              measured duration instead (PBI-1.22).
 #                              File f has a header "test <columns...>"
 #                              and one line per test, its seconds in each
-#                              column; c names the column (CI: the OS).
+#                              column; c names the column (CI: the leg).
 #                              Longest test first, each to the shard with
 #                              the least total so far (ties: fewer tests,
 #                              then the lower shard); a test f does not

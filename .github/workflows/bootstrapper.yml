@@ -32,8 +32,9 @@
 #   4 on ubuntu, 8 on the bash 3.2 leg, whose tests took 1061 to 1271 s a
 #   shard with 4 (about 2.4 times ubuntu's), 8 on Windows, whose tests
 #   take about 2.5 times as long as ubuntu's), split by the measured time
-#   of each test on that OS (bootstrap/test-durations.txt, PBI-1.22; its
-#   macos-latest column is kept for PBI-1.27); each shard records the
+#   of each test on that leg (bootstrap/test-durations.txt, PBI-1.22; the
+#   bash 3.2 leg has a column of its own, PBI-1.36; the macos-latest
+#   column is kept for PBI-1.27); each shard records the
 #   tests it ran; bootstrapper-test also fails unless, for every leg,
 #   its shards together ran every test exactly once
 #   (bootstrap/check-shards.sh).
@@ -134,8 +135,9 @@ jobs:
         # (PBI-1.25; times in bootstrap/test-durations.txt): shards 1..of
         # of every leg. bootstrapper-test fails if a shard of 1..of of a
         # leg did not report. A leg is an OS, except ubuntu-bash32 (PBI-1.26):
-        # Linux with GNU bash 3.2.57 built from source, split by ubuntu's
-        # times (os is the runner and the column of the durations file).
+        # Linux with GNU bash 3.2.57 built from source (os is the runner).
+        # Each leg is split by its own column of the durations file
+        # (PBI-1.36), named as the leg.
         include:
           - { leg: ubuntu-latest, os: ubuntu-latest, shard: 1, of: 4 }
           - { leg: ubuntu-latest, os: ubuntu-latest, shard: 2, of: 4 }
@@ -161,8 +163,9 @@ jobs:
     env:
       BOOTSTRAP_TEST_SHARD: ${{ matrix.shard }}/${{ matrix.of }}
       BOOTSTRAP_TEST_MANIFEST: shard-list/${{ matrix.leg }}-${{ matrix.shard }}-of-${{ matrix.of }}.txt
-      # Split by the measured time of each test on this OS (PBI-1.22).
-      BOOTSTRAP_TEST_WEIGHTS: bootstrap/test-durations.txt:${{ matrix.os }}
+      # Split by the measured time of each test on this leg (PBI-1.22,
+      # PBI-1.36).
+      BOOTSTRAP_TEST_WEIGHTS: bootstrap/test-durations.txt:${{ matrix.leg }}
     defaults:
       run:
         # On Windows this is Git for Windows' bash.
