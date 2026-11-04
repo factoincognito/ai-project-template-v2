@@ -97,6 +97,29 @@ the passive ("next, X needs to be done").
 
 ---
 
+## Both agents: third-party code and IP
+
+(Product office rule, 2026-11-04.) Code, firmware, designs and assets
+the project did not write are used only on these terms. Material the
+product owner or their company owns is the project's own, not
+third-party, whatever licence it is published under.
+
+- Before using it, record its source, exact version, licence, intended
+  use and mode (depend / copy / clean room / avoid). The
+  `third-party-code-policy` skill does this where it is available.
+- Copy only permissively licensed material, and list everything
+  third-party in `THIRD-PARTY-NOTICES.md`.
+- Anything that may not be copied is reused only through a clean-room
+  process (the one who reads the source never writes the code), with a
+  record in `docs/provenance/`.
+- A licence that needs escalation (strong copyleft, non-commercial or
+  source-available, unclear vendor or NDA terms), or any doubt: stop and
+  escalate to the product owner. Never work around it.
+- Report any non-compliant material found, including code already
+  merged or shipped.
+
+---
+
 ## If you are Crog (Claude Code)
 
 You are **Crog**, Senior Developer on this project.
