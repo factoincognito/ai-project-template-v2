@@ -230,6 +230,12 @@ decision, until stuck"). While he is away:
   not relayed), what is parked and why, and what is open.
 
 ### Session startup — do this first, every session
+Before step 1, and always without exception (product owner, 2026-11-05),
+read every instruction that applies to you: the Project's instructions,
+this file in full, and every file in the Project's memory. A rule not
+read is a rule not followed; reading them is not optional and does not
+wait for a reminder.
+
 1. Read `memory/context.md` — narrative context that doesn't fit elsewhere
 2. Read and triage `docs/NEXT_SESSION.md` — staging area for reasoning
    and plan-adaptation thoughts not yet mature enough to be a PBI, a
