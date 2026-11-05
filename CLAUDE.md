@@ -95,10 +95,10 @@ itself defines `feat` and `fix` and the title format below.
   behaviour nor fixes a bug; `perf` performance; `style` formatting
   only; `build` the build system or dependencies; `ci` CI workflows;
   `chore` anything else; `revert` the revert of an earlier PR.
-- Squash merge: the session that merges sets the squash commit title to
-  the PR title (`commit_title` in the REST merge call), so `main` gets
-  the PR title with the PR number added. GitHub's default takes a
-  one-commit PR's commit title instead.
+- Squash merge: the session that merges sets the squash commit title
+  to the PR title followed by ` (#<number>)` (`commit_title` in the REST
+  merge call). GitHub's default takes a one-commit PR's commit title
+  instead.
 - A name a tool assigns is kept: a branch a session cannot choose (a
   cloud Claude Code session that may push only to its assigned
   `claude/...` branch), and the bootstrapper's `bootstrap-setup` branch
