@@ -24,8 +24,9 @@ up when something is worth raising.
 
 ## Git and workflow rules
 
-- Never commit to `main`. All work on `feat/<description>`,
-  `fix/<description>` or `docs/<description>` branches.
+- Never commit to `main`. All work on `<type>/<description>` branches,
+  with PR titles `<type>(<scope>): <summary>` (CLAUDE.md, "Both agents:
+  branch and PR names").
 - One PBI per branch. One PR per branch.
 - Every PR must pass CI before review.
 - You do the merging, for your own PRs and Clead's, but only once CI

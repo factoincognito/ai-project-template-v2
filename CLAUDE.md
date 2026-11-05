@@ -69,6 +69,41 @@ three review rounds without agreement) is unchanged.
 
 ---
 
+## Both agents: branch and PR names
+
+(Product owner's rule, 2026-11-05, owned by the product office.) Branch
+names and PR titles say what kind of change they carry, using the
+[Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
+types of `@commitlint/config-conventional`: `feat`, `fix`, `docs`,
+`style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
+
+- Branch: `<type>/<short-description>`, lower case with hyphens, e.g.
+  `feat/udp-listener`, `docs/backlog-pbi-1-37`. A release prep branch is
+  `chore/release-<version>`.
+- PR title: `<type>(<scope>): <summary>`, the scope optional, the
+  summary imperative and specific, e.g. `fix(reader): show frequency as
+  not decoded when it is missing`, `docs(backlog): add PBI-1.37`. A
+  breaking change puts `!` before the colon. While a PR is a claim, its
+  title is `[claim] ` followed by the title it will keep.
+- PRs are squash-merged, so the PR title becomes the commit message on
+  the default branch.
+- Which type: `feat` new or changed behaviour; `fix` a bug fix; `docs`
+  documentation only, which includes the backlog, notes, `STATUS.md`,
+  the changelog and process rules such as this file; `test` tests only;
+  `refactor` code that changes neither behaviour nor a bug; `perf`
+  performance; `style` formatting only; `build` the build system or
+  dependencies; `ci` CI workflows; `chore` anything else; `revert` the
+  revert of an earlier PR.
+- A name a tool assigns is kept: a cloud Claude Code session's
+  `claude/...` branch, the bootstrapper's `bootstrap-setup` branch and
+  its PR title. The PR title of a session on an assigned branch still
+  follows this rule.
+- No CI check enforces this (product owner, 2026-11-05). The reviewer
+  checks the names, and the session that merges checks the PR title
+  before it merges.
+
+---
+
 ## Both agents: `STATUS.md`
 
 (Product office rule, 2026-10-26.) `STATUS.md` at the repo root is read

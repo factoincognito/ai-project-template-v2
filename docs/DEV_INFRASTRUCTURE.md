@@ -143,14 +143,17 @@ tests, so it is only safe once branch protection requires `build`.
 ### 6. Commits, branches and pull requests
 
 - **One PR, one change.** Unrelated changes never share a PR.
-- **Branch names:** `feat/<short-description>`,
-  `fix/<short-description>` or `docs/<short-description>`, e.g.
-  `feat/udp-listener`, `fix/multicast-join-error`.
+- **Branch names and PR titles:** Conventional Commits types, as set
+  out in `CLAUDE.md`, "Both agents: branch and PR names". Branches are
+  `<type>/<short-description>`, e.g. `feat/udp-listener`,
+  `fix/multicast-join-error`; PR titles are
+  `<type>(<scope>): <summary>`, e.g. `feat(listener): add configurable
+  UDP listener with multicast support`.
 - **Commit messages:** imperative, present tense, specific. Say what the
   commit does, not what you did. Good: `Add configurable UDP listener
   with multicast support`. Bad: `Added stuff`, `WIP`, `fix`.
 - **Squash merge.** A PR lands on `main` as one commit, titled after the
-  PR, so the PR title follows the same convention. Delete the branch
+  PR, so the PR title is the commit message on `main`. Delete the branch
   after the merge, or turn on "Automatically delete head branches" in
   the repo settings (Settings, General, Pull Requests) so GitHub does
   it.
