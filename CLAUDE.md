@@ -95,6 +95,11 @@ Everything else in the reply is written as what a session does ("I'm
 checking PR #67", "Crog reviews it next"), never as a bare command or in
 the passive ("next, X needs to be done").
 
+Text the product owner is to copy and paste (a prompt, a command, a
+line to send) is always given as a code block, so it is clear where it
+starts and ends and the chat's copy button works (product owner,
+2026-11-05, owned by the product office).
+
 ---
 
 ## Both agents: third-party code and IP
