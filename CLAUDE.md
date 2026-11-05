@@ -72,35 +72,41 @@ three review rounds without agreement) is unchanged.
 ## Both agents: branch and PR names
 
 (Product owner's rule, 2026-11-05, owned by the product office.) Branch
-names and PR titles say what kind of change they carry, using the
-[Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
-types of `@commitlint/config-conventional`: `feat`, `fix`, `docs`,
-`style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
+names and PR titles say what kind of change they carry. The types are
+the ones `@commitlint/config-conventional` allows: `feat`, `fix`,
+`docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`,
+`revert`. [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
+itself defines `feat` and `fix` and the title format below.
 
 - Branch: `<type>/<short-description>`, lower case with hyphens, e.g.
-  `feat/udp-listener`, `docs/backlog-pbi-1-37`. A release prep branch is
-  `chore/release-<version>`.
+  `feat/udp-listener`, `docs/backlog-release-on-merge`.
 - PR title: `<type>(<scope>): <summary>`, the scope optional, the
-  summary imperative and specific, e.g. `fix(reader): show frequency as
-  not decoded when it is missing`, `docs(backlog): add PBI-1.37`. A
-  breaking change puts `!` before the colon. While a PR is a claim, its
-  title is `[claim] ` followed by the title it will keep.
-- PRs are squash-merged, so the PR title becomes the commit message on
-  the default branch.
-- Which type: `feat` new or changed behaviour; `fix` a bug fix; `docs`
-  documentation only, which includes the backlog, notes, `STATUS.md`,
-  the changelog and process rules such as this file; `test` tests only;
-  `refactor` code that changes neither behaviour nor a bug; `perf`
-  performance; `style` formatting only; `build` the build system or
-  dependencies; `ci` CI workflows; `chore` anything else; `revert` the
-  revert of an earlier PR.
-- A name a tool assigns is kept: a cloud Claude Code session's
-  `claude/...` branch, the bootstrapper's `bootstrap-setup` branch and
-  its PR title. The PR title of a session on an assigned branch still
-  follows this rule.
+  summary imperative, specific and starting in lower case, e.g.
+  `fix(reader): show frequency as not decoded when it is missing`,
+  `docs(backlog): add the release-on-merge item`. A breaking change puts
+  `!` before the colon. While a PR is a claim, its title is `[claim] `
+  followed by the title it will keep.
+- Release prep: branch `chore/release-<version>`, title
+  `chore(release): <version>`.
+- Which type: `feat` new behaviour, or a change to behaviour that is not
+  a bug fix; `fix` a bug fix; `docs` documentation only, which includes
+  the backlog, notes, `STATUS.md`, the changelog and process rules such
+  as this file; `test` tests only; `refactor` code that neither changes
+  behaviour nor fixes a bug; `perf` performance; `style` formatting
+  only; `build` the build system or dependencies; `ci` CI workflows;
+  `chore` anything else; `revert` the revert of an earlier PR.
+- Squash merge: the session that merges sets the squash commit title to
+  the PR title (`commit_title` in the REST merge call), so `main` gets
+  the PR title with the PR number added. GitHub's default takes a
+  one-commit PR's commit title instead.
+- A name a tool assigns is kept: a branch a session cannot choose (a
+  cloud Claude Code session that may push only to its assigned
+  `claude/...` branch), and the bootstrapper's `bootstrap-setup` branch
+  and its setup PR title. A session on an assigned branch still gives
+  its PR a title that follows this rule.
 - No CI check enforces this (product owner, 2026-11-05). The reviewer
-  checks the names, and the session that merges checks the PR title
-  before it merges.
+  checks the names. Before merging, the session that merges corrects a
+  PR title that does not follow the rule.
 
 ---
 

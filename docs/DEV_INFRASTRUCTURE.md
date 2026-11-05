@@ -149,11 +149,14 @@ tests, so it is only safe once branch protection requires `build`.
   `fix/multicast-join-error`; PR titles are
   `<type>(<scope>): <summary>`, e.g. `feat(listener): add configurable
   UDP listener with multicast support`.
-- **Commit messages:** imperative, present tense, specific. Say what the
-  commit does, not what you did. Good: `Add configurable UDP listener
-  with multicast support`. Bad: `Added stuff`, `WIP`, `fix`.
-- **Squash merge.** A PR lands on `main` as one commit, titled after the
-  PR, so the PR title is the commit message on `main`. Delete the branch
+- **Commit messages:** imperative, present tense, specific, in the same
+  form as a PR title. Say what the commit does, not what you did. Good:
+  `feat(listener): add configurable UDP listener with multicast
+  support`. Bad: `Added stuff`, `WIP`, `fix`.
+- **Squash merge.** A PR lands on `main` as one commit. The session
+  that merges sets its title to the PR title (`commit_title` in the
+  REST merge call); GitHub's default would take a one-commit PR's
+  commit title instead. Delete the branch
   after the merge, or turn on "Automatically delete head branches" in
   the repo settings (Settings, General, Pull Requests) so GitHub does
   it.
