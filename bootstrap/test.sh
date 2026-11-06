@@ -289,6 +289,43 @@ test_real_build_ships_the_generic_docs() {
     || die "DEV_INFRASTRUCTURE.md shipped altered"
 }
 
+test_real_build_ships_the_backlog_stub_with_its_format() {
+  # The backlog stub's header is the format specification (Process P-9
+  # § 2 (3)): the entry line, exactly the five markers (§ 2 (2)), and the
+  # section the product owner reads (§ 3 (1)), grouped Now, When you have
+  # time and Later.
+  local out="$WORK/real.$RANDOM" b want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM" t
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  b="$out/docs/BACKLOG.md"
+  cmp -s "$REPO/bootstrap/stubs/docs/BACKLOG.md" "$b" || die "docs/BACKLOG.md shipped altered"
+  printf '%s\n' BLOCKED DONE LATER NEXT NOW >"$want"
+  sed -n 's/^| \[\([A-Z]*\)\] |.*/\1/p' "$b" | LC_ALL=C sort >"$got"
+  diff "$want" "$got" >&2 || die "the backlog stub's markers are not exactly NOW, NEXT, LATER, DONE and BLOCKED (diff above)"
+  tr '\n' ' ' <"$b" | tr -s ' ' >"$b.flat"
+  for t in '`- **[MARKER] ID**`' 'in parentheses' '` — `' 'fenced code block' 'is never an entry'; do
+    grep -qF -- "$t" "$b.flat" || die "the backlog stub's format does not say: $t"
+  done
+  [ "$(grep -cxF '## Waiting for the product owner' "$b")" -eq 1 ] || die "the backlog stub has no single section Waiting for the product owner"
+  sed -n '/^## Waiting for the product owner$/,/^## [^W]/p' "$b" | grep '^### ' >"$got" || true
+  printf '%s\n' '### Now' '### When you have time' '### Later' >"$want"
+  diff "$want" "$got" >&2 || die "Waiting for the product owner is not grouped Now, When you have time, Later (diff above)"
+  # The header comes before the first item: the section is above the phases.
+  [ "$(grep -n '^## Waiting for the product owner$' "$b" | cut -d: -f1)" -lt "$(grep -n '^## Phase 1' "$b" | cut -d: -f1)" ] \
+    || die "Waiting for the product owner is not above the phases"
+  # No entry in the stub uses a marker outside the five.
+  ! grep -nE '^ *- \*\*\[' "$b" | grep -vE '^[0-9]+: *- \*\*\[(NOW|NEXT|LATER|DONE|BLOCKED)\]' >&2 || die "an entry with another marker (above)"
+}
+
+test_real_build_readme_names_the_product_owner() {
+  # The Rules (§ 4 (1)) take the product owner to be the person the
+  # project's README.md names; the setup fills [PO NAME] in. The intro,
+  # above the first section, says so.
+  local out="$WORK/real.$RANDOM"
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  sed '/^## /,$d' "$out/README.md" | tr '\n' ' ' | tr -s ' ' >"$WORK/intro"
+  grep -qF 'The product owner, [PO NAME], decides' "$WORK/intro" || { cat "$WORK/intro" >&2; die "the README's intro does not name the product owner"; }
+}
+
 test_real_build_points_to_the_template_only_in_the_record_of_origin() {
   # PBI-1.29: what ships needs nothing from the template. The project's
   # CHANGELOG.md and the script's --version and spec link name where it
@@ -319,6 +356,13 @@ test_real_build_ships_the_status_stub() {
   sed -n '1,/^-->$/p' "$out/STATUS.md" >"$body"
   for t in 'in the same PR' 'Last update' 'Forward-looking only' 'History lives in Git'; do
     grep -qF -- "$t" "$body" || die "the update rule in STATUS.md does not say: $t"
+  done
+  # The comment is the file's format specification (Process P-9 § 6 (6)):
+  # the fixed title, line and headings, and the blocker prefix.
+  tr '\n' ' ' <"$body" | tr -s ' ' >"$body.flat"
+  for t in 'format of this file' '"# Status"' '"Last update: YYYY-MM-DD"' \
+           'Phase, Current focus, Next step and Blockers' 'starts with "Product Owner:", written exactly so'; do
+    grep -qF -- "$t" "$body.flat" || die "the format specification in STATUS.md does not say: $t"
   done
   sed '1,/^-->$/d' "$out/STATUS.md" >"$body"
   cat >"$want" <<'TEXT'
