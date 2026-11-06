@@ -6,6 +6,8 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.9.0] — 2026-11-06
+
 ### Added
 - Release prep for v2.8.5 (PR #322)
 - Recorded in NEXT_SESSION that the newcomer pre-check passed on the v2.8.5 candidate (PR #323)
@@ -28,6 +30,18 @@ A bootstrapped project records the tag it was built from.
 - Backlog header: link to vizi's backlog format spec (PR #344)
 - CHANGELOG: PR #345 (PR #346)
 - Backlog: PBI-1.36, harden the bash 3.2 leg of the Bootstrapper tests (PR #347)
+- Notes: PBI-1.36 done, item 19 resolved; CHANGELOG for PRs #341 to #350 (PR #351)
+- NEXT_SESSION: to-do 5 done (PR #352)
+- Backlog: PBI-1.37, follow-ups to PBI-1.36; NEXT_SESSION item 20 resolved (PR #353)
+- `CLAUDE.md`: text the product owner is to paste is given as a code block (PR #355)
+- `.github/scripts/check-rules-edition.sh`, the check that a copy of the Rules edition is an unchanged build output, run by the template's `build` in template mode (PR #357)
+- Backlog: PBI-1.38, ship the Rules edition to new projects (PR #360)
+- Backlog: PBI-1.39, follow-ups to the Rules edition check (PR #362)
+- The Rules edition, the public edition of the product office's Rules, in `bootstrap/stubs/rules/`: edition 2026-11-06-b9a15ae (PR #365), replaced by 2026-11-06-5b3a7bb (PR #372) and 2026-11-06-821d361 (PR #374)
+- The `build` check of every new project checks its copy of the Rules edition against its `EDITION` (PR #361)
+- `bootstrap/e2e-check.sh` checks the Rules edition in the made project (PR #367)
+- Backlog: PBI-1.38 done, and PBI-1.40, its follow-ups (PR #368)
+- Backlog: PBI-1.41, lint, format and line coverage gates for this repository's own scripts, due 2026-11-13 (PR #370)
 
 ### Changed
 - CI and the pack checks run on pull requests and on pushes to `main` only, not twice per branch push; a check in the `build` job keeps it so (PBI-1.25 part 2) (PR #329)
@@ -36,6 +50,13 @@ A bootstrapped project records the tag it was built from.
 - The Bootstrapper's bash 3.2 leg is split and held to the shard-time limit by its own measured durations (a new `ubuntu-bash32` column), not ubuntu's; the fixed floor of 8 shards is gone (PBI-1.36 part 1) (PR #348)
 - `bootstrap/bash32.sh` takes no hash from the environment: the `BASH32_SHA256` test hook is gone, and the tests fake the hasher instead (PBI-1.36 part 2) (PR #349)
 - Time limits on getting bash 3.2: `curl --max-time` on each download, and `timeout-minutes` on the "Get bash 3.2" steps and on the jobs that run them (PBI-1.36 part 3) (PR #350)
+- The template's `build` fails a change that deletes the Rules edition folder (PR #358)
+- New projects get a `CLAUDE.md` entry point that points to the Rules edition and a `RULES.md` for their local rules, which opens with the project's sign-off to the Rules; they no longer get `memory/roles.md`, `memory/standards.md`, `docs/CROG_ONBOARDING.md`, `docs/ROUTINES.md` or `docs/decisions/0001-rebuild-workflow.md` (PBI-1.38) (PR #363)
+- The backlog, `STATUS.md` and README stubs give the formats the Rules edition points to (PBI-1.38) (PR #364)
+- Shipped files point to the Rules edition instead of restating its rules (PBI-1.38) (PR #366)
+- The template itself is bound to the product office's Rules: `RULES.md` holds its sign-off and its local rules, `CLAUDE.md` is a short entry point, and `memory/roles.md`, `memory/standards.md`, `docs/CROG_ONBOARDING.md` and `docs/ROUTINES.md` are gone (PR #369)
+- `memory/project.md`: the goals follow the cutover (PR #371)
+- `STATUS.md` after the cutover (PR #373)
 
 ## [2.8.5] — 2026-10-30
 
