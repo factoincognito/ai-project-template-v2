@@ -11,10 +11,14 @@ A bootstrapped project records the tag it was built from.
 - Backlog: PBI-1.41 spec, approved by Adam (PR #378)
 - Backlog: the findings of the product office's audit of 2026-11-06, PBI-1.42 to PBI-1.53 (PR #380)
 - NEXT_SESSION: Adam's input for the p2.9.0-b and -c fixes (PR #383)
+- CHANGELOG: PRs #376 to #383 (PR #384)
+- Backlog: PBI-1.41 part (a) done, and the follow-ups from its review (PR #385)
+- NEXT_SESSION: for p2.9.0-c, the first message is a pre-written one (PR #387), and the steps on Android (PR #388)
 
 ### Changed
 - The Rules edition: 2026-11-06-643aba6 (PR #377), then 2026-11-06-d0973c4 (PR #382)
 - `build` lints the template's own scripts with shellcheck 0.11.0, pinned by its hash, and fails on any finding; `.shellcheckrc` turns off three checks the scripts break on purpose (PBI-1.41 part (a)) (PR #379)
+- The template's 21 scripts are formatted with `shfmt -i 2 -ci` (shfmt 3.14.1), with no change in behaviour (PBI-1.41 part (b)) (PR #386)
 
 ## [2.9.0] — 2026-11-06
 
