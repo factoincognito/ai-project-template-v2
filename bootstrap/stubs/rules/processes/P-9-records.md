@@ -9,6 +9,7 @@ P-9 § 2 Backlog format
 (1) A backlog has one entry per line, `- **[MARKER] ID**`, optionally followed by notes in parentheses, then ` — ` and the title; detail is indented below the entry.
 (2) The markers are `NOW`, `NEXT`, `LATER`, `DONE` and `BLOCKED`. A line inside a fenced code block is never an entry.
 (3) The specification of the format is the header of the project's backlog file.
+(4) A due date is written in the entry's notes as `due YYYY-MM-DD`.
 
 P-9 § 3 Waiting for the product owner
 (1) The section "Waiting for the product owner" of the project's backlog is the one list the product owner reads. Every open item that needs their click, setting or decision is one line in it, with Clead's recommendation and the item that holds the detail.
