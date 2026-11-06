@@ -12,13 +12,13 @@ all projects reads them.
 Last update: 2026-11-06
 
 ## Phase
-Build and release. v2.9.0 is prepared: new projects get the public edition of the product office's Rules as their rule set (PBI-1.38), and the template itself is bound to those Rules (#369).
+Build and release. v2.9.0 is tagged (2026-11-06): new projects get the public edition of the product office's Rules as their rule set (PBI-1.38), and the template itself is bound to those Rules (#369).
 
 ## Current focus
-The release of v2.9.0, and PBI-1.41, due 2026-11-13: lint, format and line coverage (at least 80%) gates in `build` for this repository's own scripts. It is the dated condition of the template's sign-off to the Rules (`RULES.md` L § 7 (3)).
+PBI-1.41, due 2026-11-13: lint, format and line coverage (at least 80%) gates in `build` for this repository's own scripts. It is the dated condition of the template's sign-off to the Rules (`RULES.md` L § 7 (3)). Also the two defects that the newcomer pre-check found on v2.9.0 (p2.9.0-b and -c in `docs/NEXT_SESSION.md`): the steps in the Claude app after the setup.
 
 ## Next step
-Clead runs the newcomer pre-check on `main` (`docs/NEWCOMER_PRECHECK.md`); when it passes, Adam tags v2.9.0. Then PBI-1.41. Run 5 is still to come: someone who has never used a terminal or gh sets up a project from the bootstrapper's README alone.
+Fix p2.9.0-b and -c in a release Adam tags, then run the pre-check again on it. Run 5 comes after that: someone who has never used a terminal or gh sets up a project from the bootstrapper's README alone.
 
 ## Blockers
 None. acuteping waits until run 5 passes.
