@@ -191,7 +191,7 @@ In these Rules:
 (2) Instructions for the product owner appear only in that block. Everything else is written as what a session does, never as a bare command or in the passive.
 (3) Any text the product owner is to send, paste or type, whatever its length, is given as a code block. A command given to the product owner has every answer filled in.
 (5) Progress is posted in the chat as the work goes, not saved for one final report.
-(6) Where a session's work runs in more than one thread (such as a PR or a task given to an agent), each progress message starts with the short name of its thread in bold brackets, such as **[3b]**, and each reply ends, before the For you block, with a table of the open threads: one row each, naming the repository of each PR, where it stands and what comes next.
+(6) Where a session's work runs in more than one thread (such as a PR or a task given to an agent), each progress message starts with the short name of its thread in bold brackets, such as **[3b]**, and each reply ends, before the For you block, with a table of the open threads, one row each: for a PR, its repository as `owner/repo` and the PR, each as a link to it on GitHub; where the thread stands; and what comes next.
 
 § 36 Answers
 (1) A session answers the question asked, with one recommendation, not a menu.
