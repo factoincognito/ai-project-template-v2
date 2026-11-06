@@ -2886,6 +2886,63 @@ test_no_grep_q_at_the_end_of_a_pipe() {
   [ -z "$hits" ] || die "grep -q at the end of a pipe in:$hits (lines above)"
 }
 
+test_real_build_points_to_the_rules_not_to_rule_files_that_no_longer_ship() {
+  # What ships points to the Rules edition (rules/, RULES.md, the
+  # Processes by number), never to the template's rule files that stopped
+  # shipping or to sections of the old CLAUDE.md.
+  local out="$WORK/real.$RANDOM" hits f
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  hits="$(cd "$out" && grep -rnE 'memory/roles\.md|memory/standards\.md|CROG_ONBOARDING\.md|ROUTINES\.md|0001-rebuild-workflow|\.\.wrap|Change execution model|session-start routine|"Session end"' . \
+    | sed 's|^\./||' | grep -v '^rules/' || true)"
+  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "these shipped lines point to rule files or CLAUDE.md sections that no longer ship"; }
+  for f in README.md memory/context.md memory/decisions.md docs/NEXT_SESSION.md docs/DEV_INFRASTRUCTURE.md; do
+    grep -qE '`rules/|`RULES\.md`|Process P-[0-9]+' "$out/$f" || die "$f does not point to the Rules"
+  done
+  # DEV_INFRASTRUCTURE.md, Part 1: the rules are Process P-11's, cited by
+  # number; Part 2 (the packs' how-to) keeps no rule of its own.
+  sed '/^## Part 2/,$d' "$out/docs/DEV_INFRASTRUCTURE.md" >"$WORK/part1"
+  for f in 1 2 3 4 6; do
+    grep -qF "Process P-11 § $f" "$WORK/part1" || die "DEV_INFRASTRUCTURE.md Part 1 does not point to Process P-11 § $f"
+  done
+}
+
+test_real_build_cites_only_paragraphs_the_rules_edition_has() {
+  # Every "P-n § m" and every bare "§ n" in a shipped file outside rules/
+  # names a paragraph of the edition that ships with it, so a pointer
+  # cannot go stale unseen when a newer edition is taken.
+  local out="$WORK/real.$RANDOM" c n m f
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  [ -f "$out/rules/RULES.md" ] || die "no rules/RULES.md in the build"
+  ( cd "$out" && grep -rhoE 'P-[0-9]+ § [0-9]+' --exclude-dir=rules . || true ) | LC_ALL=C sort -u >"$WORK/cites"
+  [ -s "$WORK/cites" ] || die "no shipped file cites a Process paragraph (the parser is broken)"
+  while IFS= read -r c; do
+    n="${c%% *}"; m="${c##* }"
+    f="$(cd "$out/rules/processes" && ls | grep -E "^$n-[a-z0-9-]+\.md$" || true)"
+    [ -n "$f" ] || die "cited $c: no Process $n in rules/processes"
+    grep -qE "^$n § $m( \(C\))? " "$out/rules/processes/$f" || die "cited $c: no such paragraph in rules/processes/$f"
+  done <"$WORK/cites"
+  ( cd "$out" && grep -rhoE '([A-Za-z0-9-]+ )?§ [0-9]+' --exclude-dir=rules . || true ) \
+    | grep -vE '^(P-[0-9]+|L) ' | sed 's/^.*§ //' | LC_ALL=C sort -u >"$WORK/bare"
+  [ -s "$WORK/bare" ] || die "no shipped file cites a paragraph of the Rules (the parser is broken)"
+  while IFS= read -r m; do
+    grep -qE "^§ $m( \(C\))? " "$out/rules/RULES.md" || die "cited § $m: no such paragraph in rules/RULES.md"
+  done <"$WORK/bare"
+}
+
+test_packs_code_standards_point_to_process_p11_for_the_shared_rules() {
+  # The rules every pack shares (Process P-11 § 5 (2): no hardcoded
+  # values, lint and format clean before a push, 80% line coverage) are
+  # cited, not restated; each pack keeps its own tools and commands.
+  local f p n=0
+  for f in "$REPO"/languages/*/code-standards.md; do
+    n=$((n + 1)); p="${f#"$REPO/"}"
+    grep -qF 'Process P-11 § 5 (2)' "$f" || die "$p does not point to Process P-11 § 5 (2)"
+    ! grep -nE 'must be clean before pushing|minimum 80% line coverage|No hardcoded values\*\* —' "$f" >&2 \
+      || die "$p restates Process P-11 § 5 (2) (lines above)"
+  done
+  [ "$n" -ge 5 ] || die "found only $n packs' code-standards.md"
+}
+
 test_project_script_mentions_no_template_only_path() {
   # It ships to the bootstrapper and then to projects, where tools/,
   # bootstrap/ and the template-only workflows do not exist.
