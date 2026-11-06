@@ -1240,7 +1240,7 @@ get a working project in any supported language.
 
   **Rules that apply.** Script, test and CI changes: test first, reviewed on Opus by the role that did not write them; one PR per part.
 
-  **Spec (Clead, 2026-11-06, PR #378; measured on `main` at `9241dab`; waiting for Adam's approval).**
+  **Spec (Clead, 2026-11-06, PR #378; measured on `main` at `9241dab`).** Approved: Adam, 2026-11-06 21:03 ("Apyr"), as written, with the coverage gate in `bootstrapper-test` and the one-time reformat.
   - *Files.* Lint and format cover all 21 scripts in `bootstrap/`, `tools/` and `.github/scripts/`, the tests included. Coverage counts the 13 scripts the tests test (every one of those files whose name does not start with `test`) and not the tests themselves.
   - *Tools* (third-party record on PR #378, versions pinned exactly, P-11 § 2 (5)): shellcheck 0.11.0 (GPL-3.0, a CI and local tool only, never copied or shipped; Adam allowed it 2026-11-06 20:02), shfmt 3.14.1 (BSD-3-Clause), bashcov 4.0.2 with simplecov 1.3.2 (MIT). kcov is not used (GPL-2.0).
   - *Lint, measured.* shellcheck at its default level gives 969 findings: 3 errors, 72 warnings and 894 notes. 944 of them are in the tests, and 823 are of three kinds that the scripts do on purpose: SC2030 and SC2031 (a variable changed in a subshell) and SC2016 (`$` in single quotes). The fix: a `.shellcheckrc` turns off only checks the scripts break on purpose, each with its reason on the line before it; every other finding is fixed, or turned off on its own line with a reason. `build` then runs `shellcheck` on all 21 files and fails on any finding.
