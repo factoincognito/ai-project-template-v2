@@ -12,13 +12,13 @@ all projects reads them.
 Last update: 2026-11-06
 
 ## Phase
-Build and release. v2.8.5 is the latest release. On `main` since then, not yet released: new projects get the public edition of the product office's Rules as their rule set (PBI-1.38), and the template itself is bound to those Rules (#369).
+Build and release. v2.9.0 is prepared: new projects get the public edition of the product office's Rules as their rule set (PBI-1.38), and the template itself is bound to those Rules (#369).
 
 ## Current focus
-PBI-1.41, due 2026-11-13: lint, format and line coverage (at least 80%) gates in `build` for this repository's own scripts. It is the dated condition of the template's sign-off to the Rules (`RULES.md` L § 7 (3)).
+The release of v2.9.0, and PBI-1.41, due 2026-11-13: lint, format and line coverage (at least 80%) gates in `build` for this repository's own scripts. It is the dated condition of the template's sign-off to the Rules (`RULES.md` L § 7 (3)).
 
 ## Next step
-PBI-1.41, then a release of what is on `main` (Adam creates the tag). Run 5 is still to come: someone who has never used a terminal or gh sets up a project from the bootstrapper's README alone.
+Clead runs the newcomer pre-check on `main` (`docs/NEWCOMER_PRECHECK.md`); when it passes, Adam tags v2.9.0. Then PBI-1.41. Run 5 is still to come: someone who has never used a terminal or gh sets up a project from the bootstrapper's README alone.
 
 ## Blockers
 None. acuteping waits until run 5 passes.
