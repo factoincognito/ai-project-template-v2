@@ -407,11 +407,19 @@ test_real_build_ships_the_rules_edition_and_its_entry_point_instead_of_the_old_r
     cmp -s "$REPO/bootstrap/stubs/$f" "$out/$f" || die "$f in the output is not the stub"
   done
   ! grep -qxF CLAUDE.md "$REPO/bootstrap/manifest.txt" || die "bootstrap/manifest.txt still ships the template's own CLAUDE.md"
-  for f in memory/roles.md memory/standards.md docs/CROG_ONBOARDING.md docs/ROUTINES.md \
-           docs/decisions/0001-rebuild-workflow.md; do
-    [ -f "$REPO/$f" ] || die "the template no longer has $f (test is stale)"
+  # The template itself is signed off to the product office's Rules: its
+  # own RULES.md opens with the sign-off, word for word, and the four old
+  # rule files are gone from it too. The ADR stays in the template as
+  # history and does not ship.
+  [ "$(sed -n 1p "$REPO/RULES.md" 2>/dev/null)" = 'L § 1 (C) This project is bound by the Rules and Processes of factoincognito, product-office.' ] \
+    || die "the template's own RULES.md does not open with its sign-off L § 1 (C)"
+  for f in memory/roles.md memory/standards.md docs/CROG_ONBOARDING.md docs/ROUTINES.md; do
+    [ ! -e "$REPO/$f" ] || die "the template still has $f, whose rules are now in the Rules it is bound by and its RULES.md"
     [ ! -e "$out/$f" ] || die "$f shipped"
   done
+  f=docs/decisions/0001-rebuild-workflow.md
+  [ -f "$REPO/$f" ] || die "the template no longer has $f (test is stale)"
+  [ ! -e "$out/$f" ] || die "$f shipped"
   # The entry point: the title the setup fills in, then what to read, in
   # the order of the session start line; no rule text.
   [ "$(sed -n 1p "$out/CLAUDE.md")" = '# [PROJECT NAME] — Agent Entry Point' ] \

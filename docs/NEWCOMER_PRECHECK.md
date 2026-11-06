@@ -14,7 +14,8 @@ never ships; it is listed in `bootstrap/not-read-by-tests.txt`). It holds
 what is used the same way every time: the persona, the instruction the
 persona is given, the procedure, the stand-in values and the pass rule.
 The spec is the PBI-1.30 entry in `docs/BACKLOG.md`. This file is a
-process document: Crog reviews changes to it.
+local process of the template (`RULES.md` L § 13): Crog reviews changes
+to it (§ 28 (1)(b)).
 
 ## The persona
 
