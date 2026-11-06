@@ -20,7 +20,10 @@
 # it at once. The kept files are plain names directly in the pack folder
 # (no spaces, no subfolders), which the copy loop relies on. The
 # steps below copy the pack's ci.yml commands verbatim;
-# tools/test-layout-pack.sh fails if they drift apart. The template has
+# tools/test-layout-pack.sh fails if they drift apart. Among them, as in
+# a project, is the Rules edition check on the project's rules/ (shipped
+# from bootstrap/stubs/rules/), in project mode: an absent rules/ fails
+# the job. The template has
 # no lockfile, so the npm-based packs (node, web, react-native) first
 # create one with `npm install --package-lock-only --no-audit --no-fund`,
 # the command the bootstrap script is specified to use (PBI-1.14 step 7),
@@ -100,6 +103,9 @@ jobs:
         env:
           TEST_FIRST_BASE: main
         run: bash .github/scripts/require-test-change.sh --code 'src/*' --test 'src/*.test.ts' 'src/*.spec.ts' 'src/*__tests__/*'
+
+      - name: Check the Rules edition
+        run: bash .github/scripts/check-rules-edition.sh rules
 
       - name: Create the lockfile
         run: npm install --package-lock-only --no-audit --no-fund
@@ -186,6 +192,9 @@ jobs:
         env:
           TEST_FIRST_BASE: main
         run: bash .github/scripts/require-test-change.sh --code 'src/*' 'index.html' --test 'src/*.test.ts' 'src/*.spec.ts' 'src/*__tests__/*' 'e2e/*'
+
+      - name: Check the Rules edition
+        run: bash .github/scripts/check-rules-edition.sh rules
 
       - name: Create the lockfile
         run: npm install --package-lock-only --no-audit --no-fund
@@ -287,6 +296,9 @@ jobs:
           TEST_FIRST_BASE: main
         run: bash .github/scripts/require-test-change.sh --code 'src/*' --test 'src/tests/*'
 
+      - name: Check the Rules edition
+        run: bash .github/scripts/check-rules-edition.sh rules
+
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
 
@@ -372,6 +384,9 @@ jobs:
         env:
           TEST_FIRST_BASE: main
         run: bash .github/scripts/require-test-change.sh --code 'src/*' --test 'src/*.test.ts' 'src/*.test.tsx' 'src/*.spec.ts' 'src/*.spec.tsx' 'src/*__tests__/*'
+
+      - name: Check the Rules edition
+        run: bash .github/scripts/check-rules-edition.sh rules
 
       - name: Create the lockfile
         run: npm install --package-lock-only --no-audit --no-fund
@@ -460,6 +475,9 @@ jobs:
         env:
           TEST_FIRST_BASE: main
         run: bash .github/scripts/require-test-change.sh --code 'src/*' --test 'tests/*' --ignore 'src/*.csproj'
+
+      - name: Check the Rules edition
+        run: bash .github/scripts/check-rules-edition.sh rules
 
       - name: Restore
         run: dotnet restore

@@ -52,6 +52,11 @@ Every pack follows the same shape. A new pack should too:
   without changing a test fails. Config files are not code for this
   check. The pack's `code-standards.md` says what counts as code and as
   a test.
+- **Rules edition check.** The next step is the same in every pack,
+  word for word: `- name: Check the Rules edition` with
+  `run: bash .github/scripts/check-rules-edition.sh rules`. It fails
+  when the project's `rules/` is not the edition its `rules/EDITION`
+  names, or is missing.
 - **No lockfile in the pack.** The first `npm install` (or the
   language's equivalent) in the project creates it, and the project
   commits it. `code-standards.md` says so under "First-time setup".
