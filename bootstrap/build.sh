@@ -33,7 +33,10 @@ FORBIDDEN_FIXED=('trig_' '(PR #')
 FORBIDDEN_REGEX=('PBI-[0-9]' 'open question [0-9]')
 
 err() { echo "build.sh: error: $*" >&2; }
-fail() { err "$@"; exit 1; }
+fail() {
+  err "$@"
+  exit 1
+}
 
 # ---------- arguments ----------
 
@@ -42,10 +45,10 @@ OUT="$1"
 VERSION="$2"
 COMMIT="$3"
 
-[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-  || fail "version '$VERSION' is not vMAJOR.MINOR.PATCH"
-[[ "$COMMIT" =~ ^[0-9a-fA-F]{40}$ ]] \
-  || fail "commit '$COMMIT' is not a 40-character hex SHA"
+[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+  fail "version '$VERSION' is not vMAJOR.MINOR.PATCH"
+[[ "$COMMIT" =~ ^[0-9a-fA-F]{40}$ ]] ||
+  fail "commit '$COMMIT' is not a 40-character hex SHA"
 
 if [ -e "$OUT" ] || [ -L "$OUT" ]; then
   [ -d "$OUT" ] || fail "out-dir '$OUT' is not a directory"
@@ -60,29 +63,29 @@ ENTRIES=()
 EXCLUDES=()
 while IFS= read -r line || [ -n "$line" ]; do
   line="${line%$'\r'}"
-  line="${line#"${line%%[![:space:]]*}"}"   # trim leading whitespace
-  line="${line%"${line##*[![:space:]]}"}"   # trim trailing whitespace
-  case "$line" in ''|'#'*) continue ;; esac
+  line="${line#"${line%%[![:space:]]*}"}" # trim leading whitespace
+  line="${line%"${line##*[![:space:]]}"}" # trim trailing whitespace
+  case "$line" in '' | '#'*) continue ;; esac
   case "$line" in
     'exclude '*)
       line="${line#exclude }"
       line="${line#"${line%%[![:space:]]*}"}"
       while [ "${line%/}" != "$line" ]; do line="${line%/}"; done
       case "/$line/" in
-        //*|*/../*|*/./*) fail "manifest path must be relative, inside the repo: $line" ;;
+        //* | */../* | */./*) fail "manifest path must be relative, inside the repo: $line" ;;
       esac
-      [ -e "$SRC/$line" ] || [ -L "$SRC/$line" ] \
-        || fail "manifest exclude path does not exist: $line"
+      [ -e "$SRC/$line" ] || [ -L "$SRC/$line" ] ||
+        fail "manifest exclude path does not exist: $line"
       EXCLUDES+=("$line")
       continue
       ;;
   esac
   while [ "${line%/}" != "$line" ]; do line="${line%/}"; done
   case "/$line/" in
-    //*|*/../*|*/./*) fail "manifest path must be relative, inside the repo: $line" ;;
+    //* | */../* | */./*) fail "manifest path must be relative, inside the repo: $line" ;;
   esac
-  [ -e "$SRC/$line" ] || [ -L "$SRC/$line" ] \
-    || fail "manifest path does not exist: $line"
+  [ -e "$SRC/$line" ] || [ -L "$SRC/$line" ] ||
+    fail "manifest path does not exist: $line"
   ENTRIES+=("$line")
 done <"$MANIFEST"
 
@@ -113,7 +116,7 @@ done
 is_excluded() {
   local x
   for x in ${EXCLUDES[@]+"${EXCLUDES[@]}"}; do
-    case "$1" in "$x"|"$x"/*) return 0 ;; esac
+    case "$1" in "$x" | "$x"/*) return 0 ;; esac
   done
   return 1
 }
@@ -125,26 +128,26 @@ is_excluded() {
 # must be there once, each on a line of its own and nowhere else.
 [ -f "$OWN_README_SRC" ] || fail "bootstrapper README source not found: bootstrap/bootstrapper-README.md"
 [ -f "$SRC/README.md" ] || fail "template README not found: README.md"
-[ "$(tr -d '\r' <"$OWN_README_SRC" | grep -cxF -- "$OWN_README_SLOT" || true)" -eq 1 ] \
-  && [ "$(tr -d '\r' <"$OWN_README_SRC" | grep -cF -- "$OWN_README_SLOT" || true)" -eq 1 ] \
-  || fail "bootstrap/bootstrapper-README.md must have the line $OWN_README_SLOT exactly once, on a line of its own"
+[ "$(tr -d '\r' <"$OWN_README_SRC" | grep -cxF -- "$OWN_README_SLOT" || true)" -eq 1 ] &&
+  [ "$(tr -d '\r' <"$OWN_README_SRC" | grep -cF -- "$OWN_README_SLOT" || true)" -eq 1 ] ||
+  fail "bootstrap/bootstrapper-README.md must have the line $OWN_README_SLOT exactly once, on a line of its own"
 for mk in "$MARK_START" "$MARK_END"; do
-  [ "$(tr -d '\r' <"$SRC/README.md" | grep -cxF -- "$mk" || true)" -eq 1 ] \
-    && [ "$(tr -d '\r' <"$SRC/README.md" | grep -cF -- "$mk" || true)" -eq 1 ] \
-    || fail "README.md must have the line $mk exactly once, on a line of its own"
+  [ "$(tr -d '\r' <"$SRC/README.md" | grep -cxF -- "$mk" || true)" -eq 1 ] &&
+    [ "$(tr -d '\r' <"$SRC/README.md" | grep -cF -- "$mk" || true)" -eq 1 ] ||
+    fail "README.md must have the line $mk exactly once, on a line of its own"
 done
 mark_start_line="$(tr -d '\r' <"$SRC/README.md" | grep -nxF -- "$MARK_START" | cut -d: -f1)"
 mark_end_line="$(tr -d '\r' <"$SRC/README.md" | grep -nxF -- "$MARK_END" | cut -d: -f1)"
-[ "$mark_start_line" -lt "$mark_end_line" ] \
-  || fail "README.md: the line $MARK_START must come before $MARK_END"
+[ "$mark_start_line" -lt "$mark_end_line" ] ||
+  fail "README.md: the line $MARK_START must come before $MARK_END"
 # marked_part: the lines strictly between the two markers. grep -c reads
 # all of it: grep -q would stop early and, under pipefail, the writer's
 # SIGPIPE would fail the check at random.
 marked_part() {
   tr -d '\r' <"$SRC/README.md" | awk -v s="$mark_start_line" -v e="$mark_end_line" 'NR > s && NR < e'
 }
-[ "$(marked_part | grep -c '[^[:space:]]' || true)" -gt 0 ] \
-  || fail "README.md: nothing between $MARK_START and $MARK_END"
+[ "$(marked_part | grep -c '[^[:space:]]' || true)" -gt 0 ] ||
+  fail "README.md: nothing between $MARK_START and $MARK_END"
 
 # ---------- stubs ----------
 
@@ -158,7 +161,7 @@ fi
 for s in ${STUB_FILES[@]+"${STUB_FILES[@]}"}; do
   for m in "${ENTRIES[@]}"; do
     case "$s" in
-      "$m"|"$m"/*) fail "stub overlaps manifest path (ambiguous source): $s" ;;
+      "$m" | "$m"/*) fail "stub overlaps manifest path (ambiguous source): $s" ;;
     esac
   done
 done
@@ -229,7 +232,10 @@ done
 # ---------- check the output ----------
 
 problems=0
-problem() { err "$@"; problems=$((problems + 1)); }
+problem() {
+  err "$@"
+  problems=$((problems + 1))
+}
 
 list_rel() { (cd "$1" && find . \( -type f -o -type l \) | sed 's|^\./||' | sort -u); }
 

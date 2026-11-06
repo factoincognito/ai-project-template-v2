@@ -27,7 +27,10 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIST="${LIST:-$HERE/not-read-by-tests.txt}"
 
-die() { echo "changed-inputs: $*" >&2; exit 2; }
+die() {
+  echo "changed-inputs: $*" >&2
+  exit 2
+}
 
 # listed: the paths of the list, one per line, each checked.
 listed() {

@@ -34,9 +34,15 @@ fi
 for a in "$@"; do
   case "$a" in
     ubuntu-latest=?* | macos-latest=?* | windows-latest=?* | ubuntu-bash32=?*) ;;
-    *) echo "durations-from-logs: not <leg>=<log> with a known leg: $a" >&2; exit 2 ;;
+    *)
+      echo "durations-from-logs: not <leg>=<log> with a known leg: $a" >&2
+      exit 2
+      ;;
   esac
-  [ -r "${a#*=}" ] || { echo "durations-from-logs: cannot read ${a#*=}" >&2; exit 2; }
+  [ -r "${a#*=}" ] || {
+    echo "durations-from-logs: cannot read ${a#*=}" >&2
+    exit 2
+  }
 done
 
 for a in "$@"; do

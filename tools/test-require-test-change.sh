@@ -31,7 +31,10 @@ run_test() {
   local name="$1"
   local log="$WORK/$name.log" rc
   set +e
-  ( set -euo pipefail; "$name" ) >"$log" 2>&1
+  (
+    set -euo pipefail
+    "$name"
+  ) >"$log" 2>&1
   rc=$?
   set -e
   if [ "$rc" -eq 0 ]; then
@@ -45,7 +48,10 @@ run_test() {
   fi
 }
 
-die() { echo "assertion failed: $*" >&2; exit 1; }
+die() {
+  echo "assertion failed: $*" >&2
+  exit 1
+}
 
 # new_repo <name>: a bare origin and a clone, main holding README.md,
 # pushed. Prints the clone's path.
@@ -107,9 +113,11 @@ expect_no_line() { ! grep -qxF -- "$1" <<<"$CHECK_OUT" || die "unexpected output
 test_fixtures_with_the_same_name_do_not_collide() {
   # Names built from $RANDOM collided now and then and made a clone fail.
   local a b
-  a="$(new_repo same)"; b="$(new_repo same)"
+  a="$(new_repo same)"
+  b="$(new_repo same)"
   [ "$a" != "$b" ] || die "two fixtures got the same directory"
-  a="$(project_repo node same)"; b="$(project_repo node same)"
+  a="$(project_repo node same)"
+  b="$(project_repo node same)"
   [ "$a" != "$b" ] || die "two project fixtures got the same directory"
 }
 
@@ -118,8 +126,11 @@ test_script_exists() {
 }
 
 test_code_without_test_fails_and_names_the_file() {
-  local w; w="$(new_repo t1)"
-  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  local w
+  w="$(new_repo t1)"
+  branch "$w" feat
+  put "$w" src/a.ts
+  commit "$w" "code"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 1
   expect_line "code: src/a.ts"
@@ -127,8 +138,11 @@ test_code_without_test_fails_and_names_the_file() {
 }
 
 test_failure_message_gives_both_ways_out() {
-  local w; w="$(new_repo t2)"
-  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  local w
+  w="$(new_repo t2)"
+  branch "$w" feat
+  put "$w" src/a.ts
+  commit "$w" "code"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 1
   expect_out "add a test"
@@ -136,8 +150,12 @@ test_failure_message_gives_both_ways_out() {
 }
 
 test_code_with_test_passes() {
-  local w; w="$(new_repo t3)"
-  branch "$w" feat; put "$w" src/a.ts; put "$w" src/a.test.ts; commit "$w" "both"
+  local w
+  w="$(new_repo t3)"
+  branch "$w" feat
+  put "$w" src/a.ts
+  put "$w" src/a.test.ts
+  commit "$w" "both"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 0
   expect_line "code: src/a.ts"
@@ -145,8 +163,11 @@ test_code_with_test_passes() {
 }
 
 test_docs_only_passes() {
-  local w; w="$(new_repo t4)"
-  branch "$w" feat; put "$w" docs/notes.md "words"; commit "$w" "docs"
+  local w
+  w="$(new_repo t4)"
+  branch "$w" feat
+  put "$w" docs/notes.md "words"
+  commit "$w" "docs"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 0
   expect_out "no code changed"
@@ -154,14 +175,18 @@ test_docs_only_passes() {
 }
 
 test_test_only_passes() {
-  local w; w="$(new_repo t5)"
-  branch "$w" feat; put "$w" src/a.test.ts; commit "$w" "test"
+  local w
+  w="$(new_repo t5)"
+  branch "$w" feat
+  put "$w" src/a.test.ts
+  commit "$w" "test"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 0
 }
 
 test_no_changes_at_all_passes() {
-  local w; w="$(new_repo t6)"
+  local w
+  w="$(new_repo t6)"
   branch "$w" feat
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 0
@@ -170,10 +195,15 @@ test_no_changes_at_all_passes() {
 
 test_code_plus_deleted_test_fails() {
   # Deleting a test is not changing one.
-  local w; w="$(new_repo t7)"
-  put "$w" src/a.test.ts; commit "$w" "a test"; on_main "$w"
+  local w
+  w="$(new_repo t7)"
+  put "$w" src/a.test.ts
+  commit "$w" "a test"
+  on_main "$w"
   branch "$w" feat
-  git -C "$w" rm -q src/a.test.ts; put "$w" src/b.ts; commit "$w" "code, test deleted"
+  git -C "$w" rm -q src/a.test.ts
+  put "$w" src/b.ts
+  commit "$w" "code, test deleted"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 1
   expect_line "code: src/b.ts"
@@ -181,20 +211,28 @@ test_code_plus_deleted_test_fails() {
 }
 
 test_deleting_code_only_passes() {
-  local w; w="$(new_repo t8)"
-  put "$w" src/a.ts; commit "$w" "code"; on_main "$w"
+  local w
+  w="$(new_repo t8)"
+  put "$w" src/a.ts
+  commit "$w" "code"
+  on_main "$w"
   branch "$w" feat
-  git -C "$w" rm -q src/a.ts; commit "$w" "remove"
+  git -C "$w" rm -q src/a.ts
+  commit "$w" "remove"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 0
   expect_out "no code changed"
 }
 
 test_rename_counts_as_a_change() {
-  local w; w="$(new_repo t9)"
-  put "$w" src/a.ts "same content"; commit "$w" "code"; on_main "$w"
+  local w
+  w="$(new_repo t9)"
+  put "$w" src/a.ts "same content"
+  commit "$w" "code"
+  on_main "$w"
   branch "$w" feat
-  git -C "$w" mv src/a.ts src/b.ts; commit "$w" "rename"
+  git -C "$w" mv src/a.ts src/b.ts
+  commit "$w" "rename"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 1
   expect_line "code: src/b.ts"
@@ -202,10 +240,16 @@ test_rename_counts_as_a_change() {
 
 test_type_change_is_not_counted() {
   # --diff-filter=ACMR leaves out T (a file turned into a symlink).
-  local w; w="$(new_repo t10)"
-  put "$w" src/a.ts; commit "$w" "code"; on_main "$w"
+  local w
+  w="$(new_repo t10)"
+  put "$w" src/a.ts
+  commit "$w" "code"
+  on_main "$w"
   branch "$w" feat
-  rm "$w/src/a.ts"; ln -s ../README.md "$w/src/a.ts"; git -C "$w" add src/a.ts; commit "$w" "symlink"
+  rm "$w/src/a.ts"
+  ln -s ../README.md "$w/src/a.ts"
+  git -C "$w" add src/a.ts
+  commit "$w" "symlink"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 0
 }
@@ -213,8 +257,11 @@ test_type_change_is_not_counted() {
 # ---------- patterns ----------
 
 test_test_pattern_beats_code_pattern() {
-  local w; w="$(new_repo p1)"
-  branch "$w" feat; put "$w" src/x.test.ts; commit "$w" "test"
+  local w
+  w="$(new_repo p1)"
+  branch "$w" feat
+  put "$w" src/x.test.ts
+  commit "$w" "test"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 0
   expect_line "test: src/x.test.ts"
@@ -222,43 +269,59 @@ test_test_pattern_beats_code_pattern() {
 }
 
 test_ignore_beats_code() {
-  local w; w="$(new_repo p2)"
-  branch "$w" feat; put "$w" src/gen/x.ts; commit "$w" "generated"
+  local w
+  w="$(new_repo p2)"
+  branch "$w" feat
+  put "$w" src/gen/x.ts
+  commit "$w" "generated"
   run_check "$w" "$BASE" "${NODE[@]}" --ignore 'src/gen/*'
   expect_rc 0
   expect_line "ignored: src/gen/x.ts"
 }
 
 test_ignore_does_not_beat_test() {
-  local w; w="$(new_repo p3)"
-  branch "$w" feat; put "$w" src/gen/x.test.ts; commit "$w" "t"
+  local w
+  w="$(new_repo p3)"
+  branch "$w" feat
+  put "$w" src/gen/x.test.ts
+  commit "$w" "t"
   run_check "$w" "$BASE" "${NODE[@]}" --ignore 'src/gen/*'
   expect_rc 0
   expect_line "test: src/gen/x.test.ts"
 }
 
 test_star_matches_slash() {
-  local w; w="$(new_repo p4)"
-  branch "$w" feat; put "$w" src/a/b/c.ts; commit "$w" "deep"
+  local w
+  w="$(new_repo p4)"
+  branch "$w" feat
+  put "$w" src/a/b/c.ts
+  commit "$w" "deep"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 1
   expect_line "code: src/a/b/c.ts"
 }
 
 test_flags_are_repeatable() {
-  local w; w="$(new_repo p5)"
-  branch "$w" feat; put "$w" index.html "<p>"; commit "$w" "page"
+  local w
+  w="$(new_repo p5)"
+  branch "$w" feat
+  put "$w" index.html "<p>"
+  commit "$w" "page"
   run_check "$w" "$BASE" --code 'src/*' --code 'index.html' --test 'src/*.test.ts' --test 'e2e/*'
   expect_rc 1
   expect_line "code: index.html"
-  put "$w" e2e/smoke.e2e.ts; commit "$w" "e2e"
+  put "$w" e2e/smoke.e2e.ts
+  commit "$w" "e2e"
   run_check "$w" "$BASE" --code 'src/*' --code 'index.html' --test 'src/*.test.ts' --test 'e2e/*'
   expect_rc 0
 }
 
 test_path_with_a_space() {
-  local w; w="$(new_repo p6)"
-  branch "$w" feat; put "$w" "src/my file.ts"; commit "$w" "space"
+  local w
+  w="$(new_repo p6)"
+  branch "$w" feat
+  put "$w" "src/my file.ts"
+  commit "$w" "space"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 1
   expect_line "code: src/my file.ts"
@@ -266,8 +329,11 @@ test_path_with_a_space() {
 
 test_non_ascii_path_is_seen() {
   # Without -z git quotes the name and it would match no pattern.
-  local w; w="$(new_repo p7)"
-  branch "$w" feat; put "$w" "src/é.ts"; commit "$w" "accent"
+  local w
+  w="$(new_repo p7)"
+  branch "$w" feat
+  put "$w" "src/é.ts"
+  commit "$w" "accent"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 1
   expect_line "code: src/é.ts"
@@ -275,18 +341,23 @@ test_non_ascii_path_is_seen() {
 
 test_several_patterns_after_one_flag() {
   # `--code A B --test C D`: every pattern after a flag belongs to it.
-  local w; w="$(new_repo p8)"
-  branch "$w" feat; put "$w" lib/a.ts; commit "$w" "code in the second pattern"
+  local w
+  w="$(new_repo p8)"
+  branch "$w" feat
+  put "$w" lib/a.ts
+  commit "$w" "code in the second pattern"
   run_check "$w" "$BASE" --code 'src/*' 'lib/*' --test 'src/*.test.ts' 'lib/*.test.ts'
   expect_rc 1
   expect_line "code: lib/a.ts"
-  put "$w" lib/a.test.ts; commit "$w" "test in the second test pattern"
+  put "$w" lib/a.test.ts
+  commit "$w" "test in the second test pattern"
   run_check "$w" "$BASE" --code 'src/*' 'lib/*' --test 'src/*.test.ts' 'lib/*.test.ts'
   expect_rc 0
 }
 
 test_pattern_without_a_flag_is_an_error() {
-  local w; w="$(new_repo p9)"
+  local w
+  w="$(new_repo p9)"
   run_check "$w" "$BASE" 'src/*' --code 'src/*' --test 'src/*.test.ts'
   expect_rc 2
 }
@@ -294,8 +365,11 @@ test_pattern_without_a_flag_is_an_error() {
 test_empty_pattern_is_an_error() {
   # An empty pattern matches nothing, so a CI line built from an empty
   # variable would pass forever.
-  local w; w="$(new_repo p10)"
-  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  local w
+  w="$(new_repo p10)"
+  branch "$w" feat
+  put "$w" src/a.ts
+  commit "$w" "code"
   run_check "$w" "$BASE" --code '' --test 'src/*.test.ts'
   expect_rc 2
   run_check "$w" "$BASE" --code 'src/*' --test ''
@@ -307,9 +381,13 @@ test_empty_pattern_is_an_error() {
 test_run_from_a_subdirectory_sees_the_whole_repo() {
   # diff.relative=true would otherwise list only the files under the
   # current directory, and a change elsewhere would pass unseen.
-  local w; w="$(new_repo p11)"
+  local w
+  w="$(new_repo p11)"
   git -C "$w" config diff.relative true
-  branch "$w" feat; put "$w" src/a.ts; put "$w" docs/d.md; commit "$w" "code and docs"
+  branch "$w" feat
+  put "$w" src/a.ts
+  put "$w" docs/d.md
+  commit "$w" "code and docs"
   run_check "$w/docs" "$BASE" "${NODE[@]}"
   expect_rc 1
   expect_line "code: src/a.ts"
@@ -318,18 +396,23 @@ test_run_from_a_subdirectory_sees_the_whole_repo() {
 test_file_name_cannot_inject_a_workflow_command() {
   # A name with a newline would otherwise print a line that GitHub reads
   # as a workflow command.
-  local w; w="$(new_repo p12)"
+  local w
+  w="$(new_repo p12)"
   branch "$w" feat
-  put "$w" "$(printf 'src/a\n::warning::injected.ts')"; commit "$w" "nasty name"
+  put "$w" "$(printf 'src/a\n::warning::injected.ts')"
+  commit "$w" "nasty name"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 1
   ! grep -q '^::warning::' <<<"$CHECK_OUT" || die "a file name produced a workflow command: $CHECK_OUT"
 }
 
 test_escaping_covers_percent_and_carriage_return() {
-  local w; w="$(new_repo p13)"
+  local w
+  w="$(new_repo p13)"
   branch "$w" feat
-  put "$w" "src/100%.ts"; put "$w" "$(printf 'src/b\r::warning::x.ts')"; commit "$w" "odd names"
+  put "$w" "src/100%.ts"
+  put "$w" "$(printf 'src/b\r::warning::x.ts')"
+  commit "$w" "odd names"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 1
   expect_line "code: src/100%25.ts"
@@ -340,8 +423,11 @@ test_escaping_covers_percent_and_carriage_return() {
 # ---------- Test-exempt trailer ----------
 
 test_trailer_with_reason_passes_and_prints_it() {
-  local w; w="$(new_repo x1)"
-  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  local w
+  w="$(new_repo x1)"
+  branch "$w" feat
+  put "$w" src/a.ts
+  commit "$w" "code"
   git -C "$w" commit -q --allow-empty -m "exempt" --trailer "Test-exempt: proven by the pack chain run"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 0
@@ -351,25 +437,35 @@ test_trailer_with_reason_passes_and_prints_it() {
 }
 
 test_trailer_without_reason_does_not_count() {
-  local w; w="$(new_repo x2)"
-  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  local w
+  w="$(new_repo x2)"
+  branch "$w" feat
+  put "$w" src/a.ts
+  commit "$w" "code"
   git -C "$w" commit -q --allow-empty --cleanup=verbatim -m "$(printf 'exempt\n\nTest-exempt:')"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 1
 }
 
 test_trailer_already_on_main_does_not_count() {
-  local w; w="$(new_repo x3)"
+  local w
+  w="$(new_repo x3)"
   git -C "$w" commit -q --allow-empty -m "old exemption" --trailer "Test-exempt: long ago"
   on_main "$w"
-  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  branch "$w" feat
+  put "$w" src/a.ts
+  commit "$w" "code"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 1
 }
 
 test_trailer_is_not_needed_when_a_test_changes() {
-  local w; w="$(new_repo x4)"
-  branch "$w" feat; put "$w" src/a.ts; put "$w" src/a.test.ts; commit "$w" "both"
+  local w
+  w="$(new_repo x4)"
+  branch "$w" feat
+  put "$w" src/a.ts
+  put "$w" src/a.test.ts
+  commit "$w" "both"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 0
   ! grep -qF "::notice::" <<<"$CHECK_OUT" || die "notice printed without an exemption"
@@ -382,10 +478,16 @@ test_pull_request_uses_the_merge_commit_against_the_base_branch() {
   # compared with origin/main, so only the branch's own files count.
   # If main's later files were attributed to the PR, main's new test
   # would hide that the branch changed code without one.
-  local w; w="$(new_repo r1)"
-  branch "$w" feat; put "$w" src/a.ts; commit "$w" "branch code, no test"
+  local w
+  w="$(new_repo r1)"
+  branch "$w" feat
+  put "$w" src/a.ts
+  commit "$w" "branch code, no test"
   git -C "$w" checkout -q main
-  put "$w" src/other.ts; put "$w" src/other.test.ts; commit "$w" "main moved on"; on_main "$w"
+  put "$w" src/other.ts
+  put "$w" src/other.test.ts
+  commit "$w" "main moved on"
+  on_main "$w"
   git -C "$w" fetch -q origin
   git -C "$w" checkout -q --detach origin/main
   git -C "$w" merge -q --no-ff -m "Merge feat into main" feat
@@ -397,8 +499,12 @@ test_pull_request_uses_the_merge_commit_against_the_base_branch() {
 }
 
 test_pull_request_with_a_test_passes() {
-  local w; w="$(new_repo r2)"
-  branch "$w" feat; put "$w" src/a.ts; put "$w" src/a.test.ts; commit "$w" "both"
+  local w
+  w="$(new_repo r2)"
+  branch "$w" feat
+  put "$w" src/a.ts
+  put "$w" src/a.test.ts
+  commit "$w" "both"
   git -C "$w" checkout -q --detach origin/main
   git -C "$w" merge -q --no-ff -m "Merge feat into main" feat
   run_check "$w" "GITHUB_EVENT_NAME=pull_request GITHUB_BASE_REF=main" "${NODE[@]}"
@@ -407,13 +513,17 @@ test_pull_request_with_a_test_passes() {
 
 test_pull_request_compares_with_its_own_base_branch() {
   # The base is whatever the pull request targets, not always main.
-  local w; w="$(new_repo r7)"
+  local w
+  w="$(new_repo r7)"
   git -C "$w" push -q origin main:release 2>/dev/null
   # main moves on, so origin/main and origin/release really differ: a
   # check that used the wrong base would see main's later test file.
-  put "$w" src/later.test.ts; commit "$w" "main moved after release was cut"; on_main "$w"
+  put "$w" src/later.test.ts
+  commit "$w" "main moved after release was cut"
+  on_main "$w"
   git -C "$w" checkout -q -b feat origin/release
-  put "$w" src/a.ts; commit "$w" "code"
+  put "$w" src/a.ts
+  commit "$w" "code"
   git -C "$w" fetch -q origin
   git -C "$w" checkout -q --detach origin/release
   git -C "$w" merge -q --no-ff -m "Merge feat into release" feat
@@ -425,12 +535,16 @@ test_pull_request_compares_with_its_own_base_branch() {
 
 test_branch_push_is_compared_with_origin_main() {
   # A branch push and its pull request must give the same verdict.
-  local w; w="$(new_repo r3)"
-  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  local w
+  w="$(new_repo r3)"
+  branch "$w" feat
+  put "$w" src/a.ts
+  commit "$w" "code"
   run_check "$w" "GITHUB_EVENT_NAME=push GITHUB_REF_NAME=feat" "${NODE[@]}"
   expect_rc 1
   expect_line "code: src/a.ts"
-  put "$w" src/a.test.ts; commit "$w" "test"
+  put "$w" src/a.test.ts
+  commit "$w" "test"
   run_check "$w" "GITHUB_EVENT_NAME=push GITHUB_REF_NAME=feat" "${NODE[@]}"
   expect_rc 0
 }
@@ -438,11 +552,18 @@ test_branch_push_is_compared_with_origin_main() {
 test_branch_push_ignores_what_main_changed_after_the_branch_started() {
   # The comparison is from the merge base (three dots). With two dots a
   # change that landed on main afterwards would show up as this branch's.
-  local w; w="$(new_repo r6)"
-  put "$w" src/m.ts "v1"; commit "$w" "existing code"; on_main "$w"
-  branch "$w" feat; put "$w" docs/n.md "docs only"; commit "$w" "docs"
+  local w
+  w="$(new_repo r6)"
+  put "$w" src/m.ts "v1"
+  commit "$w" "existing code"
+  on_main "$w"
+  branch "$w" feat
+  put "$w" docs/n.md "docs only"
+  commit "$w" "docs"
   git -C "$w" checkout -q main
-  put "$w" src/m.ts "v2"; commit "$w" "main changes code"; on_main "$w"
+  put "$w" src/m.ts "v2"
+  commit "$w" "main changes code"
+  on_main "$w"
   git -C "$w" checkout -q feat
   git -C "$w" fetch -q origin
   run_check "$w" "GITHUB_EVENT_NAME=push GITHUB_REF_NAME=feat" "${NODE[@]}"
@@ -451,16 +572,21 @@ test_branch_push_ignores_what_main_changed_after_the_branch_started() {
 }
 
 test_push_to_main_passes_with_a_notice() {
-  local w; w="$(new_repo r4)"
-  put "$w" src/a.ts; commit "$w" "code straight on main"
+  local w
+  w="$(new_repo r4)"
+  put "$w" src/a.ts
+  commit "$w" "code straight on main"
   run_check "$w" "GITHUB_EVENT_NAME=push GITHUB_REF_NAME=main" "${NODE[@]}"
   expect_rc 0
   expect_out "::notice::"
 }
 
 test_test_first_base_overrides_the_event() {
-  local w; w="$(new_repo r5)"
-  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  local w
+  w="$(new_repo r5)"
+  branch "$w" feat
+  put "$w" src/a.ts
+  commit "$w" "code"
   run_check "$w" "GITHUB_EVENT_NAME=push GITHUB_REF_NAME=main TEST_FIRST_BASE=origin/main" "${NODE[@]}"
   expect_rc 1
 }
@@ -472,68 +598,88 @@ test_shallow_clone_is_an_error() {
   mkdir -p "$d"
   git init -q --bare -b main "$d/origin.git"
   git clone -q "$d/origin.git" "$d/seed" 2>/dev/null
-  git -C "$d/seed" config user.name test; git -C "$d/seed" config user.email t@example.invalid
-  put "$d/seed" README.md one; commit "$d/seed" one
-  put "$d/seed" README.md two; commit "$d/seed" two
+  git -C "$d/seed" config user.name test
+  git -C "$d/seed" config user.email t@example.invalid
+  put "$d/seed" README.md one
+  commit "$d/seed" one
+  put "$d/seed" README.md two
+  commit "$d/seed" two
   git -C "$d/seed" push -q -u origin main 2>/dev/null
   git clone -q --depth 1 "file://$d/origin.git" "$d/w" 2>/dev/null
   w="$d/w"
-  git -C "$w" config user.name test; git -C "$w" config user.email t@example.invalid
-  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  git -C "$w" config user.name test
+  git -C "$w" config user.email t@example.invalid
+  branch "$w" feat
+  put "$w" src/a.ts
+  commit "$w" "code"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 2
   expect_out "fetch-depth: 0"
 }
 
 test_missing_base_ref_is_an_error() {
-  local w; w="$(new_repo e1)"
-  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  local w
+  w="$(new_repo e1)"
+  branch "$w" feat
+  put "$w" src/a.ts
+  commit "$w" "code"
   run_check "$w" "TEST_FIRST_BASE=origin/nope" "${NODE[@]}"
   expect_rc 2
   expect_out "fetch-depth: 0"
 }
 
 test_no_merge_base_is_an_error() {
-  local w; w="$(new_repo e2)"
+  local w
+  w="$(new_repo e2)"
   git -C "$w" checkout -q --orphan other
   git -C "$w" rm -rqf .
-  put "$w" src/a.ts; commit "$w" "unrelated history"
+  put "$w" src/a.ts
+  commit "$w" "unrelated history"
   run_check "$w" "$BASE" "${NODE[@]}"
   expect_rc 2
 }
 
 test_event_without_a_base_needs_test_first_base() {
-  local w; w="$(new_repo e3)"
-  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  local w
+  w="$(new_repo e3)"
+  branch "$w" feat
+  put "$w" src/a.ts
+  commit "$w" "code"
   run_check "$w" "GITHUB_EVENT_NAME=workflow_dispatch" "${NODE[@]}"
   expect_rc 2
   expect_out "TEST_FIRST_BASE"
 }
 
 test_local_run_without_github_variables_needs_test_first_base() {
-  local w; w="$(new_repo e4)"
-  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  local w
+  w="$(new_repo e4)"
+  branch "$w" feat
+  put "$w" src/a.ts
+  commit "$w" "code"
   run_check "$w" "" "${NODE[@]}"
   expect_rc 2
   expect_out "TEST_FIRST_BASE"
 }
 
 test_missing_code_flag_is_an_error() {
-  local w; w="$(new_repo e5)"
+  local w
+  w="$(new_repo e5)"
   run_check "$w" "$BASE" --test 'src/*.test.ts'
   expect_rc 2
   expect_out "--code"
 }
 
 test_missing_test_flag_is_an_error() {
-  local w; w="$(new_repo e6)"
+  local w
+  w="$(new_repo e6)"
   run_check "$w" "$BASE" --code 'src/*'
   expect_rc 2
   expect_out "--test"
 }
 
 test_unknown_flag_is_an_error() {
-  local w; w="$(new_repo e7)"
+  local w
+  w="$(new_repo e7)"
   run_check "$w" "$BASE" "${NODE[@]}" --bogus
   expect_rc 2
 }
@@ -551,8 +697,14 @@ test_outside_a_git_repo_is_an_error() {
 # ---------- job summary ----------
 
 test_summary_file_is_written_when_set() {
-  local w sum; w="$(new_repo m1)"; sum="$WORK/summary.md"
-  branch "$w" feat; put "$w" src/a.ts; put "$w" src/a.test.ts; put "$w" docs/n.md; commit "$w" "mixed"
+  local w sum
+  w="$(new_repo m1)"
+  sum="$WORK/summary.md"
+  branch "$w" feat
+  put "$w" src/a.ts
+  put "$w" src/a.test.ts
+  put "$w" docs/n.md
+  commit "$w" "mixed"
   run_check "$w" "$BASE GITHUB_STEP_SUMMARY=$sum" "${NODE[@]}"
   expect_rc 0
   [ -s "$sum" ] || die "summary file empty"
@@ -562,8 +714,12 @@ test_summary_file_is_written_when_set() {
 }
 
 test_summary_shows_the_exemption_reason() {
-  local w sum; w="$(new_repo m2)"; sum="$WORK/summary2.md"
-  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  local w sum
+  w="$(new_repo m2)"
+  sum="$WORK/summary2.md"
+  branch "$w" feat
+  put "$w" src/a.ts
+  commit "$w" "code"
   git -C "$w" commit -q --allow-empty -m "exempt" --trailer "Test-exempt: nothing a test could check"
   run_check "$w" "$BASE GITHUB_STEP_SUMMARY=$sum" "${NODE[@]}"
   expect_rc 0
@@ -571,8 +727,12 @@ test_summary_shows_the_exemption_reason() {
 }
 
 test_summary_names_the_base_it_compared_with() {
-  local w sum; w="$(new_repo m3)"; sum="$WORK/summary3.md"
-  branch "$w" feat; put "$w" src/a.test.ts; commit "$w" "t"
+  local w sum
+  w="$(new_repo m3)"
+  sum="$WORK/summary3.md"
+  branch "$w" feat
+  put "$w" src/a.test.ts
+  commit "$w" "t"
   run_check "$w" "$BASE GITHUB_STEP_SUMMARY=$sum" "${NODE[@]}"
   expect_rc 0
   grep -qF "Compared with" "$sum" || die "summary lacks the base line"
@@ -580,15 +740,20 @@ test_summary_names_the_base_it_compared_with() {
 }
 
 test_summary_is_written_for_a_push_to_main() {
-  local w sum; w="$(new_repo m4)"; sum="$WORK/summary4.md"
+  local w sum
+  w="$(new_repo m4)"
+  sum="$WORK/summary4.md"
   run_check "$w" "GITHUB_EVENT_NAME=push GITHUB_REF_NAME=main GITHUB_STEP_SUMMARY=$sum" "${NODE[@]}"
   expect_rc 0
   grep -qF "not checked" "$sum" || die "summary lacks the push-to-main line"
 }
 
 test_several_exemptions_are_all_shown() {
-  local w; w="$(new_repo m5)"
-  branch "$w" feat; put "$w" src/a.ts; commit "$w" "code"
+  local w
+  w="$(new_repo m5)"
+  branch "$w" feat
+  put "$w" src/a.ts
+  commit "$w" "code"
   git -C "$w" commit -q --allow-empty -m "one" --trailer "Test-exempt: first reason"
   git -C "$w" commit -q --allow-empty -m "two" --trailer "Test-exempt: second reason"
   run_check "$w" "$BASE" "${NODE[@]}"
@@ -631,24 +796,27 @@ template_verdict() {
   expect_rc "$want"
 }
 
-test_template_build_script_alone_fails()        { template_verdict 1 bootstrap/build.sh; }
+test_template_build_script_alone_fails() { template_verdict 1 bootstrap/build.sh; }
 test_template_build_script_with_its_test_passes() { template_verdict 0 bootstrap/build.sh bootstrap/test.sh; }
 test_template_tools_script_with_its_test_passes() { template_verdict 0 tools/layout-pack.sh tools/test-layout-pack.sh; }
-test_template_workflow_alone_fails()            { template_verdict 1 .github/workflows/packs.yml; }
+test_template_workflow_alone_fails() { template_verdict 1 .github/workflows/packs.yml; }
 test_template_workflow_with_a_wiring_test_passes() { template_verdict 0 .github/workflows/packs.yml bootstrap/test.sh; }
-test_template_shared_script_alone_fails()       { template_verdict 1 .github/scripts/require-test-change.sh; }
-test_template_manifest_alone_fails()            { template_verdict 1 bootstrap/manifest.txt; }
-test_template_stub_workflow_alone_fails()       { template_verdict 1 bootstrap/stubs/.github/workflows/ci.yml; }
-test_template_pack_config_alone_fails()         { template_verdict 1 languages/node/package.json; }
-test_template_pack_ci_alone_fails()             { template_verdict 1 languages/python/ci.yml; }
-test_template_dotfiles_alone_fail()             { template_verdict 1 .gitattributes; template_verdict 1 .gitignore; }
-test_template_pack_prose_alone_passes()         { template_verdict 0 languages/node/code-standards.md; }
-test_template_claude_md_alone_passes()          { template_verdict 0 CLAUDE.md; }
-test_template_docs_and_memory_alone_pass()      { template_verdict 0 docs/BACKLOG.md memory/decisions.md; }
-test_template_stub_prose_alone_passes()         { template_verdict 0 bootstrap/stubs/CHANGELOG.md bootstrap/stubs/licenses/NOTICE; }
+test_template_shared_script_alone_fails() { template_verdict 1 .github/scripts/require-test-change.sh; }
+test_template_manifest_alone_fails() { template_verdict 1 bootstrap/manifest.txt; }
+test_template_stub_workflow_alone_fails() { template_verdict 1 bootstrap/stubs/.github/workflows/ci.yml; }
+test_template_pack_config_alone_fails() { template_verdict 1 languages/node/package.json; }
+test_template_pack_ci_alone_fails() { template_verdict 1 languages/python/ci.yml; }
+test_template_dotfiles_alone_fail() {
+  template_verdict 1 .gitattributes
+  template_verdict 1 .gitignore
+}
+test_template_pack_prose_alone_passes() { template_verdict 0 languages/node/code-standards.md; }
+test_template_claude_md_alone_passes() { template_verdict 0 CLAUDE.md; }
+test_template_docs_and_memory_alone_pass() { template_verdict 0 docs/BACKLOG.md memory/decisions.md; }
+test_template_stub_prose_alone_passes() { template_verdict 0 bootstrap/stubs/CHANGELOG.md bootstrap/stubs/licenses/NOTICE; }
 # A Rules edition PR changes only bootstrap/stubs/rules/, a build output
 # whose tests are where it is built; its EDITION file has no .md ending.
-test_template_rules_edition_alone_passes()      { template_verdict 0 bootstrap/stubs/rules/EDITION bootstrap/stubs/rules/RULES.md bootstrap/stubs/rules/processes/P-1-session-startup.md; }
+test_template_rules_edition_alone_passes() { template_verdict 0 bootstrap/stubs/rules/EDITION bootstrap/stubs/rules/RULES.md bootstrap/stubs/rules/processes/P-1-session-startup.md; }
 test_template_rules_edition_check_alone_fails() { template_verdict 1 .github/scripts/check-rules-edition.sh; }
 # One file per call: each of these is a test only because of one pattern,
 # so dropping that pattern turns the case red.
@@ -678,7 +846,7 @@ test_template_test_pattern_does_not_reach_into_fixture_folders() {
 test_template_pack_starter_code_with_its_test_passes() {
   template_verdict 0 languages/web/starter/src/example.ts languages/web/starter/src/example.test.ts
 }
-test_template_pack_starter_code_alone_fails()   { template_verdict 1 languages/web/starter/src/example.ts; }
+test_template_pack_starter_code_alone_fails() { template_verdict 1 languages/web/starter/src/example.ts; }
 test_template_csharp_starter_code_alone_fails() { template_verdict 1 languages/csharp/starter/src/Example/Greeter.cs; }
 test_template_csharp_starter_code_with_its_test_passes() {
   template_verdict 0 languages/csharp/starter/src/Example/Greeter.cs languages/csharp/starter/tests/Example.Tests/GreeterTests.cs
@@ -701,8 +869,8 @@ test_template_ci_workflow_is_wired_to_the_check() {
   # Triggers: every push, and pull requests to main.
   grep -qE '^  push:' "$TEMPLATE_CI" || die "ci.yml no longer runs on push"
   grep -qE '^  pull_request:' "$TEMPLATE_CI" || die "ci.yml no longer runs on pull_request"
-  awk '/^  pull_request:/ { f = 1; next } /^  [a-z_]+:/ { f = 0 } f' "$TEMPLATE_CI" | grep -F 'branches: [main]' >/dev/null \
-    || die "pull_request no longer targets main"
+  awk '/^  pull_request:/ { f = 1; next } /^  [a-z_]+:/ { f = 0 } f' "$TEMPLATE_CI" | grep -F 'branches: [main]' >/dev/null ||
+    die "pull_request no longer targets main"
   [ "$(grep -cE '^  [a-z][a-z-]*:$' <<<"$(sed -n '/^jobs:/,$p' "$TEMPLATE_CI")")" -eq 1 ] || die "template ci.yml must keep a single job, named build"
   grep -qE '^  build:$' "$TEMPLATE_CI" || die "the job is not named build"
 }
@@ -729,8 +897,8 @@ pack_args() {
 bootstrapper_output() {
   local d="$WORK/bootstrapper-output"
   if [ ! -d "$d" ]; then
-    bash "$REPO/bootstrap/build.sh" "$d" v0.0.0 0123456789abcdef0123456789abcdef01234567 >/dev/null \
-      || die "could not build the bootstrapper"
+    bash "$REPO/bootstrap/build.sh" "$d" v0.0.0 0123456789abcdef0123456789abcdef01234567 >/dev/null ||
+      die "could not build the bootstrapper"
   fi
   echo "$d"
 }
@@ -803,11 +971,13 @@ test_every_pack_refuses_source_without_a_test_and_accepts_it_with_one() {
     pack_args "$p"
     w="$(project_repo "$p" "change-$p")"
     after_setup "$w"
-    put "$w" "$(pack_code_file "$p")"; commit "$w" "code only"
+    put "$w" "$(pack_code_file "$p")"
+    commit "$w" "code only"
     run_check "$w" "$BASE" "${PACK_ARGS[@]}"
     [ "$CHECK_RC" -eq 1 ] || die "$p: code without a test not refused (exit $CHECK_RC): $CHECK_OUT"
     grep -qxF "code: $(pack_code_file "$p")" <<<"$CHECK_OUT" || die "$p: code file not named: $CHECK_OUT"
-    put "$w" "$(pack_test_file "$p")"; commit "$w" "and its test"
+    put "$w" "$(pack_test_file "$p")"
+    commit "$w" "and its test"
     run_check "$w" "$BASE" "${PACK_ARGS[@]}"
     [ "$CHECK_RC" -eq 0 ] || die "$p: code with a test refused (exit $CHECK_RC): $CHECK_OUT"
   done
@@ -821,8 +991,10 @@ test_every_pack_treats_config_and_docs_as_not_code() {
     w="$(project_repo "$p" "config-$p")"
     after_setup "$w"
     case "$p" in python) cfg=pyproject.toml ;; csharp) cfg=src/Example/Example.csproj ;; *) cfg=package.json ;; esac
-    printf '\n' >>"$w/$cfg"; git -C "$w" add "$cfg"
-    printf '\n' >>"$w/.github/workflows/ci.yml"; git -C "$w" add .github/workflows/ci.yml
+    printf '\n' >>"$w/$cfg"
+    git -C "$w" add "$cfg"
+    printf '\n' >>"$w/.github/workflows/ci.yml"
+    git -C "$w" add .github/workflows/ci.yml
     put "$w" docs/notes.md "words"
     commit "$w" "config and docs"
     run_check "$w" "$BASE" "${PACK_ARGS[@]}"
@@ -839,7 +1011,8 @@ test_every_pack_counts_the_tests_it_runs() {
     for f in src/a.test.ts src/a.spec.ts src/__tests__/a.ts $([ "$p" = react-native ] && echo "src/a.test.tsx src/a.spec.tsx"); do
       w="$(project_repo "$p" "forms-$p")"
       after_setup "$w"
-      put "$w" "$f"; commit "$w" "test form"
+      put "$w" "$f"
+      commit "$w" "test form"
       run_check "$w" "$BASE" "${PACK_ARGS[@]}"
       [ "$CHECK_RC" -eq 0 ] || die "$p: $f not counted as a test (exit $CHECK_RC): $CHECK_OUT"
       grep -qxF "test: $f" <<<"$CHECK_OUT" || die "$p: $f not listed as a test"
@@ -848,7 +1021,8 @@ test_every_pack_counts_the_tests_it_runs() {
   pack_args python
   w="$(project_repo python "forms-python")"
   after_setup "$w"
-  put "$w" src/tests/conftest.py; commit "$w" "fixture helper"
+  put "$w" src/tests/conftest.py
+  commit "$w" "fixture helper"
   run_check "$w" "$BASE" "${PACK_ARGS[@]}"
   [ "$CHECK_RC" -eq 0 ] || die "python: conftest.py not counted as a test: $CHECK_OUT"
   # C#: everything under tests/, helpers and project files included.
@@ -856,7 +1030,8 @@ test_every_pack_counts_the_tests_it_runs() {
   for f in tests/Example.Tests/Support/Fixture.cs tests/Other.Tests/Other.Tests.csproj; do
     w="$(project_repo csharp "forms-csharp")"
     after_setup "$w"
-    put "$w" "$f"; commit "$w" "test form"
+    put "$w" "$f"
+    commit "$w" "test form"
     run_check "$w" "$BASE" "${PACK_ARGS[@]}"
     [ "$CHECK_RC" -eq 0 ] || die "csharp: $f not counted as a test (exit $CHECK_RC): $CHECK_OUT"
     grep -qxF "test: $f" <<<"$CHECK_OUT" || die "csharp: $f not listed as a test"
@@ -870,10 +1045,12 @@ test_csharp_pack_counts_project_files_under_src_as_config() {
   pack_args csharp
   w="$(project_repo csharp "csharp-csproj")"
   after_setup "$w"
-  put "$w" src/Other/Other.csproj; commit "$w" "a new project file only"
+  put "$w" src/Other/Other.csproj
+  commit "$w" "a new project file only"
   run_check "$w" "$BASE" "${PACK_ARGS[@]}"
   [ "$CHECK_RC" -eq 0 ] || die "csharp: a project file alone was refused (exit $CHECK_RC): $CHECK_OUT"
-  put "$w" src/Other/Thing.cs; commit "$w" "and code"
+  put "$w" src/Other/Thing.cs
+  commit "$w" "and code"
   run_check "$w" "$BASE" "${PACK_ARGS[@]}"
   [ "$CHECK_RC" -eq 1 ] || die "csharp: code in a new project was not refused (exit $CHECK_RC): $CHECK_OUT"
   grep -qxF "code: src/Other/Thing.cs" <<<"$CHECK_OUT" || die "csharp: the code file not named: $CHECK_OUT"
@@ -884,11 +1061,14 @@ test_web_pack_counts_the_page_as_code_and_e2e_as_tests() {
   pack_args web
   w="$(project_repo web "web-page")"
   after_setup "$w"
-  printf '<!-- changed -->\n' >>"$w/index.html"; git -C "$w" add index.html; commit "$w" "page only"
+  printf '<!-- changed -->\n' >>"$w/index.html"
+  git -C "$w" add index.html
+  commit "$w" "page only"
   run_check "$w" "$BASE" "${PACK_ARGS[@]}"
   [ "$CHECK_RC" -eq 1 ] || die "web: an index.html change without a test was not refused: $CHECK_OUT"
   grep -qxF "code: index.html" <<<"$CHECK_OUT" || die "web: index.html not listed as code"
-  put "$w" e2e/feature.e2e.ts; commit "$w" "browser test"
+  put "$w" e2e/feature.e2e.ts
+  commit "$w" "browser test"
   run_check "$w" "$BASE" "${PACK_ARGS[@]}"
   [ "$CHECK_RC" -eq 0 ] || die "web: an e2e test did not satisfy the check: $CHECK_OUT"
 }

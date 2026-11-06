@@ -176,8 +176,15 @@ api_get() {
     case "$part" in
       status)
         case "$line" in
-          HTTP/*) API_STATUS="${line#* }"; API_STATUS="${API_STATUS%% *}"; part=headers ;;
-          *) part=body; API_BODY="$line$NL" ;;
+          HTTP/*)
+            API_STATUS="${line#* }"
+            API_STATUS="${API_STATUS%% *}"
+            part=headers
+            ;;
+          *)
+            part=body
+            API_BODY="$line$NL"
+            ;;
         esac
         ;;
       headers) [ -n "$line" ] || part=body ;;
@@ -219,21 +226,42 @@ in_git() { git -C "$DIR" --no-optional-locks -c core.fsmonitor=false -c gc.auto=
 # and its tracked files (TRACKED, one per line).
 read_copy() {
   local inside prefix
-  if [ ! -e "$DIR" ]; then COPY_PROBLEM="the folder $DIR does not exist"; return 0; fi
-  if [ ! -d "$DIR" ]; then COPY_PROBLEM="$DIR is not a folder"; return 0; fi
+  if [ ! -e "$DIR" ]; then
+    COPY_PROBLEM="the folder $DIR does not exist"
+    return 0
+  fi
+  if [ ! -d "$DIR" ]; then
+    COPY_PROBLEM="$DIR is not a folder"
+    return 0
+  fi
   inside="$(in_git rev-parse --is-inside-work-tree 2>/dev/null | tr -d '\r')" || inside=""
-  if [ "$inside" != true ]; then COPY_PROBLEM="$DIR is not a copy of a project made by git"; return 0; fi
+  if [ "$inside" != true ]; then
+    COPY_PROBLEM="$DIR is not a copy of a project made by git"
+    return 0
+  fi
   prefix="$(in_git rev-parse --show-prefix 2>/dev/null | tr -d '\r')" || prefix="?"
-  if [ -n "$prefix" ]; then COPY_PROBLEM="$DIR is a folder inside a copy, not the copy's own top folder"; return 0; fi
+  if [ -n "$prefix" ]; then
+    COPY_PROBLEM="$DIR is a folder inside a copy, not the copy's own top folder"
+    return 0
+  fi
   TRACKED="$(in_git -c core.quotePath=false ls-files 2>/dev/null | tr -d '\r')" || TRACKED=""
   COPY_READABLE=1
 }
 
-is_tracked() { case "$NL$TRACKED$NL" in *"$NL$1$NL"*) return 0 ;; esac; return 1; }
+is_tracked() {
+  case "$NL$TRACKED$NL" in *"$NL$1$NL"*) return 0 ;; esac
+  return 1
+}
 
 # file_text <path in the copy>: TEXT is the file's content, exactly.
 TEXT=""
-file_text() { TEXT="$(cat "$DIR/$1"; printf x)"; TEXT="${TEXT%x}"; }
+file_text() {
+  TEXT="$(
+    cat "$DIR/$1"
+    printf x
+  )"
+  TEXT="${TEXT%x}"
+}
 
 # no_copy <id>: the check cannot run without a readable copy.
 no_copy() { result FAIL "$1" "The copy could not be read, so this was not checked (see copy)."; }
@@ -241,27 +269,42 @@ no_copy() { result FAIL "$1" "The copy could not be read, so this was not checke
 no_pack() { result FAIL "$1" "The language pack is not known, because CHANGELOG.md does not name it (see changelog)."; }
 
 # join_words <separator> <words...>
-join_list() { local sep="$1" out="" w; shift; for w in "$@"; do out="${out:+$out$sep}$w"; done; printf '%s' "$out"; }
+join_list() {
+  local sep="$1" out="" w
+  shift
+  for w in "$@"; do out="${out:+$out$sep}$w"; done
+  printf '%s' "$out"
+}
 
 # ---------- the checks on GitHub ----------
 
 REPO_OK="" REPO_PROBLEM="" R_PRIVATE="" R_TEMPLATE="" R_DELETE="" R_SQUASH=""
 read_repo() {
   api_get "repos/$OWNER/$NAME" "$REPO_JQ"
-  if [ "$API_STATUS" != 200 ]; then api_problem; REPO_PROBLEM="$PROBLEM"; return 0; fi
+  if [ "$API_STATUS" != 200 ]; then
+    api_problem
+    REPO_PROBLEM="$PROBLEM"
+    return 0
+  fi
   IFS='|' read -r _ R_PRIVATE R_TEMPLATE R_DELETE R_SQUASH <<<"$API_BODY"
   REPO_OK=1
 }
 
 check_project() {
   local vis=public
-  if [ -z "$REPO_OK" ]; then result FAIL project "The project $OWNER/$NAME could not be read: $REPO_PROBLEM."; return 0; fi
+  if [ -z "$REPO_OK" ]; then
+    result FAIL project "The project $OWNER/$NAME could not be read: $REPO_PROBLEM."
+    return 0
+  fi
   [ "$R_PRIVATE" != true ] || vis=private
   result PASS project "The project $OWNER/$NAME is on GitHub, and it is $vis."
 }
 
 check_template() {
-  if [ -z "$REPO_OK" ]; then result FAIL template "The project could not be read: $REPO_PROBLEM."; return 0; fi
+  if [ -z "$REPO_OK" ]; then
+    result FAIL template "The project could not be read: $REPO_PROBLEM."
+    return 0
+  fi
   case "$R_TEMPLATE" in
     "$BOOTSTRAPPER") result PASS template "GitHub records it as made from $BOOTSTRAPPER." ;;
     - | null | "") result FAIL template "GitHub does not record it as made from a template; the run should make it from $BOOTSTRAPPER." ;;
@@ -271,7 +314,10 @@ check_template() {
 
 check_merge_settings() {
   local off=""
-  if [ -z "$REPO_OK" ]; then result FAIL merge-settings "The project could not be read: $REPO_PROBLEM."; return 0; fi
+  if [ -z "$REPO_OK" ]; then
+    result FAIL merge-settings "The project could not be read: $REPO_PROBLEM."
+    return 0
+  fi
   [ "$R_DELETE" = true ] || off="deleting a line of work after its merge"
   [ "$R_SQUASH" = true ] || off="${off:+$off and }merging a change as one (squash)"
   if [ -n "$off" ]; then
@@ -287,7 +333,11 @@ PULLS_OK="" PULLS_PROBLEM="" PULL_LINES="" PR_NUM="" PR_MERGE_SHA="" PR_HEAD_SHA
 read_pulls() {
   local n=0 merged=0 line num state at msha hsha
   api_get "repos/$OWNER/$NAME/pulls?state=all&head=$OWNER:$SETUP_BRANCH&per_page=100" "$PULLS_JQ"
-  if [ "$API_STATUS" != 200 ]; then api_problem; PULLS_PROBLEM="$PROBLEM"; return 0; fi
+  if [ "$API_STATUS" != 200 ]; then
+    api_problem
+    PULLS_PROBLEM="$PROBLEM"
+    return 0
+  fi
   PULLS_OK=1
   PULL_LINES="$API_BODY"
   while read -r num state at msha hsha; do
@@ -311,7 +361,10 @@ MERGED_COUNT=0
 pull_list() { printf '%s\n' "$PULL_LINES" | awk 'NF { printf "%s#%s", (n++ ? ", " : ""), $1 }'; }
 
 check_setup_change() {
-  if [ -z "$PULLS_OK" ]; then result FAIL setup-change "The proposed changes from $SETUP_BRANCH could not be read: $PULLS_PROBLEM."; return 0; fi
+  if [ -z "$PULLS_OK" ]; then
+    result FAIL setup-change "The proposed changes from $SETUP_BRANCH could not be read: $PULLS_PROBLEM."
+    return 0
+  fi
   if [ "$PULL_COUNT" -eq 0 ]; then
     result FAIL setup-change "GitHub has no proposed change from $SETUP_BRANCH; the run proposes the setup as one."
   elif [ "$PULL_COUNT" -gt 1 ]; then
@@ -325,10 +378,20 @@ check_setup_change() {
 
 check_build() {
   local runs bad n
-  if [ -z "$PULLS_OK" ]; then result FAIL build "The proposed changes could not be read: $PULLS_PROBLEM."; return 0; fi
-  if [ -z "$PR_HEAD_SHA" ]; then result FAIL build "There is no single setup change whose check could be looked at (see setup-change)."; return 0; fi
+  if [ -z "$PULLS_OK" ]; then
+    result FAIL build "The proposed changes could not be read: $PULLS_PROBLEM."
+    return 0
+  fi
+  if [ -z "$PR_HEAD_SHA" ]; then
+    result FAIL build "There is no single setup change whose check could be looked at (see setup-change)."
+    return 0
+  fi
   api_get "repos/$OWNER/$NAME/commits/$PR_HEAD_SHA/check-runs?per_page=100" "$RUNS_JQ"
-  if [ "$API_STATUS" != 200 ]; then api_problem; result FAIL build "The checks of #$PR_NUM could not be read: $PROBLEM."; return 0; fi
+  if [ "$API_STATUS" != 200 ]; then
+    api_problem
+    result FAIL build "The checks of #$PR_NUM could not be read: $PROBLEM."
+    return 0
+  fi
   runs="$(printf '%s\n' "$API_BODY" | grep -c . || true)"
   bad="$(printf '%s\n' "$API_BODY" | awk 'NF && $0 != "completed success" { printf "%s%s", (n++ ? ", " : ""), ($1 == "completed" ? $2 : $1) }')"
   if [ "$runs" -eq 0 ]; then
@@ -336,7 +399,8 @@ check_build() {
   elif [ -n "$bad" ]; then
     result FAIL build "The check build on the last commit of #$PR_NUM did not pass every time it ran (other results: $bad)."
   else
-    n="time"; [ "$runs" -eq 1 ] || n="times"
+    n="time"
+    [ "$runs" -eq 1 ] || n="times"
     result PASS build "The check build passed on the last commit of #$PR_NUM ($runs $n)."
   fi
 }
@@ -344,22 +408,32 @@ check_build() {
 MAIN_SHA="" MAIN_PROBLEM=""
 read_main() {
   api_get "repos/$OWNER/$NAME/branches/main" "$SHA_JQ"
-  if [ "$API_STATUS" = 200 ] && [ -n "$API_BODY" ]; then MAIN_SHA="$API_BODY"; else api_problem; MAIN_PROBLEM="$PROBLEM"; fi
+  if [ "$API_STATUS" = 200 ] && [ -n "$API_BODY" ]; then MAIN_SHA="$API_BODY"; else
+    api_problem
+    MAIN_PROBLEM="$PROBLEM"
+  fi
 }
 
 short() { printf '%s' "$1" | cut -c1-7; }
 
 check_history() {
   local lines n first fp sp
-  if [ -z "$MAIN_SHA" ]; then result FAIL history "main could not be read: $MAIN_PROBLEM."; return 0; fi
+  if [ -z "$MAIN_SHA" ]; then
+    result FAIL history "main could not be read: $MAIN_PROBLEM."
+    return 0
+  fi
   api_get "repos/$OWNER/$NAME/commits?sha=main&per_page=3" "$COMMITS_JQ"
-  if [ "$API_STATUS" != 200 ]; then api_problem; result FAIL history "The history of main could not be read: $PROBLEM."; return 0; fi
+  if [ "$API_STATUS" != 200 ]; then
+    api_problem
+    result FAIL history "The history of main could not be read: $PROBLEM."
+    return 0
+  fi
   lines="$API_BODY"
   n="$(printf '%s\n' "$lines" | grep -c . || true)"
   read -r first fp <<<"$(printf '%s\n' "$lines" | sed -n 1p)"
   read -r _ sp <<<"$(printf '%s\n' "$lines" | sed -n 2p)"
   if [ "$n" -ne 2 ]; then
-    result FAIL history "main has $( [ "$n" -ge 3 ] && echo "3 or more changes" || echo "$n change(s)" ), not two (GitHub's template change and the setup merged as one); a run, resumed or not, adds exactly one. The usual cause is a change merged after the run, such as the red-then-Test-exempt one: run this check before merging anything else."
+    result FAIL history "main has $([ "$n" -ge 3 ] && echo "3 or more changes" || echo "$n change(s)"), not two (GitHub's template change and the setup merged as one); a run, resumed or not, adds exactly one. The usual cause is a change merged after the run, such as the red-then-Test-exempt one: run this check before merging anything else."
   elif [ "$sp" != 0 ] || [ "$fp" != 1 ]; then
     result FAIL history "main's last change has $fp parents and the one before it $sp; the setup merged as one change has one, GitHub's template change none."
   elif [ "$first" != "$MAIN_SHA" ]; then
@@ -379,7 +453,11 @@ check_setup_branch() {
   case "$API_STATUS" in
     404) ;;
     200) where="on GitHub" ;;
-    *) api_problem; result FAIL setup-branch "Whether $SETUP_BRANCH is still on GitHub could not be read: $PROBLEM."; return 0 ;;
+    *)
+      api_problem
+      result FAIL setup-branch "Whether $SETUP_BRANCH is still on GitHub could not be read: $PROBLEM."
+      return 0
+      ;;
   esac
   if [ -n "$COPY_READABLE" ] && in_git rev-parse -q --verify "refs/heads/$SETUP_BRANCH" >/dev/null 2>&1; then
     where="${where:+$where and }in the copy"
@@ -438,8 +516,14 @@ check_protection() {
 
 check_decision_row() {
   local row=""
-  if [ -z "$COPY_READABLE" ]; then no_copy decision-row; return 0; fi
-  if [ ! -f "$DIR/memory/decisions.md" ]; then result FAIL decision-row "The copy has no memory/decisions.md."; return 0; fi
+  if [ -z "$COPY_READABLE" ]; then
+    no_copy decision-row
+    return 0
+  fi
+  if [ ! -f "$DIR/memory/decisions.md" ]; then
+    result FAIL decision-row "The copy has no memory/decisions.md."
+    return 0
+  fi
   ! grep -qF -- "$UNPROTECTED_ROW_KEY" "$DIR/memory/decisions.md" || row=1
   case "$PROTECTED:$row" in
     yes:) result PASS decision-row "memory/decisions.md does not say main is unprotected, and it is protected." ;;
@@ -456,10 +540,14 @@ check_decision_row() {
 
 check_copy() {
   local problems="" url want_path p branch status n head
-  if [ -z "$COPY_READABLE" ]; then result FAIL copy "${COPY_PROBLEM}; the run leaves a clean copy on main there."; return 0; fi
+  if [ -z "$COPY_READABLE" ]; then
+    result FAIL copy "${COPY_PROBLEM}; the run leaves a clean copy on main there."
+    return 0
+  fi
   url="$(in_git remote get-url origin 2>/dev/null | tr -d '\r')" || url=""
   p="$url"
-  p="${p%/}"; p="${p%.git}"
+  p="${p%/}"
+  p="${p%.git}"
   case "$p" in
     https://github.com/* | http://github.com/*) p="${p#*://github.com/}" ;;
     git@github.com:*) p="${p#git@github.com:}" ;;
@@ -501,24 +589,37 @@ check_copy() {
 PACK="" DEPLOY="" LICENCE="" BAD_LICENCE=""
 check_changelog() {
   local section missing="" line p
-  if [ -z "$COPY_READABLE" ]; then no_copy changelog; return 0; fi
-  if [ ! -f "$DIR/CHANGELOG.md" ]; then result FAIL changelog "The copy has no CHANGELOG.md."; return 0; fi
+  if [ -z "$COPY_READABLE" ]; then
+    no_copy changelog
+    return 0
+  fi
+  if [ ! -f "$DIR/CHANGELOG.md" ]; then
+    result FAIL changelog "The copy has no CHANGELOG.md."
+    return 0
+  fi
   section="$(tr -d '\r' <"$DIR/CHANGELOG.md" | awk '$0 == "## Project created" { on = 1; next } on && /^## / { on = 0 } on')"
   while IFS= read -r line; do
     case "$line" in
       "- Language pack: web, with the files that publish the website.") PACK=web DEPLOY=yes ;;
       "- Language pack: "*.)
-        p="${line#- Language pack: }"; p="${p%.}"
+        p="${line#- Language pack: }"
+        p="${p%.}"
         case " $PACKS " in *" $p "*) PACK="$p" ;; esac
         ;;
-      "- Licence: "*.) LICENCE="${line#- Licence: }"; LICENCE="${LICENCE%.}" ;;
+      "- Licence: "*.)
+        LICENCE="${line#- Licence: }"
+        LICENCE="${LICENCE%.}"
+        ;;
     esac
   done <<<"$section"
   # The licence name goes into a gh api path: a licence key only
   # (lowercase letters, digits, . and -, not starting with . or -).
   case "$LICENCE" in
     "") ;;
-    *[!a-z0-9.-]* | [.-]*) BAD_LICENCE="$LICENCE"; LICENCE="" ;;
+    *[!a-z0-9.-]* | [.-]*)
+      BAD_LICENCE="$LICENCE"
+      LICENCE=""
+      ;;
   esac
   [ -n "$PACK" ] || missing="- Language pack: <pack>."
   if [ -n "$BAD_LICENCE" ]; then
@@ -536,8 +637,14 @@ check_changelog() {
 
 check_pack() {
   local t missing=""
-  if [ -z "$COPY_READABLE" ]; then no_copy pack; return 0; fi
-  if [ -z "$PACK" ]; then no_pack pack; return 0; fi
+  if [ -z "$COPY_READABLE" ]; then
+    no_copy pack
+    return 0
+  fi
+  if [ -z "$PACK" ]; then
+    no_pack pack
+    return 0
+  fi
   for t in $(pack_targets "$PACK" "$DEPLOY"); do
     case "$t" in
       */) case "$NL$TRACKED" in *"$NL$t"*) ;; *) missing="${missing:+$missing, }$t" ;; esac ;;
@@ -552,8 +659,14 @@ check_pack() {
 }
 
 check_lockfile() {
-  if [ -z "$COPY_READABLE" ]; then no_copy lockfile; return 0; fi
-  if [ -z "$PACK" ]; then no_pack lockfile; return 0; fi
+  if [ -z "$COPY_READABLE" ]; then
+    no_copy lockfile
+    return 0
+  fi
+  if [ -z "$PACK" ]; then
+    no_pack lockfile
+    return 0
+  fi
   case "$PACK" in
     python)
       if is_tracked package-lock.json || [ -e "$DIR/package-lock.json" ]; then
@@ -574,10 +687,18 @@ check_lockfile() {
 
 check_placeholders() {
   local row file text left="" missing=""
-  if [ -z "$COPY_READABLE" ]; then no_copy placeholders; return 0; fi
-  if [ -z "$PACK" ]; then no_pack placeholders; return 0; fi
+  if [ -z "$COPY_READABLE" ]; then
+    no_copy placeholders
+    return 0
+  fi
+  if [ -z "$PACK" ]; then
+    no_pack placeholders
+    return 0
+  fi
   while IFS= read -r row; do
-    file="${row%%|*}"; text="${row#*|}"; text="${text//<NL>/$NL}"
+    file="${row%%|*}"
+    text="${row#*|}"
+    text="${text//<NL>/$NL}"
     if [ ! -f "$DIR/$file" ]; then
       [ "$file" = LICENSE ] || case " $missing " in *" $file "*) ;; *) missing="${missing:+$missing }$file" ;; esac
       continue
@@ -596,8 +717,14 @@ check_placeholders() {
 
 check_readme_section() {
   local found
-  if [ -z "$COPY_READABLE" ]; then no_copy readme-section; return 0; fi
-  if [ ! -f "$DIR/README.md" ]; then result FAIL readme-section "The copy has no README.md."; return 0; fi
+  if [ -z "$COPY_READABLE" ]; then
+    no_copy readme-section
+    return 0
+  fi
+  if [ ! -f "$DIR/README.md" ]; then
+    result FAIL readme-section "The copy has no README.md."
+    return 0
+  fi
   found="$(tr -d '\r' <"$DIR/README.md" | grep -cxF -- "$SETUP_HEADING" || true)"
   if [ "$found" -gt 0 ]; then
     result FAIL readme-section "README.md still has the section \"$SETUP_HEADING\", which the run removes."
@@ -610,7 +737,10 @@ check_readme_section() {
 # gone; GitHub would show it on the project's page instead of the
 # project's README (PBI-1.29).
 check_own_readme() {
-  if [ -z "$COPY_READABLE" ]; then no_copy own-readme; return 0; fi
+  if [ -z "$COPY_READABLE" ]; then
+    no_copy own-readme
+    return 0
+  fi
   if grep -qxF .github/README.md <<<"$TRACKED" || [ -e "$DIR/.github/README.md" ]; then
     result FAIL own-readme "The bootstrapper's own README, .github/README.md, is still in the project."
   else
@@ -620,8 +750,14 @@ check_own_readme() {
 
 check_languages() {
   local f want="" extra="" missing="" got
-  if [ -z "$COPY_READABLE" ]; then no_copy languages; return 0; fi
-  if [ -z "$PACK" ]; then no_pack languages; return 0; fi
+  if [ -z "$COPY_READABLE" ]; then
+    no_copy languages
+    return 0
+  fi
+  if [ -z "$PACK" ]; then
+    no_pack languages
+    return 0
+  fi
   for f in $(pack_kept "$PACK" "$DEPLOY"); do want="$want${NL}languages/$PACK/$f"; done
   got="$(printf '%s\n' "$TRACKED" | grep '^languages/' || true)"
   while IFS= read -r f; do
@@ -641,9 +777,18 @@ check_languages() {
 
 check_pack_links() {
   local p bad=""
-  if [ -z "$COPY_READABLE" ]; then no_copy pack-links; return 0; fi
-  if [ -z "$PACK" ]; then no_pack pack-links; return 0; fi
-  if [ ! -f "$DIR/docs/DEV_INFRASTRUCTURE.md" ]; then result FAIL pack-links "The copy has no docs/DEV_INFRASTRUCTURE.md."; return 0; fi
+  if [ -z "$COPY_READABLE" ]; then
+    no_copy pack-links
+    return 0
+  fi
+  if [ -z "$PACK" ]; then
+    no_pack pack-links
+    return 0
+  fi
+  if [ ! -f "$DIR/docs/DEV_INFRASTRUCTURE.md" ]; then
+    result FAIL pack-links "The copy has no docs/DEV_INFRASTRUCTURE.md."
+    return 0
+  fi
   file_text docs/DEV_INFRASTRUCTURE.md
   for p in $PACKS; do
     [ "$p" != "$PACK" ] || continue
@@ -695,8 +840,14 @@ licence_matches() {
 
 check_licence() {
   local notice body
-  if [ -z "$COPY_READABLE" ]; then no_copy licence; return 0; fi
-  if [ -z "$LICENCE" ]; then result FAIL licence "The licence chosen is not known, because CHANGELOG.md does not name it (see changelog)."; return 0; fi
+  if [ -z "$COPY_READABLE" ]; then
+    no_copy licence
+    return 0
+  fi
+  if [ -z "$LICENCE" ]; then
+    result FAIL licence "The licence chosen is not known, because CHANGELOG.md does not name it (see changelog)."
+    return 0
+  fi
   case "$LICENCE" in
     none)
       if is_tracked LICENSE || is_tracked NOTICE || [ -e "$DIR/LICENSE" ]; then
@@ -721,7 +872,10 @@ check_licence() {
       fi
       ;;
     *)
-      if ! is_tracked LICENSE; then result FAIL licence "The licence chosen was $LICENCE, but the project has no LICENSE file."; return 0; fi
+      if ! is_tracked LICENSE; then
+        result FAIL licence "The licence chosen was $LICENCE, but the project has no LICENSE file."
+        return 0
+      fi
       api_get "licenses/$LICENCE" "$BODY_JQ"
       if [ "$API_STATUS" != 200 ] || [ -z "$API_BODY" ]; then
         api_problem
@@ -740,7 +894,10 @@ check_licence() {
 
 check_no_script() {
   local found
-  if [ -z "$COPY_READABLE" ]; then no_copy no-script; return 0; fi
+  if [ -z "$COPY_READABLE" ]; then
+    no_copy no-script
+    return 0
+  fi
   found="$(printf '%s\n' "$TRACKED" | awk -F / '$NF == "bootstrap-project.sh"' | tr '\n' ' ')"
   if [ -n "$found" ] || [ -e "$DIR/bootstrap-project.sh" ]; then
     result FAIL no-script "The setup script is still in the project: ${found:-bootstrap-project.sh}"
@@ -755,7 +912,10 @@ check_no_script() {
 # nothing in the copy (its temp folder is outside it).
 check_rules_edition() {
   local out rc=0 script=.github/scripts/check-rules-edition.sh
-  if [ -z "$COPY_READABLE" ]; then no_copy rules-edition; return 0; fi
+  if [ -z "$COPY_READABLE" ]; then
+    no_copy rules-edition
+    return 0
+  fi
   if [ ! -f "$DIR/$script" ]; then
     result FAIL rules-edition "The project has no $script, the check its CI runs on rules/, so rules/ was not checked."
     return 0
@@ -771,9 +931,15 @@ check_rules_edition() {
 
 check_line_endings() {
   local out bad rc=0
-  if [ -z "$COPY_READABLE" ]; then no_copy line-endings; return 0; fi
+  if [ -z "$COPY_READABLE" ]; then
+    no_copy line-endings
+    return 0
+  fi
   out="$(in_git -c core.quotePath=false ls-files --eol 2>/dev/null | tr -d '\r')" || rc=$?
-  if [ "$rc" -ne 0 ]; then result FAIL line-endings "git could not list the line endings of the project's files."; return 0; fi
+  if [ "$rc" -ne 0 ]; then
+    result FAIL line-endings "git could not list the line endings of the project's files."
+    return 0
+  fi
   bad="$(printf '%s\n' "$out" | awk -F '\t' '$1 ~ /^i\/(crlf|mixed)/ { printf "%s%s", (n++ ? ", " : ""), $2 }')"
   if [ -n "$bad" ]; then
     result FAIL line-endings "Files saved with CR LF line endings, which the run never saves: $bad."
@@ -784,7 +950,10 @@ check_line_endings() {
 
 check_no_keys() {
   local out rc=0
-  if [ -z "$COPY_READABLE" ]; then no_copy no-keys; return 0; fi
+  if [ -z "$COPY_READABLE" ]; then
+    no_copy no-keys
+    return 0
+  fi
   out="$(in_git -c core.quotePath=false grep -l -I -E -e "$KEY_PATTERN_CLASSIC" -e "$KEY_PATTERN_FINE" HEAD -- 2>/dev/null | tr -d '\r')" || rc=$?
   case "$rc" in
     1) result PASS no-keys "No file of the project holds what looks like a GitHub sign-in key." ;;
@@ -847,15 +1016,24 @@ delete_hint() {
 OWNER="" NAME="" DIR=""
 main() {
   case "${1:-}" in
-    -h | --help) show_help; return 0 ;;
+    -h | --help)
+      show_help
+      return 0
+      ;;
   esac
-  if [ "$#" -ne 2 ]; then usage >&2; return 2; fi
+  if [ "$#" -ne 2 ]; then
+    usage >&2
+    return 2
+  fi
   if ! grep -qE '^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+$' <<<"$1" || [ "$(printf '%s\n' "$1" | wc -l | tr -d ' ')" != 1 ]; then
     echo "Not a project name of the form OWNER/NAME: $1" >&2
     usage >&2
     return 2
   fi
-  if [ -z "$2" ]; then usage >&2; return 2; fi
+  if [ -z "$2" ]; then
+    usage >&2
+    return 2
+  fi
   OWNER="${1%%/*}" NAME="${1#*/}" DIR="$2"
   # git reads only: no optional locks (git status would otherwise refresh
   # the index), and the copy's own git folder, not one from the

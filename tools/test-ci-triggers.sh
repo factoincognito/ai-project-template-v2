@@ -37,9 +37,15 @@ event_block() {
 
 for wf in ci.yml packs.yml; do
   f="$REPO/.github/workflows/$wf"
-  [ -f "$f" ] || { fail "$wf: no such workflow"; continue; }
+  [ -f "$f" ] || {
+    fail "$wf: no such workflow"
+    continue
+  }
   on="$(on_block "$f")"
-  [ -n "$on" ] || { fail "$wf: no on: block found"; continue; }
+  [ -n "$on" ] || {
+    fail "$wf: no on: block found"
+    continue
+  }
 
   grep -qE '^  pull_request:' <<<"$on" || fail "$wf: no pull_request trigger"
   pr="$(event_block "$on" pull_request)"

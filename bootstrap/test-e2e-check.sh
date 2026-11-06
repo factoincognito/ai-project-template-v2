@@ -44,7 +44,10 @@ run_test() {
   local log="$WORK/$name.log" rc
   # Not inside an `if`: errexit is ignored in condition context.
   set +e
-  ( set -euo pipefail; "$name" ) >"$log" 2>&1
+  (
+    set -euo pipefail
+    "$name"
+  ) >"$log" 2>&1
   rc=$?
   set -e
   if [ "$rc" -eq 0 ]; then
@@ -58,12 +61,18 @@ run_test() {
   fi
 }
 
-die() { echo "assertion failed: $*" >&2; exit 1; }
+die() {
+  echo "assertion failed: $*" >&2
+  exit 1
+}
 
 # A fresh temp dir per call; its name has a space on purpose.
 tmpdir() { mktemp -d "$WORK/t m p.XXXXXX"; }
 
-command -v jq >/dev/null 2>&1 || { echo "These tests need jq (the stub gh runs the checker's --jq expressions with it)." >&2; exit 1; }
+command -v jq >/dev/null 2>&1 || {
+  echo "These tests need jq (the stub gh runs the checker's --jq expressions with it)." >&2
+  exit 1
+}
 
 REAL_GIT="$(command -v git)"
 # Tests run with a clean git environment: no global settings of the
@@ -173,11 +182,24 @@ EOF
 
 gh_file() { printf '%s/github/%s.json' "$1" "$(printf '%s' "$2" | tr '/?&=:' '_____')"; }
 # gh_set <d> <endpoint> <json>
-gh_set() { mkdir -p "$1/github"; printf '%s\n' "$3" >"$(gh_file "$1" "$2")"; }
+gh_set() {
+  mkdir -p "$1/github"
+  printf '%s\n' "$3" >"$(gh_file "$1" "$2")"
+}
 # gh_error <d> <endpoint> <code> <message>
-gh_error() { local f; f="$(gh_file "$1" "$2")"; printf '%s %s\n' "$3" "$4" >"${f%.json}.status"; }
+gh_error() {
+  local f
+  f="$(gh_file "$1" "$2")"
+  printf '%s %s\n' "$3" "$4" >"${f%.json}.status"
+}
 # gh_jq <d> <endpoint> <jq program>: changes the answer in place.
-gh_jq() { local f t; f="$(gh_file "$1" "$2")"; t="$f.new"; jq "$3" "$f" >"$t"; mv "$t" "$f"; }
+gh_jq() {
+  local f t
+  f="$(gh_file "$1" "$2")"
+  t="$f.new"
+  jq "$3" "$f" >"$t"
+  mv "$t" "$f"
+}
 
 P="repos/$OWNER/$NAME"
 PULLS_EP() { printf 'repos/%s/%s/pulls?state=all&head=%s:bootstrap-setup&per_page=100' "$OWNER" "$NAME" "$OWNER"; }
@@ -244,7 +266,10 @@ finished() {
     add_licence
     note_setup_in_changelog
     self_check
-  ) >"$d/setup.out" 2>&1 || { cat "$d/setup.out" >&2; die "the script's setup functions failed"; }
+  ) >"$d/setup.out" 2>&1 || {
+    cat "$d/setup.out" >&2
+    die "the script's setup functions failed"
+  }
   G -C "$work" commit -q -m "Set up $NAME (#1)"
   G init -q --bare "$bare"
   quiet_repo "$bare"
@@ -328,7 +353,8 @@ assert_read_only() {
       esac
       case "$line$TAB" in
         *"${TAB}-X"* | *"${TAB}--method"* | *"${TAB}-f${TAB}"* | *"${TAB}-F${TAB}"* | *"${TAB}--field"* | *"${TAB}--raw-field"* | *"${TAB}--input"*)
-          die "gh call that could write: $(show "$line")" ;;
+          die "gh call that could write: $(show "$line")"
+          ;;
       esac
     done <"$d/gh.log"
   fi
@@ -365,7 +391,10 @@ assert_read_only() {
 }
 
 rc_of() { cat "$1/rc"; }
-expect_rc() { [ "$(rc_of "$1")" = "$2" ] || { cat "$1/out" >&2; die "exit code $(rc_of "$1"), want $2"; }; }
+expect_rc() { [ "$(rc_of "$1")" = "$2" ] || {
+  cat "$1/out" >&2
+  die "exit code $(rc_of "$1"), want $2"
+}; }
 
 # result_of <d> <id>: PASS, FAIL or SKIP, from the line "<STATUS> <id>: <reason>".
 result_of() { awk -v id="$2" '$2 == id ":" { print $1; exit }' "$1/out"; }
@@ -374,8 +403,14 @@ result_of() { awk -v id="$2" '$2 == id ":" { print $1; exit }' "$1/out"; }
 expect_result() {
   local got
   got="$(result_of "$1" "$2")"
-  [ "$got" = "$3" ] || { cat "$1/out" >&2; die "$2 is '$got', want $3"; }
-  grep -qE "^$3 $2: [^ ]" "$1/out" || { cat "$1/out" >&2; die "$2 has no reason"; }
+  [ "$got" = "$3" ] || {
+    cat "$1/out" >&2
+    die "$2 is '$got', want $3"
+  }
+  grep -qE "^$3 $2: [^ ]" "$1/out" || {
+    cat "$1/out" >&2
+    die "$2 has no reason"
+  }
 }
 
 # expect_only_fail <d> <id>: that check, and no other, failed; exit 1.
@@ -383,7 +418,10 @@ expect_only_fail() {
   local fails
   expect_rc "$1" 1
   fails="$(awk '$1 == "FAIL" { sub(/:$/, "", $2); print $2 }' "$1/out" | tr '\n' ' ')"
-  [ "$fails" = "$2 " ] || { cat "$1/out" >&2; die "failed checks: '$fails', want only $2"; }
+  [ "$fails" = "$2 " ] || {
+    cat "$1/out" >&2
+    die "failed checks: '$fails', want only $2"
+  }
 }
 
 reason_of() { grep -E "^[A-Z]+ $2: " "$1/out" | sed -E "s/^[A-Z]+ $2: //"; }
@@ -404,22 +442,34 @@ expect_all_pass() {
 
 test_help_prints_usage_and_exits_0() {
   local d
-  d="$(tmpdir)"; mkdir -p "$d/bin"; make_stub_gh "$d"; make_git_wrapper "$d"
+  d="$(tmpdir)"
+  mkdir -p "$d/bin"
+  make_stub_gh "$d"
+  make_git_wrapper "$d"
   run_check "$d" --help
   expect_rc "$d" 0
-  grep -qF 'e2e-check.sh OWNER/NAME DIR' "$d/out" || { cat "$d/out" >&2; die "no usage line"; }
+  grep -qF 'e2e-check.sh OWNER/NAME DIR' "$d/out" || {
+    cat "$d/out" >&2
+    die "no usage line"
+  }
   grep -qi 'read' "$d/out" || die "help does not say it only reads"
   # Review round 2, items 3 and 8.
   # shellcheck disable=SC2015 # die is meant to run when either check fails
-  grep -qF 'Test-exempt' "$d/out" && grep -qF 'exactly two commits' "$d/out" \
-    || { cat "$d/out" >&2; die "help does not say to run it before the Test-exempt change is merged"; }
+  grep -qF 'Test-exempt' "$d/out" && grep -qF 'exactly two commits' "$d/out" ||
+    {
+      cat "$d/out" >&2
+      die "help does not say to run it before the Test-exempt change is merged"
+    }
   grep -qF 'CHANGELOG' "$d/out" || die "help does not say the pack and licence are read from CHANGELOG.md"
   [ ! -s "$d/gh.log" ] && [ ! -s "$d/git.log" ] || die "--help called gh or git"
 }
 
 test_wrong_argument_count_exits_2() {
   local d
-  d="$(tmpdir)"; mkdir -p "$d/bin"; make_stub_gh "$d"; make_git_wrapper "$d"
+  d="$(tmpdir)"
+  mkdir -p "$d/bin"
+  make_stub_gh "$d"
+  make_git_wrapper "$d"
   run_check "$d" only-one
   expect_rc "$d" 2
   grep -qF 'e2e-check.sh OWNER/NAME DIR' "$d/out" || die "no usage on one argument"
@@ -430,7 +480,10 @@ test_wrong_argument_count_exits_2() {
 
 test_bad_owner_name_exits_2() {
   local d n
-  d="$(tmpdir)"; mkdir -p "$d/bin"; make_stub_gh "$d"; make_git_wrapper "$d"
+  d="$(tmpdir)"
+  mkdir -p "$d/bin"
+  make_stub_gh "$d"
+  make_git_wrapper "$d"
   # The last name is two good names on two lines: only the line count
   # rejects it, as grep matches its first line.
   for n in noslash a/b/c '/name' 'owner/' 'ow ner/name' 'owner/na;me' '-x/y' "$(printf 'a/b\nc/d')"; do
@@ -444,10 +497,14 @@ test_bad_owner_name_exits_2() {
 
 test_finished_node_run_passes_every_check() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   run_check "$d"
   expect_all_pass "$d"
-  grep -qE '^Result: 23 passed, 0 failed, 7 skipped\.$' "$d/out" || { cat "$d/out" >&2; die "summary line"; }
+  grep -qE '^Result: 23 passed, 0 failed, 7 skipped\.$' "$d/out" || {
+    cat "$d/out" >&2
+    die "summary line"
+  }
   # The checker did look at GitHub and at the copy.
   [ -s "$d/gh.log" ] && [ -s "$d/git.log" ] || die "no gh or git calls logged"
 }
@@ -459,7 +516,8 @@ test_finished_runs_of_every_pack_and_licence_pass() {
     set -- $spec
     pack="$1" lic="$2" dep="${3:-}"
     echo "case: $spec"
-    d="$(tmpdir)"; finished "$d" "$pack" "$lic" "$dep"
+    d="$(tmpdir)"
+    finished "$d" "$pack" "$lic" "$dep"
     run_check "$d"
     expect_all_pass "$d"
   done
@@ -468,17 +526,22 @@ test_finished_runs_of_every_pack_and_licence_pass() {
 test_answers_with_cr_lf_pass() {
   # gh on Windows may end lines with CR LF.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   STUB_GH_CR=1 run_check "$d"
   expect_all_pass "$d"
 }
 
 test_every_line_of_a_check_has_one_status_and_a_plain_reason() {
   local d n
-  d="$(tmpdir)"; finished "$d" web mit
+  d="$(tmpdir)"
+  finished "$d" web mit
   run_check "$d"
   n="$(grep -cE '^(PASS|FAIL|SKIP) [a-z-]+: [^ ].*[.)]$' "$d/out")"
-  [ "$n" = 30 ] || { cat "$d/out" >&2; die "$n check lines in the form '<STATUS> <id>: <reason>.', want 30"; }
+  [ "$n" = 30 ] || {
+    cat "$d/out" >&2
+    die "$n check lines in the form '<STATUS> <id>: <reason>.', want 30"
+  }
   # No raw tool text: no HTTP status lines, JSON or gh's own words.
   ! grep -nE 'HTTP/|\{"|^gh: |fatal:' "$d/out" >&2 || die "raw tool text in the output"
 }
@@ -489,25 +552,30 @@ test_the_read_only_guard_catches_writes() {
   # The guard every run goes through must fail on a write, or the tests
   # above prove nothing about it.
   local d bad
-  d="$(tmpdir)"; mkdir -p "$d/bin"
+  d="$(tmpdir)"
+  mkdir -p "$d/bin"
   for bad in $'\tapi\t-i\t-X\tPUT\trepos/o/n/branches/main/protection' $'\tapi\t-i\trepos/o/n/issues\t-f\ttitle=x' \
-             $'\tapi\t-i\t--method\tDELETE\trepos/o/n' $'\trepo\tdelete\to/n\t--yes' $'\tapi\t-i\trepos/o/n\t--input\t-' \
-             $'\tpr\tmerge\t1'; do
-    printf '%s\n' "$bad" >"$d/gh.log"; : >"$d/git.log"
+    $'\tapi\t-i\t--method\tDELETE\trepos/o/n' $'\trepo\tdelete\to/n\t--yes' $'\tapi\t-i\trepos/o/n\t--input\t-' \
+    $'\tpr\tmerge\t1'; do
+    printf '%s\n' "$bad" >"$d/gh.log"
+    : >"$d/git.log"
     ! (assert_read_only "$d") 2>/dev/null || die "guard let through gh: $bad"
   done
   : >"$d/gh.log"
   for bad in $'\t-C\t/x\tfetch' $'\t-C\t/x\tstatus\t--porcelain' $'\t-C\t/x\tcheckout\tmain' $'\t-C\t/x\tremote\tset-url\torigin\tx' \
-             $'\t-C\t/x\tbranch\t-D\tx' $'\t-C\t/x\tconfig\tuser.name\tx' $'\t-C\t/x\tgc' $'\t-C\t/x\tpull'; do
+    $'\t-C\t/x\tbranch\t-D\tx' $'\t-C\t/x\tconfig\tuser.name\tx' $'\t-C\t/x\tgc' $'\t-C\t/x\tpull'; do
     printf '%s\n' "$bad" >"$d/git.log"
     ! (assert_read_only "$d") 2>/dev/null || die "guard let through git: $bad"
   done
   printf '%s\n' $'\t-C\t/x\t--no-optional-locks\tstatus\t--porcelain' $'\t-C\t/x\trev-parse\tHEAD' $'\t-C\t/x\tremote\tget-url\torigin' >"$d/git.log"
   (assert_read_only "$d") || die "guard refused plain reads"
   # A file changed in the copy.
-  d="$(tmpdir)"; finished "$d" node mit
-  : >"$d/gh.log"; : >"$d/git.log"
-  snapshot "$(COPY "$d")" >"$d/before"; : >"$d/marker"
+  d="$(tmpdir)"
+  finished "$d" node mit
+  : >"$d/gh.log"
+  : >"$d/git.log"
+  snapshot "$(COPY "$d")" >"$d/before"
+  : >"$d/marker"
   printf 'x\n' >>"$(COPY "$d")/README.md"
   ! (assert_read_only "$d") 2>/dev/null || die "guard missed a changed file"
 }
@@ -515,7 +583,8 @@ test_the_read_only_guard_catches_writes() {
 test_failing_run_is_read_only_too() {
   # The failure paths read only as well.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_jq "$d" "$(PULLS_EP)" '.[0].merged_at = null | .[0].state = "open"'
   gh_error "$d" "$P/branches/main/protection" 404 'Branch not protected'
   printf 'stray\n' >"$(COPY "$d")/stray.txt"
@@ -527,18 +596,28 @@ test_failing_run_is_read_only_too() {
 
 test_delete_command_is_printed_and_never_run() {
   local d abs
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   run_check "$d"
   abs="$(CDPATH='' cd "$(COPY "$d")" && pwd)"
-  grep -qxF "    gh auth refresh -h github.com -s delete_repo" "$d/out" || { cat "$d/out" >&2; die "no refresh line"; }
+  grep -qxF "    gh auth refresh -h github.com -s delete_repo" "$d/out" || {
+    cat "$d/out" >&2
+    die "no refresh line"
+  }
   grep -qxF "    gh repo delete $OWNER/$NAME --yes" "$d/out" || die "no delete line"
   # The refresh can ask gh's question (#235, review N4): the answer is
   # given right after the two commands.
   local n
   n="$(grep -n -xF "    gh repo delete $OWNER/$NAME --yes" "$d/out" | cut -d: -f1)"
-  [ "$(sed -n "$((n + 1))p" "$d/out")" = 'If gh auth refresh asks "Authenticate Git with your GitHub credentials?", answer Yes: type y and press Enter, or just press Enter.' ] \
-    || { cat "$d/out" >&2; die "the answer to gh's Authenticate Git question does not follow the delete commands"; }
-  grep -qxF "    rm -rf -- '$abs'" "$d/out" || { cat "$d/out" >&2; die "no folder removal line for '$abs'"; }
+  [ "$(sed -n "$((n + 1))p" "$d/out")" = 'If gh auth refresh asks "Authenticate Git with your GitHub credentials?", answer Yes: type y and press Enter, or just press Enter.' ] ||
+    {
+      cat "$d/out" >&2
+      die "the answer to gh's Authenticate Git question does not follow the delete commands"
+    }
+  grep -qxF "    rm -rf -- '$abs'" "$d/out" || {
+    cat "$d/out" >&2
+    die "no folder removal line for '$abs'"
+  }
   # The delete hint comes after every check.
   [ "$(grep -nF 'gh repo delete' "$d/out" | cut -d: -f1)" -gt "$(grep -nE '^Result: ' "$d/out" | cut -d: -f1)" ] || die "delete hint before the result"
   ! grep -qF $'\trepo\t' "$d/gh.log" || die "gh repo was called"
@@ -547,16 +626,21 @@ test_delete_command_is_printed_and_never_run() {
 
 test_delete_command_quotes_a_folder_with_a_quote() {
   local d c
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   c="$d/it's here"
   mv "$(COPY "$d")" "$c"
   run_check "$d" "$OWNER/$NAME" "$c"
-  grep -qxF "    rm -rf -- '$d/it'\\''s here'" "$d/out" || { cat "$d/out" >&2; die "folder not quoted for the shell"; }
+  grep -qxF "    rm -rf -- '$d/it'\\''s here'" "$d/out" || {
+    cat "$d/out" >&2
+    die "folder not quoted for the shell"
+  }
 }
 
 test_delete_command_printed_when_checks_fail() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_error "$d" "$P/branches/main/protection" 404 'Branch not protected'
   run_check "$d"
   expect_rc "$d" 1
@@ -565,7 +649,8 @@ test_delete_command_printed_when_checks_fail() {
 
 test_other_names_are_checked_but_get_no_delete_command() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit "" my-app
+  d="$(tmpdir)"
+  finished "$d" node mit "" my-app
   run_check "$d" "$OWNER/my-app" "$(COPY "$d")"
   expect_all_pass "$d"
   ! grep -qF 'gh repo delete' "$d/out" || die "delete command shown for a name that is not bootstrap-e2e-*"
@@ -577,7 +662,8 @@ test_other_names_are_checked_but_get_no_delete_command() {
 
 test_project_missing_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_error "$d" "$P" 404 'Not Found'
   run_check "$d"
   expect_rc "$d" 1
@@ -586,25 +672,32 @@ test_project_missing_fails() {
 
 test_project_not_made_from_the_bootstrapper_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_jq "$d" "$P" '.template_repository = null'
-  run_check "$d"; expect_only_fail "$d" template
+  run_check "$d"
+  expect_only_fail "$d" template
   gh_jq "$d" "$P" '.template_repository = {"full_name":"someone/other-template"}'
-  run_check "$d"; expect_only_fail "$d" template
+  run_check "$d"
+  expect_only_fail "$d" template
 }
 
 test_merge_settings_fail() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_jq "$d" "$P" '.delete_branch_on_merge = false'
-  run_check "$d"; expect_only_fail "$d" merge-settings
+  run_check "$d"
+  expect_only_fail "$d" merge-settings
   gh_jq "$d" "$P" '.delete_branch_on_merge = true | .allow_squash_merge = false'
-  run_check "$d"; expect_only_fail "$d" merge-settings
+  run_check "$d"
+  expect_only_fail "$d" merge-settings
 }
 
 test_no_setup_change_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_set "$d" "$(PULLS_EP)" '[]'
   run_check "$d"
   expect_rc "$d" 1
@@ -614,14 +707,17 @@ test_no_setup_change_fails() {
 test_two_setup_changes_fail() {
   # Done when 4: no duplicate proposed change.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_jq "$d" "$(PULLS_EP)" '. + [.[0] | .number = 2 | .state = "closed" | .merged_at = null | .merge_commit_sha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]'
-  run_check "$d"; expect_only_fail "$d" setup-change
+  run_check "$d"
+  expect_only_fail "$d" setup-change
 }
 
 test_setup_change_not_merged_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_jq "$d" "$(PULLS_EP)" '.[0].merged_at = null | .[0].state = "open"'
   run_check "$d"
   expect_rc "$d" 1
@@ -631,46 +727,59 @@ test_setup_change_not_merged_fails() {
 test_build_not_green_fails() {
   local d prog
   for prog in '.check_runs[0].conclusion = "failure"' '.check_runs[2].status = "in_progress" | .check_runs[2].conclusion = null' \
-              '.check_runs |= map(select(.name != "build"))' '.check_runs[0].conclusion = "skipped"'; do
-    d="$(tmpdir)"; finished "$d" node mit
+    '.check_runs |= map(select(.name != "build"))' '.check_runs[0].conclusion = "skipped"'; do
+    d="$(tmpdir)"
+    finished "$d" node mit
     gh_jq "$d" "$(RUNS_EP "$HEAD_SHA")" "$prog"
     echo "case: $prog"
-    run_check "$d"; expect_only_fail "$d" build
+    run_check "$d"
+    expect_only_fail "$d" build
   done
 }
 
 test_build_answer_missing_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_error "$d" "$(RUNS_EP "$HEAD_SHA")" 403 'Resource not accessible by personal access token'
-  run_check "$d"; expect_only_fail "$d" build
+  run_check "$d"
+  expect_only_fail "$d" build
 }
 
 test_main_not_the_merged_change_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_jq "$d" "$(PULLS_EP)" '.[0].merge_commit_sha = "cccccccccccccccccccccccccccccccccccccccc"'
-  run_check "$d"; expect_only_fail "$d" history
+  run_check "$d"
+  expect_only_fail "$d" history
 }
 
 test_extra_commit_on_main_fails() {
   # Done when 4: no duplicate change. The setup arrived as two changes.
   local d bare
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   bare="$d/remotes/$OWNER/$NAME.git"
   G -C "$(COPY "$d")" commit -q --allow-empty -m "Set up again"
   G -C "$(COPY "$d")" push -q "$bare" main
   G -C "$(COPY "$d")" fetch -q "$bare" "+refs/heads/main:refs/remotes/origin/main"
   sync_github "$d"
-  run_check "$d"; expect_only_fail "$d" history
-  reason_of "$d" history | grep -F '3 or more changes' >/dev/null || { cat "$d/out" >&2; die "the reason does not count the changes"; }
+  run_check "$d"
+  expect_only_fail "$d" history
+  reason_of "$d" history | grep -F '3 or more changes' >/dev/null || {
+    cat "$d/out" >&2
+    die "the reason does not count the changes"
+  }
   reason_of "$d" history | grep -F 'Test-exempt' >/dev/null || die "the reason does not name the usual cause (a change merged after the run)"
 }
 
 test_merge_with_two_parents_fails() {
   local d bare c side
-  d="$(tmpdir)"; finished "$d" node mit
-  bare="$d/remotes/$OWNER/$NAME.git"; c="$(COPY "$d")"
+  d="$(tmpdir)"
+  finished "$d" node mit
+  bare="$d/remotes/$OWNER/$NAME.git"
+  c="$(COPY "$d")"
   # main = a merge commit of the template change and the setup.
   side="$(G -C "$c" rev-parse HEAD)"
   G -C "$c" reset -q --hard HEAD~1
@@ -683,45 +792,56 @@ test_merge_with_two_parents_fails() {
   expect_result "$d" history FAIL
   # Two changes on main, the last with two parents (the other one a
   # second root, which no setup makes): only the parent count can tell.
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_jq "$d" "$(COMMITS_EP)" '.[0].parents += [{"sha":"dddddddddddddddddddddddddddddddddddddddd"}]'
-  run_check "$d"; expect_only_fail "$d" history
+  run_check "$d"
+  expect_only_fail "$d" history
 }
 
 test_setup_branch_left_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_set "$d" "$P/branches/bootstrap-setup" "{\"name\":\"bootstrap-setup\",\"commit\":{\"sha\":\"$HEAD_SHA\"}}"
-  run_check "$d"; expect_only_fail "$d" setup-branch
-  d="$(tmpdir)"; finished "$d" node mit
+  run_check "$d"
+  expect_only_fail "$d" setup-branch
+  d="$(tmpdir)"
+  finished "$d" node mit
   G -C "$(COPY "$d")" branch -q bootstrap-setup
-  run_check "$d"; expect_only_fail "$d" setup-branch
+  run_check "$d"
+  expect_only_fail "$d" setup-branch
 }
 
 test_setup_branch_answer_other_than_404_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_error "$d" "$P/branches/bootstrap-setup" 500 'Server Error'
-  run_check "$d"; expect_only_fail "$d" setup-branch
+  run_check "$d"
+  expect_only_fail "$d" setup-branch
 }
 
 test_protection_not_as_specified_fails() {
   local d prog
   for prog in '.required_pull_request_reviews.required_approving_review_count = 1' \
-              '.required_status_checks.contexts = []' '.required_status_checks = null' \
-              '.required_status_checks.contexts = ["build","lint"]' '.required_status_checks.strict = true' \
-              '.enforce_admins.enabled = false' '.allow_force_pushes.enabled = true' '.allow_deletions.enabled = true' \
-              '.restrictions = {"users":[],"teams":[],"apps":[]}' 'del(.required_pull_request_reviews)'; do
-    d="$(tmpdir)"; finished "$d" node mit
+    '.required_status_checks.contexts = []' '.required_status_checks = null' \
+    '.required_status_checks.contexts = ["build","lint"]' '.required_status_checks.strict = true' \
+    '.enforce_admins.enabled = false' '.allow_force_pushes.enabled = true' '.allow_deletions.enabled = true' \
+    '.restrictions = {"users":[],"teams":[],"apps":[]}' 'del(.required_pull_request_reviews)'; do
+    d="$(tmpdir)"
+    finished "$d" node mit
     gh_jq "$d" "$P/branches/main/protection" "$prog"
     echo "case: $prog"
-    run_check "$d"; expect_only_fail "$d" protection
+    run_check "$d"
+    expect_only_fail "$d" protection
   done
 }
 
 test_main_not_protected_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_error "$d" "$P/branches/main/protection" 404 'Branch not protected'
   run_check "$d"
   expect_rc "$d" 1
@@ -734,7 +854,8 @@ test_unprotected_with_its_decision_row_still_fails_protection() {
   # --allow-unprotected writes the row; the e2e runs are public projects,
   # and "Done when" asks for protection, so protection still fails.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'printf "%s\n" "| 2026-10-15 | The main version (main) is not protected | because. |" >>memory/decisions.md'
   gh_error "$d" "$P/branches/main/protection" 404 'Branch not protected'
   run_check "$d"
@@ -749,18 +870,23 @@ test_private_project_refused_protection_says_it_is_expected() {
   # --allow-unprotected path: still FAIL for the e2e runs, in the right
   # words, and the decision row then counts.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_jq "$d" "$P" '.private = true | .visibility = "private"'
   change_setup "$d" 'printf "%s\n" "| 2026-10-15 | The main version (main) is not protected | because. |" >>memory/decisions.md'
   gh_error "$d" "$P/branches/main/protection" 403 'Upgrade to GitHub Pro or make this repository public to enable this feature.'
   run_check "$d"
   expect_only_fail "$d" protection
-  reason_of "$d" protection | grep -F 'expected' >/dev/null || { cat "$d/out" >&2; die "the reason does not say a 403 is expected here"; }
+  reason_of "$d" protection | grep -F 'expected' >/dev/null || {
+    cat "$d/out" >&2
+    die "the reason does not say a 403 is expected here"
+  }
   reason_of "$d" protection | grep -F 'private' >/dev/null || die "the reason does not name the private project"
   reason_of "$d" protection | grep -F -- '--allow-unprotected' >/dev/null || die "the reason does not name --allow-unprotected"
   expect_result "$d" decision-row PASS
   # A public project refused the same way: a permission, not the plan.
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_error "$d" "$P/branches/main/protection" 403 'Resource not accessible by personal access token'
   run_check "$d"
   expect_rc "$d" 1
@@ -768,7 +894,8 @@ test_private_project_refused_protection_says_it_is_expected() {
   ! reason_of "$d" protection | grep -F 'expected' >/dev/null || die "a public project's 403 is called expected"
   # A public project can be protected on any plan, so even GitHub's plan
   # message is not the --allow-unprotected path there.
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_error "$d" "$P/branches/main/protection" 403 'Upgrade to GitHub Pro or make this repository public to enable this feature.'
   run_check "$d"
   expect_rc "$d" 1
@@ -778,31 +905,41 @@ test_private_project_refused_protection_says_it_is_expected() {
 test_unreadable_protection_is_never_called_protected() {
   # Review round 2, item 4 (mutant M04).
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_error "$d" "$P/branches/main/protection" 500 'Server Error'
   run_check "$d"
   expect_rc "$d" 1
   expect_result "$d" protection FAIL
   expect_result "$d" decision-row FAIL
-  ! reason_of "$d" decision-row | grep -F 'it is protected' >/dev/null || { cat "$d/out" >&2; die "decision-row claims main is protected"; }
+  ! reason_of "$d" decision-row | grep -F 'it is protected' >/dev/null || {
+    cat "$d/out" >&2
+    die "decision-row claims main is protected"
+  }
   reason_of "$d" decision-row | grep -F 'not known' >/dev/null || die "decision-row does not say it is not known"
 }
 
 test_decision_row_while_protected_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'printf "%s\n" "| 2026-10-15 | The main version (main) is not protected | because. |" >>memory/decisions.md'
-  run_check "$d"; expect_only_fail "$d" decision-row
+  run_check "$d"
+  expect_only_fail "$d" decision-row
 }
 
 test_copy_not_clean_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   printf 'x\n' >>"$(COPY "$d")/docs/SPEC.md"
-  run_check "$d"; expect_only_fail "$d" copy
-  d="$(tmpdir)"; finished "$d" node mit
+  run_check "$d"
+  expect_only_fail "$d" copy
+  d="$(tmpdir)"
+  finished "$d" node mit
   printf 'x\n' >"$(COPY "$d")/notes.txt"
-  run_check "$d"; expect_only_fail "$d" copy
+  run_check "$d"
+  expect_only_fail "$d" copy
 }
 
 test_copy_with_thousands_of_unsaved_files_fails_with_a_reason() {
@@ -811,31 +948,51 @@ test_copy_with_thousands_of_unsaved_files_fails_with_a_reason() {
   # lines must not kill the checker (exit 141 under pipefail, seen in
   # review of PR #208) before it reports the copy check.
   local d c i
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   c="$(COPY "$d")"
   mkdir "$c/junk"
-  i=0; while [ "$i" -lt 3000 ]; do : >"$c/junk/untracked-file-with-a-long-name-$i.txt"; i=$((i + 1)); done
-  run_check "$d"; expect_only_fail "$d" copy
-  reason_of "$d" copy | grep -F '3000 file(s) changed or not saved: ' >/dev/null \
-    || { tail -n 5 "$d/out" >&2; die "the reason does not count the 3000 files"; }
-  [ "$(reason_of "$d" copy | grep -o 'junk/untracked-file' | wc -l | tr -d ' ')" = 5 ] \
-    || { reason_of "$d" copy | cut -c1-400 >&2; die "the reason does not name exactly the first five files"; }
+  i=0
+  while [ "$i" -lt 3000 ]; do
+    : >"$c/junk/untracked-file-with-a-long-name-$i.txt"
+    i=$((i + 1))
+  done
+  run_check "$d"
+  expect_only_fail "$d" copy
+  reason_of "$d" copy | grep -F '3000 file(s) changed or not saved: ' >/dev/null ||
+    {
+      tail -n 5 "$d/out" >&2
+      die "the reason does not count the 3000 files"
+    }
+  [ "$(reason_of "$d" copy | grep -o 'junk/untracked-file' | wc -l | tr -d ' ')" = 5 ] ||
+    {
+      reason_of "$d" copy | cut -c1-400 >&2
+      die "the reason does not name exactly the first five files"
+    }
 }
 
 test_copy_not_on_main_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   G -C "$(COPY "$d")" checkout -q -b other
-  run_check "$d"; expect_only_fail "$d" copy
-  d="$(tmpdir)"; finished "$d" node mit
+  run_check "$d"
+  expect_only_fail "$d" copy
+  d="$(tmpdir)"
+  finished "$d" node mit
   G -C "$(COPY "$d")" checkout -q --detach
-  run_check "$d"; expect_only_fail "$d" copy
-  reason_of "$d" copy | grep -F 'on no line of work' >/dev/null || { cat "$d/out" >&2; die "the reason does not say the copy is detached"; }
+  run_check "$d"
+  expect_only_fail "$d" copy
+  reason_of "$d" copy | grep -F 'on no line of work' >/dev/null || {
+    cat "$d/out" >&2
+    die "the reason does not say the copy is detached"
+  }
 }
 
 test_copy_behind_github_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   G -C "$(COPY "$d")" reset -q --hard HEAD~1
   run_check "$d"
   expect_rc "$d" 1
@@ -844,25 +1001,30 @@ test_copy_behind_github_fails() {
 
 test_copy_of_another_project_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   G -C "$(COPY "$d")" remote set-url origin "https://github.com/$OWNER/other.git"
-  run_check "$d"; expect_only_fail "$d" copy
+  run_check "$d"
+  expect_only_fail "$d" copy
 }
 
 test_copy_that_accepts_other_origin_forms() {
   # gh repo clone may give the remote with or without .git; ssh too.
   local d u
   for u in "https://github.com/$OWNER/$NAME" "git@github.com:$OWNER/$NAME.git"; do
-    d="$(tmpdir)"; finished "$d" node mit
+    d="$(tmpdir)"
+    finished "$d" node mit
     G -C "$(COPY "$d")" remote set-url origin "$u"
     echo "case: $u"
-    run_check "$d"; expect_all_pass "$d"
+    run_check "$d"
+    expect_all_pass "$d"
   done
 }
 
 test_folder_missing_or_not_a_copy_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   run_check "$d" "$OWNER/$NAME" "$d/nowhere"
   expect_rc "$d" 1
   expect_result "$d" copy FAIL
@@ -883,9 +1045,18 @@ test_folder_missing_or_not_a_copy_fails() {
 # expect_no_folder_removal <d>: no rm line, a sentence saying why, and
 # the project's delete command still shown (it depends on the name only).
 expect_no_folder_removal() {
-  ! grep -qF 'rm -rf' "$1/out" || { cat "$1/out" >&2; die "a folder removal command is shown for a folder that is not the project's copy"; }
-  grep -qF 'No command to remove the folder is shown' "$1/out" || { cat "$1/out" >&2; die "no sentence saying why the folder removal is not shown"; }
-  grep -qxF "    gh repo delete $OWNER/$NAME --yes" "$1/out" || { cat "$1/out" >&2; die "the project's delete command is gone"; }
+  ! grep -qF 'rm -rf' "$1/out" || {
+    cat "$1/out" >&2
+    die "a folder removal command is shown for a folder that is not the project's copy"
+  }
+  grep -qF 'No command to remove the folder is shown' "$1/out" || {
+    cat "$1/out" >&2
+    die "no sentence saying why the folder removal is not shown"
+  }
+  grep -qxF "    gh repo delete $OWNER/$NAME --yes" "$1/out" || {
+    cat "$1/out" >&2
+    die "the project's delete command is gone"
+  }
 }
 
 test_no_folder_removal_unless_the_copy_check_passed() {
@@ -894,7 +1065,8 @@ test_no_folder_removal_unless_the_copy_check_passed() {
   # the template's own checkout), and a copy of this project that is not
   # clean, get a sentence instead.
   local d other
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   other="$d/template checkout"
   G clone -q "$d/remotes/$OWNER/$NAME.git" "$other"
   quiet_repo "$other/.git"
@@ -902,7 +1074,7 @@ test_no_folder_removal_unless_the_copy_check_passed() {
   run_check "$d" "$OWNER/$NAME" "$other"
   expect_result "$d" copy FAIL
   expect_no_folder_removal "$d"
-  ( CDPATH='' cd "$other" && run_check "$d" "$OWNER/$NAME" . )
+  (CDPATH='' cd "$other" && run_check "$d" "$OWNER/$NAME" .)
   expect_result "$d" copy FAIL
   expect_no_folder_removal "$d"
   # The right project, but not clean.
@@ -914,14 +1086,17 @@ test_no_folder_removal_unless_the_copy_check_passed() {
 
 test_changelog_lines_missing_fail() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'grep -vxF -- "- Set up by bootstrap-project.sh." CHANGELOG.md >c.tmp; mv c.tmp CHANGELOG.md'
-  run_check "$d"; expect_only_fail "$d" changelog
+  run_check "$d"
+  expect_only_fail "$d" changelog
 }
 
 test_unknown_pack_fails_the_checks_that_need_it() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'grep -vxF -- "- Language pack: node." CHANGELOG.md >c.tmp; mv c.tmp CHANGELOG.md'
   run_check "$d"
   expect_rc "$d" 1
@@ -933,19 +1108,24 @@ test_unknown_pack_fails_the_checks_that_need_it() {
 
 test_pack_file_missing_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'git rm -q tsconfig.json'
-  run_check "$d"; expect_only_fail "$d" pack
-  d="$(tmpdir)"; finished "$d" web mit
+  run_check "$d"
+  expect_only_fail "$d" pack
+  d="$(tmpdir)"
+  finished "$d" web mit
   change_setup "$d" 'git rm -q -r e2e'
-  run_check "$d"; expect_only_fail "$d" pack
+  run_check "$d"
+  expect_only_fail "$d" pack
 }
 
 test_web_deploy_files_follow_the_changelog() {
   # Without deploy the deploy files stay in languages/web; with it they
   # are laid out. A run without deploy whose CHANGELOG says "with" fails.
   local d
-  d="$(tmpdir)"; finished "$d" web mit
+  d="$(tmpdir)"
+  finished "$d" web mit
   change_setup "$d" 'awk '"'"'{ if ($0 == "- Language pack: web.") print "- Language pack: web, with the files that publish the website."; else print }'"'"' CHANGELOG.md >c.tmp; mv c.tmp CHANGELOG.md'
   run_check "$d"
   expect_rc "$d" 1
@@ -955,21 +1135,28 @@ test_web_deploy_files_follow_the_changelog() {
 
 test_lockfile_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'git rm -q package-lock.json'
-  run_check "$d"; expect_only_fail "$d" lockfile
-  d="$(tmpdir)"; finished "$d" python none
+  run_check "$d"
+  expect_only_fail "$d" lockfile
+  d="$(tmpdir)"
+  finished "$d" python none
   change_setup "$d" 'printf "{}\n" >package-lock.json'
-  run_check "$d"; expect_only_fail "$d" lockfile
+  run_check "$d"
+  expect_only_fail "$d" lockfile
 }
 
 test_placeholder_left_fails() {
   local d spec pack file text dep
   for spec in "node|docs/SPEC.md|[PROJECT NAME]" "node|memory/project.md|[OWNER/REPO]" "node|docs/SPEC.md|[DATE]" \
-              "node|package.json|[project-name]" "node|README.md|[PO NAME]" \
-              "node|README.md|[One or two sentences: what this project is and who it is for.]" \
-              "web|index.html|[project-name]" "react-native|app.json|[project-slug]" "web yes|wrangler.jsonc|[project-name]"; do
-    pack="${spec%%|*}"; file="${spec#*|}"; text="${file#*|}"; file="${file%%|*}"
+    "node|package.json|[project-name]" "node|README.md|[PO NAME]" \
+    "node|README.md|[One or two sentences: what this project is and who it is for.]" \
+    "web|index.html|[project-name]" "react-native|app.json|[project-slug]" "web yes|wrangler.jsonc|[project-name]"; do
+    pack="${spec%%|*}"
+    file="${spec#*|}"
+    text="${file#*|}"
+    file="${file%%|*}"
     d="$(tmpdir)"
     # "web yes": the pack and deploy. (No case inside $( ): bash 3.2
     # cannot parse its ")".)
@@ -978,18 +1165,27 @@ test_placeholder_left_fails() {
     finished "$d" "${pack%% *}" mit "$dep"
     change_setup "$d" "printf '%s\n' '$text' >>'$file'"
     echo "case: $spec"
-    run_check "$d"; expect_only_fail "$d" placeholders
-    reason_of "$d" placeholders | grep -F "$file" >/dev/null || { cat "$d/out" >&2; die "$spec: the reason does not name $file"; }
+    run_check "$d"
+    expect_only_fail "$d" placeholders
+    reason_of "$d" placeholders | grep -F "$file" >/dev/null || {
+      cat "$d/out" >&2
+      die "$spec: the reason does not name $file"
+    }
   done
 }
 
 test_fill_table_file_missing_fails() {
   # Review round 2, item 4 (mutant M20).
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'git rm -q docs/NEXT_SESSION.md'
-  run_check "$d"; expect_only_fail "$d" placeholders
-  reason_of "$d" placeholders | grep -F docs/NEXT_SESSION.md >/dev/null || { cat "$d/out" >&2; die "the reason does not name the missing file"; }
+  run_check "$d"
+  expect_only_fail "$d" placeholders
+  reason_of "$d" placeholders | grep -F docs/NEXT_SESSION.md >/dev/null || {
+    cat "$d/out" >&2
+    die "the reason does not name the missing file"
+  }
 }
 
 test_licence_with_an_empty_holder_or_year_fails() {
@@ -997,9 +1193,11 @@ test_licence_with_an_empty_holder_or_year_fails() {
   local d line
   for line in 'Copyright (c) 2026 ' 'Copyright (c)  Octo User' 'Copyright (c) 2026  '; do
     echo "case: '$line'"
-    d="$(tmpdir)"; finished "$d" node mit
+    d="$(tmpdir)"
+    finished "$d" node mit
     LINE="$line" change_setup "$d" 'awk '"'"'NR == 3 { print ENVIRON["LINE"]; next } { print }'"'"' LICENSE >l.tmp; mv l.tmp LICENSE'
-    run_check "$d"; expect_only_fail "$d" licence
+    run_check "$d"
+    expect_only_fail "$d" licence
   done
 }
 
@@ -1007,7 +1205,8 @@ test_licence_name_from_the_changelog_is_checked_before_use() {
   # Review round 2, item 6: the name goes into a gh api path only when it
   # looks like a licence key.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'awk '"'"'{ if ($0 == "- Licence: mit.") print "- Licence: ../user?x={owner}."; else print }'"'"' CHANGELOG.md >c.tmp; mv c.tmp CHANGELOG.md'
   run_check "$d"
   expect_rc "$d" 1
@@ -1019,14 +1218,17 @@ test_licence_name_from_the_changelog_is_checked_before_use() {
 
 test_placeholder_over_two_lines_left_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'printf "%s\n%s\n" "[What the project is, who it is for, and what problem" "it solves.]" >>memory/project.md'
-  run_check "$d"; expect_only_fail "$d" placeholders
+  run_check "$d"
+  expect_only_fail "$d" placeholders
 }
 
 test_licence_placeholders_left_fail() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'printf "%s\n" "Copyright (c) [year] [fullname]" >>LICENSE'
   run_check "$d"
   expect_rc "$d" 1
@@ -1035,171 +1237,241 @@ test_licence_placeholders_left_fail() {
 
 test_readme_section_left_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'printf "\n%s\n\nSteps.\n" "## Finishing the setup" >>README.md'
-  run_check "$d"; expect_only_fail "$d" readme-section
+  run_check "$d"
+  expect_only_fail "$d" readme-section
 }
 
 test_bootstrapper_readme_left_fails() {
   # PBI-1.29: the bootstrapper's own README would show on the project's
   # page instead of the project's README.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'mkdir -p .github && printf "# The bootstrapper\n" >.github/README.md'
-  run_check "$d"; expect_only_fail "$d" own-readme
+  run_check "$d"
+  expect_only_fail "$d" own-readme
 }
 
 test_readme_section_check_matches_the_whole_heading() {
   # A heading that only starts like the setup's is a project's own
   # section, not the setup's.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'printf "\n%s\n\nText.\n" "## Finishing the setup: notes" >>README.md'
-  run_check "$d"; expect_rc "$d" 0
+  run_check "$d"
+  expect_rc "$d" 0
 }
 
 test_languages_not_pruned_fails() {
   local d cmd
   for cmd in 'mkdir -p languages/python && printf "x\n" >languages/python/code-standards.md' \
-             'printf "x\n" >languages/README.md' 'git rm -q languages/node/code-standards.md' \
-             'printf "x\n" >languages/node/extra.md'; do
-    d="$(tmpdir)"; finished "$d" node mit
+    'printf "x\n" >languages/README.md' 'git rm -q languages/node/code-standards.md' \
+    'printf "x\n" >languages/node/extra.md'; do
+    d="$(tmpdir)"
+    finished "$d" node mit
     change_setup "$d" "$cmd"
     echo "case: $cmd"
-    run_check "$d"; expect_only_fail "$d" languages
+    run_check "$d"
+    expect_only_fail "$d" languages
   done
-  d="$(tmpdir)"; finished "$d" web mit
+  d="$(tmpdir)"
+  finished "$d" web mit
   change_setup "$d" 'git rm -q languages/web/deploy.yml'
-  run_check "$d"; expect_only_fail "$d" languages
+  run_check "$d"
+  expect_only_fail "$d" languages
 }
 
 test_other_pack_links_not_rewritten_fail() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'printf "%s\n" "See \`languages/python/code-standards.md\`." >>docs/DEV_INFRASTRUCTURE.md'
-  run_check "$d"; expect_only_fail "$d" pack-links
+  run_check "$d"
+  expect_only_fail "$d" pack-links
 }
 
 test_another_packs_section_left_fails() {
   # PBI-1.29: the setup removes Part 2's sections of the other packs.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'printf "\n%s\n\n%s\n" "### Python (\`python\` pack)" "Text." >>docs/DEV_INFRASTRUCTURE.md'
-  run_check "$d"; expect_only_fail "$d" pack-links
+  run_check "$d"
+  expect_only_fail "$d" pack-links
 }
 
 test_licence_not_as_chosen_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'git rm -q LICENSE'
-  run_check "$d"; expect_only_fail "$d" licence
-  reason_of "$d" licence | grep -F 'no LICENSE file' >/dev/null || { cat "$d/out" >&2; die "the reason does not say LICENSE is missing"; }
-  d="$(tmpdir)"; finished "$d" node mit
+  run_check "$d"
+  expect_only_fail "$d" licence
+  reason_of "$d" licence | grep -F 'no LICENSE file' >/dev/null || {
+    cat "$d/out" >&2
+    die "the reason does not say LICENSE is missing"
+  }
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'printf "%s\n" "Some other text." >LICENSE'
-  run_check "$d"; expect_only_fail "$d" licence
-  d="$(tmpdir)"; finished "$d" node mit
+  run_check "$d"
+  expect_only_fail "$d" licence
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'awk '"'"'NR == 5 { print "changed line" ; next } { print }'"'"' LICENSE >l.tmp; mv l.tmp LICENSE'
-  run_check "$d"; expect_only_fail "$d" licence
-  d="$(tmpdir)"; finished "$d" node none
+  run_check "$d"
+  expect_only_fail "$d" licence
+  d="$(tmpdir)"
+  finished "$d" node none
   change_setup "$d" 'printf "x\n" >LICENSE'
-  run_check "$d"; expect_only_fail "$d" licence
-  d="$(tmpdir)"; finished "$d" node polyform-noncommercial-1.0.0
+  run_check "$d"
+  expect_only_fail "$d" licence
+  d="$(tmpdir)"
+  finished "$d" node polyform-noncommercial-1.0.0
   change_setup "$d" 'git rm -q NOTICE'
-  run_check "$d"; expect_only_fail "$d" licence
-  d="$(tmpdir)"; finished "$d" node polyform-noncommercial-1.0.0
+  run_check "$d"
+  expect_only_fail "$d" licence
+  d="$(tmpdir)"
+  finished "$d" node polyform-noncommercial-1.0.0
   change_setup "$d" 'printf "x\n" >>LICENSE'
-  run_check "$d"; expect_only_fail "$d" licence
+  run_check "$d"
+  expect_only_fail "$d" licence
 }
 
 test_licence_text_unreadable_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_error "$d" licenses/mit 404 'Not Found'
-  run_check "$d"; expect_only_fail "$d" licence
+  run_check "$d"
+  expect_only_fail "$d" licence
 }
 
 test_script_left_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'printf "#!/bin/sh\n" >bootstrap-project.sh'
-  run_check "$d"; expect_only_fail "$d" no-script
-  d="$(tmpdir)"; finished "$d" node mit
+  run_check "$d"
+  expect_only_fail "$d" no-script
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'mkdir -p tools && printf "#!/bin/sh\n" >tools/bootstrap-project.sh'
-  run_check "$d"; expect_only_fail "$d" no-script
+  run_check "$d"
+  expect_only_fail "$d" no-script
 }
 
 test_rules_edition_unchanged_passes_and_names_the_edition() {
   # The made project's rules/ passes the project's own check, the one its
   # CI runs; the reason names the edition.
   local d id
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   id="$(sed -n 1p "$BUILT/rules/EDITION")"
   [ -n "$id" ] || die "the built bootstrapper has no rules/EDITION (test is stale)"
-  run_check "$d"; expect_all_pass "$d"
-  reason_of "$d" rules-edition | grep -F "$id" >/dev/null || { cat "$d/out" >&2; die "the reason does not name the edition $id"; }
+  run_check "$d"
+  expect_all_pass "$d"
+  reason_of "$d" rules-edition | grep -F "$id" >/dev/null || {
+    cat "$d/out" >&2
+    die "the reason does not name the edition $id"
+  }
 }
 
 test_rules_edition_changed_or_removed_fails() {
   # A changed file, an extra file or a removed rules/ fails the check,
   # and the reason names what is wrong.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'printf "edited here\n" >>rules/RULES.md'
-  run_check "$d"; expect_only_fail "$d" rules-edition
-  reason_of "$d" rules-edition | grep -F RULES.md >/dev/null || { cat "$d/out" >&2; die "the reason does not name the changed file"; }
-  d="$(tmpdir)"; finished "$d" node mit
+  run_check "$d"
+  expect_only_fail "$d" rules-edition
+  reason_of "$d" rules-edition | grep -F RULES.md >/dev/null || {
+    cat "$d/out" >&2
+    die "the reason does not name the changed file"
+  }
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'printf "x\n" >rules/extra.md'
-  run_check "$d"; expect_only_fail "$d" rules-edition
-  reason_of "$d" rules-edition | grep -F extra.md >/dev/null || { cat "$d/out" >&2; die "the reason does not name the extra file"; }
-  d="$(tmpdir)"; finished "$d" node mit
+  run_check "$d"
+  expect_only_fail "$d" rules-edition
+  reason_of "$d" rules-edition | grep -F extra.md >/dev/null || {
+    cat "$d/out" >&2
+    die "the reason does not name the extra file"
+  }
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'rm -r rules'
-  run_check "$d"; expect_only_fail "$d" rules-edition
+  run_check "$d"
+  expect_only_fail "$d" rules-edition
 }
 
 test_rules_edition_without_the_projects_check_script_fails() {
   # The check is the project's own script; without it nothing is checked,
   # which is a failure, not a pass.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'rm .github/scripts/check-rules-edition.sh'
-  run_check "$d"; expect_only_fail "$d" rules-edition
-  reason_of "$d" rules-edition | grep -F check-rules-edition.sh >/dev/null || { cat "$d/out" >&2; die "the reason does not name the script"; }
+  run_check "$d"
+  expect_only_fail "$d" rules-edition
+  reason_of "$d" rules-edition | grep -F check-rules-edition.sh >/dev/null || {
+    cat "$d/out" >&2
+    die "the reason does not name the script"
+  }
 }
 
 test_cr_lf_file_fails() {
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   # The project's .gitattributes would make it LF; this file opts out.
   change_setup "$d" 'printf "docs/notes.md -text\n" >.git/info/attributes; printf "a\r\nb\r\n" >docs/notes.md'
-  run_check "$d"; expect_only_fail "$d" line-endings
+  run_check "$d"
+  expect_only_fail "$d" line-endings
 }
 
 test_key_in_a_file_fails_and_is_never_shown() {
   local d key
   key="ghp_$(printf 'A%.0s' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36)"
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" "printf 'token: %s\n' '$key' >>docs/SPEC.md"
-  run_check "$d"; expect_only_fail "$d" no-keys
+  run_check "$d"
+  expect_only_fail "$d" no-keys
   reason_of "$d" no-keys | grep -F docs/SPEC.md >/dev/null || die "the reason does not name the file"
   ! grep -qF "$key" "$d/out" || die "the key was shown"
   key="github_pat_$(printf 'B%.0s' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22)"
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" "printf 'token: %s\n' '$key' >>README.md"
-  run_check "$d"; expect_only_fail "$d" no-keys
+  run_check "$d"
+  expect_only_fail "$d" no-keys
   ! grep -qF "$key" "$d/out" || die "the fine-grained key was shown"
 }
 
 test_github_unreachable_fails_every_github_check_plainly() {
   local d id
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   STUB_GH_OFFLINE=1 run_check "$d"
   expect_rc "$d" 1
   for id in $GITHUB_CHECKS; do
-    [ "$(result_of "$d" "$id")" = FAIL ] || { [ "$id" = decision-row ] && [ "$(result_of "$d" "$id")" = PASS ]; } \
-      || { cat "$d/out" >&2; die "$id is $(result_of "$d" "$id") with GitHub unreachable"; }
+    [ "$(result_of "$d" "$id")" = FAIL ] || { [ "$id" = decision-row ] && [ "$(result_of "$d" "$id")" = PASS ]; } ||
+      {
+        cat "$d/out" >&2
+        die "$id is $(result_of "$d" "$id") with GitHub unreachable"
+      }
   done
   expect_result "$d" copy FAIL
-  reason_of "$d" project | grep -F 'gh auth status' >/dev/null || { cat "$d/out" >&2; die "no next step for an unreachable GitHub"; }
+  reason_of "$d" project | grep -F 'gh auth status' >/dev/null || {
+    cat "$d/out" >&2
+    die "no next step for an unreachable GitHub"
+  }
   ! grep -nE 'error connecting|githubstatus' "$d/out" >&2 || die "gh's own words in the output"
 }
 
@@ -1207,7 +1479,8 @@ test_git_settings_in_the_copy_run_no_command() {
   # Review round 2, item 7: core.fsmonitor in the copy's settings names a
   # command that git status would run.
   local d h
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   # git runs the setting through a shell: a folder without a space.
   h="$(mktemp -d "$WORK/hook.XXXXXX")"
   printf '#!/bin/sh\n: >"%s/RAN"\nexit 1\n' "$h" >"$h/hook.sh"
@@ -1236,7 +1509,8 @@ aggressive_home() {
 
 test_harness_repos_turn_off_gits_own_maintenance() {
   local d r v
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   for r in "$(COPY "$d")/.git" "$d/remotes/$OWNER/$NAME.git" "$d/work/.git"; do
     v="$("$REAL_GIT" --git-dir="$r" config --local --get gc.auto || true)"
     [ "$v" = 0 ] || die "gc.auto is '$v' in $r"
@@ -1252,7 +1526,8 @@ test_gits_own_maintenance_during_a_check_changes_nothing() {
   # first gh call, with global settings under which it repacks.
   local d c
   aggressive_home
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   c="$(COPY "$d")"
   # A second pack, so gc --auto has work under gc.autoPackLimit = 1.
   printf '%s\n' "$(G -C "$c" rev-parse HEAD)" | G -C "$c" pack-objects -q --revs "$c/.git/objects/pack/pack" >/dev/null
@@ -1269,13 +1544,14 @@ test_every_git_call_of_the_checker_turns_off_what_could_write() {
   # core.fsmonitor=false as -c settings, and --no-optional-locks, on
   # every git call.
   local d line want
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   run_check "$d"
   expect_all_pass "$d"
   [ -s "$d/git.log" ] || die "no git calls logged"
   while IFS= read -r line; do
     for want in "${TAB}-c${TAB}gc.auto=0${TAB}" "${TAB}-c${TAB}maintenance.auto=false${TAB}" \
-                "${TAB}-c${TAB}core.fsmonitor=false${TAB}" "${TAB}--no-optional-locks${TAB}"; do
+      "${TAB}-c${TAB}core.fsmonitor=false${TAB}" "${TAB}--no-optional-locks${TAB}"; do
       case "$line$TAB" in *"$want"*) ;; *) die "git call without $(show "$want"): $(show "$line")" ;; esac
     done
   done <"$d/git.log"
@@ -1287,37 +1563,52 @@ test_folder_removal_names_the_absolute_folder_for_a_relative_dir() {
   # M56: pasted from another folder, a relative path would delete the
   # wrong one.
   local d abs
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   abs="$(CDPATH='' cd "$(COPY "$d")" && pwd)"
-  ( CDPATH='' cd "$d" && run_check "$d" "$OWNER/$NAME" "my copy" )
+  (CDPATH='' cd "$d" && run_check "$d" "$OWNER/$NAME" "my copy")
   expect_all_pass "$d"
-  grep -qxF "    rm -rf -- '$abs'" "$d/out" || { cat "$d/out" >&2; die "no absolute folder in the removal line"; }
+  grep -qxF "    rm -rf -- '$abs'" "$d/out" || {
+    cat "$d/out" >&2
+    die "no absolute folder in the removal line"
+  }
 }
 
 test_no_folder_removal_for_a_symbolic_link() {
   # Item 2: rm -rf on a link removes only the link. The safer choice:
   # no removal line for a link, and a sentence saying so.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   ln -s "$(COPY "$d")" "$d/link"
   [ -L "$d/link" ] || die "fixture: no symbolic link here"
   run_check "$d" "$OWNER/$NAME" "$d/link"
   expect_all_pass "$d"
   expect_no_folder_removal "$d"
-  grep -qF 'symbolic link' "$d/out" || { cat "$d/out" >&2; die "the sentence does not say it is a link"; }
+  grep -qF 'symbolic link' "$d/out" || {
+    cat "$d/out" >&2
+    die "the sentence does not say it is a link"
+  }
 }
 
 test_folder_sentences_say_what_is_wrong() {
   # Item 3: a missing folder, and a copy with unsaved work.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   run_check "$d" "$OWNER/$NAME" "$d/nowhere"
-  grep -F 'No command to remove the folder is shown' "$d/out" | grep -F 'does not exist' >/dev/null \
-    || { cat "$d/out" >&2; die "missing folder: the sentence does not say it does not exist"; }
+  grep -F 'No command to remove the folder is shown' "$d/out" | grep -F 'does not exist' >/dev/null ||
+    {
+      cat "$d/out" >&2
+      die "missing folder: the sentence does not say it does not exist"
+    }
   printf 'x\n' >"$(COPY "$d")/stray.txt"
   run_check "$d"
-  grep -F 'No command to remove the folder is shown' "$d/out" | grep -F 'unsaved work' >/dev/null \
-    || { cat "$d/out" >&2; die "dirty copy: the sentence does not name unsaved work"; }
+  grep -F 'No command to remove the folder is shown' "$d/out" | grep -F 'unsaved work' >/dev/null ||
+    {
+      cat "$d/out" >&2
+      die "dirty copy: the sentence does not name unsaved work"
+    }
 }
 
 test_near_miss_names_get_no_delete_command() {
@@ -1325,7 +1616,8 @@ test_near_miss_names_get_no_delete_command() {
   local d n
   for n in bootstrap-e2e bootstrap-x bootstrap-e2ex-1; do
     echo "case: $n"
-    d="$(tmpdir)"; finished "$d" node mit "" "$n"
+    d="$(tmpdir)"
+    finished "$d" node mit "" "$n"
     run_check "$d" "$OWNER/$n" "$(COPY "$d")"
     expect_all_pass "$d"
     ! grep -qF 'gh repo delete' "$d/out" || die "$n: delete command shown"
@@ -1337,7 +1629,8 @@ test_licence_name_with_a_slash_is_refused() {
   local d n
   for n in ../user a/b; do
     echo "case: $n"
-    d="$(tmpdir)"; finished "$d" node mit
+    d="$(tmpdir)"
+    finished "$d" node mit
     N="$n" change_setup "$d" 'awk '"'"'{ if ($0 == "- Licence: mit.") print "- Licence: " ENVIRON["N"] "."; else print }'"'"' CHANGELOG.md >c.tmp; mv c.tmp CHANGELOG.md'
     run_check "$d"
     expect_result "$d" changelog FAIL
@@ -1349,7 +1642,8 @@ test_licence_name_with_a_slash_is_refused() {
 test_private_refusal_without_the_row_fails_the_row() {
   # M09.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_jq "$d" "$P" '.private = true | .visibility = "private"'
   gh_error "$d" "$P/branches/main/protection" 403 'Upgrade to GitHub Pro or make this repository public to enable this feature.'
   run_check "$d"
@@ -1361,20 +1655,25 @@ test_private_refusal_without_the_row_fails_the_row() {
 test_private_refusal_for_another_reason_is_not_called_expected() {
   # Item 3: only GitHub's plan message is the --allow-unprotected path.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_jq "$d" "$P" '.private = true | .visibility = "private"'
   gh_error "$d" "$P/branches/main/protection" 403 'API rate limit exceeded for user ID 1.'
   run_check "$d"
   expect_rc "$d" 1
   expect_result "$d" protection FAIL
-  ! reason_of "$d" protection | grep -F 'expected' >/dev/null || { cat "$d/out" >&2; die "a rate limit is called the plan case"; }
+  ! reason_of "$d" protection | grep -F 'expected' >/dev/null || {
+    cat "$d/out" >&2
+    die "a rate limit is called the plan case"
+  }
   reason_of "$d" decision-row | grep -F 'not known' >/dev/null || die "decision-row should not judge the row"
 }
 
 test_private_protected_project_passes() {
   # M06: a private project on a plan with protection.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_jq "$d" "$P" '.private = true | .visibility = "private"'
   run_check "$d"
   expect_all_pass "$d"
@@ -1383,23 +1682,28 @@ test_private_protected_project_passes() {
 test_template_of_the_same_name_elsewhere_fails() {
   # M34.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_jq "$d" "$P" '.template_repository = {"full_name":"someone/ai-project-bootstrap"}'
-  run_check "$d"; expect_only_fail "$d" template
+  run_check "$d"
+  expect_only_fail "$d" template
 }
 
 test_mixed_line_endings_fail() {
   # M44.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   change_setup "$d" 'printf "docs/notes.md -text\n" >.git/info/attributes; printf "a\r\nb\n" >docs/notes.md'
-  run_check "$d"; expect_only_fail "$d" line-endings
+  run_check "$d"
+  expect_only_fail "$d" line-endings
 }
 
 test_two_merged_setup_changes_leave_nothing_to_judge() {
   # M54: with two merged changes neither is taken as the setup.
   local d
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   gh_jq "$d" "$(PULLS_EP)" '. + [.[0] | .number = 2]'
   run_check "$d"
   expect_rc "$d" 1
@@ -1411,21 +1715,27 @@ test_two_merged_setup_changes_leave_nothing_to_judge() {
 test_notice_with_other_text_fails() {
   # M57.
   local d
-  d="$(tmpdir)"; finished "$d" node polyform-noncommercial-1.0.0
+  d="$(tmpdir)"
+  finished "$d" node polyform-noncommercial-1.0.0
   change_setup "$d" 'printf "Copyright someone\n" >NOTICE'
-  run_check "$d"; expect_only_fail "$d" licence
+  run_check "$d"
+  expect_only_fail "$d" licence
 }
 
 # ---------- what it cannot see ----------
 
 test_skips_only_what_it_cannot_see_and_says_why() {
   local d id ids
-  d="$(tmpdir)"; finished "$d" node mit
+  d="$(tmpdir)"
+  finished "$d" node mit
   run_check "$d"
   ids="$(awk '$1 == "SKIP" { sub(/:$/, "", $2); print $2 }' "$d/out" | tr '\n' ' ')"
   [ "$ids" = "$SKIP_CHECKS " ] || die "skipped: '$ids', want '$SKIP_CHECKS '"
   for id in $SKIP_CHECKS; do
-    reason_of "$d" "$id" | grep -iE 'cannot|only|not visible|not something' >/dev/null || { cat "$d/out" >&2; die "$id: the reason does not say why it cannot be seen"; }
+    reason_of "$d" "$id" | grep -iE 'cannot|only|not visible|not something' >/dev/null || {
+      cat "$d/out" >&2
+      die "$id: the reason does not say why it cannot be seen"
+    }
   done
 }
 
@@ -1437,9 +1747,15 @@ test_skips_only_what_it_cannot_see_and_says_why() {
 
 # load_check: sources the checker, defining its functions only.
 # shellcheck source=e2e-check.sh
-load_check() { set --; . "$CHECK"; }
+load_check() {
+  set --
+  . "$CHECK"
+}
 # shellcheck source=stubs/bootstrap-project.sh
-load_script() { set --; . "$SCRIPT"; }
+load_script() {
+  set --
+  . "$SCRIPT"
+}
 
 test_checker_can_be_sourced_without_running() {
   local out
@@ -1453,10 +1769,27 @@ test_fill_table_matches_the_script() {
   for pack in node web python react-native; do
     for dep in "" yes; do
       [ "$pack" = web ] || [ -z "$dep" ] || continue
-      a="$(load_script; fill_rows "$pack" "$dep"; while read -r f k; do fill_text "$k"; printf '%s|%s\n' "$f" "${FILL_TEXT//$NL/<NL>}"; done <<<"$FILL_ROWS"; fill_text year; printf 'LICENSE|%s\n' "$FILL_TEXT"; fill_text fullname; printf 'LICENSE|%s\n' "$FILL_TEXT")"
-      b="$(load_check; placeholder_rows "$pack" "$dep")"
-      [ "$(printf '%s\n' "$a" | LC_ALL=C sort)" = "$(printf '%s\n' "$b" | LC_ALL=C sort)" ] \
-        || { diff <(printf '%s\n' "$a" | LC_ALL=C sort) <(printf '%s\n' "$b" | LC_ALL=C sort) >&2; die "fill table differs for $pack $dep"; }
+      a="$(
+        load_script
+        fill_rows "$pack" "$dep"
+        while read -r f k; do
+          fill_text "$k"
+          printf '%s|%s\n' "$f" "${FILL_TEXT//$NL/<NL>}"
+        done <<<"$FILL_ROWS"
+        fill_text year
+        printf 'LICENSE|%s\n' "$FILL_TEXT"
+        fill_text fullname
+        printf 'LICENSE|%s\n' "$FILL_TEXT"
+      )"
+      b="$(
+        load_check
+        placeholder_rows "$pack" "$dep"
+      )"
+      [ "$(printf '%s\n' "$a" | LC_ALL=C sort)" = "$(printf '%s\n' "$b" | LC_ALL=C sort)" ] ||
+        {
+          diff <(printf '%s\n' "$a" | LC_ALL=C sort) <(printf '%s\n' "$b" | LC_ALL=C sort) >&2
+          die "fill table differs for $pack $dep"
+        }
     done
   done
 }
@@ -1467,11 +1800,25 @@ test_layout_matches_the_script() {
     for dep in "" yes; do
       [ "$pack" = web ] || [ -z "$dep" ] || continue
       t="$(tmpdir)"
-      read -r kept_s <<<"$(load_script; layout_into "$pack" "$REPO/languages" "$t/out" strict "$dep" >/dev/null; printf '%s\n' "$LP_KEPT")"
+      read -r kept_s <<<"$(
+        load_script
+        layout_into "$pack" "$REPO/languages" "$t/out" strict "$dep" >/dev/null
+        printf '%s\n' "$LP_KEPT"
+      )"
       # shellcheck disable=SC2086 # one file name per word
-      targets_s="$(load_script; layout_into "$pack" "$REPO/languages" "$t/out2" strict "$dep" >/dev/null; printf '%s\n' $LP_TARGETS)"
-      kept_c="$(load_check; pack_kept "$pack" "$dep")"
-      targets_c="$(load_check; pack_targets "$pack" "$dep")"
+      targets_s="$(
+        load_script
+        layout_into "$pack" "$REPO/languages" "$t/out2" strict "$dep" >/dev/null
+        printf '%s\n' $LP_TARGETS
+      )"
+      kept_c="$(
+        load_check
+        pack_kept "$pack" "$dep"
+      )"
+      targets_c="$(
+        load_check
+        pack_targets "$pack" "$dep"
+      )"
       # shellcheck disable=SC2086 # one file name per word
       [ "$(printf '%s\n' $kept_s | LC_ALL=C sort)" = "$(printf '%s\n' $kept_c | LC_ALL=C sort)" ] || die "$pack $dep: kept files '$kept_c', script '$kept_s'"
       # Every file the script lays out is a target of the checker (a
@@ -1497,9 +1844,18 @@ test_layout_matches_the_script() {
 
 test_readback_and_other_texts_match_the_script() {
   local s c
-  s="$(load_script; printf '%s\n' "$READBACK_JQ" "$REQUIRE_READBACK" "$UNPROTECTED_ROW_KEY" "$SETUP_HEADING" "$KEY_PATTERN_CLASSIC" "$KEY_PATTERN_FINE" "$SETUP_BRANCH" "$BOOTSTRAPPER" "$POLYFORM_KEY" "$POLYFORM_TEXT")"
-  c="$(load_check; printf '%s\n' "$READBACK_JQ" "$REQUIRE_READBACK" "$UNPROTECTED_ROW_KEY" "$SETUP_HEADING" "$KEY_PATTERN_CLASSIC" "$KEY_PATTERN_FINE" "$SETUP_BRANCH" "$BOOTSTRAPPER" "$POLYFORM_KEY" "$POLYFORM_TEXT")"
-  [ "$s" = "$c" ] || { diff <(printf '%s\n' "$s") <(printf '%s\n' "$c") >&2; die "the checker's texts differ from the script's"; }
+  s="$(
+    load_script
+    printf '%s\n' "$READBACK_JQ" "$REQUIRE_READBACK" "$UNPROTECTED_ROW_KEY" "$SETUP_HEADING" "$KEY_PATTERN_CLASSIC" "$KEY_PATTERN_FINE" "$SETUP_BRANCH" "$BOOTSTRAPPER" "$POLYFORM_KEY" "$POLYFORM_TEXT"
+  )"
+  c="$(
+    load_check
+    printf '%s\n' "$READBACK_JQ" "$REQUIRE_READBACK" "$UNPROTECTED_ROW_KEY" "$SETUP_HEADING" "$KEY_PATTERN_CLASSIC" "$KEY_PATTERN_FINE" "$SETUP_BRANCH" "$BOOTSTRAPPER" "$POLYFORM_KEY" "$POLYFORM_TEXT"
+  )"
+  [ "$s" = "$c" ] || {
+    diff <(printf '%s\n' "$s") <(printf '%s\n' "$c") >&2
+    die "the checker's texts differ from the script's"
+  }
 }
 
 test_checker_avoids_bash4_constructs() {
@@ -1508,8 +1864,8 @@ test_checker_avoids_bash4_constructs() {
   local code="$WORK/code.e2e"
   bash -n "$CHECK" || die "syntax error"
   grep -nvE '^[[:space:]]*#' "$CHECK" >"$code" || true
-  ! grep -nE '(declare|local|typeset)[[:space:]]+-[a-zA-Z]*A|mapfile|readarray|\$\{[A-Za-z_]+(,,|\^\^)|&>>|\|&|;;&' "$code" >&2 \
-    || die "bash 4+ construct in the checker"
+  ! grep -nE '(declare|local|typeset)[[:space:]]+-[a-zA-Z]*A|mapfile|readarray|\$\{[A-Za-z_]+(,,|\^\^)|&>>|\|&|;;&' "$code" >&2 ||
+    die "bash 4+ construct in the checker"
 }
 
 # ---------- run ----------

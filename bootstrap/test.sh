@@ -27,7 +27,12 @@ run_test() {
   # Each test gets its own empty WORK, so the $RANDOM in its temp names
   # cannot collide with another test's.
   set +e
-  ( set -euo pipefail; WORK="$WORK/$name.d"; mkdir "$WORK"; "$name" ) >"$log" 2>&1
+  (
+    set -euo pipefail
+    WORK="$WORK/$name.d"
+    mkdir "$WORK"
+    "$name"
+  ) >"$log" 2>&1
   rc=$?
   set -e
   if [ "$rc" -eq 0 ]; then
@@ -41,7 +46,10 @@ run_test() {
   fi
 }
 
-die() { echo "assertion failed: $*" >&2; exit 1; }
+die() {
+  echo "assertion failed: $*" >&2
+  exit 1
+}
 
 test_harness_gives_each_test_an_empty_work_dir() {
   # Tests name their temp dirs "$WORK/<name>.$RANDOM". In one shared
@@ -54,16 +62,21 @@ test_harness_gives_each_test_an_empty_work_dir() {
 
 # expect_build_fail <fixture> <expected-stderr-substring> <out> <version> <commit>
 expect_build_fail() {
-  local fx="$1" msg="$2"; shift 2
+  local fx="$1" msg="$2"
+  shift 2
   local err="$WORK/err.$RANDOM"
   if bash "$fx/bootstrap/build.sh" "$@" 2>"$err" >/dev/null; then
     die "build succeeded, expected failure containing: $msg"
   fi
-  grep -qF -- "$msg" "$err" || { cat "$err" >&2; die "stderr lacks: $msg"; }
+  grep -qF -- "$msg" "$err" || {
+    cat "$err" >&2
+    die "stderr lacks: $msg"
+  }
 }
 
 build_ok() {
-  local fx="$1"; shift
+  local fx="$1"
+  shift
   bash "$fx/bootstrap/build.sh" "$@" >/dev/null || die "build failed: $*"
 }
 
@@ -113,51 +126,68 @@ EOF
 
 test_fixture_output_is_exactly_manifest_plus_stubs() {
   local fx out
-  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  fx="$(make_fixture)"
+  out="$WORK/out.$RANDOM"
   build_ok "$fx" "$out" v1.2.3 "$SHA"
   diff <(list_files "$out") <(printf '%s\n' \
     .github/README.md .github/workflows/ci.yml .gitignore CHANGELOG.md CLAUDE.md \
-    bootstrap-project.sh docs/BACKLOG.md lang/.hidden lang/a/x.txt lang/b.txt | LC_ALL=C sort) \
-    || die "output file list differs from manifest plus stubs"
+    bootstrap-project.sh docs/BACKLOG.md lang/.hidden lang/a/x.txt lang/b.txt | LC_ALL=C sort) ||
+    die "output file list differs from manifest plus stubs"
 }
 
 test_copied_files_are_byte_identical() {
   local fx out
-  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  fx="$(make_fixture)"
+  out="$WORK/out.$RANDOM"
   build_ok "$fx" "$out" v1.2.3 "$SHA"
   for f in CLAUDE.md .gitignore lang/a/x.txt lang/.hidden .github/workflows/ci.yml; do
     cmp -s "$fx/$f" "$out/$f" || die "$f differs from source"
   done
-  cmp -s "$fx/bootstrap/stubs/docs/BACKLOG.md" "$out/docs/BACKLOG.md" \
-    || die "stub docs/BACKLOG.md differs"
+  cmp -s "$fx/bootstrap/stubs/docs/BACKLOG.md" "$out/docs/BACKLOG.md" ||
+    die "stub docs/BACKLOG.md differs"
 }
 
 test_placeholders_replaced_with_version_and_commit() {
   local fx out
-  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  fx="$(make_fixture)"
+  out="$WORK/out.$RANDOM"
   build_ok "$fx" "$out" v1.2.3 "$SHA"
-  grep -qF "## Created from template v1.2.3 ($SHA)" "$out/CHANGELOG.md" \
-    || { cat "$out/CHANGELOG.md" >&2; die "CHANGELOG not stamped"; }
+  grep -qF "## Created from template v1.2.3 ($SHA)" "$out/CHANGELOG.md" ||
+    {
+      cat "$out/CHANGELOG.md" >&2
+      die "CHANGELOG not stamped"
+    }
   ! grep -rqF '{{TEMPLATE_' "$out" || die "placeholder left"
 }
 
 test_changelog_stamp_is_byte_for_byte_as_before() {
   # Stamping the script too must not change what the CHANGELOG gets.
   local fx out
-  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  fx="$(make_fixture)"
+  out="$WORK/out.$RANDOM"
   build_ok "$fx" "$out" v1.2.3 "$SHA"
-  cmp -s "$out/CHANGELOG.md" <(printf '# Changelog\n\n## Created from template v1.2.3 (%s)\n' "$SHA") \
-    || { cat "$out/CHANGELOG.md" >&2; die "CHANGELOG stamp changed"; }
+  cmp -s "$out/CHANGELOG.md" <(printf '# Changelog\n\n## Created from template v1.2.3 (%s)\n' "$SHA") ||
+    {
+      cat "$out/CHANGELOG.md" >&2
+      die "CHANGELOG stamp changed"
+    }
   [ ! -e "$out/CHANGELOG.md.tmp" ] || die "temp file left in output"
 }
 
 test_project_script_stub_is_stamped_with_version_and_commit() {
   local fx out f
-  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  fx="$(make_fixture)"
+  out="$WORK/out.$RANDOM"
   build_ok "$fx" "$out" v1.2.3 "$SHA"
   f="$out/bootstrap-project.sh"
-  grep -qxF "SCRIPT_VERSION='v1.2.3'" "$f" || { cat "$f" >&2; die "script version not stamped"; }
-  grep -qxF "SCRIPT_COMMIT='$SHA'" "$f" || { cat "$f" >&2; die "script commit not stamped"; }
+  grep -qxF "SCRIPT_VERSION='v1.2.3'" "$f" || {
+    cat "$f" >&2
+    die "script version not stamped"
+  }
+  grep -qxF "SCRIPT_COMMIT='$SHA'" "$f" || {
+    cat "$f" >&2
+    die "script commit not stamped"
+  }
   ! grep -qF '{{TEMPLATE_' "$f" || die "placeholder left in the script"
   [ "$(bash "$f")" = "v1.2.3 $SHA" ] || die "stamped script does not report its stamp"
 }
@@ -166,13 +196,18 @@ test_stamped_project_script_stays_executable() {
   # Stamping rewrites the file; it must keep the stub's executable bit
   # (a sed-to-temp-then-mv stamp would drop it).
   local fx out
-  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  fx="$(make_fixture)"
+  out="$WORK/out.$RANDOM"
   build_ok "$fx" "$out" v1.2.3 "$SHA"
-  [ -x "$out/bootstrap-project.sh" ] || { ls -l "$out" >&2; die "stamping dropped the executable bit"; }
+  [ -x "$out/bootstrap-project.sh" ] || {
+    ls -l "$out" >&2
+    die "stamping dropped the executable bit"
+  }
 }
 
 test_project_script_stub_without_placeholders_rejected() {
-  local fx; fx="$(make_fixture)"
+  local fx
+  fx="$(make_fixture)"
   printf '%s\n' '#!/usr/bin/env bash' "SCRIPT_VERSION='{{TEMPLATE_VERSION}}'" \
     >"$fx/bootstrap/stubs/bootstrap-project.sh"
   expect_build_fail "$fx" "bootstrap-project.sh stub lacks {{TEMPLATE_COMMIT}}" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
@@ -189,7 +224,9 @@ test_stamped_stub_that_is_a_symlink_rejected() {
   # absolute: a relative one would be broken once copied into the
   # build's temp folder, and nothing could be written through it.
   local fx target out err rc
-  fx="$(make_fixture)"; out="$WORK/o.$RANDOM"; err="$WORK/err.$RANDOM"
+  fx="$(make_fixture)"
+  out="$WORK/o.$RANDOM"
+  err="$WORK/err.$RANDOM"
   target="$WORK/outside-changelog.$RANDOM.md"
   mv "$fx/bootstrap/stubs/CHANGELOG.md" "$target"
   ln -s "$target" "$fx/bootstrap/stubs/CHANGELOG.md"
@@ -197,10 +234,16 @@ test_stamped_stub_that_is_a_symlink_rejected() {
   bash "$fx/bootstrap/build.sh" "$out" v1.2.3 "$SHA" >/dev/null 2>"$err"
   rc=$?
   set -e
-  grep -qF '{{TEMPLATE_VERSION}}' "$target" || { cat "$target" >&2; die "the link target outside the build was modified"; }
+  grep -qF '{{TEMPLATE_VERSION}}' "$target" || {
+    cat "$target" >&2
+    die "the link target outside the build was modified"
+  }
   [ ! -L "$out/CHANGELOG.md" ] || die "CHANGELOG.md shipped as a symlink"
   [ "$rc" -ne 0 ] || die "build succeeded, expected the symlinked stub to be refused"
-  grep -qF "CHANGELOG.md stub must be a regular file, not a symlink" "$err" || { cat "$err" >&2; die "stderr lacks the symlink refusal"; }
+  grep -qF "CHANGELOG.md stub must be a regular file, not a symlink" "$err" || {
+    cat "$err" >&2
+    die "stderr lacks the symlink refusal"
+  }
 }
 
 test_build_fails_if_stamping_drops_the_executable_bit() {
@@ -209,38 +252,45 @@ test_build_fails_if_stamping_drops_the_executable_bit() {
   # build must then refuse. No hook in build.sh; the patch must apply,
   # or this test fails instead of passing on an unchanged copy.
   local fx b
-  fx="$(make_fixture)"; b="$fx/bootstrap/build.sh"
+  fx="$(make_fixture)"
+  b="$fx/bootstrap/build.sh"
   grep -qxF '  cat "$STAMP_TMP" >"$STAGE/$s"' "$b" || die "stamp line not found in build.sh; update this test"
   sed -e 's|^  cat "\$STAMP_TMP" >"\$STAGE/\$s"$|&; chmod a-x "$STAGE/$s"|' "$b" >"$b.new"
-  cat "$b.new" >"$b"; rm "$b.new"
+  cat "$b.new" >"$b"
+  rm "$b.new"
   grep -qF 'chmod a-x "$STAGE/$s"' "$b" || die "the patch did not apply"
   expect_build_fail "$fx" "stamping dropped the executable bit of bootstrap-project.sh" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
 }
 
 test_absent_out_dir_is_created() {
   local fx out
-  fx="$(make_fixture)"; out="$WORK/new.$RANDOM/nested"
+  fx="$(make_fixture)"
+  out="$WORK/new.$RANDOM/nested"
   build_ok "$fx" "$out" v1.2.3 "$SHA"
   [ -f "$out/CLAUDE.md" ] || die "out-dir not created"
 }
 
 test_empty_existing_out_dir_is_accepted() {
   local fx out
-  fx="$(make_fixture)"; out="$WORK/empty.$RANDOM"; mkdir "$out"
+  fx="$(make_fixture)"
+  out="$WORK/empty.$RANDOM"
+  mkdir "$out"
   build_ok "$fx" "$out" v1.2.3 "$SHA"
   [ -f "$out/CLAUDE.md" ] || die "nothing written"
 }
 
 test_uppercase_hex_commit_is_accepted() {
   local fx out
-  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  fx="$(make_fixture)"
+  out="$WORK/out.$RANDOM"
   build_ok "$fx" "$out" v10.0.12 "0123456789ABCDEF0123456789ABCDEF01234567"
 }
 
 test_open_questions_heading_is_not_a_false_positive() {
   # "Open questions" (no number) and "PBI-x" (no digit) must pass.
   local fx out
-  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  fx="$(make_fixture)"
+  out="$WORK/out.$RANDOM"
   printf 'open questions\nPBI-x\nPR #3\ntrig\n' >>"$fx/CLAUDE.md"
   build_ok "$fx" "$out" v1.2.3 "$SHA"
 }
@@ -286,8 +336,8 @@ test_real_build_ships_the_generic_docs() {
   bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
   [ -f "$out/docs/DEV_INFRASTRUCTURE.md" ] || die "DEV_INFRASTRUCTURE.md not shipped"
   [ -f "$out/languages/python/code-standards.md" ] || die "python pack not shipped"
-  cmp -s "$REPO/docs/DEV_INFRASTRUCTURE.md" "$out/docs/DEV_INFRASTRUCTURE.md" \
-    || die "DEV_INFRASTRUCTURE.md shipped altered"
+  cmp -s "$REPO/docs/DEV_INFRASTRUCTURE.md" "$out/docs/DEV_INFRASTRUCTURE.md" ||
+    die "DEV_INFRASTRUCTURE.md shipped altered"
 }
 
 test_real_build_ships_the_backlog_stub_with_its_format() {
@@ -311,8 +361,8 @@ test_real_build_ships_the_backlog_stub_with_its_format() {
   printf '%s\n' '### Now' '### When you have time' '### Later' >"$want"
   diff "$want" "$got" >&2 || die "Waiting for the product owner is not grouped Now, When you have time, Later (diff above)"
   # The header comes before the first item: the section is above the phases.
-  [ "$(grep -n '^## Waiting for the product owner$' "$b" | cut -d: -f1)" -lt "$(grep -n '^## Phase 1' "$b" | cut -d: -f1)" ] \
-    || die "Waiting for the product owner is not above the phases"
+  [ "$(grep -n '^## Waiting for the product owner$' "$b" | cut -d: -f1)" -lt "$(grep -n '^## Phase 1' "$b" | cut -d: -f1)" ] ||
+    die "Waiting for the product owner is not above the phases"
   # No entry in the stub uses a marker outside the five.
   ! grep -nE '^ *- \*\*\[' "$b" | grep -vE '^[0-9]+: *- \*\*\[(NOW|NEXT|LATER|DONE|BLOCKED)\]' >&2 || die "an entry with another marker (above)"
 }
@@ -324,7 +374,10 @@ test_real_build_readme_names_the_product_owner() {
   local out="$WORK/real.$RANDOM"
   bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
   sed '/^## /,$d' "$out/README.md" | tr '\n' ' ' | tr -s ' ' >"$WORK/intro"
-  grep -qF 'The product owner, [PO NAME], decides' "$WORK/intro" || { cat "$WORK/intro" >&2; die "the README's intro does not name the product owner"; }
+  grep -qF 'The product owner, [PO NAME], decides' "$WORK/intro" || {
+    cat "$WORK/intro" >&2
+    die "the README's intro does not name the product owner"
+  }
 }
 
 test_real_build_points_to_the_template_only_in_the_record_of_origin() {
@@ -335,14 +388,17 @@ test_real_build_points_to_the_template_only_in_the_record_of_origin() {
   bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
   # Every line that names it, less the record of origin: the CHANGELOG
   # stamp, and the script's spec link and two --version texts.
-  hits="$(cd "$out" && grep -rnF 'ai-project-template-v2' . | sed 's|^\./||' \
-    | grep -vE '^CHANGELOG\.md:[0-9]+:  factoincognito/ai-project-template-v2@[0-9a-f]{40}\.$' \
-    | grep -vE '^bootstrap-project\.sh:[0-9]+:# https://github\.com/factoincognito/ai-project-template-v2/blob/main/docs/BACKLOG\.md$' \
-    | grep -vF 'built from factoincognito/ai-project-template-v2@$SCRIPT_COMMIT"' \
-    | grep -vF 'the copy in factoincognito/ai-project-template-v2 that releases are built from"' || true)"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "these shipped lines point to the template"; }
-  ! grep -niE 'this template|from the template|template repo' "$out/docs/DEV_INFRASTRUCTURE.md" >&2 \
-    || die "the shipped DEV_INFRASTRUCTURE.md speaks of the template"
+  hits="$(cd "$out" && grep -rnF 'ai-project-template-v2' . | sed 's|^\./||' |
+    grep -vE '^CHANGELOG\.md:[0-9]+:  factoincognito/ai-project-template-v2@[0-9a-f]{40}\.$' |
+    grep -vE '^bootstrap-project\.sh:[0-9]+:# https://github\.com/factoincognito/ai-project-template-v2/blob/main/docs/BACKLOG\.md$' |
+    grep -vF 'built from factoincognito/ai-project-template-v2@$SCRIPT_COMMIT"' |
+    grep -vF 'the copy in factoincognito/ai-project-template-v2 that releases are built from"' || true)"
+  [ -z "$hits" ] || {
+    printf '%s\n' "$hits" >&2
+    die "these shipped lines point to the template"
+  }
+  ! grep -niE 'this template|from the template|template repo' "$out/docs/DEV_INFRASTRUCTURE.md" >&2 ||
+    die "the shipped DEV_INFRASTRUCTURE.md speaks of the template"
 }
 
 test_real_build_ships_the_status_stub() {
@@ -362,7 +418,7 @@ test_real_build_ships_the_status_stub() {
   # the fixed title, line and headings, and the blocker prefix.
   tr '\n' ' ' <"$body" | tr -s ' ' >"$body.flat"
   for t in 'format of this file' '"# Status"' '"Last update: YYYY-MM-DD"' \
-           'Phase, Current focus, Next step and Blockers' 'starts with "Product Owner:", written exactly so'; do
+    'Phase, Current focus, Next step and Blockers' 'starts with "Product Owner:", written exactly so'; do
     grep -qF -- "$t" "$body.flat" || die "the format specification in STATUS.md does not say: $t"
   done
   sed '1,/^-->$/d' "$out/STATUS.md" >"$body"
@@ -401,8 +457,8 @@ test_real_build_ships_the_rules_edition_and_its_entry_point_instead_of_the_old_r
   # The check as a project's CI runs it, from the project's root. The
   # template's copy of the script: that it ships unchanged is tested on
   # its own.
-  ( cd "$out" && bash "$REPO/.github/scripts/check-rules-edition.sh" rules ) >&2 \
-    || die "the shipped rules/ fails check-rules-edition.sh rules"
+  (cd "$out" && bash "$REPO/.github/scripts/check-rules-edition.sh" rules) >&2 ||
+    die "the shipped rules/ fails check-rules-edition.sh rules"
   for f in CLAUDE.md RULES.md; do
     [ -f "$REPO/bootstrap/stubs/$f" ] || die "no stub bootstrap/stubs/$f"
     cmp -s "$REPO/bootstrap/stubs/$f" "$out/$f" || die "$f in the output is not the stub"
@@ -412,8 +468,8 @@ test_real_build_ships_the_rules_edition_and_its_entry_point_instead_of_the_old_r
   # own RULES.md opens with the sign-off, word for word, and the four old
   # rule files are gone from it too. The ADR stays in the template as
   # history and does not ship.
-  [ "$(sed -n 1p "$REPO/RULES.md" 2>/dev/null)" = 'L § 1 (C) This project is bound by the Rules and Processes of factoincognito, product-office.' ] \
-    || die "the template's own RULES.md does not open with its sign-off L § 1 (C)"
+  [ "$(sed -n 1p "$REPO/RULES.md" 2>/dev/null)" = 'L § 1 (C) This project is bound by the Rules and Processes of factoincognito, product-office.' ] ||
+    die "the template's own RULES.md does not open with its sign-off L § 1 (C)"
   for f in memory/roles.md memory/standards.md docs/CROG_ONBOARDING.md docs/ROUTINES.md; do
     [ ! -e "$REPO/$f" ] || die "the template still has $f, whose rules are now in the Rules it is bound by and its RULES.md"
     [ ! -e "$out/$f" ] || die "$f shipped"
@@ -423,8 +479,8 @@ test_real_build_ships_the_rules_edition_and_its_entry_point_instead_of_the_old_r
   [ ! -e "$out/$f" ] || die "$f shipped"
   # The entry point: the title the setup fills in, then what to read, in
   # the order of the session start line; no rule text.
-  [ "$(sed -n 1p "$out/CLAUDE.md")" = '# [PROJECT NAME] — Agent Entry Point' ] \
-    || die "CLAUDE.md does not start with the title the setup fills in"
+  [ "$(sed -n 1p "$out/CLAUDE.md")" = '# [PROJECT NAME] — Agent Entry Point' ] ||
+    die "CLAUDE.md does not start with the title the setup fills in"
   for p in '`rules/RULES.md`, in full' '`rules/processes/P-1-session-startup.md`' '`RULES.md`' '`rules/RULES.md` § 4'; do
     grep -qF -- "$p" "$out/CLAUDE.md" || die "CLAUDE.md does not say: $p"
   done
@@ -432,10 +488,10 @@ test_real_build_ships_the_rules_edition_and_its_entry_point_instead_of_the_old_r
   # The local rules: the sign-off paragraph first, word for word, with
   # the generic Adopted line (no PR number to fill in), then L § 2 and
   # L § 3.
-  [ "$(sed -n 1p "$out/RULES.md")" = 'L § 1 (C) This project is bound by the Rules in `rules/`, in the edition `rules/EDITION` names.' ] \
-    || die "RULES.md does not open with the sign-off paragraph L § 1 (C)"
-  [ "$(sed -n 2p "$out/RULES.md")" = 'Adopted: the product owner, by the setup that created this project' ] \
-    || die "L § 1 (C) does not end with the generic Adopted line"
+  [ "$(sed -n 1p "$out/RULES.md")" = 'L § 1 (C) This project is bound by the Rules in `rules/`, in the edition `rules/EDITION` names.' ] ||
+    die "RULES.md does not open with the sign-off paragraph L § 1 (C)"
+  [ "$(sed -n 2p "$out/RULES.md")" = 'Adopted: the product owner, by the setup that created this project' ] ||
+    die "L § 1 (C) does not end with the generic Adopted line"
   grep -qE '^L § 2 ' "$out/RULES.md" || die "RULES.md has no L § 2"
   grep -qE '^L § 3 ' "$out/RULES.md" || die "RULES.md has no L § 3"
   for p in '`§ n`' '`P-n § m`' '`memory/context.md`' '`docs/SPEC.md`'; do
@@ -460,10 +516,10 @@ test_real_build_ships_the_template_licence() {
   bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
   [ -f "$out/$lic" ] || die "$lic not shipped"
   sum="$(sha256sum "$out/$lic" | cut -d' ' -f1)"
-  [ "$sum" = "c0ea4a896d2c8c394b29f9427589996db826cd501c512279ff0ed3ef48fabbe5" ] \
-    || die "$lic differs from the official PolyForm Noncommercial 1.0.0 text"
-  grep -qE '^Required Notice: Copyright .+' "$out/licenses/NOTICE" \
-    || die "licenses/NOTICE lacks a Required Notice line"
+  [ "$sum" = "c0ea4a896d2c8c394b29f9427589996db826cd501c512279ff0ed3ef48fabbe5" ] ||
+    die "$lic differs from the official PolyForm Noncommercial 1.0.0 text"
+  grep -qE '^Required Notice: Copyright .+' "$out/licenses/NOTICE" ||
+    die "licenses/NOTICE lacks a Required Notice line"
   [ ! -e "$out/LICENSE" ] || die "root LICENSE shipped"
   [ ! -e "$out/LICENSE.md" ] || die "root LICENSE.md shipped"
 }
@@ -491,8 +547,8 @@ test_real_build_ships_the_stub_ci_unchanged() {
 }
 
 test_template_ci_is_not_in_the_manifest() {
-  ! grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -xF '.github/workflows/ci.yml' >/dev/null \
-    || die "the template's own ci.yml is listed in the manifest, so it would ship"
+  ! grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -xF '.github/workflows/ci.yml' >/dev/null ||
+    die "the template's own ci.yml is listed in the manifest, so it would ship"
 }
 
 # ---------- changelog.yml: the reminder after a merge (shipped) ----------
@@ -516,7 +572,8 @@ changelog_step_script() {
 # fails when GH_API_FAIL is set). Leaves the gh calls in <dir>/gh.log,
 # the output in <dir>/out and the exit code in <dir>/rc.
 run_changelog_step() {
-  local d="$1" rc=0; shift
+  local d="$1" rc=0
+  shift
   mkdir -p "$d/bin"
   : >"$d/gh.log"
   if [ "$#" -gt 0 ]; then printf '%s\n' "$@" >"$d/files"; else : >"$d/files"; fi
@@ -543,7 +600,10 @@ CHANGELOG_COMMENT_CALL="pr comment 7 --body $CHANGELOG_REMINDER --repo o/r"
 test_changelog_reminder_is_posted_when_the_merged_pr_did_not_change_the_changelog() {
   local d="$WORK/step"
   run_changelog_step "$d" src/app.ts README.md docs/CHANGELOG.md
-  [ "$(cat "$d/rc")" = 0 ] || { cat "$d/out" >&2; die "the step failed"; }
+  [ "$(cat "$d/rc")" = 0 ] || {
+    cat "$d/out" >&2
+    die "the step failed"
+  }
   printf '%s\n' "$CHANGELOG_API_CALL" "$CHANGELOG_COMMENT_CALL" >"$d/want"
   diff "$d/want" "$d/gh.log" >&2 || die "the step did not read the PR's files and then post the reminder"
 }
@@ -556,10 +616,16 @@ test_changelog_reminder_is_skipped_when_the_merged_pr_changed_the_changelog() {
     d="$WORK/step.$RANDOM"
     # shellcheck disable=SC2086 # split the list into file names
     run_changelog_step "$d" $files
-    [ "$(cat "$d/rc")" = 0 ] || { cat "$d/out" >&2; die "the step failed for: $files"; }
+    [ "$(cat "$d/rc")" = 0 ] || {
+      cat "$d/out" >&2
+      die "the step failed for: $files"
+    }
     printf '%s\n' "$CHANGELOG_API_CALL" >"$d/want"
     diff "$d/want" "$d/gh.log" >&2 || die "the step posted a comment although the PR changed CHANGELOG.md: $files"
-    grep -qF "already changes CHANGELOG.md" "$d/out" || { cat "$d/out" >&2; die "no log line says why the reminder was skipped"; }
+    grep -qF "already changes CHANGELOG.md" "$d/out" || {
+      cat "$d/out" >&2
+      die "no log line says why the reminder was skipped"
+    }
   done
 }
 
@@ -572,7 +638,10 @@ test_changelog_reminder_is_skipped_when_the_changelog_comes_first_in_a_long_list
   local d="$WORK/step"
   # shellcheck disable=SC2046 # one argument per generated name
   run_changelog_step "$d" CHANGELOG.md $(seq -f 'src/components/feature-%04g/index.test.ts' 1 5000)
-  [ "$(cat "$d/rc")" = 0 ] || { tail -n 5 "$d/out" >&2; die "the step failed"; }
+  [ "$(cat "$d/rc")" = 0 ] || {
+    tail -n 5 "$d/out" >&2
+    die "the step failed"
+  }
   printf '%s\n' "$CHANGELOG_API_CALL" >"$d/want"
   diff "$d/want" "$d/gh.log" >&2 || die "the step posted a comment although CHANGELOG.md is first in the list"
 }
@@ -590,8 +659,8 @@ test_changelog_workflow_runs_on_merged_prs_with_the_token_it_needs() {
   grep -qxF '    if: github.event.pull_request.merged == true' "$CWF" || die "the job is not limited to merged PRs"
   # Least privilege: reading the PR's files needs pull requests read,
   # which pull-requests: write includes. Nothing else.
-  [ "$(awk '/^    permissions:/ { p = 1; next } p && /^      / { print; next } { p = 0 }' "$CWF")" = '      pull-requests: write' ] \
-    || die "the job's permissions are not exactly pull-requests: write"
+  [ "$(awk '/^    permissions:/ { p = 1; next } p && /^      / { print; next } { p = 0 }' "$CWF")" = '      pull-requests: write' ] ||
+    die "the job's permissions are not exactly pull-requests: write"
   grep -qxF '          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}' "$CWF" || die "the step does not get the job's token"
   grep -qxF '          PR_NUMBER: ${{ github.event.pull_request.number }}' "$CWF" || die "the step does not get the PR number"
   grep -qxF '          REPO: ${{ github.repository }}' "$CWF" || die "the step does not get the repo"
@@ -603,34 +672,42 @@ test_changelog_workflow_runs_on_merged_prs_with_the_token_it_needs() {
 # ---------- build.sh: argument errors ----------
 
 test_wrong_arg_count_fails_with_usage() {
-  local fx; fx="$(make_fixture)"
+  local fx
+  fx="$(make_fixture)"
   expect_build_fail "$fx" "usage:" "$WORK/o.$RANDOM" v1.2.3
   expect_build_fail "$fx" "usage:" "$WORK/o.$RANDOM" v1.2.3 "$SHA" extra
 }
 
 test_bad_version_rejected() {
-  local fx v; fx="$(make_fixture)"
+  local fx v
+  fx="$(make_fixture)"
   for v in 1.2.3 v1.2 v1.2.3-rc1 V1.2.3 "v1.2.3 " "" v1.2.x; do
     expect_build_fail "$fx" "is not vMAJOR.MINOR.PATCH" "$WORK/o.$RANDOM" "$v" "$SHA"
   done
 }
 
 test_bad_commit_rejected() {
-  local fx c; fx="$(make_fixture)"
+  local fx c
+  fx="$(make_fixture)"
   for c in "${SHA:0:39}" "${SHA}0" "g${SHA:1}" "" "${SHA:0:7}"; do
     expect_build_fail "$fx" "is not a 40-character hex SHA" "$WORK/o.$RANDOM" v1.2.3 "$c"
   done
 }
 
 test_non_empty_out_dir_rejected_and_untouched() {
-  local fx out; fx="$(make_fixture)"; out="$WORK/full.$RANDOM"
-  mkdir "$out"; echo keep >"$out/.existing"
+  local fx out
+  fx="$(make_fixture)"
+  out="$WORK/full.$RANDOM"
+  mkdir "$out"
+  echo keep >"$out/.existing"
   expect_build_fail "$fx" "is not empty" "$out" v1.2.3 "$SHA"
   [ "$(list_files "$out")" = ".existing" ] || die "out-dir was modified"
 }
 
 test_out_dir_that_is_a_file_rejected() {
-  local fx out; fx="$(make_fixture)"; out="$WORK/file.$RANDOM"
+  local fx out
+  fx="$(make_fixture)"
+  out="$WORK/file.$RANDOM"
   echo x >"$out"
   expect_build_fail "$fx" "is not a directory" "$out" v1.2.3 "$SHA"
 }
@@ -638,20 +715,24 @@ test_out_dir_that_is_a_file_rejected() {
 # ---------- build.sh: manifest and stub errors ----------
 
 test_missing_manifest_path_rejected() {
-  local fx out; fx="$(make_fixture)"; out="$WORK/o.$RANDOM"
+  local fx out
+  fx="$(make_fixture)"
+  out="$WORK/o.$RANDOM"
   echo "docs/NOPE.md" >>"$fx/bootstrap/manifest.txt"
   expect_build_fail "$fx" "manifest path does not exist: docs/NOPE.md" "$out" v1.2.3 "$SHA"
   [ ! -e "$out" ] || die "failed build left output behind"
 }
 
 test_missing_manifest_file_rejected() {
-  local fx; fx="$(make_fixture)"
+  local fx
+  fx="$(make_fixture)"
   rm "$fx/bootstrap/manifest.txt"
   expect_build_fail "$fx" "manifest not found" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
 }
 
 test_manifest_path_escaping_repo_rejected() {
-  local fx p; fx="$(make_fixture)"
+  local fx p
+  fx="$(make_fixture)"
   for p in /etc/passwd ../outside lang/../CLAUDE.md; do
     fx="$(make_fixture)"
     echo "$p" >>"$fx/bootstrap/manifest.txt"
@@ -660,20 +741,23 @@ test_manifest_path_escaping_repo_rejected() {
 }
 
 test_manifest_glob_is_not_expanded() {
-  local fx; fx="$(make_fixture)"
+  local fx
+  fx="$(make_fixture)"
   echo "lang/*.txt" >>"$fx/bootstrap/manifest.txt"
   expect_build_fail "$fx" "manifest path does not exist: lang/*.txt" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
 }
 
 test_stub_same_path_as_manifest_entry_rejected() {
-  local fx; fx="$(make_fixture)"
+  local fx
+  fx="$(make_fixture)"
   echo "stub" >"$fx/bootstrap/stubs/CLAUDE.md"
   expect_build_fail "$fx" "stub overlaps manifest path (ambiguous source): CLAUDE.md" \
     "$WORK/o.$RANDOM" v1.2.3 "$SHA"
 }
 
 test_stub_inside_manifest_directory_rejected() {
-  local fx; fx="$(make_fixture)"
+  local fx
+  fx="$(make_fixture)"
   mkdir -p "$fx/bootstrap/stubs/lang/a"
   echo "stub" >"$fx/bootstrap/stubs/lang/a/new.txt"
   expect_build_fail "$fx" "stub overlaps manifest path (ambiguous source): lang/a/new.txt" \
@@ -689,7 +773,8 @@ test_stub_inside_manifest_directory_rejected() {
 
 test_build_writes_the_bootstrapper_readme_from_its_source_and_the_marked_part() {
   local fx out
-  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  fx="$(make_fixture)"
+  out="$WORK/out.$RANDOM"
   build_ok "$fx" "$out" v1.2.3 "$SHA"
   diff <(printf '%s\n' '# The bootstrapper' '' 'Intro.' '' 'Step 0.' '' 'Step 1.' '' '## After') \
     "$out/.github/README.md" >&2 || die ".github/README.md is not the source with the marked part in place (diff above)"
@@ -697,7 +782,9 @@ test_build_writes_the_bootstrapper_readme_from_its_source_and_the_marked_part() 
 }
 
 test_bootstrapper_readme_source_missing_rejected() {
-  local fx out; fx="$(make_fixture)"; out="$WORK/o.$RANDOM"
+  local fx out
+  fx="$(make_fixture)"
+  out="$WORK/o.$RANDOM"
   rm "$fx/bootstrap/bootstrapper-README.md"
   expect_build_fail "$fx" "bootstrapper README source not found: bootstrap/bootstrapper-README.md" "$out" v1.2.3 "$SHA"
   [ ! -e "$out" ] || die "failed build left output behind"
@@ -743,21 +830,24 @@ test_template_readme_markers_must_be_there_once_and_in_order() {
 }
 
 test_a_stub_at_the_bootstrapper_readme_path_rejected() {
-  local fx; fx="$(make_fixture)"
+  local fx
+  fx="$(make_fixture)"
   mkdir -p "$fx/bootstrap/stubs/.github"
   echo "stub" >"$fx/bootstrap/stubs/.github/README.md"
   expect_build_fail "$fx" "the build writes .github/README.md, but a manifest path or a stub already gives it" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
 }
 
 test_a_manifest_path_at_the_bootstrapper_readme_path_rejected() {
-  local fx; fx="$(make_fixture)"
+  local fx
+  fx="$(make_fixture)"
   echo "readme" >"$fx/.github/README.md"
   echo ".github/README.md" >>"$fx/bootstrap/manifest.txt"
   expect_build_fail "$fx" "the build writes .github/README.md, but a manifest path or a stub already gives it" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
 }
 
 test_the_marked_part_goes_through_the_output_checks() {
-  local fx; fx="$(make_fixture)"
+  local fx
+  fx="$(make_fixture)"
   printf '%s\n' '<!-- bootstrapper-readme: start -->' 'see PBI-4' '<!-- bootstrapper-readme: end -->' >"$fx/README.md"
   expect_build_fail "$fx" "in output file: .github/README.md" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
   printf '%s\n' '<!-- bootstrapper-readme: start -->' 'built {{TEMPLATE_X}}' '<!-- bootstrapper-readme: end -->' >"$fx/README.md"
@@ -769,9 +859,11 @@ test_a_long_marked_part_builds_every_time() {
   # the writer got SIGPIPE and, under pipefail, the build failed at random.
   local fx out i
   fx="$(make_fixture)"
-  { echo '<!-- bootstrapper-readme: start -->'
+  {
+    echo '<!-- bootstrapper-readme: start -->'
     awk 'BEGIN { for (i = 1; i <= 5000; i++) print "Line " i " of the marked part, long enough to fill the pipe." }'
-    echo '<!-- bootstrapper-readme: end -->'; } >"$fx/README.md"
+    echo '<!-- bootstrapper-readme: end -->'
+  } >"$fx/README.md"
   for i in 1 2 3; do
     out="$WORK/out.$i"
     build_ok "$fx" "$out" v1.2.3 "$SHA"
@@ -781,19 +873,21 @@ test_a_long_marked_part_builds_every_time() {
 
 test_carriage_returns_in_the_readme_sources_are_dropped() {
   local fx out
-  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  fx="$(make_fixture)"
+  out="$WORK/out.$RANDOM"
   printf '%s\r\n' '# The bootstrapper' '{{TEMPLATE_README_SETUP}}' 'End.' >"$fx/bootstrap/bootstrapper-README.md"
   printf '%s\r\n' '<!-- bootstrapper-readme: start -->' 'Step 0.' '<!-- bootstrapper-readme: end -->' >"$fx/README.md"
   build_ok "$fx" "$out" v1.2.3 "$SHA"
-  diff <(printf '%s\n' '# The bootstrapper' 'Step 0.' 'End.') "$out/.github/README.md" >&2 \
-    || die "the CRLF sources did not give an LF .github/README.md (diff above)"
+  diff <(printf '%s\n' '# The bootstrapper' 'Step 0.' 'End.') "$out/.github/README.md" >&2 ||
+    die "the CRLF sources did not give an LF .github/README.md (diff above)"
 }
 
 # ---------- build.sh: paths left out of a listed folder ----------
 
 test_manifest_exclude_leaves_a_file_out_of_a_listed_folder() {
   local fx out
-  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  fx="$(make_fixture)"
+  out="$WORK/out.$RANDOM"
   echo "exclude lang/b.txt" >>"$fx/bootstrap/manifest.txt"
   build_ok "$fx" "$out" v1.2.3 "$SHA"
   [ ! -e "$out/lang/b.txt" ] || die "the excluded file shipped"
@@ -802,7 +896,8 @@ test_manifest_exclude_leaves_a_file_out_of_a_listed_folder() {
 
 test_manifest_exclude_with_a_trailing_slash_leaves_the_folder_out() {
   local fx out
-  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  fx="$(make_fixture)"
+  out="$WORK/out.$RANDOM"
   echo "  exclude lang/a/" >>"$fx/bootstrap/manifest.txt"
   build_ok "$fx" "$out" v1.2.3 "$SHA"
   [ ! -e "$out/lang/a" ] || die "the excluded folder shipped"
@@ -811,8 +906,10 @@ test_manifest_exclude_with_a_trailing_slash_leaves_the_folder_out() {
 
 test_manifest_exclude_through_a_symlink_rejected_and_nothing_outside_is_removed() {
   local fx keep
-  fx="$(make_fixture)"; keep="$WORK/outside.$RANDOM"
-  mkdir -p "$keep"; echo precious >"$keep/precious.txt"
+  fx="$(make_fixture)"
+  keep="$WORK/outside.$RANDOM"
+  mkdir -p "$keep"
+  echo precious >"$keep/precious.txt"
   ln -s "$keep" "$fx/lang/link"
   echo "exclude lang/link/precious.txt" >>"$fx/bootstrap/manifest.txt"
   expect_build_fail "$fx" "manifest exclude path goes through a symlink: lang/link/precious.txt" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
@@ -820,13 +917,15 @@ test_manifest_exclude_through_a_symlink_rejected_and_nothing_outside_is_removed(
 }
 
 test_manifest_exclude_of_a_missing_path_rejected() {
-  local fx; fx="$(make_fixture)"
+  local fx
+  fx="$(make_fixture)"
   echo "exclude lang/nope.txt" >>"$fx/bootstrap/manifest.txt"
   expect_build_fail "$fx" "manifest exclude path does not exist: lang/nope.txt" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
 }
 
 test_manifest_exclude_outside_a_listed_folder_rejected() {
-  local fx; fx="$(make_fixture)"
+  local fx
+  fx="$(make_fixture)"
   echo "exclude unlisted.md" >>"$fx/bootstrap/manifest.txt"
   expect_build_fail "$fx" "manifest exclude path is not inside a listed folder: unlisted.md" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
   fx="$(make_fixture)"
@@ -843,8 +942,8 @@ test_real_build_ships_the_bootstrapper_readme() {
   [ -f "$r" ] || die ".github/README.md not shipped"
   grep -qF '**Step 0: install gh and sign in.**' "$r" || die "step 0 is not in the bootstrapper's README"
   grep -qF '**Step 1: run the setup.**' "$r" || die "step 1 is not in the bootstrapper's README"
-  grep -qxF 'gh api repos/factoincognito/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh && bash bootstrap-project.sh' "$r" \
-    || die "the command that starts a new setup is not on a line of its own"
+  grep -qxF 'gh api repos/factoincognito/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh && bash bootstrap-project.sh' "$r" ||
+    die "the command that starts a new setup is not on a line of its own"
   ! grep -qF 'bootstrapper-readme:' "$r" || die "a marker line shipped"
   ! grep -qF '{{TEMPLATE_' "$r" || die "a placeholder shipped"
   ! grep -qF 'ai-project-template-v2' "$r" || die "the bootstrapper's README points to the template"
@@ -861,27 +960,33 @@ test_real_build_leaves_out_the_languages_readme() {
 # ---------- build.sh: output checks ----------
 
 test_release_notes_in_output_rejected() {
-  local fx out; fx="$(make_fixture)"; out="$WORK/o.$RANDOM"
+  local fx out
+  fx="$(make_fixture)"
+  out="$WORK/o.$RANDOM"
   echo "docs/RELEASE_NOTES.md" >>"$fx/bootstrap/manifest.txt"
   expect_build_fail "$fx" "forbidden path in output: docs/RELEASE_NOTES.md" "$out" v1.2.3 "$SHA"
   [ ! -e "$out" ] || die "failed build left output behind"
 }
 
 test_bootstrap_dir_in_output_rejected() {
-  local fx; fx="$(make_fixture)"
+  local fx
+  fx="$(make_fixture)"
   echo "bootstrap" >>"$fx/bootstrap/manifest.txt"
   expect_build_fail "$fx" "forbidden path in output: bootstrap/" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
 }
 
 test_bootstrap_stub_in_output_rejected() {
-  local fx; fx="$(make_fixture)"
+  local fx
+  fx="$(make_fixture)"
   mkdir -p "$fx/bootstrap/stubs/bootstrap"
   echo x >"$fx/bootstrap/stubs/bootstrap/x.sh"
   expect_build_fail "$fx" "forbidden path in output: bootstrap/" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
 }
 
 test_leftover_placeholder_rejected() {
-  local fx out; fx="$(make_fixture)"; out="$WORK/o.$RANDOM"
+  local fx out
+  fx="$(make_fixture)"
+  out="$WORK/o.$RANDOM"
   echo "built on {{TEMPLATE_DATE}}" >>"$fx/lang/b.txt"
   expect_build_fail "$fx" "placeholder left in output: lang/b.txt" "$out" v1.2.3 "$SHA"
   [ ! -e "$out" ] || die "failed build left output behind"
@@ -890,7 +995,8 @@ test_leftover_placeholder_rejected() {
 test_changelog_stub_without_placeholders_rejected() {
   # The stamp is the only link back to the template; losing it silently
   # would be worse than failing.
-  local fx; fx="$(make_fixture)"
+  local fx
+  fx="$(make_fixture)"
   printf '# Changelog\n\n## Created from template {{TEMPLATE_VERSION}}\n' \
     >"$fx/bootstrap/stubs/CHANGELOG.md"
   expect_build_fail "$fx" "CHANGELOG.md stub lacks {{TEMPLATE_COMMIT}}" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
@@ -901,32 +1007,36 @@ test_changelog_stub_without_placeholders_rejected() {
 test_placeholder_outside_changelog_not_replaced() {
   # Only the CHANGELOG and script stubs are stamped; the same placeholder
   # anywhere else is left in and therefore fails the build.
-  local fx; fx="$(make_fixture)"
+  local fx
+  fx="$(make_fixture)"
   echo "{{TEMPLATE_VERSION}}" >>"$fx/CLAUDE.md"
   expect_build_fail "$fx" "placeholder left in output: CLAUDE.md" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
 }
 
 check_forbidden_in_manifest_file() {
   local s="$1" fx out
-  fx="$(make_fixture)"; out="$WORK/o.$RANDOM"
+  fx="$(make_fixture)"
+  out="$WORK/o.$RANDOM"
   printf 'line with %s inside\n' "$s" >>"$fx/lang/a/x.txt"
   expect_build_fail "$fx" "in output file: lang/a/x.txt" "$out" v1.2.3 "$SHA"
   [ ! -e "$out" ] || die "failed build left output behind"
 }
 
-test_forbidden_trig_rejected()          { check_forbidden_in_manifest_file 'trig_abc123'; }
-test_forbidden_pr_ref_rejected()        { check_forbidden_in_manifest_file 'see (PR #58)'; }
-test_forbidden_pbi_id_rejected()        { check_forbidden_in_manifest_file 'PBI-1.10'; }
+test_forbidden_trig_rejected() { check_forbidden_in_manifest_file 'trig_abc123'; }
+test_forbidden_pr_ref_rejected() { check_forbidden_in_manifest_file 'see (PR #58)'; }
+test_forbidden_pbi_id_rejected() { check_forbidden_in_manifest_file 'PBI-1.10'; }
 test_forbidden_open_question_rejected() { check_forbidden_in_manifest_file 'open question 3'; }
 
 test_forbidden_string_in_stub_rejected() {
-  local fx; fx="$(make_fixture)"
+  local fx
+  fx="$(make_fixture)"
   echo "see PBI-4" >>"$fx/bootstrap/stubs/docs/BACKLOG.md"
   expect_build_fail "$fx" "in output file: docs/BACKLOG.md" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
 }
 
 test_forbidden_string_in_dotfile_rejected() {
-  local fx; fx="$(make_fixture)"
+  local fx
+  fx="$(make_fixture)"
   echo "trig_x" >>"$fx/lang/.hidden"
   expect_build_fail "$fx" "in output file: lang/.hidden" "$WORK/o.$RANDOM" v1.2.3 "$SHA"
 }
@@ -937,7 +1047,8 @@ test_forbidden_string_in_dotfile_rejected() {
 make_bootstrap_output() {
   local fx out
   # mktemp, not $RANDOM: callers use $(...), where bash 3.2 can repeat it.
-  fx="$(make_fixture)"; out="$(mktemp -d "$WORK/pubout.XXXXXX")"
+  fx="$(make_fixture)"
+  out="$(mktemp -d "$WORK/pubout.XXXXXX")"
   build_ok "$fx" "$out" "$1" "$SHA"
   echo "$out"
 }
@@ -947,7 +1058,7 @@ test_make_bootstrap_output_gives_a_new_dir_on_each_call() {
   # subshell that already used it, so two $(...) calls in one test got
   # the same "$WORK/pubout.$RANDOM" and the second build found it full.
   local a b
-  : "$RANDOM"  # seed this subshell first, as a test that used $RANDOM would
+  : "$RANDOM" # seed this subshell first, as a test that used $RANDOM would
   a="$(make_bootstrap_output v1.0.0)"
   b="$(make_bootstrap_output v1.1.0)"
   [ -n "$a" ] && [ -n "$b" ] || die "a build failed"
@@ -957,27 +1068,31 @@ test_make_bootstrap_output_gives_a_new_dir_on_each_call() {
 
 test_publish_to_empty_repo_creates_first_commit_and_tag() {
   local remote out clone
-  remote="$WORK/remote.$RANDOM.git"; git init -q --bare -b main "$remote"
+  remote="$WORK/remote.$RANDOM.git"
+  git init -q --bare -b main "$remote"
   out="$(make_bootstrap_output v1.0.0)"
   bash "$PUBLISH" "$out" v1.0.0 "$SHA" "$remote" >/dev/null || die "publish failed"
-  clone="$WORK/clone.$RANDOM"; git clone -q "$remote" "$clone"
+  clone="$WORK/clone.$RANDOM"
+  git clone -q "$remote" "$clone"
   [ "$(git -C "$clone" rev-list --count HEAD)" = 1 ] || die "expected exactly one commit"
   [ "$(git -C "$clone" log -1 --format=%s)" = \
     "Bootstrapper v1.0.0 from factoincognito/ai-project-template-v2@$SHA" ] || die "bad commit message"
-  [ "$(git -C "$clone" rev-parse "v1.0.0^{commit}")" = "$(git -C "$clone" rev-parse HEAD)" ] \
-    || die "tag does not point at the release commit"
+  [ "$(git -C "$clone" rev-parse "v1.0.0^{commit}")" = "$(git -C "$clone" rev-parse HEAD)" ] ||
+    die "tag does not point at the release commit"
   diff <(git -C "$clone" ls-files | LC_ALL=C sort) <(list_files "$out") || die "tree differs"
 }
 
 test_publish_second_release_mirrors_output_and_keeps_history() {
   local remote out1 out2 clone
-  remote="$WORK/remote.$RANDOM.git"; git init -q --bare -b main "$remote"
+  remote="$WORK/remote.$RANDOM.git"
+  git init -q --bare -b main "$remote"
   out1="$(make_bootstrap_output v1.0.0)"
   echo "obsolete" >"$out1/obsolete.md"
   bash "$PUBLISH" "$out1" v1.0.0 "$SHA" "$remote" >/dev/null || die "publish 1 failed"
   out2="$(make_bootstrap_output v1.1.0)"
   bash "$PUBLISH" "$out2" v1.1.0 "$SHA" "$remote" >/dev/null || die "publish 2 failed"
-  clone="$WORK/clone.$RANDOM"; git clone -q "$remote" "$clone"
+  clone="$WORK/clone.$RANDOM"
+  git clone -q "$remote" "$clone"
   [ "$(git -C "$clone" rev-list --count HEAD)" = 2 ] || die "history not kept"
   [ ! -e "$clone/obsolete.md" ] || die "file not in output was not deleted"
   diff <(git -C "$clone" ls-files | LC_ALL=C sort) <(list_files "$out2") || die "tree differs"
@@ -987,10 +1102,14 @@ test_publish_second_release_mirrors_output_and_keeps_history() {
 
 test_publish_uses_existing_default_branch() {
   local remote seed out
-  remote="$WORK/remote.$RANDOM.git"; git init -q --bare -b main "$remote"
+  remote="$WORK/remote.$RANDOM.git"
+  git init -q --bare -b main "$remote"
   git -C "$remote" symbolic-ref HEAD refs/heads/trunk
-  seed="$WORK/seed.$RANDOM"; git init -q -b trunk "$seed"
-  echo seed >"$seed/seed.txt"; git -C "$seed" add .; git -C "$seed" -c user.name=test -c user.email=test@example.invalid commit -qm seed
+  seed="$WORK/seed.$RANDOM"
+  git init -q -b trunk "$seed"
+  echo seed >"$seed/seed.txt"
+  git -C "$seed" add .
+  git -C "$seed" -c user.name=test -c user.email=test@example.invalid commit -qm seed
   git -C "$seed" push -q "$remote" trunk
   out="$(make_bootstrap_output v1.0.0)"
   bash "$PUBLISH" "$out" v1.0.0 "$SHA" "$remote" >/dev/null || die "publish failed"
@@ -1000,7 +1119,8 @@ test_publish_uses_existing_default_branch() {
 
 test_publish_fails_if_tag_exists_and_changes_nothing() {
   local remote out before
-  remote="$WORK/remote.$RANDOM.git"; git init -q --bare -b main "$remote"
+  remote="$WORK/remote.$RANDOM.git"
+  git init -q --bare -b main "$remote"
   out="$(make_bootstrap_output v1.0.0)"
   bash "$PUBLISH" "$out" v1.0.0 "$SHA" "$remote" >/dev/null || die "publish 1 failed"
   before="$(git -C "$remote" for-each-ref)"
@@ -1008,13 +1128,17 @@ test_publish_fails_if_tag_exists_and_changes_nothing() {
   if bash "$PUBLISH" "$out" v1.0.0 "$SHA" "$remote" 2>"$WORK/perr" >/dev/null; then
     die "publish succeeded although tag exists"
   fi
-  grep -qF "tag v1.0.0 already exists" "$WORK/perr" || { cat "$WORK/perr" >&2; die "bad message"; }
+  grep -qF "tag v1.0.0 already exists" "$WORK/perr" || {
+    cat "$WORK/perr" >&2
+    die "bad message"
+  }
   [ "$(git -C "$remote" for-each-ref)" = "$before" ] || die "remote refs changed"
 }
 
 test_publish_rejects_bad_arguments() {
   local remote out
-  remote="$WORK/remote.$RANDOM.git"; git init -q --bare -b main "$remote"
+  remote="$WORK/remote.$RANDOM.git"
+  git init -q --bare -b main "$remote"
   out="$(make_bootstrap_output v1.0.0)"
   ! bash "$PUBLISH" "$out" 1.0.0 "$SHA" "$remote" 2>/dev/null || die "bad version accepted"
   ! bash "$PUBLISH" "$out" v1.0.0 abc "$remote" 2>/dev/null || die "bad commit accepted"
@@ -1034,46 +1158,64 @@ make_history_repo() {
   d="$(mktemp -d "$WORK/hist.XXXXXX")"
   git init -q -b main "$d"
   gc() { git -C "$d" -c user.name=test -c user.email=test@example.invalid -c commit.gpgsign=false "$@"; }
-  echo 1 >"$d/f"; gc add f; gc commit -qm one
-  echo 2 >"$d/f"; gc commit -qam two
+  echo 1 >"$d/f"
+  gc add f
+  gc commit -qm one
+  echo 2 >"$d/f"
+  gc commit -qam two
   gc checkout -q -b side
-  echo 3 >"$d/f"; gc commit -qam unmerged
+  echo 3 >"$d/f"
+  gc commit -qam unmerged
   gc checkout -q main
   echo "$d"
 }
 
 test_on_main_commit_on_main_accepted() {
-  local d; d="$(make_history_repo)"
+  local d
+  d="$(make_history_repo)"
   bash "$REQUIRE" "$d" "$(git -C "$d" rev-parse main)" main >/dev/null || die "tip of main rejected"
   bash "$REQUIRE" "$d" "$(git -C "$d" rev-parse main~1)" main >/dev/null || die "older main commit rejected"
 }
 
 test_on_main_unmerged_commit_rejected() {
-  local d; d="$(make_history_repo)"
+  local d
+  d="$(make_history_repo)"
   if bash "$REQUIRE" "$d" "$(git -C "$d" rev-parse side)" main 2>"$WORK/rerr" >/dev/null; then
     die "unmerged commit accepted"
   fi
-  grep -qF "is not on main" "$WORK/rerr" || { cat "$WORK/rerr" >&2; die "bad message"; }
+  grep -qF "is not on main" "$WORK/rerr" || {
+    cat "$WORK/rerr" >&2
+    die "bad message"
+  }
 }
 
 test_on_main_unknown_commit_rejected() {
-  local d; d="$(make_history_repo)"
+  local d
+  d="$(make_history_repo)"
   if bash "$REQUIRE" "$d" "$SHA" main 2>"$WORK/rerr" >/dev/null; then
     die "unknown commit accepted"
   fi
-  grep -qF "not found" "$WORK/rerr" || { cat "$WORK/rerr" >&2; die "bad message"; }
+  grep -qF "not found" "$WORK/rerr" || {
+    cat "$WORK/rerr" >&2
+    die "bad message"
+  }
 }
 
 test_on_main_missing_ref_rejected() {
-  local d; d="$(make_history_repo)"
+  local d
+  d="$(make_history_repo)"
   if bash "$REQUIRE" "$d" "$(git -C "$d" rev-parse main)" origin/main 2>"$WORK/rerr" >/dev/null; then
     die "missing ref accepted"
   fi
-  grep -qF "ref origin/main not found" "$WORK/rerr" || { cat "$WORK/rerr" >&2; die "bad message"; }
+  grep -qF "ref origin/main not found" "$WORK/rerr" || {
+    cat "$WORK/rerr" >&2
+    die "bad message"
+  }
 }
 
 test_on_main_bad_arguments_rejected() {
-  local d; d="$(make_history_repo)"
+  local d
+  d="$(make_history_repo)"
   ! bash "$REQUIRE" "$d" abc main 2>/dev/null || die "bad commit accepted"
   ! bash "$REQUIRE" "$d" "$(git -C "$d" rev-parse main)" 2>/dev/null || die "missing arg accepted"
   ! bash "$REQUIRE" "$WORK/nope" "$SHA" main 2>/dev/null || die "missing repo accepted"
@@ -1085,8 +1227,8 @@ test_workflow_publish_requires_commit_on_main() {
   local wf="$REPO/.github/workflows/bootstrapper.yml"
   grep -qF 'fetch-depth: 0' "$wf" || die "publish checkout lacks fetch-depth: 0"
   grep -qE 'bootstrap/require-on-main\.sh .*origin/main' "$wf" || die "publish does not run require-on-main.sh against origin/main"
-  awk '/require-on-main\.sh/ { c = NR } /bootstrap\/publish\.sh/ { p = NR } END { exit !(c && p && c < p) }' "$wf" \
-    || die "on-main check does not come before publish.sh"
+  awk '/require-on-main\.sh/ { c = NR } /bootstrap\/publish\.sh/ { p = NR } END { exit !(c && p && c < p) }' "$wf" ||
+    die "on-main check does not come before publish.sh"
 }
 
 test_workflow_test_job_named_bootstrapper_test() {
@@ -1135,8 +1277,8 @@ wf_needs() {
   local line
   line="$(wf_job "$1" | grep -E '^    needs:' || true)"
   [ -n "$line" ] || return 0
-  grep -qE '^    needs: \[[A-Za-z0-9_, -]+\][[:space:]]*$' <<<"$line" \
-    || die "needs of $1 is not in the form needs: [a, b]: $line"
+  grep -qE '^    needs: \[[A-Za-z0-9_, -]+\][[:space:]]*$' <<<"$line" ||
+    die "needs of $1 is not in the form needs: [a, b]: $line"
   printf '%s\n' "$line" | sed -E 's/^    needs: \[//; s/\][[:space:]]*$//' | tr ',' '\n' | sed -E 's/^ +//; s/ +$//'
 }
 
@@ -1213,7 +1355,10 @@ test_workflow_bootstrapper_runs_on_pull_requests_to_main_and_v_tags_only() {
   pull_request:
     branches: [main]'
   got="$(wf_on)"
-  [ "$got" = "$want" ] || { printf 'on: block is:\n%s\n' "$got" >&2; die "triggers are not pull_request to main and v* tags only"; }
+  [ "$got" = "$want" ] || {
+    printf 'on: block is:\n%s\n' "$got" >&2
+    die "triggers are not pull_request to main and v* tags only"
+  }
 }
 
 test_workflow_bootstrapper_cancels_superseded_pr_runs_but_never_a_tag_run() {
@@ -1222,16 +1367,28 @@ test_workflow_bootstrapper_cancels_superseded_pr_runs_but_never_a_tag_run() {
   local top pub
   top="$(awk '/^concurrency:/ { p = 1; print; next } /^[^ #]/ { p = 0 } p' "$BWF")"
   [ -n "$top" ] || die "no workflow-level concurrency"
-  grep -qxF '  group: bootstrapper-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}' <<<"$top" \
-    || { printf '%s\n' "$top" >&2; die "concurrency group is not per pull request (or per ref for a tag)"; }
-  grep -qxF "  cancel-in-progress: \${{ github.event_name == 'pull_request' }}" <<<"$top" \
-    || { printf '%s\n' "$top" >&2; die "cancel-in-progress is not limited to pull_request runs"; }
-  [ "$(printf '%s\n' "$top" | grep -cvE '^[[:space:]]*(#|$)')" = 3 ] \
-    || { printf '%s\n' "$top" >&2; die "unexpected keys in the workflow-level concurrency"; }
+  grep -qxF '  group: bootstrapper-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}' <<<"$top" ||
+    {
+      printf '%s\n' "$top" >&2
+      die "concurrency group is not per pull request (or per ref for a tag)"
+    }
+  grep -qxF "  cancel-in-progress: \${{ github.event_name == 'pull_request' }}" <<<"$top" ||
+    {
+      printf '%s\n' "$top" >&2
+      die "cancel-in-progress is not limited to pull_request runs"
+    }
+  [ "$(printf '%s\n' "$top" | grep -cvE '^[[:space:]]*(#|$)')" = 3 ] ||
+    {
+      printf '%s\n' "$top" >&2
+      die "unexpected keys in the workflow-level concurrency"
+    }
   # The publish job keeps its own group, which never cancels a publish.
   pub="$(wf_job publish | awk '/^    concurrency:/ { p = 1; next } /^    [A-Za-z]/ { p = 0 } p')"
   [ "$pub" = '      group: bootstrapper-publish
-      cancel-in-progress: false' ] || { printf '%s\n' "$pub" >&2; die "publish job concurrency changed"; }
+      cancel-in-progress: false' ] || {
+    printf '%s\n' "$pub" >&2
+    die "publish job concurrency changed"
+  }
 }
 
 # assert_no_continue_on_error: no continue-on-error key, bare or quoted
@@ -1244,8 +1401,8 @@ assert_no_continue_on_error() {
   for id in $ids; do
     [ -n "$(wf_job "$id")" ] || die "no job $id"
     n=$((n + 1))
-    ! wf_job "$id" | grep -nE '(^|[[:space:]])["'"'"']?continue-on-error["'"'"']?[[:space:]]*:' >&2 \
-      || die "continue-on-error in $id"
+    ! wf_job "$id" | grep -nE '(^|[[:space:]])["'"'"']?continue-on-error["'"'"']?[[:space:]]*:' >&2 ||
+      die "continue-on-error in $id"
   done
   CHECKED_IDS="$ids"
   CHECKED_N="$n"
@@ -1256,7 +1413,8 @@ test_workflow_no_continue_on_error_in_the_required_check_or_its_needs() {
   # success result, and the required check green with it.
   local id ids n
   assert_no_continue_on_error
-  ids="$CHECKED_IDS"; n="$CHECKED_N"
+  ids="$CHECKED_IDS"
+  n="$CHECKED_N"
   [ "$n" -ge 3 ] || die "expected bootstrapper-test and at least two needs, got: $ids"
   for id in scripts-test bootstrap-project-test; do
     grep -qF " $id " <<<" $ids " || die "$id is not checked (not needed by bootstrapper-test)"
@@ -1272,7 +1430,10 @@ test_workflow_continue_on_error_check_catches_the_bare_and_quoted_key() {
   local fx key err
   fx="$WORK/bootstrapper.yml"
   cp "$BWF" "$fx"
-  ( BWF="$fx"; assert_no_continue_on_error ) || die "the unchanged copy of the workflow fails the check"
+  (
+    BWF="$fx"
+    assert_no_continue_on_error
+  ) || die "the unchanged copy of the workflow fails the check"
   for key in 'continue-on-error' '"continue-on-error"' "'continue-on-error'"; do
     awk -v k="$key" '{ print }
       /^  scripts-test:[[:space:]]*$/ { injob = 1; next }
@@ -1280,10 +1441,16 @@ test_workflow_continue_on_error_check_catches_the_bare_and_quoted_key() {
       injob && !done && /^      - uses: actions\/checkout/ { print "        " k ": true"; done = 1 }' "$BWF" >"$fx"
     grep -qF "        $key: true" "$fx" || die "fixture: the key $key was not inserted"
     err="$WORK/err.$RANDOM"
-    if ( BWF="$fx"; assert_no_continue_on_error ) 2>"$err"; then
+    if (
+      BWF="$fx"
+      assert_no_continue_on_error
+    ) 2>"$err"; then
       die "the check passed a step with $key: true in scripts-test"
     fi
-    grep -qF "continue-on-error in scripts-test" "$err" || { cat "$err" >&2; die "the check failed for another reason with $key"; }
+    grep -qF "continue-on-error in scripts-test" "$err" || {
+      cat "$err" >&2
+      die "the check failed for another reason with $key"
+    }
   done
 }
 
@@ -1291,7 +1458,8 @@ test_workflow_matrix_cannot_drop_an_os() {
   # An exclude: entry would remove a leg and the aggregate would never
   # see it. The legs are an include: list, so every OS needs an entry.
   local j job o
-  j="$(matrix_job)"; job="$(wf_job "$j")"
+  j="$(matrix_job)"
+  job="$(wf_job "$j")"
   ! printf '%s\n' "$job" | grep -nE '^[[:space:]]+exclude[[:space:]]*:' >&2 || die "$j has a matrix exclude"
   for o in ubuntu-latest ubuntu-bash32 windows-latest; do
     [ -n "$(wf_legs | awk -v o="$o" '$1 == o { print }')" ] || die "$o has no leg in the matrix"
@@ -1325,8 +1493,11 @@ NOT_READ="$HERE/not-read-by-tests.txt"
 inputs_repo() {
   mkdir -p "$1/docs" "$1/bootstrap"
   git -C "$1" init -q -b main
-  printf 'x\n' >"$1/README.md"; printf 'x\n' >"$1/docs/BACKLOG.md"; printf 'x\n' >"$1/docs/SPEC.md"
-  printf 'x\n' >"$1/bootstrap/build.sh"; printf 'x\n' >"$1/STATUS.md"
+  printf 'x\n' >"$1/README.md"
+  printf 'x\n' >"$1/docs/BACKLOG.md"
+  printf 'x\n' >"$1/docs/SPEC.md"
+  printf 'x\n' >"$1/bootstrap/build.sh"
+  printf 'x\n' >"$1/STATUS.md"
   printf '%s\n' '# comment' '' docs/BACKLOG.md STATUS.md >"$1/list"
   git -C "$1" add -A
   git -C "$1" -c user.name=T -c user.email=t@example.com commit -q -m base
@@ -1335,17 +1506,19 @@ inputs_repo() {
 # needed_in <dir> <change...>: makes the changes (shell commands run in
 # <dir>), commits them, and prints the tool's answer for base..HEAD.
 needed_in() {
-  local d="$1"; shift
+  local d="$1"
+  shift
   # shellcheck disable=SC2294 # each argument is a shell command; eval joins them with spaces
-  ( cd "$d" && eval "$@" && git add -A && git -c user.name=T -c user.email=t@example.com commit -q --allow-empty -m change ) \
-    || die "the change '$*' could not be made"
-  ( cd "$d" && LIST="$d/list" bash "$CHANGED_INPUTS" needed HEAD~1 HEAD 2>/dev/null )
+  (cd "$d" && eval "$@" && git add -A && git -c user.name=T -c user.email=t@example.com commit -q --allow-empty -m change) ||
+    die "the change '$*' could not be made"
+  (cd "$d" && LIST="$d/list" bash "$CHANGED_INPUTS" needed HEAD~1 HEAD 2>/dev/null)
 }
 
 test_changed_inputs_says_the_tests_are_needed_unless_only_unread_files_changed() {
   local d
   [ -f "$CHANGED_INPUTS" ] || die "no bootstrap/changed-inputs.sh"
-  d="$WORK/r1"; inputs_repo "$d"
+  d="$WORK/r1"
+  inputs_repo "$d"
   [ "$(needed_in "$d" 'printf y >>docs/BACKLOG.md')" = false ] || die "a change to a listed file alone needs the tests"
   [ "$(needed_in "$d" 'printf y >>docs/BACKLOG.md; printf y >>STATUS.md')" = false ] || die "two listed files need the tests"
   [ "$(needed_in "$d" 'printf y >>docs/BACKLOG.md; printf y >>README.md')" = true ] || die "a listed and an unlisted file do not need the tests"
@@ -1359,13 +1532,20 @@ test_changed_inputs_says_the_tests_are_needed_unless_only_unread_files_changed()
   [ "$(needed_in "$d" 'git mv docs/BACKLOG.md docs/OTHER.md')" = true ] || die "renaming a listed file to an unlisted name does not need the tests"
   [ "$(needed_in "$d" 'true')" = true ] || die "an empty change does not need the tests"
   # The changed files are named on stderr, each with its side.
-  d="$WORK/r1b"; inputs_repo "$d"
-  ( cd "$d" && printf y >>README.md && git add -A && git -c user.name=T -c user.email=t@example.com commit -q -m c \
-    && LIST="$d/list" bash "$CHANGED_INPUTS" needed HEAD~1 HEAD ) >"$WORK/out" 2>"$WORK/err"
-  grep -qF 'read by the tests:     README.md' "$WORK/err" || { cat "$WORK/err" >&2; die "the changed file is not named"; }
-  ( cd "$d" && printf y >>docs/BACKLOG.md && git add -A && git -c user.name=T -c user.email=t@example.com commit -q -m c \
-    && LIST="$d/list" bash "$CHANGED_INPUTS" needed HEAD~1 HEAD ) >"$WORK/out" 2>"$WORK/err"
-  grep -qF 'not read by the tests: docs/BACKLOG.md' "$WORK/err" || { cat "$WORK/err" >&2; die "the listed file is not named"; }
+  d="$WORK/r1b"
+  inputs_repo "$d"
+  (cd "$d" && printf y >>README.md && git add -A && git -c user.name=T -c user.email=t@example.com commit -q -m c &&
+    LIST="$d/list" bash "$CHANGED_INPUTS" needed HEAD~1 HEAD) >"$WORK/out" 2>"$WORK/err"
+  grep -qF 'read by the tests:     README.md' "$WORK/err" || {
+    cat "$WORK/err" >&2
+    die "the changed file is not named"
+  }
+  (cd "$d" && printf y >>docs/BACKLOG.md && git add -A && git -c user.name=T -c user.email=t@example.com commit -q -m c &&
+    LIST="$d/list" bash "$CHANGED_INPUTS" needed HEAD~1 HEAD) >"$WORK/out" 2>"$WORK/err"
+  grep -qF 'not read by the tests: docs/BACKLOG.md' "$WORK/err" || {
+    cat "$WORK/err" >&2
+    die "the listed file is not named"
+  }
 }
 
 test_changed_inputs_refuses_what_it_cannot_judge() {
@@ -1373,46 +1553,59 @@ test_changed_inputs_refuses_what_it_cannot_judge() {
   # is not a plain repo path: exit 2, so the workflow's step fails and
   # the gate does not pass on it.
   local d bad rc
-  d="$WORK/r2"; inputs_repo "$d"
+  d="$WORK/r2"
+  inputs_repo "$d"
   set +e
-  ( cd "$d" && LIST="$d/list" bash "$CHANGED_INPUTS" needed nosuchref HEAD ) >/dev/null 2>&1; rc=$?
+  (cd "$d" && LIST="$d/list" bash "$CHANGED_INPUTS" needed nosuchref HEAD) >/dev/null 2>&1
+  rc=$?
   set -e
   [ "$rc" -eq 2 ] || die "an unknown commit: exit $rc, want 2"
   set +e
-  ( cd "$d" && LIST="$d/missing" bash "$CHANGED_INPUTS" needed HEAD HEAD ) >/dev/null 2>&1; rc=$?
+  (cd "$d" && LIST="$d/missing" bash "$CHANGED_INPUTS" needed HEAD HEAD) >/dev/null 2>&1
+  rc=$?
   set -e
   [ "$rc" -eq 2 ] || die "a missing list: exit $rc, want 2"
   for bad in '/etc/passwd' '../outside' 'docs/../README.md' 'docs/' 'docs/*.md' 'with space'; do
     printf '%s\n' "$bad" >"$d/badlist"
     set +e
-    ( cd "$d" && LIST="$d/badlist" bash "$CHANGED_INPUTS" needed HEAD HEAD ) >/dev/null 2>"$WORK/err"; rc=$?
+    (cd "$d" && LIST="$d/badlist" bash "$CHANGED_INPUTS" needed HEAD HEAD) >/dev/null 2>"$WORK/err"
+    rc=$?
     set -e
     [ "$rc" -eq 2 ] || die "list entry '$bad': exit $rc, want 2"
-    grep -qF 'not a plain repo path' "$WORK/err" || { cat "$WORK/err" >&2; die "list entry '$bad': not refused for its path"; }
+    grep -qF 'not a plain repo path' "$WORK/err" || {
+      cat "$WORK/err" >&2
+      die "list entry '$bad': not refused for its path"
+    }
   done
   set +e
-  ( cd "$d" && LIST="$d/list" bash "$CHANGED_INPUTS" ) >/dev/null 2>&1; rc=$?
+  (cd "$d" && LIST="$d/list" bash "$CHANGED_INPUTS") >/dev/null 2>&1
+  rc=$?
   set -e
   [ "$rc" -eq 2 ] || die "no subcommand: exit $rc, want 2"
 }
 
 test_changed_inputs_remove_deletes_only_the_listed_files() {
   local d rc
-  d="$WORK/r3"; inputs_repo "$d"
-  ( cd "$d" && LIST="$d/list" bash "$CHANGED_INPUTS" remove ) >"$WORK/out" 2>&1 || { cat "$WORK/out" >&2; die "remove failed"; }
+  d="$WORK/r3"
+  inputs_repo "$d"
+  (cd "$d" && LIST="$d/list" bash "$CHANGED_INPUTS" remove) >"$WORK/out" 2>&1 || {
+    cat "$WORK/out" >&2
+    die "remove failed"
+  }
   [ ! -e "$d/docs/BACKLOG.md" ] && [ ! -e "$d/STATUS.md" ] || die "a listed file is still there"
   [ -f "$d/README.md" ] && [ -f "$d/docs/SPEC.md" ] && [ -f "$d/bootstrap/build.sh" ] || die "an unlisted file was deleted"
   # A list saved with CR LF line ends works the same (Git Bash).
   printf 'x\n' >"$d/STATUS.md"
   printf '%s\r\n' '# c' STATUS.md >"$d/crlf"
-  ( cd "$d" && LIST="$d/crlf" bash "$CHANGED_INPUTS" remove ) >/dev/null 2>&1 || die "remove with a CR LF list failed"
+  (cd "$d" && LIST="$d/crlf" bash "$CHANGED_INPUTS" remove) >/dev/null 2>&1 || die "remove with a CR LF list failed"
   [ ! -e "$d/STATUS.md" ] || die "a CR LF list did not delete its file"
   # Again, with the files gone: still fine.
-  ( cd "$d" && LIST="$d/list" bash "$CHANGED_INPUTS" remove ) >/dev/null 2>&1 || die "remove failed when the files were already gone"
+  (cd "$d" && LIST="$d/list" bash "$CHANGED_INPUTS" remove) >/dev/null 2>&1 || die "remove failed when the files were already gone"
   # A listed folder is refused before anything is deleted.
   printf '%s\n' README.md docs >"$d/dirlist"
   set +e
-  ( cd "$d" && LIST="$d/dirlist" bash "$CHANGED_INPUTS" remove ) >/dev/null 2>&1; rc=$?
+  (cd "$d" && LIST="$d/dirlist" bash "$CHANGED_INPUTS" remove) >/dev/null 2>&1
+  rc=$?
   set -e
   [ "$rc" -eq 2 ] || die "a listed folder: exit $rc, want 2"
   [ -f "$d/README.md" ] || die "a file was deleted before the folder was refused"
@@ -1427,15 +1620,19 @@ test_not_read_list_holds_only_tracked_files_and_every_test_job_deletes_them() {
   # fails in CI.
   local f j job
   [ -f "$NOT_READ" ] || die "no bootstrap/not-read-by-tests.txt"
-  ( cd "$REPO" && LIST="$NOT_READ" bash "$CHANGED_INPUTS" needed HEAD HEAD ) >/dev/null 2>"$WORK/err" \
-    || { cat "$WORK/err" >&2; die "the list does not pass the tool's own checks"; }
+  (cd "$REPO" && LIST="$NOT_READ" bash "$CHANGED_INPUTS" needed HEAD HEAD) >/dev/null 2>"$WORK/err" ||
+    {
+      cat "$WORK/err" >&2
+      die "the list does not pass the tool's own checks"
+    }
   grep -vE '^(#|$)' "$NOT_READ" >"$WORK/listed"
   [ -s "$WORK/listed" ] || die "the list is empty"
   while IFS= read -r f; do
     git -C "$REPO" ls-files --error-unmatch -- "$f" >/dev/null 2>&1 || die "listed but not tracked: $f"
     case "$f" in
       bootstrap/* | tools/* | languages/* | .github/* | README.md | CLAUDE.md | docs/SPEC.md | docs/DEV_INFRASTRUCTURE.md)
-        die "listed, but the tests or the build read it: $f" ;;
+        die "listed, but the tests or the build read it: $f"
+        ;;
     esac
     ! grep -qxF -- "$f" "$HERE/manifest.txt" || die "listed, but the build ships it: $f"
   done <"$WORK/listed"
@@ -1446,11 +1643,11 @@ test_not_read_list_holds_only_tracked_files_and_every_test_job_deletes_them() {
     $(wf_jobs_running bootstrap/test-e2e-check.sh) $(wf_jobs_running tools/test-check-status.sh) \
     $(wf_jobs_running tools/test-check-rules-edition.sh) "$(matrix_job)"; do
     job="$(wf_job "$j")"
-    grep -qxF '        run: bash bootstrap/changed-inputs.sh remove' <<<"$job" \
-      || die "job $j runs tests without deleting the files no test reads first"
+    grep -qxF '        run: bash bootstrap/changed-inputs.sh remove' <<<"$job" ||
+      die "job $j runs tests without deleting the files no test reads first"
     # Before the first step that runs a suite.
-    awk '/run: bash bootstrap\/changed-inputs.sh remove/ { r = NR } /(\/bin\/)?bash (bootstrap|tools)\/test/ && !f { f = NR } END { exit !(r && f && r < f) }' <<<"$job" \
-      || die "job $j deletes the files after a suite has run"
+    awk '/run: bash bootstrap\/changed-inputs.sh remove/ { r = NR } /(\/bin\/)?bash (bootstrap|tools)\/test/ && !f { f = NR } END { exit !(r && f && r < f) }' <<<"$job" ||
+      die "job $j deletes the files after a suite has run"
   done
 }
 
@@ -1483,44 +1680,54 @@ test_workflow_changes_job_answers_true_unless_only_unread_files_changed() {
   printf '%s\n' "$step" | wf_run_block >"$script"
   [ -s "$script" ] || die "no run script in the changes job"
   merge_case() { # <name> <event> <change in the branch> [broken] -> prints needed
-    d="$WORK/m.$1"; mkdir -p "$d/bootstrap" "$d/docs"
+    d="$WORK/m.$1"
+    mkdir -p "$d/bootstrap" "$d/docs"
     git -C "$d" init -q -b main
-    cp "$CHANGED_INPUTS" "$d/bootstrap/changed-inputs.sh"; cp "$NOT_READ" "$d/bootstrap/not-read-by-tests.txt"
+    cp "$CHANGED_INPUTS" "$d/bootstrap/changed-inputs.sh"
+    cp "$NOT_READ" "$d/bootstrap/not-read-by-tests.txt"
     [ -z "${4:-}" ] || printf '%s\n' '#!/usr/bin/env bash' 'exit 3' >"$d/bootstrap/changed-inputs.sh"
-    printf 'x\n' >"$d/README.md"; printf 'x\n' >"$d/docs/BACKLOG.md"
-    git -C "$d" add -A; git -C "$d" -c user.name=T -c user.email=t@example.com commit -q -m base
+    printf 'x\n' >"$d/README.md"
+    printf 'x\n' >"$d/docs/BACKLOG.md"
+    git -C "$d" add -A
+    git -C "$d" -c user.name=T -c user.email=t@example.com commit -q -m base
     git -C "$d" checkout -q -b pr
-    ( cd "$d" && eval "$3" && git add -A && git -c user.name=T -c user.email=t@example.com commit -q -m pr )
+    (cd "$d" && eval "$3" && git add -A && git -c user.name=T -c user.email=t@example.com commit -q -m pr)
     git -C "$d" checkout -q main
     git -C "$d" -c user.name=T -c user.email=t@example.com merge -q --no-ff -m merge pr
     : >"$WORK/out.$1"
-    ( cd "$d" && EVENT="$2" GITHUB_OUTPUT="$WORK/out.$1" RUNNER_TEMP="$WORK" bash "$script" ) >/dev/null 2>&1 \
-      || die "$1: the changes job failed"
+    (cd "$d" && EVENT="$2" GITHUB_OUTPUT="$WORK/out.$1" RUNNER_TEMP="$WORK" bash "$script") >/dev/null 2>&1 ||
+      die "$1: the changes job failed"
     sed -n 's/^needed=//p' "$WORK/out.$1"
   }
   [ "$(merge_case docs pull_request 'printf y >>docs/BACKLOG.md')" = false ] || die "a pull request changing only docs/BACKLOG.md needs the tests"
   [ "$(merge_case readme pull_request 'printf y >>README.md')" = true ] || die "a pull request changing README.md does not need the tests"
-  [ "$(merge_case list pull_request 'printf "README.md\n" >>bootstrap/not-read-by-tests.txt; printf y >>README.md')" = true ] \
-    || die "a pull request that lists README.md itself skipped its own tests (the base's list must decide)"
+  [ "$(merge_case list pull_request 'printf "README.md\n" >>bootstrap/not-read-by-tests.txt; printf y >>README.md')" = true ] ||
+    die "a pull request that lists README.md itself skipped its own tests (the base's list must decide)"
   # A pull request cannot switch off its own tests through the list or
   # the script: the base branch's copies decide.
-  [ "$(merge_case list2 pull_request 'printf "README.md\nbootstrap/not-read-by-tests.txt\n" >>bootstrap/not-read-by-tests.txt; printf y >>README.md')" = true ] \
-    || die "a pull request listing README.md and the list itself skipped its own tests"
-  [ "$(merge_case script pull_request 'printf "%s\n" "#!/usr/bin/env bash" "echo false" >bootstrap/changed-inputs.sh; printf y >>docs/BACKLOG.md')" = true ] \
-    || die "a pull request that replaced the script skipped its own tests"
-  [ "$(merge_case script2 pull_request 'printf "%s\n" "#!/usr/bin/env bash" "echo false" >bootstrap/changed-inputs.sh; printf "bootstrap/changed-inputs.sh\n" >>bootstrap/not-read-by-tests.txt; printf y >>docs/BACKLOG.md')" = true ] \
-    || die "a pull request that replaced and listed the script skipped its own tests"
+  [ "$(merge_case list2 pull_request 'printf "README.md\nbootstrap/not-read-by-tests.txt\n" >>bootstrap/not-read-by-tests.txt; printf y >>README.md')" = true ] ||
+    die "a pull request listing README.md and the list itself skipped its own tests"
+  [ "$(merge_case script pull_request 'printf "%s\n" "#!/usr/bin/env bash" "echo false" >bootstrap/changed-inputs.sh; printf y >>docs/BACKLOG.md')" = true ] ||
+    die "a pull request that replaced the script skipped its own tests"
+  [ "$(merge_case script2 pull_request 'printf "%s\n" "#!/usr/bin/env bash" "echo false" >bootstrap/changed-inputs.sh; printf "bootstrap/changed-inputs.sh\n" >>bootstrap/not-read-by-tests.txt; printf y >>docs/BACKLOG.md')" = true ] ||
+    die "a pull request that replaced and listed the script skipped its own tests"
   # A judge that fails runs the tests (and does not block the pull request).
   [ "$(merge_case broken pull_request 'printf y >>docs/BACKLOG.md' broken)" = true ] || die "a failing judge did not run the tests"
   [ "$(merge_case tag push 'printf y >>docs/BACKLOG.md')" = true ] || die "a tag run does not run the tests"
   # A base branch without the script (the first pull request): the tests run.
-  d="$WORK/m.nobase"; mkdir -p "$d/docs"
-  git -C "$d" init -q -b main; printf 'x\n' >"$d/docs/BACKLOG.md"
-  git -C "$d" add -A; git -C "$d" -c user.name=T -c user.email=t@example.com commit -q -m base
-  git -C "$d" checkout -q -b pr; printf y >>"$d/docs/BACKLOG.md"; git -C "$d" -c user.name=T -c user.email=t@example.com commit -q -am pr
-  git -C "$d" checkout -q main; git -C "$d" -c user.name=T -c user.email=t@example.com merge -q --no-ff -m merge pr
+  d="$WORK/m.nobase"
+  mkdir -p "$d/docs"
+  git -C "$d" init -q -b main
+  printf 'x\n' >"$d/docs/BACKLOG.md"
+  git -C "$d" add -A
+  git -C "$d" -c user.name=T -c user.email=t@example.com commit -q -m base
+  git -C "$d" checkout -q -b pr
+  printf y >>"$d/docs/BACKLOG.md"
+  git -C "$d" -c user.name=T -c user.email=t@example.com commit -q -am pr
+  git -C "$d" checkout -q main
+  git -C "$d" -c user.name=T -c user.email=t@example.com merge -q --no-ff -m merge pr
   : >"$WORK/out.nobase"
-  ( cd "$d" && EVENT=pull_request GITHUB_OUTPUT="$WORK/out.nobase" RUNNER_TEMP="$WORK" bash "$script" ) >/dev/null 2>&1 || die "nobase: failed"
+  (cd "$d" && EVENT=pull_request GITHUB_OUTPUT="$WORK/out.nobase" RUNNER_TEMP="$WORK" bash "$script") >/dev/null 2>&1 || die "nobase: failed"
   [ "$(sed -n 's/^needed=//p' "$WORK/out.nobase")" = true ] || die "with no script on the base, the tests were skipped"
 }
 
@@ -1533,15 +1740,20 @@ test_workflow_bootstrapper_test_passes_a_skip_only_when_the_changes_job_said_so(
   step="$(wf_step bootstrapper-test '^ *run: [|]')"
   script="$WORK/gate.skip.sh"
   printf '%s\n' "$step" | wf_run_block >"$script"
-  d="$WORK/gate.skip"; gate_fixture "$d"; rm -f "$d/shard-list/"*
-  ( cd "$d" && RESULTS="success skipped skipped" CHANGES_RESULT=success TESTS_NEEDED=false TEST_RESULTS="skipped skipped" bash "$script" ) \
-    >"$WORK/out" 2>&1 || { cat "$WORK/out" >&2; die "a pull request with only unread files did not pass"; }
+  d="$WORK/gate.skip"
+  gate_fixture "$d"
+  rm -f "$d/shard-list/"*
+  (cd "$d" && RESULTS="success skipped skipped" CHANGES_RESULT=success TESTS_NEEDED=false TEST_RESULTS="skipped skipped" bash "$script") \
+    >"$WORK/out" 2>&1 || {
+    cat "$WORK/out" >&2
+    die "a pull request with only unread files did not pass"
+  }
   for r in "success|true|skipped skipped" "failure|false|skipped skipped" "success||skipped skipped" \
-           "success|false|success skipped" "success|false|skipped success" "success|false|failure skipped" \
-           "skipped|false|skipped skipped" "cancelled|false|skipped skipped" "success|False|skipped skipped"; do
+    "success|false|success skipped" "success|false|skipped success" "success|false|failure skipped" \
+    "skipped|false|skipped skipped" "cancelled|false|skipped skipped" "success|False|skipped skipped"; do
     IFS='|' read -r c n t <<<"$r"
-    ! ( cd "$d" && RESULTS="$c $t" CHANGES_RESULT="$c" TESTS_NEEDED="$n" TEST_RESULTS="$t" bash "$script" ) >/dev/null 2>&1 \
-      || die "the gate passed: changes=$c needed='$n' tests='$t'"
+    ! (cd "$d" && RESULTS="$c $t" CHANGES_RESULT="$c" TESTS_NEEDED="$n" TEST_RESULTS="$t" bash "$script") >/dev/null 2>&1 ||
+      die "the gate passed: changes=$c needed='$n' tests='$t'"
   done
 }
 
@@ -1580,9 +1792,15 @@ harness_tests() {
 harness_list() {
   local out="$1"
   if [ -n "${2:-}" ]; then
-    run_harness "$out" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD="$2" || { head -n 5 "$out" >&2; die "list mode failed for shard ${2}"; }
+    run_harness "$out" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD="$2" || {
+      head -n 5 "$out" >&2
+      die "list mode failed for shard ${2}"
+    }
   else
-    run_harness "$out" BOOTSTRAP_TEST_LIST=1 || { head -n 5 "$out" >&2; die "list mode failed"; }
+    run_harness "$out" BOOTSTRAP_TEST_LIST=1 || {
+      head -n 5 "$out" >&2
+      die "list mode failed"
+    }
   fi
   ! grep -vE '^test_[A-Za-z0-9_]+$' "$out" | head -n 5 >&2 || die "list mode printed something other than test names (shard ${2:-all})"
 }
@@ -1602,7 +1820,8 @@ test_harness_shards_together_run_every_test_exactly_once() {
   local want="$WORK/want" all="$WORK/all" n i sizes min max s
   harness_tests >"$want"
   for n in 1 2 3 4 5 7; do
-    : >"$all"; sizes=""
+    : >"$all"
+    sizes=""
     i=1
     while [ "$i" -le "$n" ]; do
       harness_list "$WORK/shard.$n.$i" "$i/$n"
@@ -1610,9 +1829,13 @@ test_harness_shards_together_run_every_test_exactly_once() {
       sizes="$sizes $(wc -l <"$WORK/shard.$n.$i" | tr -d ' ')"
       i=$((i + 1))
     done
-    [ -z "$(LC_ALL=C sort "$all" | uniq -d)" ] || { LC_ALL=C sort "$all" | uniq -d | head >&2; die "with $n shards, these tests run twice"; }
+    [ -z "$(LC_ALL=C sort "$all" | uniq -d)" ] || {
+      LC_ALL=C sort "$all" | uniq -d | head >&2
+      die "with $n shards, these tests run twice"
+    }
     LC_ALL=C sort "$all" | diff "$want" - >&2 || die "with $n shards, the shards together do not run every test once (want, then got)"
-    min=""; max=""
+    min=""
+    max=""
     for s in $sizes; do
       if [ -z "$min" ] || [ "$s" -lt "$min" ]; then min="$s"; fi
       if [ -z "$max" ] || [ "$s" -gt "$max" ]; then max="$s"; fi
@@ -1639,13 +1862,19 @@ test_harness_refuses_a_shard_setting_it_cannot_read() {
   # The last ones overflow bash's integers (review of #178, B1): [ -gt ]
   # then errs inside an if, and the setting was taken.
   for v in 0/4 5/4 1/0 4 1/4/2 a/b 1/b -1/4 01/4 1/04 ' 1/4' '1 /4' 1/ \
-           1/99999999999999999999 99999999999999999999/4 2/9223372036854775808 1/1000000; do
+    1/99999999999999999999 99999999999999999999/4 2/9223372036854775808 1/1000000; do
     set +e
     run_harness "$out" BOOTSTRAP_TEST_SHARD="$v"
     rc=$?
     set -e
-    [ "$rc" -eq 2 ] || { head -n 5 "$out" >&2; die "BOOTSTRAP_TEST_SHARD='$v': exit $rc, want 2"; }
-    grep -qF "BOOTSTRAP_TEST_SHARD" "$out" || { cat "$out" >&2; die "BOOTSTRAP_TEST_SHARD='$v': the message does not name the setting"; }
+    [ "$rc" -eq 2 ] || {
+      head -n 5 "$out" >&2
+      die "BOOTSTRAP_TEST_SHARD='$v': exit $rc, want 2"
+    }
+    grep -qF "BOOTSTRAP_TEST_SHARD" "$out" || {
+      cat "$out" >&2
+      die "BOOTSTRAP_TEST_SHARD='$v': the message does not name the setting"
+    }
     ! grep -qE '^(ok|FAIL) ' "$out" || die "BOOTSTRAP_TEST_SHARD='$v': tests ran"
   done
 }
@@ -1659,12 +1888,27 @@ test_harness_records_the_tests_it_ran() {
   harness_tests >"$WORK/tests"
   first="$(sed -n 1p "$WORK/tests")"
   mkdir -p "$d"
-  ( cd "$d" && run_harness "$out" BOOTSTRAP_TEST_SHARD=1/100000 BOOTSTRAP_TEST_MANIFEST=list/ran.txt ) \
-    || { tail -n 20 "$out" >&2; die "the one-test shard failed"; }
-  [ -f "$d/list/ran.txt" ] || { cat "$out" >&2; die "no manifest at list/ran.txt, relative to where the harness started"; }
-  [ "$(cat "$d/list/ran.txt")" = "$first" ] || { cat "$d/list/ran.txt" >&2; die "the manifest is not the one test that ran ($first)"; }
-  grep -qxF "ok   $first" "$out" || { cat "$out" >&2; die "$first did not run"; }
-  grep -qxF '1 passed, 0 failed' "$out" || { cat "$out" >&2; die "not exactly one test ran"; }
+  (cd "$d" && run_harness "$out" BOOTSTRAP_TEST_SHARD=1/100000 BOOTSTRAP_TEST_MANIFEST=list/ran.txt) ||
+    {
+      tail -n 20 "$out" >&2
+      die "the one-test shard failed"
+    }
+  [ -f "$d/list/ran.txt" ] || {
+    cat "$out" >&2
+    die "no manifest at list/ran.txt, relative to where the harness started"
+  }
+  [ "$(cat "$d/list/ran.txt")" = "$first" ] || {
+    cat "$d/list/ran.txt" >&2
+    die "the manifest is not the one test that ran ($first)"
+  }
+  grep -qxF "ok   $first" "$out" || {
+    cat "$out" >&2
+    die "$first did not run"
+  }
+  grep -qxF '1 passed, 0 failed' "$out" || {
+    cat "$out" >&2
+    die "not exactly one test ran"
+  }
 }
 
 # ---------- shards split by measured duration (PBI-1.22, part 2) ----------
@@ -1696,12 +1940,18 @@ test_harness_shards_by_duration_together_run_every_test_exactly_once() {
       i=1
       while [ "$i" -le "$n" ]; do
         run_harness "$WORK/s.$col.$n.$i" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD="$i/$n" \
-          BOOTSTRAP_TEST_WEIGHTS="$DURATIONS:$col" || { head -n 5 "$WORK/s.$col.$n.$i" >&2; die "list mode failed ($col, $i/$n)"; }
+          BOOTSTRAP_TEST_WEIGHTS="$DURATIONS:$col" || {
+          head -n 5 "$WORK/s.$col.$n.$i" >&2
+          die "list mode failed ($col, $i/$n)"
+        }
         ! grep -vE '^test_[A-Za-z0-9_]+$' "$WORK/s.$col.$n.$i" | head -n 5 >&2 || die "list mode printed something other than test names"
         cat "$WORK/s.$col.$n.$i" >>"$all"
         i=$((i + 1))
       done
-      [ -z "$(LC_ALL=C sort "$all" | uniq -d)" ] || { LC_ALL=C sort "$all" | uniq -d | head >&2; die "$col, $n shards: tests run twice"; }
+      [ -z "$(LC_ALL=C sort "$all" | uniq -d)" ] || {
+        LC_ALL=C sort "$all" | uniq -d | head >&2
+        die "$col, $n shards: tests run twice"
+      }
       LC_ALL=C sort "$all" | diff "$want" - >&2 || die "$col, $n shards: not every test once (want, then got)"
     done
   done
@@ -1712,10 +1962,11 @@ test_harness_shards_by_duration_balance_the_measured_time() {
   # shards' totals (by the same file) differ by at most the longest test.
   local col i tot max min longest
   for col in ubuntu-latest macos-latest windows-latest ubuntu-bash32; do
-    max=""; min=""
+    max=""
+    min=""
     for i in 1 2 3 4; do
-      run_harness "$WORK/b.$col.$i" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD="$i/4" BOOTSTRAP_TEST_WEIGHTS="$DURATIONS:$col" \
-        || die "list mode failed"
+      run_harness "$WORK/b.$col.$i" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD="$i/4" BOOTSTRAP_TEST_WEIGHTS="$DURATIONS:$col" ||
+        die "list mode failed"
       tot="$(awk -v col="$col" 'NR == FNR { if (FNR == 1) { for (k = 2; k <= NF; k++) if ($k == col) c = k; next } w[$1] = $c * 100; next }
         { s += w[$1] } END { printf "%d\n", s }' "$DURATIONS" "$WORK/b.$col.$i")"
       if [ -z "$max" ] || [ "$tot" -gt "$max" ]; then max="$tot"; fi
@@ -1737,16 +1988,28 @@ test_harness_shards_by_duration_follow_the_greedy_rule() {
   heavy="$(sed -n 5p "$WORK/names")"
   light="$(sed -n 9p "$WORK/names")"
   printf 'test a\n%s 100000\n%s 1\n' "$heavy" "$light" >"$w"
-  run_harness "$WORK/g1" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD=1/2 BOOTSTRAP_TEST_WEIGHTS="$w:a" || { cat "$WORK/g1" >&2; die "list mode failed"; }
-  run_harness "$WORK/g2" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD=2/2 BOOTSTRAP_TEST_WEIGHTS="$w:a" || { cat "$WORK/g2" >&2; die "list mode failed"; }
-  [ "$(cat "$WORK/g1")" = "$heavy" ] || { cat "$WORK/g1" >&2; die "shard 1 is not the heavy test alone"; }
+  run_harness "$WORK/g1" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD=1/2 BOOTSTRAP_TEST_WEIGHTS="$w:a" || {
+    cat "$WORK/g1" >&2
+    die "list mode failed"
+  }
+  run_harness "$WORK/g2" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD=2/2 BOOTSTRAP_TEST_WEIGHTS="$w:a" || {
+    cat "$WORK/g2" >&2
+    die "list mode failed"
+  }
+  [ "$(cat "$WORK/g1")" = "$heavy" ] || {
+    cat "$WORK/g1" >&2
+    die "shard 1 is not the heavy test alone"
+  }
   grep -vxF "$heavy" "$WORK/names" | diff - "$WORK/g2" >&2 || die "shard 2 is not every other test, in the list's order (want, then got)"
 }
 
 # shard_of <weights> <column> <i> <n>: the harness's list of shard i of n.
 shard_of() {
-  run_harness "$WORK/one.$3" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD="$3/$4" BOOTSTRAP_TEST_WEIGHTS="$1:$2" \
-    || { cat "$WORK/one.$3" >&2; die "list mode failed for shard $3/$4"; }
+  run_harness "$WORK/one.$3" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD="$3/$4" BOOTSTRAP_TEST_WEIGHTS="$1:$2" ||
+    {
+      cat "$WORK/one.$3" >&2
+      die "list mode failed for shard $3/$4"
+    }
   cat "$WORK/one.$3"
 }
 
@@ -1755,8 +2018,11 @@ shard_of() {
 split_of() {
   local i=1
   while [ "$i" -le "$3" ]; do
-    run_harness "$WORK/split.$i" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD="$i/$3" BOOTSTRAP_TEST_WEIGHTS="$1:$2" \
-      || { cat "$WORK/split.$i" >&2; die "list mode failed for shard $i/$3"; }
+    run_harness "$WORK/split.$i" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD="$i/$3" BOOTSTRAP_TEST_WEIGHTS="$1:$2" ||
+      {
+        cat "$WORK/split.$i" >&2
+        die "list mode failed for shard $i/$3"
+      }
     sed "s/^/$i /" "$WORK/split.$i"
     i=$((i + 1))
   done
@@ -1776,8 +2042,10 @@ test_harness_shards_by_duration_weigh_unlisted_and_zero_tests_as_the_lower_media
   local w="$WORK/w" n t10 t20 t30 t0 t40
   harness_tests >"$WORK/names"
   n="$(grep -c . "$WORK/names")"
-  t0="$(sed -n 1p "$WORK/names")"; t10="$(sed -n 3p "$WORK/names")"
-  t20="$(sed -n 7p "$WORK/names")"; t30="$(sed -n 11p "$WORK/names")"
+  t0="$(sed -n 1p "$WORK/names")"
+  t10="$(sed -n 3p "$WORK/names")"
+  t20="$(sed -n 7p "$WORK/names")"
+  t30="$(sed -n 11p "$WORK/names")"
   printf 'test a\n%s 10\n%s 20\n%s 30\n%s 0\n' "$t10" "$t20" "$t30" "$t0" >"$w"
   [ "$(shard_of "$w" a 1 "$n")" = "$t30" ] || die "shard 1 is not the 30-second test"
   [ "$(shard_of "$w" a 2 "$n")" = "$t0" ] || die "shard 2 is not the 0-second test (it should weigh the median, 20, and lead the 20s in list order)"
@@ -1798,21 +2066,32 @@ test_harness_shards_by_duration_break_ties_by_fewer_tests_then_lower_shard() {
   # tests alternate from shard 1 in list order.
   local w="$WORK/w" a b c rest4 rest5 got first second third
   harness_tests >"$WORK/names"
-  a="$(sed -n 2p "$WORK/names")"; b="$(sed -n 4p "$WORK/names")"; c="$(sed -n 6p "$WORK/names")"
-  { printf 'test x\n'; awk -v a="$a" -v b="$b" -v c="$c" '{ print $0, ($0 == a) ? 4 : ($0 == b || $0 == c) ? 3 : 1 }' "$WORK/names"; } >"$w"
+  a="$(sed -n 2p "$WORK/names")"
+  b="$(sed -n 4p "$WORK/names")"
+  c="$(sed -n 6p "$WORK/names")"
+  {
+    printf 'test x\n'
+    awk -v a="$a" -v b="$b" -v c="$c" '{ print $0, ($0 == a) ? 4 : ($0 == b || $0 == c) ? 3 : 1 }' "$WORK/names"
+  } >"$w"
   grep -vxF -e "$a" -e "$b" -e "$c" "$WORK/names" >"$WORK/rest"
-  rest4="$(sed -n 1p "$WORK/rest")"; rest5="$(sed -n 3p "$WORK/rest")"
+  rest4="$(sed -n 1p "$WORK/rest")"
+  rest5="$(sed -n 3p "$WORK/rest")"
   got="$(shard_of "$w" x 2 2)"
   # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -qxF "$b" <<<"$got" && grep -qxF "$c" <<<"$got" || die "the two 3-second tests are not in shard 2"
   grep -qxF "$rest4" <<<"$got" && die "the first 1-second test is in shard 2, want shard 1"
   grep -qxF "$rest5" <<<"$got" || die "on equal totals (6 and 6) the next test did not go to shard 2, the one with fewer tests"
-  { printf 'test x\n'; awk '{ print $0, 1 }' "$WORK/names"; } >"$w"
+  {
+    printf 'test x\n'
+    awk '{ print $0, 1 }' "$WORK/names"
+  } >"$w"
   got="$(shard_of "$w" x 1 2)"
-  first="$(sed -n 1p "$WORK/names")"; second="$(sed -n 2p "$WORK/names")"; third="$(sed -n 3p "$WORK/names")"
+  first="$(sed -n 1p "$WORK/names")"
+  second="$(sed -n 2p "$WORK/names")"
+  third="$(sed -n 3p "$WORK/names")"
   # shellcheck disable=SC2015 # die is meant to run when either check fails
-  grep -qxF "$first" <<<"$got" && ! grep -qxF "$second" <<<"$got" && grep -qxF "$third" <<<"$got" \
-    || die "equal weights do not alternate from shard 1 in list order"
+  grep -qxF "$first" <<<"$got" && ! grep -qxF "$second" <<<"$got" && grep -qxF "$third" <<<"$got" ||
+    die "equal weights do not alternate from shard 1 in list order"
 }
 
 test_harness_fails_when_its_shard_by_duration_selects_no_test() {
@@ -1827,9 +2106,15 @@ test_harness_fails_when_its_shard_by_duration_selects_no_test() {
   run_harness "$out" BOOTSTRAP_TEST_SHARD="$((n + 1))/$((n + 1))" BOOTSTRAP_TEST_WEIGHTS="$w:x"
   rc=$?
   set -e
-  [ "$rc" -eq 1 ] || { cat "$out" >&2; die "exit $rc, want 1"; }
+  [ "$rc" -eq 1 ] || {
+    cat "$out" >&2
+    die "exit $rc, want 1"
+  }
   ! grep -qE '^(ok|FAIL) ' "$out" || die "tests ran"
-  grep -qF "shard $((n + 1)) of $((n + 1)) selects none of the $n tests" "$out" || { cat "$out" >&2; die "the message does not name the shard and the $n tests"; }
+  grep -qF "shard $((n + 1)) of $((n + 1)) selects none of the $n tests" "$out" || {
+    cat "$out" >&2
+    die "the message does not name the shard and the $n tests"
+  }
 }
 
 test_harness_reads_a_weights_file_with_windows_line_endings() {
@@ -1860,14 +2145,24 @@ test_harness_refuses_weights_it_cannot_read() {
     ":a|not <file>:<column>" "$w:b|no column b" "$WORK/bad-number:a|no number in column a" \
     "$WORK/bad-head:a|not a header" "$WORK/empty:a|it is empty" "$WORK/header-only:a|no line of times" \
     "$WORK/a-folder:a|no readable file"; do
-    why="${v##*|}"; v="${v%|*}"
+    why="${v##*|}"
+    v="${v%|*}"
     set +e
     run_harness "$out" BOOTSTRAP_TEST_SHARD=1/2 BOOTSTRAP_TEST_WEIGHTS="$v"
     rc=$?
     set -e
-    [ "$rc" -eq 2 ] || { head -n 5 "$out" >&2; die "BOOTSTRAP_TEST_WEIGHTS='$v': exit $rc, want 2"; }
-    grep -qF BOOTSTRAP_TEST_WEIGHTS "$out" || { cat "$out" >&2; die "'$v': the message does not name the setting"; }
-    grep -qF -- "$why" "$out" || { cat "$out" >&2; die "'$v': the message does not say '$why'"; }
+    [ "$rc" -eq 2 ] || {
+      head -n 5 "$out" >&2
+      die "BOOTSTRAP_TEST_WEIGHTS='$v': exit $rc, want 2"
+    }
+    grep -qF BOOTSTRAP_TEST_WEIGHTS "$out" || {
+      cat "$out" >&2
+      die "'$v': the message does not name the setting"
+    }
+    grep -qF -- "$why" "$out" || {
+      cat "$out" >&2
+      die "'$v': the message does not say '$why'"
+    }
     ! grep -qE '^(ok|FAIL) ' "$out" || die "'$v': tests ran"
   done
 }
@@ -1881,8 +2176,8 @@ test_durations_file_lists_every_test_with_a_time_for_each_os() {
   harness_tests >"$want"
   [ -f "$DURATIONS" ] || die "no bootstrap/test-durations.txt"
   [ "$(sed -n 1p "$DURATIONS")" = 'test ubuntu-latest macos-latest windows-latest ubuntu-bash32' ] || die "unexpected header: $(sed -n 1p "$DURATIONS")"
-  ! awk 'NR > 1 && (NF != 5 || $2 !~ /^[0-9]+(\.[0-9]+)?$/ || $3 !~ /^[0-9]+(\.[0-9]+)?$/ || $4 !~ /^[0-9]+(\.[0-9]+)?$/ || $5 !~ /^[0-9]+(\.[0-9]+)?$/)' "$DURATIONS" | grep . >&2 \
-    || die "a line of the durations file is not a name and four numbers"
+  ! awk 'NR > 1 && (NF != 5 || $2 !~ /^[0-9]+(\.[0-9]+)?$/ || $3 !~ /^[0-9]+(\.[0-9]+)?$/ || $4 !~ /^[0-9]+(\.[0-9]+)?$/ || $5 !~ /^[0-9]+(\.[0-9]+)?$/)' "$DURATIONS" | grep . >&2 ||
+    die "a line of the durations file is not a name and four numbers"
   awk 'NR > 1 { print $1 }' "$DURATIONS" | LC_ALL=C sort >"$WORK/listed"
   LC_ALL=C comm -13 "$want" "$WORK/listed" | grep . >&2 && die "the durations file lists tests the harness does not have"
   [ -z "$(awk 'NR > 1 { print $1 }' "$DURATIONS" | LC_ALL=C sort | uniq -d)" ] || die "a test is listed twice"
@@ -1894,8 +2189,8 @@ test_workflow_shards_split_by_the_durations_of_their_leg() {
   # weighed by its own times; every other leg is named as its OS).
   local job
   job="$(wf_job "$(matrix_job)")"
-  grep -qxF '      BOOTSTRAP_TEST_WEIGHTS: bootstrap/test-durations.txt:${{ matrix.leg }}' <<<"$job" \
-    || die "the shards are not split by bootstrap/test-durations.txt for their leg"
+  grep -qxF '      BOOTSTRAP_TEST_WEIGHTS: bootstrap/test-durations.txt:${{ matrix.leg }}' <<<"$job" ||
+    die "the shards are not split by bootstrap/test-durations.txt for their leg"
   # Each leg has its column in the file's header.
   local leg
   for leg in $(wf_legs | awk '{ print $1 }' | LC_ALL=C sort -u); do
@@ -1929,8 +2224,11 @@ test_durations_from_logs_reads_the_times_between_result_lines() {
     '2026-11-04T00:22:01.0000000Z bash on PATH: /home/runner/work/_temp/bash32/bash, version 3.2' \
     '2026-11-04T00:22:07.0000000Z ok   test_a' '2026-11-04T00:22:10.0000000Z ok   test_d' >"$d/b1.log"
   bash "$tool" ubuntu-latest="$d/u1.log" macos-latest="$d/m1.log" windows-latest="$d/w1.log" macos-latest="$d/m2.log" \
-    ubuntu-bash32="$d/b1.log" >"$d/out" 2>"$d/err" \
-    || { cat "$d/err" >&2; die "the tool failed"; }
+    ubuntu-bash32="$d/b1.log" >"$d/out" 2>"$d/err" ||
+    {
+      cat "$d/err" >&2
+      die "the tool failed"
+    }
   printf '%s\n' 'test ubuntu-latest macos-latest windows-latest ubuntu-bash32' 'test_a 2.5 0 60.0 7.0' 'test_b 9.5 0 0 0' \
     'test_c 0 5.0 1.0 0' 'test_d 0 0 0.1 3.0' >"$d/want"
   diff "$d/want" "$d/out" >&2 || die "unexpected durations (want, then got)"
@@ -1980,8 +2278,8 @@ test_workflow_shard_counts_keep_every_legs_slowest_shard_short() {
     worst=0
     i=1
     while [ "$i" -le "$n" ]; do
-      run_harness "$WORK/w.$leg.$i" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD="$i/$n" BOOTSTRAP_TEST_WEIGHTS="$DURATIONS:$leg" \
-        || die "list mode failed ($leg, $i/$n)"
+      run_harness "$WORK/w.$leg.$i" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD="$i/$n" BOOTSTRAP_TEST_WEIGHTS="$DURATIONS:$leg" ||
+        die "list mode failed ($leg, $i/$n)"
       tot="$(awk -v col="$leg" 'NR == FNR { if (FNR == 1) { for (k = 2; k <= NF; k++) if ($k == col) c = k; next } w[$1] = $c; next }
         { s += w[$1] } END { printf "%d\n", s }' "$DURATIONS" "$WORK/w.$leg.$i")"
       [ "$tot" -le "$worst" ] || worst="$tot"
@@ -1989,8 +2287,8 @@ test_workflow_shard_counts_keep_every_legs_slowest_shard_short() {
     done
     [ "$worst" -le 660 ] || die "$leg with $n shards: the slowest shard is $worst s of tests, above 660"
   done
-  [ "$(printf '%s\n' "$legs" | awk '$1 == "windows-latest" { print $4; exit }')" -gt "$(printf '%s\n' "$legs" | awk '$1 == "ubuntu-latest" { print $4; exit }')" ] \
-    || die "Windows does not have more shards than ubuntu"
+  [ "$(printf '%s\n' "$legs" | awk '$1 == "windows-latest" { print $4; exit }')" -gt "$(printf '%s\n' "$legs" | awk '$1 == "ubuntu-latest" { print $4; exit }')" ] ||
+    die "Windows does not have more shards than ubuntu"
 }
 
 test_harness_fails_when_its_shard_selects_no_test() {
@@ -2002,12 +2300,24 @@ test_harness_fails_when_its_shard_selects_no_test() {
   run_harness "$out" BOOTSTRAP_TEST_SHARD=100000/100000
   rc=$?
   set -e
-  [ "$rc" -ne 0 ] || { cat "$out" >&2; die "a shard that ran no test exited 0"; }
+  [ "$rc" -ne 0 ] || {
+    cat "$out" >&2
+    die "a shard that ran no test exited 0"
+  }
   [ "$rc" -ne 124 ] || die "timed out"
-  grep -qF 'ran no test' "$out" || { cat "$out" >&2; die "the failure does not say no test ran"; }
+  grep -qF 'ran no test' "$out" || {
+    cat "$out" >&2
+    die "the failure does not say no test ran"
+  }
   ! grep -qE '^(ok|FAIL) ' "$out" || die "tests ran"
-  run_harness "$out" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD=100000/100000 || { cat "$out" >&2; die "list mode of an empty shard failed"; }
-  [ ! -s "$out" ] || { cat "$out" >&2; die "list mode of an empty shard printed something"; }
+  run_harness "$out" BOOTSTRAP_TEST_LIST=1 BOOTSTRAP_TEST_SHARD=100000/100000 || {
+    cat "$out" >&2
+    die "list mode of an empty shard failed"
+  }
+  [ ! -s "$out" ] || {
+    cat "$out" >&2
+    die "list mode of an empty shard printed something"
+  }
 }
 
 # shard_fixture <dir> <n> <os>...: <dir>/all.txt lists 10 tests;
@@ -2046,18 +2356,34 @@ check_shards() {
 expect_shards_refused() {
   local d="$1" r="$2" msg="$3"
   shift 3
-  if check_shards "$d" "$r" "$@"; then cat "$d/out" >&2; die "passed, want refused with: $msg"; fi
-  grep -qF -- "$msg" "$d/out" || { cat "$d/out" >&2; die "refused, but without: $msg"; }
-  grep -qF '::error::' "$d/out" || { cat "$d/out" >&2; die "no ::error:: line"; }
+  if check_shards "$d" "$r" "$@"; then
+    cat "$d/out" >&2
+    die "passed, want refused with: $msg"
+  fi
+  grep -qF -- "$msg" "$d/out" || {
+    cat "$d/out" >&2
+    die "refused, but without: $msg"
+  }
+  grep -qF '::error::' "$d/out" || {
+    cat "$d/out" >&2
+    die "no ::error:: line"
+  }
 }
 
 test_check_shards_passes_when_every_need_succeeded_and_every_shard_ran_all_tests() {
   local d="$WORK/fx"
   shard_fixture "$d" 3 os-a os-b
-  check_shards "$d" "success success" os-a os-b || { cat "$d/out" >&2; die "refused a complete, green run"; }
+  check_shards "$d" "success success" os-a os-b || {
+    cat "$d/out" >&2
+    die "refused a complete, green run"
+  }
   # One shard per OS is a complete run too.
-  d="$WORK/fx1"; shard_fixture "$d" 1 os-a
-  check_shards "$d" "success" os-a || { cat "$d/out" >&2; die "refused one shard of one"; }
+  d="$WORK/fx1"
+  shard_fixture "$d" 1 os-a
+  check_shards "$d" "success" os-a || {
+    cat "$d/out" >&2
+    die "refused one shard of one"
+  }
 }
 
 test_check_shards_passes_with_a_shard_count_of_its_own_for_each_os() {
@@ -2067,9 +2393,15 @@ test_check_shards_passes_with_a_shard_count_of_its_own_for_each_os() {
   shard_fixture "$d" 2 os-a
   shard_fixture "$WORK/fxm2" 5 os-b
   cp "$WORK/fxm2/shards/"os-b-* "$d/shards/"
-  check_shards "$d" "success success" os-a os-b || { cat "$d/out" >&2; die "refused a complete run with 2 shards for one OS and 5 for the other"; }
+  check_shards "$d" "success success" os-a os-b || {
+    cat "$d/out" >&2
+    die "refused a complete run with 2 shards for one OS and 5 for the other"
+  }
   # shellcheck disable=SC2015 # die is meant to run when either check fails
-  grep -qF 'os-a: 2 shards ran all' "$d/out" && grep -qF 'os-b: 5 shards ran all' "$d/out" || { cat "$d/out" >&2; die "each OS is not judged by its own count"; }
+  grep -qF 'os-a: 2 shards ran all' "$d/out" && grep -qF 'os-b: 5 shards ran all' "$d/out" || {
+    cat "$d/out" >&2
+    die "each OS is not judged by its own count"
+  }
   rm "$d/shards/os-b-5-of-5.txt"
   expect_shards_refused "$d" "success success" "os-b: shard 5 of 5 did not report" os-a os-b
 }
@@ -2078,9 +2410,12 @@ test_check_shards_fails_unless_every_need_succeeded() {
   local d="$WORK/fx" r
   shard_fixture "$d" 2 os-a
   for r in "" "failure" "success failure" "failure success" "skipped success" \
-           "success skipped" "success cancelled" "cancelled" "success  success failure"; do
+    "success skipped" "success cancelled" "cancelled" "success  success failure"; do
     if check_shards "$d" "$r" os-a; then die "passed on results: '$r'"; fi
-    grep -qF '::error::' "$d/out" || { cat "$d/out" >&2; die "no ::error:: on results: '$r'"; }
+    grep -qF '::error::' "$d/out" || {
+      cat "$d/out" >&2
+      die "no ::error:: on results: '$r'"
+    }
   done
 }
 
@@ -2090,7 +2425,8 @@ test_check_shards_fails_when_a_shard_is_missing() {
   rm "$d/shards/os-b-3-of-4.txt"
   expect_shards_refused "$d" "success success" "os-b: shard 3 of 4 did not report" os-a os-b
   # The last shard missing, too: nothing else says there were 4.
-  d="$WORK/fx2"; shard_fixture "$d" 4 os-a
+  d="$WORK/fx2"
+  shard_fixture "$d" 4 os-a
   rm "$d/shards/os-a-4-of-4.txt"
   expect_shards_refused "$d" "success" "os-a: shard 4 of 4 did not report" os-a
 }
@@ -2106,10 +2442,12 @@ test_check_shards_fails_when_a_test_ran_twice_or_not_at_all() {
   shard_fixture "$d" 2 os-a
   echo test_c >>"$d/shards/os-a-2-of-2.txt"
   expect_shards_refused "$d" "success" "os-a: ran more than once: test_c" os-a
-  d="$WORK/fx2"; shard_fixture "$d" 2 os-a
+  d="$WORK/fx2"
+  shard_fixture "$d" 2 os-a
   grep -vxF test_e "$d/shards/os-a-1-of-2.txt" >"$d/x" && mv "$d/x" "$d/shards/os-a-1-of-2.txt"
   expect_shards_refused "$d" "success" "os-a: did not run: test_e" os-a
-  d="$WORK/fx3"; shard_fixture "$d" 2 os-a
+  d="$WORK/fx3"
+  shard_fixture "$d" 2 os-a
   echo test_zzz >>"$d/shards/os-a-2-of-2.txt"
   expect_shards_refused "$d" "success" "os-a: not in the list of tests: test_zzz" os-a
 }
@@ -2126,12 +2464,14 @@ test_check_shards_refuses_a_shard_count_above_a_matrix_at_once() {
   # larger count is refused at once, not looped over (review of #178).
   local d="$WORK/fx" n
   for n in 257 9223372036854775807 99999999999999999999; do
-    d="$WORK/fx.$n"; shard_fixture "$d" 1 os-a
+    d="$WORK/fx.$n"
+    shard_fixture "$d" 1 os-a
     mv "$d/shards/os-a-1-of-1.txt" "$d/shards/os-a-1-of-$n.txt"
     expect_shards_refused "$d" "success" "os-a: shard count $n is above 256" os-a
   done
   # 256 itself is a count a matrix can have.
-  d="$WORK/fx.256"; shard_fixture "$d" 1 os-a
+  d="$WORK/fx.256"
+  shard_fixture "$d" 1 os-a
   mv "$d/shards/os-a-1-of-1.txt" "$d/shards/os-a-1-of-256.txt"
   expect_shards_refused "$d" "success" "os-a: shard 2 of 256 did not report" os-a
 }
@@ -2141,7 +2481,8 @@ test_check_shards_fails_on_a_file_it_does_not_expect() {
   shard_fixture "$d" 2 os-a
   : >"$d/shards/os-c-1-of-1.txt"
   expect_shards_refused "$d" "success" "unexpected file: os-c-1-of-1.txt" os-a
-  d="$WORK/fx2"; shard_fixture "$d" 2 os-a
+  d="$WORK/fx2"
+  shard_fixture "$d" 2 os-a
   : >"$d/shards/notes.txt"
   expect_shards_refused "$d" "success" "unexpected file: notes.txt" os-a
 }
@@ -2151,10 +2492,12 @@ test_check_shards_fails_on_an_empty_test_list_or_no_manifests() {
   shard_fixture "$d" 1 os-a
   : >"$d/all.txt"
   expect_shards_refused "$d" "success" "the list of tests is empty" os-a
-  d="$WORK/fx2"; shard_fixture "$d" 1 os-a
+  d="$WORK/fx2"
+  shard_fixture "$d" 1 os-a
   rm -rf "$d/shards"
   expect_shards_refused "$d" "success" "no shard reported" os-a
-  d="$WORK/fx3"; shard_fixture "$d" 1 os-a
+  d="$WORK/fx3"
+  shard_fixture "$d" 1 os-a
   if RESULTS=success bash "$CHECK_SHARDS" "$d/shards" "$d/all.txt" >/dev/null 2>&1; then
     die "passed with no OS to check"
   fi
@@ -2164,7 +2507,10 @@ test_check_shards_reads_manifests_with_windows_line_ends() {
   local d="$WORK/fx"
   shard_fixture "$d" 2 os-a
   awk '{ printf "%s\r\n", $0 }' "$d/shards/os-a-1-of-2.txt" >"$d/x" && mv "$d/x" "$d/shards/os-a-1-of-2.txt"
-  check_shards "$d" "success" os-a || { cat "$d/out" >&2; die "refused manifests with CRLF line ends"; }
+  check_shards "$d" "success" os-a || {
+    cat "$d/out" >&2
+    die "refused manifests with CRLF line ends"
+  }
 }
 
 # gate_fixture <dir>: a checkout for the aggregate step's script: a stub
@@ -2195,18 +2541,22 @@ test_workflow_bootstrapper_test_fails_unless_every_need_succeeded() {
   [ -n "$step" ] || die "bootstrapper-test has no run: | step"
   [ "$(printf '%s\n' "$step" | grep -cE '^ *run:')" = 1 ] || die "expected one run step in bootstrapper-test"
   # Every need's result, by construction: a need added later is covered.
-  grep -qxF "          RESULTS: \${{ join(needs.*.result, ' ') }}" <<<"$step" \
-    || die "the step does not get every need's result in RESULTS"
+  grep -qxF "          RESULTS: \${{ join(needs.*.result, ' ') }}" <<<"$step" ||
+    die "the step does not get every need's result in RESULTS"
   script="$WORK/gate.$RANDOM.sh"
   printf '%s\n' "$step" | wf_run_block >"$script"
   [ -s "$script" ] || die "empty run script"
-  d="$WORK/gate"; gate_fixture "$d"
+  d="$WORK/gate"
+  gate_fixture "$d"
   for r in "success" "success success" "success success success"; do
-    ( cd "$d" && RESULTS="$r" bash "$script" ) >"$WORK/out" 2>&1 || { cat "$WORK/out" >&2; die "failed on results: $r"; }
+    (cd "$d" && RESULTS="$r" bash "$script") >"$WORK/out" 2>&1 || {
+      cat "$WORK/out" >&2
+      die "failed on results: $r"
+    }
   done
   for r in "" "failure" "success failure" "failure success" "skipped success" \
-           "success skipped" "success cancelled" "cancelled" "success  success failure"; do
-    ! ( cd "$d" && RESULTS="$r" bash "$script" ) >/dev/null 2>&1 || die "passed on results: '$r'"
+    "success skipped" "success cancelled" "cancelled" "success  success failure"; do
+    ! (cd "$d" && RESULTS="$r" bash "$script") >/dev/null 2>&1 || die "passed on results: '$r'"
   done
 }
 
@@ -2219,25 +2569,37 @@ test_workflow_bootstrapper_test_fails_when_a_shard_or_leg_did_not_report() {
   script="$WORK/gate.$RANDOM.sh"
   printf '%s\n' "$step" | wf_run_block >"$script"
   for f in windows-latest-2-of-4.txt ubuntu-latest-1-of-4.txt ubuntu-bash32-3-of-4.txt; do
-    d="$WORK/gate.$f"; gate_fixture "$d"
+    d="$WORK/gate.$f"
+    gate_fixture "$d"
     rm "$d/shard-list/$f"
-    if ( cd "$d" && RESULTS="success success" bash "$script" ) >"$WORK/out" 2>&1; then
+    if (cd "$d" && RESULTS="success success" bash "$script") >"$WORK/out" 2>&1; then
       die "passed with $f missing"
     fi
-    grep -qF 'did not report' "$WORK/out" || { cat "$WORK/out" >&2; die "failed with $f missing, but not for that reason"; }
+    grep -qF 'did not report' "$WORK/out" || {
+      cat "$WORK/out" >&2
+      die "failed with $f missing, but not for that reason"
+    }
   done
-  d="$WORK/gate.leg"; gate_fixture "$d"
+  d="$WORK/gate.leg"
+  gate_fixture "$d"
   rm "$d/shard-list/windows-latest-"*
-  if ( cd "$d" && RESULTS="success success" bash "$script" ) >"$WORK/out" 2>&1; then
+  if (cd "$d" && RESULTS="success success" bash "$script") >"$WORK/out" 2>&1; then
     die "passed with the Windows leg missing"
   fi
-  grep -qF 'windows-latest: no shard reported' "$WORK/out" || { cat "$WORK/out" >&2; die "the missing Windows leg is not named"; }
-  d="$WORK/gate.bash32"; gate_fixture "$d"
+  grep -qF 'windows-latest: no shard reported' "$WORK/out" || {
+    cat "$WORK/out" >&2
+    die "the missing Windows leg is not named"
+  }
+  d="$WORK/gate.bash32"
+  gate_fixture "$d"
   rm "$d/shard-list/ubuntu-bash32-"*
-  if ( cd "$d" && RESULTS="success success" bash "$script" ) >"$WORK/out" 2>&1; then
+  if (cd "$d" && RESULTS="success success" bash "$script") >"$WORK/out" 2>&1; then
     die "passed with the bash 3.2 leg missing"
   fi
-  grep -qF 'ubuntu-bash32: no shard reported' "$WORK/out" || { cat "$WORK/out" >&2; die "the missing bash 3.2 leg is not named"; }
+  grep -qF 'ubuntu-bash32: no shard reported' "$WORK/out" || {
+    cat "$WORK/out" >&2
+    die "the missing bash 3.2 leg is not named"
+  }
   # The call names the bash 3.2 leg, so a gate that was not told to
   # expect it cannot pass without it.
   grep -qE 'bash bootstrap/check-shards[.]sh shard-list all-tests[.]txt .*ubuntu-bash32' <<<"$step" || die "the gate call does not name ubuntu-bash32"
@@ -2249,29 +2611,30 @@ test_workflow_every_os_leg_is_sharded_and_records_what_it_ran() {
   # and uploading that; bootstrapper-test downloads them all into
   # shard-list/ before its step runs.
   local j job os n legs agg
-  j="$(matrix_job)"; job="$(wf_job "$j")"
+  j="$(matrix_job)"
+  job="$(wf_job "$j")"
   legs="$(wf_legs)"
   [ -n "$legs" ] || die "$j has no matrix legs (- { leg: <leg>, os: <os>, shard: <i>, of: <n> })"
   for os in ubuntu-latest ubuntu-bash32 windows-latest; do
     n="$(printf '%s\n' "$legs" | awk -v os="$os" '$1 == os { print $4 }' | sort -u)"
     [ "$(printf '%s\n' "$n" | grep -c .)" = 1 ] || die "$os: its legs do not agree on one shard count: $n"
     [ "$n" -ge 2 ] || die "$os is not sharded (n = $n)"
-    [ "$(printf '%s\n' "$legs" | awk -v os="$os" '$1 == os { print $3 }' | paste -sd, -)" = "$(seq -s, 1 "$n")" ] \
-      || die "$os: its shards are not 1..$n, each once"
+    [ "$(printf '%s\n' "$legs" | awk -v os="$os" '$1 == os { print $3 }' | paste -sd, -)" = "$(seq -s, 1 "$n")" ] ||
+      die "$os: its shards are not 1..$n, each once"
   done
   # Every entry under include: is in the one-line form wf_legs reads, so
   # none can hide from these tests.
   printf '%s\n' "$job" | awk '/^        include:[[:space:]]*$/ { p = 1; next } p && /^          / { print; next } p && !/^[[:space:]]*(#|$)/ { p = 0 }' >"$WORK/include-lines"
   [ -s "$WORK/include-lines" ] || die "$j has no include: entries"
-  ! grep -vE '^          - \{ leg: [a-z0-9-]+, os: [a-z0-9-]+, shard: [0-9]+, of: [0-9]+ \}[[:space:]]*$' "$WORK/include-lines" >&2 \
-    || die "an include: entry is not in the form - { leg: <leg>, os: <os>, shard: <i>, of: <n> } (listed above)"
+  ! grep -vE '^          - \{ leg: [a-z0-9-]+, os: [a-z0-9-]+, shard: [0-9]+, of: [0-9]+ \}[[:space:]]*$' "$WORK/include-lines" >&2 ||
+    die "an include: entry is not in the form - { leg: <leg>, os: <os>, shard: <i>, of: <n> } (listed above)"
   [ "$(wc -l <"$WORK/include-lines" | tr -d ' ')" = "$(printf '%s\n' "$legs" | grep -c .)" ] || die "wf_legs does not read every include: entry"
-  grep -qxF '      BOOTSTRAP_TEST_SHARD: ${{ matrix.shard }}/${{ matrix.of }}' <<<"$job" \
-    || die "the shard setting is not matrix.shard/matrix.of"
-  grep -qxF '      BOOTSTRAP_TEST_MANIFEST: shard-list/${{ matrix.leg }}-${{ matrix.shard }}-of-${{ matrix.of }}.txt' <<<"$job" \
-    || die "the shards do not record what they ran as shard-list/<leg>-<i>-of-<n>.txt"
-  grep -qE '^        uses: actions/upload-artifact@v[0-9]+$|^      - uses: actions/upload-artifact@v[0-9]+$' <<<"$job" \
-    || die "the shards do not upload what they ran"
+  grep -qxF '      BOOTSTRAP_TEST_SHARD: ${{ matrix.shard }}/${{ matrix.of }}' <<<"$job" ||
+    die "the shard setting is not matrix.shard/matrix.of"
+  grep -qxF '      BOOTSTRAP_TEST_MANIFEST: shard-list/${{ matrix.leg }}-${{ matrix.shard }}-of-${{ matrix.of }}.txt' <<<"$job" ||
+    die "the shards do not record what they ran as shard-list/<leg>-<i>-of-<n>.txt"
+  grep -qE '^        uses: actions/upload-artifact@v[0-9]+$|^      - uses: actions/upload-artifact@v[0-9]+$' <<<"$job" ||
+    die "the shards do not upload what they ran"
   grep -qxF '          name: bootstrap-tests-${{ matrix.leg }}-${{ matrix.shard }}' <<<"$job" || die "unexpected artifact name"
   grep -qxF '          path: shard-list/' <<<"$job" || die "the upload is not shard-list/"
   grep -qxF '          if-no-files-found: error' <<<"$job" || die "an upload with no manifest does not fail"
@@ -2330,13 +2693,17 @@ test_workflow_bootstrapper_test_gates_the_e2e_check_tests() {
 
 test_workflow_bootstrap_project_tests_run_on_ubuntu_bash32_and_windows() {
   local j job oses
-  j="$(matrix_job)"; job="$(wf_job "$j")"
+  j="$(matrix_job)"
+  job="$(wf_job "$j")"
   grep -qxF '    runs-on: ${{ matrix.os }}' <<<"$job" || die "$j does not run on matrix.os"
   oses="$(wf_legs | awk '{ print $1 }' | LC_ALL=C sort -u | tr '\n' ' ')"
   [ "$oses" = "ubuntu-bash32 ubuntu-latest windows-latest " ] || die "matrix legs are '$oses'"
   # macOS is not supported for now (PBI-1.26): no leg for it, no step for
   # it. PBI-1.27 puts both back.
-  ! grep -qiE 'macos' <<<"$job" || { grep -niE 'macos' <<<"$job" >&2; die "$j still mentions macOS"; }
+  ! grep -qiE 'macos' <<<"$job" || {
+    grep -niE 'macos' <<<"$job" >&2
+    die "$j still mentions macOS"
+  }
   # (Comments may name it: the header says the durations file keeps its column.)
   ! grep -vE '^[[:space:]]*#' "$BWF" | grep -F 'macos-latest' >&2 || die "bootstrapper.yml still names macos-latest outside comments"
   # The plain step is for every leg but the bash 3.2 one, which has its own.
@@ -2400,14 +2767,14 @@ test_workflow_bash32_leg_gets_bash_3_2_before_it_runs_the_tests_with_it() {
   grep -qxF "          key: $BASH32_KEY" <<<"$restore" || die "the restore key is not $BASH32_KEY"
   get="$(wf_step "$j" '^      - name: Get bash 3[.]2$')"
   [ -n "$get" ] || die "no step named Get bash 3.2 in $j"
-  grep -qxF "        if: matrix.leg == 'ubuntu-bash32' && steps.cache.outputs.cache-hit != 'true'" <<<"$get" \
-    || die "Get bash 3.2 does not run only on a cache miss of the bash 3.2 leg"
-  grep -qE '^ +run: bash bootstrap/bash32[.]sh "[$]RUNNER_TEMP/bash32" *$' <<<"$get" \
-    || die "Get bash 3.2 does not run bootstrap/bash32.sh into RUNNER_TEMP/bash32"
+  grep -qxF "        if: matrix.leg == 'ubuntu-bash32' && steps.cache.outputs.cache-hit != 'true'" <<<"$get" ||
+    die "Get bash 3.2 does not run only on a cache miss of the bash 3.2 leg"
+  grep -qE '^ +run: bash bootstrap/bash32[.]sh "[$]RUNNER_TEMP/bash32" *$' <<<"$get" ||
+    die "Get bash 3.2 does not run bootstrap/bash32.sh into RUNNER_TEMP/bash32"
   test_step="$(b32_test_step)"
   [ -n "$test_step" ] || die "no test step for the bash 3.2 leg"
-  grep -qE '^ +bash bootstrap/test-bootstrap-project\.sh *$' <<<"$test_step" \
-    || die "the bash 3.2 step does not run the tests with the bash on PATH"
+  grep -qE '^ +bash bootstrap/test-bootstrap-project\.sh *$' <<<"$test_step" ||
+    die "the bash 3.2 step does not run the tests with the bash on PATH"
   grep -qF 'PATH="$RUNNER_TEMP/bash32:$PATH"' <<<"$test_step" || die "the bash 3.2 step does not put RUNNER_TEMP/bash32 first on PATH"
   # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -qF 'BASH_VERSINFO' <<<"$test_step" && grep -qF '3.2' <<<"$test_step" || die "the bash 3.2 step does not check that bash is 3.2"
@@ -2430,7 +2797,8 @@ test_workflow_bash32_step_checks_for_bash_3_2_and_runs_the_tests_with_it() {
   printf '%s\n' "$step" | wf_run_block >"$script"
   [ -s "$script" ] || die "empty run script"
   for v in 3.2.57 5.2.21; do
-    d="$WORK/b32step.$v.$RANDOM"; mkdir -p "$d/bootstrap" "$d/tmp/bash32"
+    d="$WORK/b32step.$v.$RANDOM"
+    mkdir -p "$d/bootstrap" "$d/tmp/bash32"
     printf 'echo STUB TESTS RAN\n' >"$d/bootstrap/test-bootstrap-project.sh"
     cat >"$d/tmp/bash32/bash" <<'FB'
 #!/bin/sh
@@ -2448,12 +2816,26 @@ FB
     set -e
     case "$v" in
       3.2.*)
-        [ "$rc" -eq 0 ] || { printf '%s\n' "$out" >&2; die "check failed on bash $v"; }
-        grep -qxF 'STUB TESTS RAN' <<<"$out" || { printf '%s\n' "$out" >&2; die "tests not run on bash $v"; } ;;
+        [ "$rc" -eq 0 ] || {
+          printf '%s\n' "$out" >&2
+          die "check failed on bash $v"
+        }
+        grep -qxF 'STUB TESTS RAN' <<<"$out" || {
+          printf '%s\n' "$out" >&2
+          die "tests not run on bash $v"
+        }
+        ;;
       *)
-        [ "$rc" -ne 0 ] || { printf '%s\n' "$out" >&2; die "check passed on bash $v"; }
-        grep -qF '::error::' <<<"$out" || { printf '%s\n' "$out" >&2; die "no ::error:: on bash $v"; }
-        ! grep -qxF 'STUB TESTS RAN' <<<"$out" || die "tests ran on bash $v" ;;
+        [ "$rc" -ne 0 ] || {
+          printf '%s\n' "$out" >&2
+          die "check passed on bash $v"
+        }
+        grep -qF '::error::' <<<"$out" || {
+          printf '%s\n' "$out" >&2
+          die "no ::error:: on bash $v"
+        }
+        ! grep -qxF 'STUB TESTS RAN' <<<"$out" || die "tests ran on bash $v"
+        ;;
     esac
   done
 }
@@ -2462,8 +2844,8 @@ test_workflow_main_saves_the_bash32_cache_under_the_key_the_shards_restore() {
   local save restore get
   [ -f "$CACHEWF" ] || die "no .github/workflows/bash32-cache.yml"
   # Runs on pushes to main and by hand, nothing else.
-  [ "$(awk '/^on:/ { p = 1; next } /^[^ #]/ { p = 0 } p' "$CACHEWF" | grep -vE '^[[:space:]]*(#|$)' | tr -d ' \n')" = 'push:branches:[main]workflow_dispatch:' ] \
-    || die "bash32-cache.yml does not run on pushes to main and workflow_dispatch only"
+  [ "$(awk '/^on:/ { p = 1; next } /^[^ #]/ { p = 0 } p' "$CACHEWF" | grep -vE '^[[:space:]]*(#|$)' | tr -d ' \n')" = 'push:branches:[main]workflow_dispatch:' ] ||
+    die "bash32-cache.yml does not run on pushes to main and workflow_dispatch only"
   restore="$(wf_file_step "$CACHEWF" '^        uses: actions/cache/restore@v[0-9]+$')"
   save="$(wf_file_step "$CACHEWF" '^        uses: actions/cache/save@v[0-9]+$')"
   [ -n "$restore" ] || die "bash32-cache.yml restores nothing"
@@ -2477,8 +2859,8 @@ test_workflow_main_saves_the_bash32_cache_under_the_key_the_shards_restore() {
   grep -qxF "        id: cache" <<<"$restore" || die "the restore step has no id: cache"
   grep -qxF "        if: steps.cache.outputs.cache-hit != 'true'" <<<"$save" || die "the save is not only on a miss"
   get="$(wf_file_step "$CACHEWF" '^      - name: Get bash 3[.]2$')"
-  grep -qE '^ +run: bash bootstrap/bash32[.]sh "[$]RUNNER_TEMP/bash32" *$' <<<"$get" \
-    || die "bash32-cache.yml does not build with bootstrap/bash32.sh into RUNNER_TEMP/bash32"
+  grep -qE '^ +run: bash bootstrap/bash32[.]sh "[$]RUNNER_TEMP/bash32" *$' <<<"$get" ||
+    die "bash32-cache.yml does not build with bootstrap/bash32.sh into RUNNER_TEMP/bash32"
   # The pinned hash in the key is the one the script checks.
   grep -qF "$BASH32_SHA256_PINNED" "$BASH32" || die "bash32.sh does not pin $BASH32_SHA256_PINNED"
 }
@@ -2508,10 +2890,12 @@ test_workflow_image_step_fails_without_imageos_or_gcc_and_writes_both_outputs() 
     script="$WORK/image.$RANDOM.sh"
     printf '%s\n' "$step" | wf_run_block >"$script"
     [ -s "$script" ] || die "$f: empty image run script"
-    fake="$WORK/fakegcc.$RANDOM"; mkdir -p "$fake"
+    fake="$WORK/fakegcc.$RANDOM"
+    mkdir -p "$fake"
     printf '#!/bin/sh\nif [ "$1" = -dumpfullversion ]; then printf "%%s\\n" "$FAKE_GCC"; fi\nexit 0\n' >"$fake/gcc"
     chmod +x "$fake/gcc"
-    d="$WORK/image.d.$RANDOM"; mkdir -p "$d"
+    d="$WORK/image.d.$RANDOM"
+    mkdir -p "$d"
     # ImageOS unset.
     : >"$d/out1"
     set +e
@@ -2530,10 +2914,16 @@ test_workflow_image_step_fails_without_imageos_or_gcc_and_writes_both_outputs() 
     grep -qF '::error::' <<<"$out" || die "$f: no ::error:: without a gcc version"
     # Both set.
     : >"$d/out3"
-    ( cd "$d" && ImageOS=ubuntu24 PATH="$fake:$PATH" FAKE_GCC=13.3.0 GITHUB_OUTPUT="$d/out3" "$BASH" --noprofile --norc -eo pipefail "$script" ) >/dev/null 2>&1 \
-      || die "$f: the image step failed with both set"
-    grep -qxF 'image=ubuntu24' "$d/out3" || { cat "$d/out3" >&2; die "$f: no image=ubuntu24 output"; }
-    grep -qxF 'gcc=13.3.0' "$d/out3" || { cat "$d/out3" >&2; die "$f: no gcc=13.3.0 output"; }
+    (cd "$d" && ImageOS=ubuntu24 PATH="$fake:$PATH" FAKE_GCC=13.3.0 GITHUB_OUTPUT="$d/out3" "$BASH" --noprofile --norc -eo pipefail "$script") >/dev/null 2>&1 ||
+      die "$f: the image step failed with both set"
+    grep -qxF 'image=ubuntu24' "$d/out3" || {
+      cat "$d/out3" >&2
+      die "$f: no image=ubuntu24 output"
+    }
+    grep -qxF 'gcc=13.3.0' "$d/out3" || {
+      cat "$d/out3" >&2
+      die "$f: no gcc=13.3.0 output"
+    }
   done
 }
 
@@ -2557,7 +2947,7 @@ echo "CC=$CC CFLAGS=$CFLAGS ARGS=$*" >>"$FAKE_CONFIGURE_LOG"
 printf 'bash:\n\tcp fakebash bash\n' >Makefile
 CFG
   chmod +x "$d/src/bash-3.2.57/configure"
-  ( cd "$d/src" && tar -czf "$d/fake.tar.gz" bash-3.2.57 )
+  (cd "$d/src" && tar -czf "$d/fake.tar.gz" bash-3.2.57)
   # A fake curl: records the URL; fails for URLs containing FAKE_CURL_FAIL.
   cat >"$d/fake/curl" <<'CURL'
 #!/bin/sh
@@ -2613,18 +3003,30 @@ test_bash32_script_builds_and_installs_a_bash_that_reports_3_2() {
   [ -f "$BASH32" ] || die "no bootstrap/bash32.sh"
   b32_fixture "$d" 3.2.57
   b32_run "$d" fake FAKE_CURL_FAIL=
-  [ "$rc" -eq 0 ] || { printf '%s\n' "$out" >&2; die "failed with a bash 3.2 build"; }
+  [ "$rc" -eq 0 ] || {
+    printf '%s\n' "$out" >&2
+    die "failed with a bash 3.2 build"
+  }
   [ -x "$d/out/bash32/bash" ] || die "no bash installed in the folder"
   [ "$("$d/out/bash32/bash" -c x)" = 3.2 ] || die "the installed bash is not the built one"
-  grep -qF -- '--without-bash-malloc' "$d/configure.log" || { cat "$d/configure.log" >&2; die "configure without --without-bash-malloc"; }
-  grep -qF -- '-std=gnu89' "$d/configure.log" || { cat "$d/configure.log" >&2; die "configure without -std=gnu89"; }
+  grep -qF -- '--without-bash-malloc' "$d/configure.log" || {
+    cat "$d/configure.log" >&2
+    die "configure without --without-bash-malloc"
+  }
+  grep -qF -- '-std=gnu89' "$d/configure.log" || {
+    cat "$d/configure.log" >&2
+    die "configure without -std=gnu89"
+  }
   # In the compiler command itself, not only CFLAGS: bash's build tools
   # (support/bashversion.c) are compiled with CC_FOR_BUILD and no CFLAGS,
   # and fail under the default C standard of gcc 15 (seen on ubuntu-26.04,
   # run 41729021082).
-  grep -qE '(^|[[:space:]])CC=gcc -std=gnu89([[:space:]]|$)' "$d/configure.log" || { cat "$d/configure.log" >&2; die "configure without CC=\"gcc -std=gnu89\""; }
-  [ "$(head -n 1 "$d/curl.log")" = 'https://ftp.gnu.org/gnu/bash/bash-3.2.57.tar.gz' ] \
-    || die "the first download is not from ftp.gnu.org: $(head -n 1 "$d/curl.log")"
+  grep -qE '(^|[[:space:]])CC=gcc -std=gnu89([[:space:]]|$)' "$d/configure.log" || {
+    cat "$d/configure.log" >&2
+    die "configure without CC=\"gcc -std=gnu89\""
+  }
+  [ "$(head -n 1 "$d/curl.log")" = 'https://ftp.gnu.org/gnu/bash/bash-3.2.57.tar.gz' ] ||
+    die "the first download is not from ftp.gnu.org: $(head -n 1 "$d/curl.log")"
 }
 
 test_bash32_script_uses_the_mirror_when_the_first_server_fails() {
@@ -2632,9 +3034,15 @@ test_bash32_script_uses_the_mirror_when_the_first_server_fails() {
   [ -f "$BASH32" ] || die "no bootstrap/bash32.sh"
   b32_fixture "$d" 3.2.57
   b32_run "$d" fake FAKE_CURL_FAIL=ftp.gnu.org
-  [ "$rc" -eq 0 ] || { printf '%s\n' "$out" >&2; die "failed although the mirror works"; }
+  [ "$rc" -eq 0 ] || {
+    printf '%s\n' "$out" >&2
+    die "failed although the mirror works"
+  }
   [ -x "$d/out/bash32/bash" ] || die "no bash installed"
-  grep -qxF 'https://ftpmirror.gnu.org/gnu/bash/bash-3.2.57.tar.gz' "$d/curl.log" || { cat "$d/curl.log" >&2; die "the mirror was not tried"; }
+  grep -qxF 'https://ftpmirror.gnu.org/gnu/bash/bash-3.2.57.tar.gz' "$d/curl.log" || {
+    cat "$d/curl.log" >&2
+    die "the mirror was not tried"
+  }
 }
 
 test_bash32_script_names_the_download_when_neither_server_answers() {
@@ -2644,7 +3052,10 @@ test_bash32_script_names_the_download_when_neither_server_answers() {
   b32_run "$d" fake FAKE_CURL_FAIL=gnu.org
   [ "$rc" -ne 0 ] || die "passed with no download"
   err="$(grep -F '::error::' <<<"$out" || true)"
-  grep -qi 'download' <<<"$err" || { printf '%s\n' "$out" >&2; die "no ::error:: line naming the download"; }
+  grep -qi 'download' <<<"$err" || {
+    printf '%s\n' "$out" >&2
+    die "no ::error:: line naming the download"
+  }
   [ ! -e "$d/out/bash32/bash" ] || die "a bash was left in the folder"
   [ ! -e "$d/configure.log" ] || die "a build ran without a download"
 }
@@ -2657,7 +3068,10 @@ test_bash32_script_refuses_a_file_with_another_hash_and_leaves_no_bash() {
   b32_run "$d" pinned FAKE_CURL_FAIL=
   [ "$rc" -ne 0 ] || die "accepted a file with another hash"
   err="$(grep -F '::error::' <<<"$out" || true)"
-  grep -q 'SHA-256' <<<"$err" || { printf '%s\n' "$out" >&2; die "no ::error:: line naming the hash"; }
+  grep -q 'SHA-256' <<<"$err" || {
+    printf '%s\n' "$out" >&2
+    die "no ::error:: line naming the hash"
+  }
   [ ! -e "$d/out/bash32/bash" ] || die "a bash was left in the folder"
   [ ! -e "$d/configure.log" ] || die "the refused file was built"
 }
@@ -2675,7 +3089,10 @@ test_bash32_script_takes_no_hash_from_the_environment() {
   b32_run "$d" pinned FAKE_CURL_FAIL= BASH32_SHA256="$hash"
   [ "$rc" -ne 0 ] || die "BASH32_SHA256 replaced the pinned hash: the fake file was accepted"
   err="$(grep -F '::error::' <<<"$out" || true)"
-  grep -qF "$BASH32_SHA256_PINNED" <<<"$err" || { printf '%s\n' "$out" >&2; die "the refusal does not name the pinned hash"; }
+  grep -qF "$BASH32_SHA256_PINNED" <<<"$err" || {
+    printf '%s\n' "$out" >&2
+    die "the refusal does not name the pinned hash"
+  }
   [ ! -e "$d/out/bash32/bash" ] || die "a bash was left in the folder"
   [ ! -e "$d/configure.log" ] || die "the refused file was built"
   for f in "$BASH32" "$BWF" "$CACHEWF"; do
@@ -2690,7 +3107,10 @@ test_bash32_script_fails_when_the_built_bash_is_not_3_2() {
   b32_run "$d" fake FAKE_CURL_FAIL=
   [ "$rc" -ne 0 ] || die "passed with a bash 5.2 build"
   err="$(grep -F '::error::' <<<"$out" || true)"
-  grep -q '5[.]2' <<<"$err" || { printf '%s\n' "$out" >&2; die "no ::error:: line naming the version"; }
+  grep -q '5[.]2' <<<"$err" || {
+    printf '%s\n' "$out" >&2
+    die "no ::error:: line naming the version"
+  }
   [ ! -e "$d/out/bash32/bash" ] || die "a bash 5.2 was left in the folder"
 }
 
@@ -2699,11 +3119,14 @@ test_bash32_script_fails_naming_the_build_when_configure_fails() {
   [ -f "$BASH32" ] || die "no bootstrap/bash32.sh"
   b32_fixture "$d" 3.2.57
   printf '#!/bin/sh\nexit 1\n' >"$d/src/bash-3.2.57/configure"
-  ( cd "$d/src" && tar -czf "$d/fake.tar.gz" bash-3.2.57 )
+  (cd "$d/src" && tar -czf "$d/fake.tar.gz" bash-3.2.57)
   b32_run "$d" fake FAKE_CURL_FAIL=
   [ "$rc" -ne 0 ] || die "passed although configure failed"
   err="$(grep -F '::error::' <<<"$out" || true)"
-  grep -qi 'build' <<<"$err" || { printf '%s\n' "$out" >&2; die "no ::error:: line naming the build"; }
+  grep -qi 'build' <<<"$err" || {
+    printf '%s\n' "$out" >&2
+    die "no ::error:: line naming the build"
+  }
   [ ! -e "$d/out/bash32/bash" ] || die "a bash was left in the folder"
 }
 
@@ -2715,7 +3138,10 @@ test_bash32_script_limits_the_time_of_each_download() {
   [ -f "$BASH32" ] || die "no bootstrap/bash32.sh"
   b32_fixture "$d" 3.2.57
   b32_run "$d" fake FAKE_CURL_FAIL=ftp.gnu.org FAKE_CURL_ARGS_LOG="$d/curl-args.log"
-  [ "$rc" -eq 0 ] || { printf '%s\n' "$out" >&2; die "failed although the mirror works"; }
+  [ "$rc" -eq 0 ] || {
+    printf '%s\n' "$out" >&2
+    die "failed although the mirror works"
+  }
   [ -s "$d/curl-args.log" ] || die "curl was not called"
   while IFS= read -r line; do
     calls=$((calls + 1))
@@ -2725,7 +3151,10 @@ test_bash32_script_limits_the_time_of_each_download() {
     [ "$n" -ge 30 ] && [ "$n" -le 600 ] || die "--max-time $n is not from 30 to 600 seconds"
     case " $line " in *" --connect-timeout "*) ;; *) die "a download has no --connect-timeout: curl $line" ;; esac
   done <"$d/curl-args.log"
-  [ "$calls" -eq 2 ] || { cat "$d/curl-args.log" >&2; die "want 2 downloads (the first server fails, then the mirror), got $calls"; }
+  [ "$calls" -eq 2 ] || {
+    cat "$d/curl-args.log" >&2
+    die "want 2 downloads (the first server fails, then the mirror), got $calls"
+  }
 }
 
 # timeout_of <text> <indent>: the value of the timeout-minutes: line at
@@ -2768,8 +3197,8 @@ test_real_build_does_not_ship_the_bootstrap_project_tests() {
   local out="$WORK/real.$RANDOM"
   bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
   [ -z "$(cd "$out" && find . -name 'test-bootstrap-project*')" ] || die "the script's tests shipped"
-  ! grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -E '^bootstrap(/|$)' >/dev/null \
-    || die "bootstrap/ is listed in the manifest"
+  ! grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -E '^bootstrap(/|$)' >/dev/null ||
+    die "bootstrap/ is listed in the manifest"
 }
 
 test_real_build_does_not_ship_the_e2e_checker() {
@@ -2779,8 +3208,8 @@ test_real_build_does_not_ship_the_e2e_checker() {
   [ -f "$HERE/e2e-check.sh" ] || die "no bootstrap/e2e-check.sh"
   bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
   [ -z "$(cd "$out" && find . -name '*e2e-check*')" ] || die "the end-to-end checker or its tests shipped"
-  ! grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -E '(^|/)(test-)?e2e-check\.sh$' >/dev/null \
-    || die "the end-to-end checker is listed in the manifest"
+  ! grep -vE '^[[:space:]]*(#|$)' "$REPO/bootstrap/manifest.txt" | grep -E '(^|/)(test-)?e2e-check\.sh$' >/dev/null ||
+    die "the end-to-end checker is listed in the manifest"
 }
 
 test_real_build_ships_the_require_test_change_script() {
@@ -2805,13 +3234,13 @@ test_real_build_ships_every_script_a_project_ci_runs() {
     [ -f "$out/$f" ] || die "$f is run by a project's CI but not shipped (bootstrap/manifest.txt)"
     [ -x "$out/$f" ] || die "$f shipped without its executable bit"
     cmp -s "$REPO/$f" "$out/$f" || die "$f shipped altered"
-  done < <( {
+  done < <({
     echo .github/scripts/check-rules-edition.sh
     grep -ohE '\.github/scripts/[A-Za-z0-9._-]+' "$REPO/bootstrap/stubs/.github/workflows/ci.yml" "$REPO"/languages/*/ci.yml
   } | LC_ALL=C sort -u)
   [ "$n" -ge 2 ] || die "found only $n scripts; the parser is broken"
-  grep -qxF .github/scripts/check-rules-edition.sh "$REPO/bootstrap/manifest.txt" \
-    || die "bootstrap/manifest.txt does not list .github/scripts/check-rules-edition.sh by name"
+  grep -qxF .github/scripts/check-rules-edition.sh "$REPO/bootstrap/manifest.txt" ||
+    die "bootstrap/manifest.txt does not list .github/scripts/check-rules-edition.sh by name"
 }
 
 # ---------- bootstrap-project.sh (shipped as a stub) ----------
@@ -2823,7 +3252,8 @@ PROJECT_SCRIPT="$HERE/stubs/bootstrap-project.sh"
 
 test_build_preserves_the_executable_bit_of_a_stub() {
   local fx out
-  fx="$(make_fixture)"; out="$WORK/out.$RANDOM"
+  fx="$(make_fixture)"
+  out="$WORK/out.$RANDOM"
   printf '#!/usr/bin/env bash\necho hi\n' >"$fx/bootstrap/stubs/run.sh"
   chmod 755 "$fx/bootstrap/stubs/run.sh"
   build_ok "$fx" "$out" v1.2.3 "$SHA"
@@ -2851,9 +3281,12 @@ test_real_build_project_script_reports_its_stamp_with_version() {
   chmod +x "$gh"
   got="$(BOOTSTRAP_GH="$gh" bash "$f" --version </dev/null)" || rc=$?
   [ "$rc" -eq 0 ] || die "--version: exit $rc, want 0"
-  [ "$got" = "bootstrap-project.sh v2.1.0, built from factoincognito/ai-project-template-v2@$SHA" ] \
-    || die "--version printed: $got"
-  [ ! -e "$gh.log" ] || { cat "$gh.log" >&2; die "--version called gh"; }
+  [ "$got" = "bootstrap-project.sh v2.1.0, built from factoincognito/ai-project-template-v2@$SHA" ] ||
+    die "--version printed: $got"
+  [ ! -e "$gh.log" ] || {
+    cat "$gh.log" >&2
+    die "--version called gh"
+  }
 }
 
 test_project_script_holds_only_the_two_placeholder_assignments() {
@@ -2865,8 +3298,11 @@ test_project_script_holds_only_the_two_placeholder_assignments() {
   [ -f "$f" ] || die "no $f"
   grep -qxF "SCRIPT_VERSION='{{TEMPLATE_VERSION}}'" "$f" || die "no SCRIPT_VERSION placeholder assignment"
   grep -qxF "SCRIPT_COMMIT='{{TEMPLATE_COMMIT}}'" "$f" || die "no SCRIPT_COMMIT placeholder assignment"
-  [ "$(grep -oF '{{TEMPLATE_' "$f" | wc -l | tr -d ' ')" -eq 2 ] \
-    || { grep -nF '{{TEMPLATE_' "$f" >&2; die "placeholder outside the two assignments"; }
+  [ "$(grep -oF '{{TEMPLATE_' "$f" | wc -l | tr -d ' ')" -eq 2 ] ||
+    {
+      grep -nF '{{TEMPLATE_' "$f" >&2
+      die "placeholder outside the two assignments"
+    }
 }
 
 test_unstamped_project_script_still_lays_out() {
@@ -2875,9 +3311,12 @@ test_unstamped_project_script_still_lays_out() {
   # values must not break it.
   local a="$WORK/unstamped.$RANDOM" b="$WORK/wrapper.$RANDOM"
   grep -qF '{{TEMPLATE_VERSION}}' "$PROJECT_SCRIPT" || die "the stub is not unstamped; this test checks nothing"
-  PACKS_DIR="$REPO/languages" bash "$PROJECT_SCRIPT" layout-pack node "$a" >/dev/null \
-    || die "unstamped script layout-pack failed"
-  (unset PACKS_DIR; bash "$REPO/tools/layout-pack.sh" node "$b") >/dev/null || die "wrapper failed"
+  PACKS_DIR="$REPO/languages" bash "$PROJECT_SCRIPT" layout-pack node "$a" >/dev/null ||
+    die "unstamped script layout-pack failed"
+  (
+    unset PACKS_DIR
+    bash "$REPO/tools/layout-pack.sh" node "$b"
+  ) >/dev/null || die "wrapper failed"
   diff -r "$a" "$b" >&2 || die "unstamped script and wrapper lay out different trees"
 }
 
@@ -2907,10 +3346,17 @@ test_shipped_project_script_lays_out_from_its_own_languages_dir() {
   local out="$WORK/real.$RANDOM" p a b
   bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
   for p in node web python react-native; do
-    a="$WORK/shipped.$p.$RANDOM"; b="$WORK/wrapper.$p.$RANDOM"
-    (unset PACKS_DIR; cd "$WORK" && bash "$out/bootstrap-project.sh" layout-pack "$p" "$a") >/dev/null \
-      || die "shipped script layout-pack $p failed"
-    (unset PACKS_DIR; bash "$REPO/tools/layout-pack.sh" "$p" "$b") >/dev/null || die "wrapper $p failed"
+    a="$WORK/shipped.$p.$RANDOM"
+    b="$WORK/wrapper.$p.$RANDOM"
+    (
+      unset PACKS_DIR
+      cd "$WORK" && bash "$out/bootstrap-project.sh" layout-pack "$p" "$a"
+    ) >/dev/null ||
+      die "shipped script layout-pack $p failed"
+    (
+      unset PACKS_DIR
+      bash "$REPO/tools/layout-pack.sh" "$p" "$b"
+    ) >/dev/null || die "wrapper $p failed"
     diff -r "$a" "$b" >&2 || die "$p: shipped script and wrapper lay out different trees"
   done
 }
@@ -2922,18 +3368,29 @@ test_shipped_project_script_ignores_the_users_cdpath() {
   # by a relative path.
   local out="$WORK/real.$RANDOM" parent name decoy a b
   bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
-  parent="$(dirname "$out")"; name="$(basename "$out")"
-  decoy="$WORK/decoy.$RANDOM"; mkdir -p "$decoy/$name"
+  parent="$(dirname "$out")"
+  name="$(basename "$out")"
+  decoy="$WORK/decoy.$RANDOM"
+  mkdir -p "$decoy/$name"
   b="$WORK/wrapper.$RANDOM"
-  (unset PACKS_DIR; bash "$REPO/tools/layout-pack.sh" node "$b") >/dev/null || die "wrapper failed"
+  (
+    unset PACKS_DIR
+    bash "$REPO/tools/layout-pack.sh" node "$b"
+  ) >/dev/null || die "wrapper failed"
   # CDPATH holding the script's own parent: cd would print the folder.
   a="$WORK/cdp1.$RANDOM"
-  (unset PACKS_DIR; cd "$parent" && CDPATH="$parent" bash "$name/bootstrap-project.sh" layout-pack node "$a") \
+  (
+    unset PACKS_DIR
+    cd "$parent" && CDPATH="$parent" bash "$name/bootstrap-project.sh" layout-pack node "$a"
+  ) \
     >/dev/null || die "layout-pack failed with CDPATH set to the script's parent"
   diff -r "$a" "$b" >&2 || die "CDPATH (script's parent) changed the layout"
   # CDPATH holding a decoy folder with the same name: cd would go there.
   a="$WORK/cdp2.$RANDOM"
-  (unset PACKS_DIR; cd "$parent" && CDPATH="$decoy" bash "$name/bootstrap-project.sh" layout-pack node "$a") \
+  (
+    unset PACKS_DIR
+    cd "$parent" && CDPATH="$decoy" bash "$name/bootstrap-project.sh" layout-pack node "$a"
+  ) \
     >/dev/null || die "layout-pack failed with CDPATH set to a decoy"
   diff -r "$a" "$b" >&2 || die "CDPATH (decoy) changed the layout"
 }
@@ -2959,33 +3416,55 @@ assert_no_listed_bash4_constructs() {
   local pats=() samples=()
   [ -f "$f" ] || die "no $f"
   bash -n "$f" || die "syntax error in $f"
-  pats+=('(declare|local|typeset|readonly)[[:space:]]+-[a-zA-Z]*[Anlu]'); samples+=('local -A map')
-  pats+=('(declare|typeset)[[:space:]]+-[a-zA-Z]*g'); samples+=('declare -g x=1')
-  pats+=('\[\[?[[:space:]]+(!+[[:space:]]+)?-[vR][[:space:]]'); samples+=('[ -v x ] && :')
-  pats+=('\{[A-Za-z_][A-Za-z0-9_]*\}[<>]'); samples+=('exec {fd}>/dev/null')
-  pats+=('BASHPID|BASH_COMPAT|BASH_LOADABLES_PATH|READLINE_|COPROC|SRANDOM'); samples+=('echo "$BASHPID"')
-  pats+=('%-?[0-9]*\([^)]*\)T'); samples+=("printf '%(%F)T' -1")
-  pats+=('(declare|typeset|local)[[:space:]]+-[a-zA-Z]*I'); samples+=('local -I x')
-  pats+=('shopt[[:space:]]+-s[[:space:]]+(checkjobs|direxpand|globasciiranges|inherit_errexit|localvar_inherit|assoc_expand_once)'); samples+=('shopt -s inherit_errexit')
-  pats+=('\$\{[A-Za-z_][A-Za-z0-9_]*:[0-9]+:-[0-9]+\}'); samples+=('y="${x:2:-1}"')
-  pats+=('read[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*-[a-zA-Z]*N[[:space:]]'); samples+=('read -N 3 x')
-  pats+=('\$\{[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?(,,?|\^\^?)'); samples+=('y="${x,,}"')
-  pats+=('\$\{[A-Za-z_][A-Za-z0-9_]*@[QEPAaKkUuL]\}'); samples+=('y="${x@Q}"')
-  pats+=('(^|[^A-Za-z0-9_])(mapfile|readarray|coproc)([^A-Za-z0-9_]|$)'); samples+=('mapfile -t lines')
-  pats+=('&>>'); samples+=('cmd &>>log')
-  pats+=('\|&'); samples+=('cmd |& tee log')
-  pats+=(';;&|;&$|;&[[:space:]]'); samples+=('a) x ;;&')
-  pats+=('shopt[[:space:]]+-s[[:space:]]+(globstar|lastpipe|autocd)'); samples+=('shopt -s globstar')
-  pats+=('wait[[:space:]]+-n'); samples+=('wait -n')
-  pats+=('read[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*-[a-zA-Z]*i'); samples+=('read -e -i default x')
-  pats+=('\$\{[A-Za-z_][A-Za-z0-9_]*\[-[0-9]+\]\}'); samples+=('y="${a[-1]}"')
-  pats+=('EPOCHSECONDS|EPOCHREALTIME|BASH_ARGV0'); samples+=('t=$EPOCHSECONDS')
-  pats+=('\{[0-9]+\.\.[0-9]+\.\.[0-9]+\}'); samples+=('for i in {1..9..2}')
+  pats+=('(declare|local|typeset|readonly)[[:space:]]+-[a-zA-Z]*[Anlu]')
+  samples+=('local -A map')
+  pats+=('(declare|typeset)[[:space:]]+-[a-zA-Z]*g')
+  samples+=('declare -g x=1')
+  pats+=('\[\[?[[:space:]]+(!+[[:space:]]+)?-[vR][[:space:]]')
+  samples+=('[ -v x ] && :')
+  pats+=('\{[A-Za-z_][A-Za-z0-9_]*\}[<>]')
+  samples+=('exec {fd}>/dev/null')
+  pats+=('BASHPID|BASH_COMPAT|BASH_LOADABLES_PATH|READLINE_|COPROC|SRANDOM')
+  samples+=('echo "$BASHPID"')
+  pats+=('%-?[0-9]*\([^)]*\)T')
+  samples+=("printf '%(%F)T' -1")
+  pats+=('(declare|typeset|local)[[:space:]]+-[a-zA-Z]*I')
+  samples+=('local -I x')
+  pats+=('shopt[[:space:]]+-s[[:space:]]+(checkjobs|direxpand|globasciiranges|inherit_errexit|localvar_inherit|assoc_expand_once)')
+  samples+=('shopt -s inherit_errexit')
+  pats+=('\$\{[A-Za-z_][A-Za-z0-9_]*:[0-9]+:-[0-9]+\}')
+  samples+=('y="${x:2:-1}"')
+  pats+=('read[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*-[a-zA-Z]*N[[:space:]]')
+  samples+=('read -N 3 x')
+  pats+=('\$\{[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?(,,?|\^\^?)')
+  samples+=('y="${x,,}"')
+  pats+=('\$\{[A-Za-z_][A-Za-z0-9_]*@[QEPAaKkUuL]\}')
+  samples+=('y="${x@Q}"')
+  pats+=('(^|[^A-Za-z0-9_])(mapfile|readarray|coproc)([^A-Za-z0-9_]|$)')
+  samples+=('mapfile -t lines')
+  pats+=('&>>')
+  samples+=('cmd &>>log')
+  pats+=('\|&')
+  samples+=('cmd |& tee log')
+  pats+=(';;&|;&$|;&[[:space:]]')
+  samples+=('a) x ;;&')
+  pats+=('shopt[[:space:]]+-s[[:space:]]+(globstar|lastpipe|autocd)')
+  samples+=('shopt -s globstar')
+  pats+=('wait[[:space:]]+-n')
+  samples+=('wait -n')
+  pats+=('read[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*-[a-zA-Z]*i')
+  samples+=('read -e -i default x')
+  pats+=('\$\{[A-Za-z_][A-Za-z0-9_]*\[-[0-9]+\]\}')
+  samples+=('y="${a[-1]}"')
+  pats+=('EPOCHSECONDS|EPOCHREALTIME|BASH_ARGV0')
+  samples+=('t=$EPOCHSECONDS')
+  pats+=('\{[0-9]+\.\.[0-9]+\.\.[0-9]+\}')
+  samples+=('for i in {1..9..2}')
   grep -nvE '^[[:space:]]*#' "$f" >"$code" || true
   [ "$(wc -l <"$code")" -ge 20 ] || die "found almost no code lines; the filter is broken"
   for i in "${!pats[@]}"; do
-    grep -qE -- "${pats[$i]}" <<<"${samples[$i]}" \
-      || die "pattern ${pats[$i]} misses its sample: ${samples[$i]}"
+    grep -qE -- "${pats[$i]}" <<<"${samples[$i]}" ||
+      die "pattern ${pats[$i]} misses its sample: ${samples[$i]}"
     ! grep -E -- "${pats[$i]}" "$code" >&2 || die "bash 4+ construct (${pats[$i]}) in $f"
   done
 }
@@ -3009,12 +3488,12 @@ test_no_grep_q_at_the_end_of_a_pipe() {
   done
   # The /dev/null form is safe only if grep then reads all of its input.
   awk 'BEGIN { print "match"; for (i = 0; i < 200000; i++) print "filler line" }' >"$big"
-  cat "$big" | grep -xF match >/dev/null \
-    || die "with its output to /dev/null, grep stopped reading at the first match: the /dev/null form is not safe"
+  cat "$big" | grep -xF match >/dev/null ||
+    die "with its output to /dev/null, grep stopped reading at the first match: the /dev/null form is not safe"
   for f in bootstrap/test.sh bootstrap/test-bootstrap-project.sh bootstrap/test-e2e-check.sh \
-           tools/test-layout-pack.sh bootstrap/check-shards.sh bootstrap/e2e-check.sh \
-           tools/test-require-test-change.sh tools/check-status.sh tools/test-check-status.sh \
-           .github/scripts/check-rules-edition.sh tools/test-check-rules-edition.sh; do
+    tools/test-layout-pack.sh bootstrap/check-shards.sh bootstrap/e2e-check.sh \
+    tools/test-require-test-change.sh tools/check-status.sh tools/test-check-status.sh \
+    .github/scripts/check-rules-edition.sh tools/test-check-rules-edition.sh; do
     [ -f "$REPO/$f" ] || die "no $f"
     grep -q 'pipefail' "$REPO/$f" || die "$f no longer sets pipefail; update this test"
     grep -nvE '^[[:space:]]*#' "$REPO/$f" >"$code" || true
@@ -3029,9 +3508,12 @@ test_real_build_points_to_the_rules_not_to_rule_files_that_no_longer_ship() {
   # shipping or to sections of the old CLAUDE.md.
   local out="$WORK/real.$RANDOM" hits f
   bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
-  hits="$(cd "$out" && grep -rnE 'memory/roles\.md|memory/standards\.md|CROG_ONBOARDING\.md|ROUTINES\.md|0001-rebuild-workflow|\.\.wrap|Change execution model|session-start routine|"Session end"' . \
-    | sed 's|^\./||' | grep -v '^rules/' || true)"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "these shipped lines point to rule files or CLAUDE.md sections that no longer ship"; }
+  hits="$(cd "$out" && grep -rnE 'memory/roles\.md|memory/standards\.md|CROG_ONBOARDING\.md|ROUTINES\.md|0001-rebuild-workflow|\.\.wrap|Change execution model|session-start routine|"Session end"' . |
+    sed 's|^\./||' | grep -v '^rules/' || true)"
+  [ -z "$hits" ] || {
+    printf '%s\n' "$hits" >&2
+    die "these shipped lines point to rule files or CLAUDE.md sections that no longer ship"
+  }
   # The shipped CLAUDE.md is the slim entry point and has no sections, so
   # any pointer to a section of it is stale, whatever the section's name:
   # a quoted name after it, a "Heading: text" name after it, a "... routine"
@@ -3039,15 +3521,18 @@ test_real_build_points_to_the_rules_not_to_rule_files_that_no_longer_ship() {
   local sect='CLAUDE\.md`?[,:]? +"|CLAUDE\.md`?, +[A-Z][^,.)`]*:|CLAUDE\.md`?(.s)? +[A-Za-z-]+ (routine|section)|sections? [^.]*(of|in) `?CLAUDE\.md'
   # The pattern catches every form and leaves plain mentions alone.
   for f in '(see `CLAUDE.md`, "Review process")' '(see `CLAUDE.md`, Both agents: test first)' \
-           'in `CLAUDE.md`: "Session end"' '(see `CLAUDE.md` session-start routine)' 'the PIN section of `CLAUDE.md`'; do
+    'in `CLAUDE.md`: "Session end"' '(see `CLAUDE.md` session-start routine)' 'the PIN section of `CLAUDE.md`'; do
     grep -qE -- "$sect" <<<"$f" || die "the section pattern misses: $f"
   done
   for f in '`CLAUDE.md`, `RULES.md` and the Rules in `rules/`' '(the file `CLAUDE.md`, which points to the Rules' \
-           '`CLAUDE.md` loads from the repo.' 'The file CLAUDE.md in the project tells Claude the rest.'; do
+    '`CLAUDE.md` loads from the repo.' 'The file CLAUDE.md in the project tells Claude the rest.'; do
     ! grep -qE -- "$sect" <<<"$f" || die "the section pattern flags a plain mention: $f"
   done
   hits="$(cd "$out" && grep -rnE -- "$sect" . | sed 's|^\./||' | grep -v '^rules/' || true)"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "these shipped lines point to a section of CLAUDE.md, which has none"; }
+  [ -z "$hits" ] || {
+    printf '%s\n' "$hits" >&2
+    die "these shipped lines point to a section of CLAUDE.md, which has none"
+  }
   for f in README.md memory/context.md memory/decisions.md docs/NEXT_SESSION.md docs/DEV_INFRASTRUCTURE.md; do
     grep -qE '`rules/|`RULES\.md`|Process P-[0-9]+' "$out/$f" || die "$f does not point to the Rules"
   done
@@ -3066,17 +3551,18 @@ test_real_build_cites_only_paragraphs_the_rules_edition_has() {
   local out="$WORK/real.$RANDOM" c n m f
   bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
   [ -f "$out/rules/RULES.md" ] || die "no rules/RULES.md in the build"
-  ( cd "$out" && grep -rhoE 'P-[0-9]+ § [0-9]+' --exclude-dir=rules . || true ) | LC_ALL=C sort -u >"$WORK/cites"
+  (cd "$out" && grep -rhoE 'P-[0-9]+ § [0-9]+' --exclude-dir=rules . || true) | LC_ALL=C sort -u >"$WORK/cites"
   [ -s "$WORK/cites" ] || die "no shipped file cites a Process paragraph (the parser is broken)"
   while IFS= read -r c; do
-    n="${c%% *}"; m="${c##* }"
+    n="${c%% *}"
+    m="${c##* }"
     # shellcheck disable=SC2010 # the names are the edition's own, plain ones
     f="$(cd "$out/rules/processes" && ls | grep -E "^$n-[a-z0-9-]+\.md$" || true)"
     [ -n "$f" ] || die "cited $c: no Process $n in rules/processes"
     grep -qE "^$n § $m( \(C\))? " "$out/rules/processes/$f" || die "cited $c: no such paragraph in rules/processes/$f"
   done <"$WORK/cites"
-  ( cd "$out" && grep -rhoE '([A-Za-z0-9-]+ )?§ [0-9]+' --exclude-dir=rules . || true ) \
-    | grep -vE '^(P-[0-9]+|L) ' | sed 's/^.*§ //' | LC_ALL=C sort -u >"$WORK/bare"
+  (cd "$out" && grep -rhoE '([A-Za-z0-9-]+ )?§ [0-9]+' --exclude-dir=rules . || true) |
+    grep -vE '^(P-[0-9]+|L) ' | sed 's/^.*§ //' | LC_ALL=C sort -u >"$WORK/bare"
   [ -s "$WORK/bare" ] || die "no shipped file cites a paragraph of the Rules (the parser is broken)"
   while IFS= read -r m; do
     grep -qE "^§ $m( \(C\))? " "$out/rules/RULES.md" || die "cited § $m: no such paragraph in rules/RULES.md"
@@ -3089,10 +3575,11 @@ test_packs_code_standards_point_to_process_p11_for_the_shared_rules() {
   # cited, not restated; each pack keeps its own tools and commands.
   local f p n=0
   for f in "$REPO"/languages/*/code-standards.md; do
-    n=$((n + 1)); p="${f#"$REPO/"}"
+    n=$((n + 1))
+    p="${f#"$REPO/"}"
     grep -qF 'Process P-11 § 5 (2)' "$f" || die "$p does not point to Process P-11 § 5 (2)"
-    ! grep -nE 'must be clean before pushing|minimum 80% line coverage|No hardcoded values\*\* —' "$f" >&2 \
-      || die "$p restates Process P-11 § 5 (2) (lines above)"
+    ! grep -nE 'must be clean before pushing|minimum 80% line coverage|No hardcoded values\*\* —' "$f" >&2 ||
+      die "$p restates Process P-11 § 5 (2) (lines above)"
   done
   [ "$n" -ge 5 ] || die "found only $n packs' code-standards.md"
 }
@@ -3103,8 +3590,8 @@ test_project_script_mentions_no_template_only_path() {
   local f="$PROJECT_SCRIPT"
   [ -f "$f" ] || die "no $f"
   ! grep -nE '(^|[^A-Za-z0-9_.-])(tools|bootstrap|stubs)/' "$f" >&2 || die "template-only folder named in $f"
-  ! grep -nE 'packs\.yml|bootstrapper\.yml|manifest\.txt|test-layout-pack|layout-pack\.sh' "$f" >&2 \
-    || die "template-only file named in $f"
+  ! grep -nE 'packs\.yml|bootstrapper\.yml|manifest\.txt|test-layout-pack|layout-pack\.sh' "$f" >&2 ||
+    die "template-only file named in $f"
 }
 
 test_project_script_passes_the_forbidden_string_checks() {
@@ -3112,8 +3599,8 @@ test_project_script_passes_the_forbidden_string_checks() {
   [ -f "$f" ] || die "no $f"
   ! grep -nE 'trig_|PBI-[0-9]|open question [0-9]' "$f" >&2 || die "forbidden pattern in $f"
   ! grep -nF '(PR #' "$f" >&2 || die "(PR # in $f"
-  grep -qE 'https://github\.com/factoincognito/ai-project-template-v2/blob/main/docs/BACKLOG\.md' "$f" \
-    || die "$f header does not link the spec by URL"
+  grep -qE 'https://github\.com/factoincognito/ai-project-template-v2/blob/main/docs/BACKLOG\.md' "$f" ||
+    die "$f header does not link the spec by URL"
 }
 
 # ---------- ci.yml: the lint step (PBI-1.41 part (a)) ----------
@@ -3145,20 +3632,20 @@ test_ci_build_lints_every_script_with_shellcheck_pinned_to_0_11_0() {
   local step script
   step="$(lint_step)"
   [ -n "$step" ] || die "the build job of ci.yml has no step named '$LINT_STEP_NAME'"
-  grep -qxF "          SHELLCHECK_VERSION: $SHELLCHECK_VERSION_PINNED" <<<"$step" \
-    || die "the lint step does not pin shellcheck $SHELLCHECK_VERSION_PINNED exactly"
-  grep -qxF "          SHELLCHECK_SHA256: $SHELLCHECK_SHA256_PINNED" <<<"$step" \
-    || die "the lint step does not pin the archive's SHA-256 $SHELLCHECK_SHA256_PINNED"
+  grep -qxF "          SHELLCHECK_VERSION: $SHELLCHECK_VERSION_PINNED" <<<"$step" ||
+    die "the lint step does not pin shellcheck $SHELLCHECK_VERSION_PINNED exactly"
+  grep -qxF "          SHELLCHECK_SHA256: $SHELLCHECK_SHA256_PINNED" <<<"$step" ||
+    die "the lint step does not pin the archive's SHA-256 $SHELLCHECK_SHA256_PINNED"
   # Nothing lets the step pass on a finding.
   ! grep -nE '^        (if|continue-on-error):' <<<"$step" >&2 || die "the lint step can be skipped or let fail (line above)"
   script="$(printf '%s\n' "$step" | wf_run_block)"
   [ -n "$script" ] || die "the lint step has no run: | script"
-  grep -qxF 'url="https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION/shellcheck-v$SHELLCHECK_VERSION.linux.x86_64.tar.xz"' <<<"$script" \
-    || die "the lint step does not download the official release archive"
+  grep -qxF 'url="https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION/shellcheck-v$SHELLCHECK_VERSION.linux.x86_64.tar.xz"' <<<"$script" ||
+    die "the lint step does not download the official release archive"
   ! grep -nE '\|\| *(true|:)|--severity|(^| )-S|(^| )-e ' <<<"$script" >&2 || die "the lint step loosens shellcheck or ignores its result (line above)"
   # Every script: the same selection, run with the downloaded shellcheck.
-  grep -qxF "$LINT_SELECTION | xargs -0 \"\$dir/shellcheck\"" <<<"$script" \
-    || die "the lint step does not run the downloaded shellcheck on: $LINT_SELECTION"
+  grep -qxF "$LINT_SELECTION | xargs -0 \"\$dir/shellcheck\"" <<<"$script" ||
+    die "the lint step does not run the downloaded shellcheck on: $LINT_SELECTION"
 }
 
 test_ci_lint_selection_holds_every_script_in_the_three_folders() {
@@ -3223,11 +3710,15 @@ run_lint_step() {
 test_ci_lint_step_passes_clean_scripts_and_fails_on_a_finding_or_a_bad_download() {
   local d sha f n
   # Clean: the step passes and shellcheck gets every selected script.
-  d="$WORK/clean"; lint_fakes "$d" "$SHELLCHECK_VERSION_PINNED"
+  d="$WORK/clean"
+  lint_fakes "$d" "$SHELLCHECK_VERSION_PINNED"
   sha="$(sha256sum "$d/archive.tar.xz" | cut -d' ' -f1)"
-  run_lint_step "$d" "$sha" || { printf '%s\n' "$LINT_OUT" >&2; die "the step failed on clean scripts"; }
-  [ "$(cat "$d/url")" = "https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION_PINNED/shellcheck-v$SHELLCHECK_VERSION_PINNED.linux.x86_64.tar.xz" ] \
-    || die "the step downloaded $(cat "$d/url")"
+  run_lint_step "$d" "$sha" || {
+    printf '%s\n' "$LINT_OUT" >&2
+    die "the step failed on clean scripts"
+  }
+  [ "$(cat "$d/url")" = "https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION_PINNED/shellcheck-v$SHELLCHECK_VERSION_PINNED.linux.x86_64.tar.xz" ] ||
+    die "the step downloaded $(cat "$d/url")"
   n=0
   while IFS= read -r f; do
     n=$((n + 1))
@@ -3236,15 +3727,18 @@ test_ci_lint_step_passes_clean_scripts_and_fails_on_a_finding_or_a_bad_download(
   [ "$n" -gt 0 ] || die "the selection is empty"
   [ "$(wc -l <"$d/args" | tr -d ' ')" -eq "$n" ] || die "shellcheck was given $(wc -l <"$d/args" | tr -d ' ') files, want $n"
   # A finding fails the step.
-  d="$WORK/finding"; lint_fakes "$d" "$SHELLCHECK_VERSION_PINNED"
+  d="$WORK/finding"
+  lint_fakes "$d" "$SHELLCHECK_VERSION_PINNED"
   sha="$(sha256sum "$d/archive.tar.xz" | cut -d' ' -f1)"
   ! FAKE_FINDING=1 run_lint_step "$d" "$sha" || die "the step passed on a finding"
   # An archive with another hash fails before anything is run from it.
-  d="$WORK/hash"; lint_fakes "$d" "$SHELLCHECK_VERSION_PINNED"
+  d="$WORK/hash"
+  lint_fakes "$d" "$SHELLCHECK_VERSION_PINNED"
   ! run_lint_step "$d" "$SHELLCHECK_SHA256_PINNED" || die "the step passed with an archive of another hash"
   [ ! -e "$d/args" ] || die "shellcheck ran from an archive of another hash"
   # A shellcheck that reports another version fails before the lint.
-  d="$WORK/version"; lint_fakes "$d" 0.9.0
+  d="$WORK/version"
+  lint_fakes "$d" 0.9.0
   sha="$(sha256sum "$d/archive.tar.xz" | cut -d' ' -f1)"
   ! run_lint_step "$d" "$sha" || die "the step passed with shellcheck 0.9.0"
   [ ! -e "$d/args" ] || die "shellcheck 0.9.0 was run on the scripts"
