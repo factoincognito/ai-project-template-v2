@@ -4492,7 +4492,7 @@ fill_texts_left() {
     t="$FILL_TEXT"
     s="$(
       cat "$IN_DIR/$file"
-      printf x
+      printf x # not-user-facing
     )"
     s="${s%x}"
     keys="$(while read -r f k; do [ "$f" != "$file" ] || printf '%s ' "$k"; done <<<"$rows")"
