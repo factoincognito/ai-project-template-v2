@@ -2,10 +2,10 @@
 
 [One or two sentences: what this project is and who it is for.]
 
-A project run with the Clead + Crog workflow: a product owner decides
-what gets built, Clead (Claude, Tech Owner) owns how, and Crog (Claude
-Code, Senior Developer) implements. Everything the agents need lives in
-this repo: `CLAUDE.md` is the entry point.
+A project run with the Clead + Crog workflow. The product owner,
+[PO NAME], decides what gets built, Clead (Claude, Tech Owner) owns
+how, and Crog (Claude Code, Senior Developer) implements. Everything
+the agents need lives in this repo: `CLAUDE.md` is the entry point.
 
 ## Finishing the setup
 
