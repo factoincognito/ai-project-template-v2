@@ -1232,6 +1232,14 @@ get a working project in any supported language.
 
   **Rules that apply.** Test and script changes: test first, reviewed on Opus by the role that did not write them; one PR per point.
 
+- **[NEXT] PBI-1.41** (Adam, 2026-11-06 16:40, a dated condition of the template's sign-off to the product office's Rules; due 2026-11-13; the HOW is Clead's; not yet specced) — `build` fails on lint, formatting and line coverage below 80% of this repository's own scripts, as P-11 § 2 (2) asks; until then `RULES.md` L § 7 (3) overrides it.
+
+  **Scope.** A lint check (shellcheck) and a format check of the template's own scripts (`bootstrap/`, `tools/`, `.github/scripts/`), and a line coverage measurement of them under the existing test suites (kcov or bashcov; which one, and how it copes with the tests' subshells, `sh -c` and the Windows and bash 3.2 legs, is settled in the spec), then a gate at 80%. Measure first: where coverage is short, tests are added test first. Each tool is recorded under the third-party policy before it is used.
+
+  **Done when.** `build` fails a PR whose scripts fail shellcheck or the format check, or whose line coverage of the template's own scripts is below 80%, with a red run shown for each; `RULES.md` L § 7 (3) is removed in the same PR or the next.
+
+  **Rules that apply.** Script, test and CI changes: test first, reviewed on Opus by the role that did not write them; one PR per part.
+
 ---
 
 ## Phase 2 — Validate unproven pieces
