@@ -1182,6 +1182,31 @@ get a working project in any supported language.
 
   **Rules that apply.** Script, test and workflow changes: test first (red, then green), reviewed by a Crog agent on Opus, one PR per scope point.
 
+- **[NEXT] PBI-1.38** (Clead, 2026-11-06, from the design of the public Rules edition, whose intent the product owner approved on 2026-11-05; this spec waits for the product owner's approval before it is built; the HOW is Clead's) — New projects get the Rules edition in `rules/` as their rule set, with a slim entry point and a `RULES.md` of local rules, and the old rule files stop shipping.
+
+  **Why.** The edition (`bootstrap/stubs/rules/`, taken by its own PR) holds the rules that today are spread over `CLAUDE.md`, `memory/roles.md`, `memory/standards.md`, `docs/CROG_ONBOARDING.md` and `docs/ROUTINES.md`. Shipping both would give a new project two rule sets that differ. Each new project signs off to the edition by its setup PR (edition Process P-7 § 5).
+
+  **Scope.**
+  1. **New stubs.**
+     - `bootstrap/stubs/CLAUDE.md`, the entry point: the title with `[PROJECT NAME]`; before any work, read `rules/RULES.md` in full, Process P-1 and carry out its startup, the processes the work needs, and `RULES.md`; Clead and Crog are the roles `rules/RULES.md` § 4 defines. Nothing else: no rule text.
+     - `bootstrap/stubs/RULES.md`, the local rules: `L § 1 (C)` "This project is bound by the Rules in `rules/`, in the edition `rules/EDITION` names.", with the line "Adopted: the product owner, by the setup that created this project" (no PR number, so the setup leaves the file unchanged); `L § 2` names the project's files (backlog, decisions, `STATUS.md`, the staging file, `memory/`) and says that `§ n` and `P-n § m` refer to `rules/`; `L § 3` Clead reads `memory/context.md` at session start.
+  2. **Stop shipping** (`bootstrap/manifest.txt`): the root `CLAUDE.md` (the stub replaces it), `memory/roles.md`, `memory/standards.md`, `docs/CROG_ONBOARDING.md`, `docs/ROUTINES.md` and `docs/decisions/0001-rebuild-workflow.md`. The template keeps them for itself until its own move to the edition.
+  3. **What the edition points to, in the stubs.** The README stub names the product owner (edition § 4 (1)). The backlog stub's header is the format specification (P-9 § 2 (3)): the markers `NOW`, `NEXT`, `LATER`, `DONE` and `BLOCKED` (P-9 § 2 (2); today's stub also has `IDEA` and `SUPERSEDED`), and a section "Waiting for the product owner" (P-9 § 3 (1)). The `STATUS.md` stub's header is its format specification (P-9 § 6 (6)), with the blocker prefix "Product Owner:".
+  4. **Pointers, not copies.** `docs/DEV_INFRASTRUCTURE.md`: rule text becomes pointers to Process P-11 by number; the how-to stays (a new machine, the starting files, the runbook the script cites, CI), and Part 2 is unchanged (the script edits it). `languages/*/code-standards.md`: lines that restate P-11 § 5 (2) become pointers. The README stub, the template README's shipped part, and the `memory/context.md` and `memory/decisions.md` stubs point to `rules/` and `RULES.md` instead of the files that stop shipping.
+  5. **Tests, red first.**
+     - `bootstrap/test.sh`: a build from the real tree contains `rules/EDITION` and passes `check-rules-edition.sh rules`; `CLAUDE.md` in the output is the stub; none of the files in 2 is in the output.
+     - `bootstrap/test-bootstrap-project.sh`: the `[DATE]` token assertions on `roles.md` and `CROG_ONBOARDING.md` go; the "never touched by the setup" examples become `rules/RULES.md` and `rules/EDITION` (which also asserts that the setup leaves the edition alone); the expected-change rows add `RULES.md` and `rules/RULES.md` as not changed by the setup; the fill table keeps its `CLAUDE.md` row.
+     - `bootstrap/e2e-check.sh` and its tests: a new `rules-edition` check runs the shipped script in the made project; the `roles.md` fixture goes.
+     - `bootstrap/not-read-by-tests.txt`: updated where it names a removed file.
+
+  **Out of scope.** The template's own `CLAUDE.md`, `memory/` files and staging file (its own move to the edition comes after this PBI); the edition's text (it is built elsewhere and only taken whole); a release.
+
+  **Order and release.** This PBI is built after the edition PR and the edition step in the projects' CI, prepared together with them so that the edition PR merges only once these PRs are ready for review. From the edition PR's merge to this PBI's last merged PR, `main` ships two rule sets that differ, so no `v*` tag is created in that window; each PR in it leaves `build` green. Clead's proposed split, one fix each: (a) items 1 and 2 with their tests; (b) item 3; (c) item 4; (d) the `e2e-check.sh` check.
+
+  **Done when.** A project made from `main` has `rules/` (passing its CI check), the stub `CLAUDE.md` and `RULES.md`, and none of the files in 2; every shipped file that pointed to a removed one points to `rules/` or `RULES.md` instead; the test suites are green on every leg.
+
+  **Rules that apply.** Script, test and stub changes: test first, reviewed by a Crog agent on Opus (process and rules content included); one PR per part.
+
 ---
 
 ## Phase 2 — Validate unproven pieces
