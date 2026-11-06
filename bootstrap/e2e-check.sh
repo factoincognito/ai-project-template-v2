@@ -752,6 +752,26 @@ check_no_script() {
   fi
 }
 
+# The Rules edition: the made project's rules/ passes the project's own
+# .github/scripts/check-rules-edition.sh in project mode, run in the copy
+# as its CI runs it. That mode reads the files only (no git) and writes
+# nothing in the copy (its temp folder is outside it).
+check_rules_edition() {
+  local out rc=0 script=.github/scripts/check-rules-edition.sh
+  if [ -z "$COPY_READABLE" ]; then no_copy rules-edition; return 0; fi
+  if [ ! -f "$DIR/$script" ]; then
+    result FAIL rules-edition "The project has no $script, the check its CI runs on rules/, so rules/ was not checked."
+    return 0
+  fi
+  out="$(CDPATH='' cd -- "$DIR" && bash "$script" rules 2>&1 </dev/null | tr -d '\r')" || rc=$?
+  out="$(printf '%s\n' "$out" | sed 's/^::[a-z]*:://' | awk 'NF { printf "%s%s", (n++ ? " " : ""), $0 }')"
+  if [ "$rc" -eq 0 ]; then
+    result PASS rules-edition "The project's own $script passes on rules/: $out"
+  else
+    result FAIL rules-edition "The project's own $script fails on rules/ (exit code $rc): $out"
+  fi
+}
+
 check_line_endings() {
   local out bad rc=0
   if [ -z "$COPY_READABLE" ]; then no_copy line-endings; return 0; fi
@@ -872,6 +892,7 @@ main() {
   check_no_script
   check_line_endings
   check_no_keys
+  check_rules_edition
   skip_the_rest
   echo
   echo "Result: $N_PASS passed, $N_FAIL failed, $N_SKIP skipped."
