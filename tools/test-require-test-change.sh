@@ -645,6 +645,10 @@ test_template_pack_prose_alone_passes()         { template_verdict 0 languages/n
 test_template_claude_md_alone_passes()          { template_verdict 0 CLAUDE.md; }
 test_template_docs_and_memory_alone_pass()      { template_verdict 0 docs/BACKLOG.md memory/decisions.md; }
 test_template_stub_prose_alone_passes()         { template_verdict 0 bootstrap/stubs/CHANGELOG.md bootstrap/stubs/licenses/NOTICE; }
+# A Rules edition PR changes only bootstrap/stubs/rules/, a build output
+# whose tests are where it is built; its EDITION file has no .md ending.
+test_template_rules_edition_alone_passes()      { template_verdict 0 bootstrap/stubs/rules/EDITION bootstrap/stubs/rules/RULES.md bootstrap/stubs/rules/processes/P-1-session-startup.md; }
+test_template_rules_edition_check_alone_fails() { template_verdict 1 .github/scripts/check-rules-edition.sh; }
 # One file per call: each of these is a test only because of one pattern,
 # so dropping that pattern turns the case red.
 test_template_pack_test_patterns_each_count() {
