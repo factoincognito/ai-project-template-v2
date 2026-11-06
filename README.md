@@ -163,7 +163,8 @@ same `cd`: the one you ran, with every answer in it.
 - After the script: in the Claude app, create a Claude Project for the
   new GitHub project, add the GitHub project to that Claude Project, and
   start a chat inside the Claude Project; the project's instructions for
-  Claude (the file `CLAUDE.md`) do the rest. A Claude Project is a
+  Claude (the file `CLAUDE.md`, which points to the Rules in `rules/` and
+  the project's own rules in `RULES.md`) do the rest. A Claude Project is a
   workspace in the Claude app that keeps the chats and files of one
   project together. Claude's help pages say how:
   - To create a Claude Project: "How can I create and manage projects?",

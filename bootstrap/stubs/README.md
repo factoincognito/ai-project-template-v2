@@ -35,15 +35,13 @@ describe the project and its goals, it is oriented. In VS Code, open
 your clone and use a Claude Code tab if you want to run Crog yourself.
 
 Keep one Claude Project per repo, so what Clead learns in one project
-never mixes with another (`docs/decisions/0001-rebuild-workflow.md`,
-§6, "Cowork project setup"; written for Cowork, the reasoning is the
-same).
+never mixes with another.
 
 ### Starting later sessions
 In the Claude app, start a new chat inside the project's Claude Project
-(it already has the repo). Clead follows the session startup steps in
-`CLAUDE.md`. The first thing you say is the first thing
-that matters.
+(it already has the repo). Clead follows the session startup of the
+Rules (`rules/processes/P-1-session-startup.md`), which `CLAUDE.md`
+points to. The first thing you say is the first thing that matters.
 
 ### Working from another computer
 You can work on this project from more than one computer, for example
@@ -115,8 +113,9 @@ Reviews and merges are delegated: Clead reviews Crog's code, Crog
 reviews Clead's code, config and process changes, and Crog merges once
 the review passes and CI is green. After 3 review rounds without
 agreement, the product owner decides. The product owner is never used to
-pass messages between Clead and Crog. Details: `CLAUDE.md`, "Change
-execution model".
+pass messages between Clead and Crog. Details: the Rules in `rules/`,
+§ 10 and § 26 to § 28 of `rules/RULES.md` and Processes P-2 to P-4, and
+the project's own rules in `RULES.md`.
 
 ## Working without Claude
 
@@ -150,8 +149,9 @@ With Claude, the Clead and Crog workflow comes on top of it.
 **What does not work without Claude.**
 
 - Clead and Crog, and everything they do: specs, reviews, merges,
-  session start and end, `..wrap` and pins.
-- `CLAUDE.md` and `memory/roles.md` are written for Clead and Crog, and
+  session start and end, and pins.
+- `CLAUDE.md`, `RULES.md` and the Rules in `rules/` are written for
+  Clead and Crog, and
   `memory/context.md` is Clead's session notes. Without Claude, nobody
   reads them as instructions.
   The other files under `memory/` hold the project's own data, such as
@@ -173,8 +173,9 @@ written for Clead and Crog, as they apply to a team of people only:
 - Write the test first and see it fail. The test-first check fails a
   code change without a test; a change no test can check says why in a
   `Test-exempt:` trailer line.
-- Someone other than the author reviews the pull request. Sections 1
-  to 5 of `memory/standards.md` work as the review checklist.
+- Someone other than the author reviews the pull request. The review
+  standard of the Rules, Process P-3 § 3
+  (`rules/processes/P-3-review.md`), works as the review checklist.
 - Merge once `build` is green and the review has passed.
 - Fill in the texts the setup left for Clead (listed above) yourself,
   and keep `STATUS.md` up to date by hand.
