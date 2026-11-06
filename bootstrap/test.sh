@@ -3016,6 +3016,22 @@ test_real_build_points_to_the_rules_not_to_rule_files_that_no_longer_ship() {
   hits="$(cd "$out" && grep -rnE 'memory/roles\.md|memory/standards\.md|CROG_ONBOARDING\.md|ROUTINES\.md|0001-rebuild-workflow|\.\.wrap|Change execution model|session-start routine|"Session end"' . \
     | sed 's|^\./||' | grep -v '^rules/' || true)"
   [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "these shipped lines point to rule files or CLAUDE.md sections that no longer ship"; }
+  # The shipped CLAUDE.md is the slim entry point and has no sections, so
+  # any pointer to a section of it is stale, whatever the section's name:
+  # a quoted name after it, a "Heading: text" name after it, a "... routine"
+  # or "... section" of it, or a section said to be in it.
+  local sect='CLAUDE\.md`?[,:]? +"|CLAUDE\.md`?, +[A-Z][^,.)`]*:|CLAUDE\.md`?(.s)? +[A-Za-z-]+ (routine|section)|sections? [^.]*(of|in) `?CLAUDE\.md'
+  # The pattern catches every form and leaves plain mentions alone.
+  for f in '(see `CLAUDE.md`, "Review process")' '(see `CLAUDE.md`, Both agents: test first)' \
+           'in `CLAUDE.md`: "Session end"' '(see `CLAUDE.md` session-start routine)' 'the PIN section of `CLAUDE.md`'; do
+    grep -qE -- "$sect" <<<"$f" || die "the section pattern misses: $f"
+  done
+  for f in '`CLAUDE.md`, `RULES.md` and the Rules in `rules/`' '(the file `CLAUDE.md`, which points to the Rules' \
+           '`CLAUDE.md` loads from the repo.' 'The file CLAUDE.md in the project tells Claude the rest.'; do
+    ! grep -qE -- "$sect" <<<"$f" || die "the section pattern flags a plain mention: $f"
+  done
+  hits="$(cd "$out" && grep -rnE -- "$sect" . | sed 's|^\./||' | grep -v '^rules/' || true)"
+  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "these shipped lines point to a section of CLAUDE.md, which has none"; }
   for f in README.md memory/context.md memory/decisions.md docs/NEXT_SESSION.md docs/DEV_INFRASTRUCTURE.md; do
     grep -qE '`rules/|`RULES\.md`|Process P-[0-9]+' "$out/$f" || die "$f does not point to the Rules"
   done
