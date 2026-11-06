@@ -48,7 +48,10 @@ usage() {
   echo "usage: $NAME [--template] <dir>" >&2
   exit 2
 }
-die2() { echo "::error::$NAME: $*"; exit 2; }
+die2() {
+  echo "::error::$NAME: $*"
+  exit 2
+}
 
 TEMPLATE=false
 DIR=""
@@ -56,7 +59,10 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --template) TEMPLATE=true ;;
     -*) usage ;;
-    *) [ -z "$DIR" ] || usage; DIR="$1" ;;
+    *)
+      [ -z "$DIR" ] || usage
+      DIR="$1"
+      ;;
   esac
   shift
 done
@@ -88,8 +94,8 @@ sha256_of() {
     shasum -a 256 "$1" | cut -d' ' -f1
   fi
 }
-command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 \
-  || die2 "neither sha256sum nor shasum is installed"
+command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 ||
+  die2 "neither sha256sum nor shasum is installed"
 
 # ---------- template mode: what the change touches ----------
 
@@ -117,14 +123,14 @@ check_change() {
   if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
     die2 "the checkout is shallow, so the base cannot be compared: checkout needs fetch-depth: 0"
   fi
-  git rev-parse --verify --quiet "$base^{commit}" >/dev/null \
-    || die2 "base '$base' not found: checkout needs fetch-depth: 0 (and a fetch of the base branch)"
+  git rev-parse --verify --quiet "$base^{commit}" >/dev/null ||
+    die2 "base '$base' not found: checkout needs fetch-depth: 0 (and a fetch of the base branch)"
   if ! git diff -z --name-only --no-renames "$base...HEAD" >"$WORK/changed" 2>"$WORK/err"; then
     cat "$WORK/err"
     die2 "git diff against '$base' failed (no common history? checkout needs fetch-depth: 0)"
   fi
-  MERGE_BASE="$(git merge-base "$base" HEAD)" \
-    || die2 "no merge base of '$base' and HEAD (checkout needs fetch-depth: 0)"
+  MERGE_BASE="$(git merge-base "$base" HEAD)" ||
+    die2 "no merge base of '$base' and HEAD (checkout needs fetch-depth: 0)"
   : >"$outside"
   while IFS= read -r -d '' f; do
     case "$f" in
@@ -142,7 +148,8 @@ check_change() {
 if [ "$TEMPLATE" = true ]; then
   case "$DIR" in
     /* | . | ./* | .. | ../* | */../* | */.. | */./* | */. | *//*)
-      die2 "in template mode, <dir> is a plain path relative to the repository root: '$DIR'" ;;
+      die2 "in template mode, <dir> is a plain path relative to the repository root: '$DIR'"
+      ;;
   esac
   DIR="${DIR%/}"
   git rev-parse --git-dir >/dev/null 2>&1 || die2 "not inside a git repository"
@@ -191,8 +198,11 @@ fi
 [ "$bad" -eq 0 ] || exit 1
 
 ID="$(head -n 1 "$ED")"
-LC_ALL=C grep -Eqx '[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9a-f]{7}' <<<"$ID" \
-  || { malformed "line 1: not an edition id (YYYY-MM-DD-<7 hex>): '$(escape "$ID")'"; bad=1; }
+LC_ALL=C grep -Eqx '[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9a-f]{7}' <<<"$ID" ||
+  {
+    malformed "line 1: not an edition id (YYYY-MM-DD-<7 hex>): '$(escape "$ID")'"
+    bad=1
+  }
 
 : >"$WORK/listed"
 : >"$WORK/pairs"
@@ -208,13 +218,18 @@ while IFS= read -r line; do
   path="${line#*  }"
   case "/$path/" in
     //* | */./* | */../* | *//*)
-      malformed "line $n: not a plain relative path: '$(escape "$path")'"; bad=1; continue ;;
+      malformed "line $n: not a plain relative path: '$(escape "$path")'"
+      bad=1
+      continue
+      ;;
   esac
   if [ "$path" = EDITION ]; then
-    malformed "line $n: it lists EDITION itself"; bad=1; continue
+    malformed "line $n: it lists EDITION itself"
+    bad=1
+    continue
   fi
-  if [ -n "$prev" ] && ! [ "$(printf '%s\n%s\n' "$prev" "$path" | LC_ALL=C sort | sed -n 1p)" = "$prev" ] \
-    || [ "$prev" = "$path" ]; then
+  if [ -n "$prev" ] && ! [ "$(printf '%s\n%s\n' "$prev" "$path" | LC_ALL=C sort | sed -n 1p)" = "$prev" ] ||
+    [ "$prev" = "$path" ]; then
     malformed "line $n: not sorted by path (byte order, each path once): '$(escape "$path")' after '$(escape "$prev")'"
     bad=1
   fi
@@ -240,7 +255,7 @@ while IFS= read -r line; do
 done <"$WORK/pairs"
 
 # Files EDITION does not list (anything but a folder, symlinks included).
-( cd "$DIR" && find . ! -type d ! -path ./EDITION ) | sed 's|^\./||' | LC_ALL=C sort >"$WORK/present"
+(cd "$DIR" && find . ! -type d ! -path ./EDITION) | sed 's|^\./||' | LC_ALL=C sort >"$WORK/present"
 LC_ALL=C sort "$WORK/listed" >"$WORK/listed.sorted"
 LC_ALL=C comm -23 "$WORK/present" "$WORK/listed.sorted" >"$WORK/extra"
 while IFS= read -r path; do

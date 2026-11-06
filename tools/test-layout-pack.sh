@@ -23,7 +23,10 @@ run_test() {
   local name="$1"
   local log="$WORK/$name.log" rc
   set +e
-  ( set -euo pipefail; "$name" ) >"$log" 2>&1
+  (
+    set -euo pipefail
+    "$name"
+  ) >"$log" 2>&1
   rc=$?
   set -e
   if [ "$rc" -eq 0 ]; then
@@ -37,25 +40,39 @@ run_test() {
   fi
 }
 
-die() { echo "assertion failed: $*" >&2; exit 1; }
+die() {
+  echo "assertion failed: $*" >&2
+  exit 1
+}
 
 # expect_fail <expected-stderr-substring> <args...>
 expect_fail() {
-  local msg="$1"; shift
+  local msg="$1"
+  shift
   local err="$WORK/err.$RANDOM"
   if bash "$LAYOUT" "$@" 2>"$err" >/dev/null; then
     die "layout succeeded, expected failure containing: $msg"
   fi
-  grep -qF -- "$msg" "$err" || { cat "$err" >&2; die "stderr lacks: $msg"; }
+  grep -qF -- "$msg" "$err" || {
+    cat "$err" >&2
+    die "stderr lacks: $msg"
+  }
 }
 
 # expect_rc <want-rc> <expected-stderr-substring> <command...>
 expect_rc() {
-  local want="$1" msg="$2"; shift 2
+  local want="$1" msg="$2"
+  shift 2
   local err="$WORK/err.$RANDOM" rc=0
   "$@" 2>"$err" >/dev/null || rc=$?
-  [ "$rc" -eq "$want" ] || { cat "$err" >&2; die "exit $rc, want $want: $*"; }
-  grep -qF -- "$msg" "$err" || { cat "$err" >&2; die "stderr lacks: $msg"; }
+  [ "$rc" -eq "$want" ] || {
+    cat "$err" >&2
+    die "exit $rc, want $want: $*"
+  }
+  grep -qF -- "$msg" "$err" || {
+    cat "$err" >&2
+    die "stderr lacks: $msg"
+  }
 }
 
 list_files() {
@@ -77,14 +94,14 @@ test_node_layout_matches_the_expected_files() {
   bash "$LAYOUT" node "$out" >/dev/null || die "layout failed"
   diff <(list_files "$out") <(printf '%s\n' \
     .github/workflows/ci.yml .gitignore .vscode/extensions.json .vscode/settings.json \
-    biome.json package.json src/placeholder.test.ts tsconfig.json | LC_ALL=C sort) \
-    || die "node layout differs from the expected files"
+    biome.json package.json src/placeholder.test.ts tsconfig.json | LC_ALL=C sort) ||
+    die "node layout differs from the expected files"
 }
 
 test_web_layout_matches_the_expected_files() {
   local out="$WORK/web.$RANDOM" expected
   bash "$LAYOUT" web "$out" >/dev/null || die "layout failed"
-  expected="$( {
+  expected="$({
     printf '%s\n' .github/workflows/ci.yml .gitignore .vscode/extensions.json \
       .vscode/settings.json biome.json package.json tsconfig.json index.html \
       vite.config.mts playwright.config.ts
@@ -96,7 +113,7 @@ test_web_layout_matches_the_expected_files() {
 test_python_layout_matches_the_expected_files() {
   local out="$WORK/python.$RANDOM" expected
   bash "$LAYOUT" python "$out" >/dev/null || die "layout failed"
-  expected="$( {
+  expected="$({
     printf '%s\n' .github/workflows/ci.yml .gitignore .vscode/extensions.json \
       .vscode/settings.json pyproject.toml requirements.txt requirements-dev.txt \
       .pre-commit-config.yaml
@@ -109,7 +126,7 @@ test_python_layout_matches_the_expected_files() {
 test_react_native_layout_matches_the_expected_files() {
   local out="$WORK/rn.$RANDOM" expected
   bash "$LAYOUT" react-native "$out" >/dev/null || die "layout failed"
-  expected="$( {
+  expected="$({
     printf '%s\n' .github/workflows/ci.yml .gitignore .vscode/extensions.json \
       .vscode/settings.json biome.json package.json tsconfig.json app.json
     (cd "$REPO/languages/react-native/starter" && find src -type f)
@@ -170,8 +187,8 @@ test_python_files_are_byte_identical_to_the_pack() {
   cmp -s "$p/ci.yml" "$out/.github/workflows/ci.yml" || die "ci.yml differs"
   cmp -s "$p/pre-commit-config.yaml" "$out/.pre-commit-config.yaml" || die "pre-commit config differs"
   cmp -s "$p/pyproject.toml" "$out/pyproject.toml" || die "pyproject.toml differs"
-  cmp -s "$p/starter/src/tests/test_placeholder.py" "$out/src/tests/test_placeholder.py" \
-    || die "placeholder test differs"
+  cmp -s "$p/starter/src/tests/test_placeholder.py" "$out/src/tests/test_placeholder.py" ||
+    die "placeholder test differs"
   [ ! -e "$out/code-standards.md" ] || die "code-standards.md laid out"
   [ ! -e "$out/starter" ] || die "starter/ copied as is"
 }
@@ -207,7 +224,7 @@ test_python_pre_commit_ruff_matches_the_pinned_ruff() {
 test_csharp_layout_matches_the_expected_files() {
   local out="$WORK/csharp.$RANDOM" expected
   bash "$LAYOUT" csharp "$out" >/dev/null || die "layout failed"
-  expected="$( {
+  expected="$({
     printf '%s\n' .github/workflows/ci.yml .gitignore .vscode/extensions.json \
       .vscode/settings.json .editorconfig global.json Directory.Build.props \
       Directory.Packages.props Project.slnx
@@ -247,17 +264,17 @@ test_csharp_pack_pins_every_package_exactly() {
   # Central package management: every version is in Directory.Packages.props,
   # exact, and no project file sets one of its own.
   local p="$REPO/languages/csharp" v n=0
-  grep -qF '<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>' "$p/Directory.Packages.props" \
-    || die "central package management is not on"
+  grep -qF '<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>' "$p/Directory.Packages.props" ||
+    die "central package management is not on"
   while IFS= read -r v; do
     n=$((n + 1))
     [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Directory.Packages.props: not pinned exactly: $v"
   done < <(sed -n 's/.*<PackageVersion Include="[^"]*" Version="\([^"]*\)".*/\1/p' "$p/Directory.Packages.props")
   [ "$n" -ge 2 ] || die "found only $n package versions; the parser is broken"
-  [ "$n" -eq "$(grep -c '<PackageVersion ' "$p/Directory.Packages.props")" ] \
-    || die "a PackageVersion in Directory.Packages.props is not in the one-line form the check reads"
-  ! grep -rE '<PackageReference [^>]*(Version|VersionOverride)=' "$p" --include='*.csproj' --include='*.props' >/dev/null \
-    || die "a project file sets a package version of its own"
+  [ "$n" -eq "$(grep -c '<PackageVersion ' "$p/Directory.Packages.props")" ] ||
+    die "a PackageVersion in Directory.Packages.props is not in the one-line form the check reads"
+  ! grep -rE '<PackageReference [^>]*(Version|VersionOverride)=' "$p" --include='*.csproj' --include='*.props' >/dev/null ||
+    die "a project file sets a package version of its own"
 }
 
 test_csharp_test_project_references_every_project_under_src() {
@@ -265,8 +282,8 @@ test_csharp_test_project_references_every_project_under_src() {
   # project references every project under src/ with one glob: a new
   # project there counts toward the gate at once, at 0% until tested.
   local t="$REPO/languages/csharp/starter/tests/Example.Tests/Example.Tests.csproj" n
-  grep -qF '<ProjectReference Include="../../src/**/*.csproj" />' "$t" \
-    || die "the test project does not reference every project under src/"
+  grep -qF '<ProjectReference Include="../../src/**/*.csproj" />' "$t" ||
+    die "the test project does not reference every project under src/"
   n="$(grep -c '<ProjectReference ' "$t")"
   [ "$n" -eq 1 ] || die "the test project has $n project references, want only the glob"
 }
@@ -289,13 +306,13 @@ test_csharp_ci_reads_the_sdk_from_global_json() {
   # The pack's CI and packs.yml install the SDK global.json names; packs.yml
   # runs from the checkout's root, where the project is in project/.
   local wf="$REPO/.github/workflows/packs.yml" job
-  grep -qxF '          global-json-file: global.json' "$REPO/languages/csharp/ci.yml" \
-    || die "the csharp ci.yml does not install the SDK from global.json"
+  grep -qxF '          global-json-file: global.json' "$REPO/languages/csharp/ci.yml" ||
+    die "the csharp ci.yml does not install the SDK from global.json"
   ! grep -qE 'dotnet-version:' "$REPO/languages/csharp/ci.yml" || die "the csharp ci.yml names an SDK version of its own"
   job="$(awk '$0 == "  pack-csharp:" { injob = 1; next } /^  [a-z][a-z-]*:$/ { injob = 0 } injob' "$wf")"
   [ -n "$job" ] || die "no pack-csharp job"
-  grep -qxF '          global-json-file: project/global.json' <<<"$job" \
-    || die "pack-csharp does not install the SDK from the project's global.json"
+  grep -qxF '          global-json-file: project/global.json' <<<"$job" ||
+    die "pack-csharp does not install the SDK from the project's global.json"
   ! grep -qE 'dotnet-version:' <<<"$job" || die "pack-csharp names an SDK version of its own"
 }
 
@@ -348,7 +365,8 @@ test_unknown_pack_fails() {
 
 test_non_empty_target_dir_fails() {
   local out="$WORK/full.$RANDOM"
-  mkdir "$out"; echo x >"$out/keep.txt"
+  mkdir "$out"
+  echo x >"$out/keep.txt"
   expect_fail "is not empty" node "$out"
   [ "$(cat "$out/keep.txt")" = x ] || die "existing file touched"
 }
@@ -366,7 +384,8 @@ test_pack_file_not_in_the_table_fails() {
 test_new_starter_folder_fails() {
   local packs out="$WORK/o.$RANDOM"
   packs="$(copy_packs)"
-  mkdir "$packs/web/starter/public"; echo x >"$packs/web/starter/public/x.txt"
+  mkdir "$packs/web/starter/public"
+  echo x >"$packs/web/starter/public/x.txt"
   PACKS_DIR="$packs" expect_fail "not in the layout table: starter/public/x.txt" web "$out"
 }
 
@@ -395,18 +414,18 @@ test_layout_table_lives_only_in_the_script() {
     done < <(cd "$REPO/languages/$p" && find . -mindepth 1 -maxdepth 1 | sed 's|^\./||' | LC_ALL=C sort)
   done
   [ "$n" -ge 30 ] || die "found only $n pack entries; the listing is broken"
-  grep -qE 'bootstrap/stubs/bootstrap-project\.sh"? layout-pack' "$LAYOUT" \
-    || die "the wrapper does not call the script's layout-pack subcommand"
+  grep -qE 'bootstrap/stubs/bootstrap-project\.sh"? layout-pack' "$LAYOUT" ||
+    die "the wrapper does not call the script's layout-pack subcommand"
 }
 
 test_wrapper_passes_the_template_packs_dir() {
   # The script sits in bootstrap/stubs/ in the template, so its own
   # default (languages/ next to it) does not exist there; the wrapper
   # must point it at the template's languages/.
-  grep -qF 'PACKS_DIR="${PACKS_DIR:-$HERE/../languages}"' "$LAYOUT" \
-    || die "the wrapper does not default PACKS_DIR to the template's languages/"
-  grep -qE '^export PACKS_DIR$|^export PACKS_DIR=|PACKS_DIR="\$PACKS_DIR" ' "$LAYOUT" \
-    || die "the wrapper does not pass PACKS_DIR to the script"
+  grep -qF 'PACKS_DIR="${PACKS_DIR:-$HERE/../languages}"' "$LAYOUT" ||
+    die "the wrapper does not default PACKS_DIR to the template's languages/"
+  grep -qE '^export PACKS_DIR$|^export PACKS_DIR=|PACKS_DIR="\$PACKS_DIR" ' "$LAYOUT" ||
+    die "the wrapper does not pass PACKS_DIR to the script"
 }
 
 test_wrapper_lays_out_what_the_script_does() {
@@ -415,9 +434,10 @@ test_wrapper_lays_out_what_the_script_does() {
   # tested against the pack sources in the next test.
   local p a b
   for p in $PACKS; do
-    a="$WORK/script.$p.$RANDOM"; b="$WORK/wrapper.$p.$RANDOM"
-    PACKS_DIR="$REPO/languages" bash "$SCRIPT" layout-pack "$p" "$a" >/dev/null \
-      || die "script layout-pack $p failed"
+    a="$WORK/script.$p.$RANDOM"
+    b="$WORK/wrapper.$p.$RANDOM"
+    PACKS_DIR="$REPO/languages" bash "$SCRIPT" layout-pack "$p" "$a" >/dev/null ||
+      die "script layout-pack $p failed"
     bash "$LAYOUT" "$p" "$b" >/dev/null || die "wrapper $p failed"
     diff <(list_files "$a") <(list_files "$b") || die "$p: file lists differ"
     diff -r "$a" "$b" >&2 || die "$p: contents differ"
@@ -476,12 +496,13 @@ test_every_laid_out_file_is_its_pack_source_at_the_expected_path() {
   # each file is byte-identical to its source in the pack.
   local p out exp to from n=0
   for p in $PACKS; do
-    out="$WORK/golden.$p.$RANDOM"; exp="$WORK/expected.$p.$RANDOM"
-    PACKS_DIR="$REPO/languages" bash "$SCRIPT" layout-pack "$p" "$out" >/dev/null \
-      || die "script layout-pack $p failed"
+    out="$WORK/golden.$p.$RANDOM"
+    exp="$WORK/expected.$p.$RANDOM"
+    PACKS_DIR="$REPO/languages" bash "$SCRIPT" layout-pack "$p" "$out" >/dev/null ||
+      die "script layout-pack $p failed"
     expected_files "$p" >"$exp"
-    diff <(list_files "$out") <(cut -d' ' -f1 "$exp") >&2 \
-      || die "$p: laid-out files differ from the expected placement (diff above)"
+    diff <(list_files "$out") <(cut -d' ' -f1 "$exp") >&2 ||
+      die "$p: laid-out files differ from the expected placement (diff above)"
     while read -r to from; do
       n=$((n + 1))
       cmp -s "$REPO/languages/$p/$from" "$out/$to" || die "$p: $to differs from the pack's $from"
@@ -492,7 +513,8 @@ test_every_laid_out_file_is_its_pack_source_at_the_expected_path() {
 
 test_script_refuses_a_non_empty_target() {
   local out="$WORK/full.$RANDOM"
-  mkdir "$out"; echo x >"$out/keep.txt"
+  mkdir "$out"
+  echo x >"$out/keep.txt"
   PACKS_DIR="$REPO/languages" expect_rc 1 "target dir is not empty" \
     bash "$SCRIPT" layout-pack node "$out"
   [ "$(list_files "$out")" = keep.txt ] || die "target dir changed"
@@ -547,8 +569,8 @@ test_the_layout_table_is_only_in_the_script_not_the_readmes() {
   grep -qF 'bootstrap-project.sh layout-pack' "$langs" || die "languages/README.md does not give the layout-pack command"
   # Review of #174, note 1: that command works only in the bootstrapper;
   # in the template the wrapper is the command that works.
-  grep -qF 'bash tools/layout-pack.sh <pack> <empty folder>' "$langs" \
-    || die "languages/README.md does not give tools/layout-pack.sh for the template"
+  grep -qF 'bash tools/layout-pack.sh <pack> <empty folder>' "$langs" ||
+    die "languages/README.md does not give tools/layout-pack.sh for the template"
 }
 
 test_languages_readme_lists_every_pack() {
@@ -565,7 +587,10 @@ test_the_layout_commands_languages_readme_gives_work_where_it_says() {
   local out="$WORK/o.$RANDOM" err="$WORK/e.$RANDOM"
   bash "$LAYOUT" node "$out" >/dev/null || die "tools/layout-pack.sh failed in the template"
   ! bash "$SCRIPT" layout-pack node "$WORK/o2.$RANDOM" >/dev/null 2>"$err" || die "bootstrap-project.sh layout-pack worked in the template"
-  grep -qF 'pack folder not found' "$err" || { cat "$err" >&2; die "unexpected failure"; }
+  grep -qF 'pack folder not found' "$err" || {
+    cat "$err" >&2
+    die "unexpected failure"
+  }
   grep -qF 'works only in the bootstrapper' "$REPO/languages/README.md" || die "languages/README.md does not say where each command works"
 }
 
@@ -593,8 +618,8 @@ test_packs_workflow_tests_the_pack_from_the_built_bootstrapper() {
   # that output, with languages/ deleted.
   local wf="$REPO/.github/workflows/packs.yml" p n
   for p in node web python react-native csharp; do
-    grep -qE "PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack\\.sh $p pack" "$wf" \
-      || die "pack-$p does not lay out from the built bootstrapper"
+    grep -qE "PACKS_DIR=bootstrapper/languages bash template/tools/layout-pack\\.sh $p pack" "$wf" ||
+      die "pack-$p does not lay out from the built bootstrapper"
   done
   n="$(grep -cF 'bash template/bootstrap/build.sh bootstrapper v0.0.0' "$wf")"
   [ "$n" -eq 5 ] || die "expected 5 bootstrapper builds in packs.yml, found $n"
@@ -631,11 +656,11 @@ test_packs_workflow_keeps_the_pack_files_the_setup_keeps() {
     l_commit="$(grep -nF "commit -q -m \"Set up the $p pack\"" <<<"$job" | cut -d: -f1 || true)"
     [ -n "$l_probe" ] || die "pack-$p does not read the kept files from LP_KEPT with this line: $probe"
     [ "$l_check" = "$((l_probe + 1))" ] || die "pack-$p does not check right after reading it that the kept list is not empty"
-    [ -n "$l_rm" ] && [ -n "$l_mkdir" ] && [ -n "$l_copy" ] && [ -n "$l_add" ] && [ -n "$l_commit" ] \
-      || die "pack-$p does not put the kept files back in languages/$p/ and commit them"
-    [ "$l_probe" -lt "$l_rm" ] && [ "$l_rm" -lt "$l_mkdir" ] && [ "$l_mkdir" -lt "$l_copy" ] \
-      && [ "$l_copy" -lt "$l_add" ] && [ "$l_add" -lt "$l_commit" ] \
-      || die "pack-$p: the kept files are not put back after deleting languages/ and added before the setup commit"
+    [ -n "$l_rm" ] && [ -n "$l_mkdir" ] && [ -n "$l_copy" ] && [ -n "$l_add" ] && [ -n "$l_commit" ] ||
+      die "pack-$p does not put the kept files back in languages/$p/ and commit them"
+    [ "$l_probe" -lt "$l_rm" ] && [ "$l_rm" -lt "$l_mkdir" ] && [ "$l_mkdir" -lt "$l_copy" ] &&
+      [ "$l_copy" -lt "$l_add" ] && [ "$l_add" -lt "$l_commit" ] ||
+      die "pack-$p: the kept files are not put back after deleting languages/ and added before the setup commit"
   done
   [ "$n" -eq 5 ] || die "checked $n pack jobs, expected 5"
 }
@@ -718,8 +743,8 @@ expect_edition_step() {
   local where="$1" text="$2" n
   n="$(grep -cxF -- "$EDITION_STEP_NAME" <<<"$text" || true)"
   [ "$n" -eq 1 ] || die "$where: expected 1 step named \"Check the Rules edition\", found $n"
-  [ "$(edition_step_block <<<"$text")" = "$EDITION_STEP_NAME"$'\n'"$EDITION_STEP_RUN" ] \
-    || die "$where: the edition step is not exactly these two lines: $EDITION_STEP_NAME / $EDITION_STEP_RUN (got: $(edition_step_block <<<"$text" | tr '\n' '/'))"
+  [ "$(edition_step_block <<<"$text")" = "$EDITION_STEP_NAME"$'\n'"$EDITION_STEP_RUN" ] ||
+    die "$where: the edition step is not exactly these two lines: $EDITION_STEP_NAME / $EDITION_STEP_RUN (got: $(edition_step_block <<<"$text" | tr '\n' '/'))"
   n="$(grep -vE '^[[:space:]]*#' <<<"$text" | grep -cF 'check-rules-edition.sh' || true)"
   [ "$n" -eq 1 ] || die "$where: expected the check script on 1 line, found $n"
 }
@@ -734,8 +759,8 @@ test_every_pack_ci_checks_the_rules_edition_after_the_test_change_check() {
     ci="$REPO/languages/$p/ci.yml"
     expect_edition_step "languages/$p/ci.yml" "$(cat "$ci")"
     heads="$(step_heads <"$ci" | sed -n 1,3p)"
-    [ "$heads" = "uses: actions/checkout@v7"$'\n'"name: Require a test change with a code change"$'\n'"name: Check the Rules edition" ] \
-      || die "languages/$p/ci.yml: the first steps are not the checkout, the test-change check and the edition check (got: $(tr '\n' '/' <<<"$heads"))"
+    [ "$heads" = "uses: actions/checkout@v7"$'\n'"name: Require a test change with a code change"$'\n'"name: Check the Rules edition" ] ||
+      die "languages/$p/ci.yml: the first steps are not the checkout, the test-change check and the edition check (got: $(tr '\n' '/' <<<"$heads"))"
   done
   [ "$n" -eq 5 ] || die "checked $n packs, expected 5"
 }
@@ -747,8 +772,8 @@ test_the_stub_ci_checks_the_rules_edition_right_after_the_checkout() {
   [ -f "$stub" ] || die "no $stub"
   expect_edition_step "the stub ci.yml" "$(cat "$stub")"
   heads="$(step_heads <"$stub" | sed -n 1,2p)"
-  [ "$heads" = "uses: actions/checkout@v7"$'\n'"name: Check the Rules edition" ] \
-    || die "the stub ci.yml: the edition check is not the first step after the checkout (got: $(tr '\n' '/' <<<"$heads"))"
+  [ "$heads" = "uses: actions/checkout@v7"$'\n'"name: Check the Rules edition" ] ||
+    die "the stub ci.yml: the edition check is not the first step after the checkout (got: $(tr '\n' '/' <<<"$heads"))"
 }
 
 test_the_ci_yml_laid_out_in_overlay_mode_checks_the_rules_edition() {
@@ -763,10 +788,17 @@ test_the_ci_yml_laid_out_in_overlay_mode_checks_the_rules_edition() {
     cp "$REPO/bootstrap/stubs/.github/workflows/ci.yml" "$out/.github/workflows/ci.yml"
     printf 'x\n' >"$out/.gitignore"
     # shellcheck source=/dev/null # the setup script, for layout_into; nothing here needs shellcheck to follow it
-    ( set --; . "$SCRIPT"; layout_into "$p" "$REPO/languages" "$out" overlay ) >"$WORK/overlay.out" 2>&1 \
-      || { cat "$WORK/overlay.out" >&2; die "$p: overlay failed"; }
-    grep -qF 'require-test-change.sh' "$out/.github/workflows/ci.yml" \
-      || die "$p: the overlay left the stub ci.yml in place (test is stale)"
+    (
+      set --
+      . "$SCRIPT"
+      layout_into "$p" "$REPO/languages" "$out" overlay
+    ) >"$WORK/overlay.out" 2>&1 ||
+      {
+        cat "$WORK/overlay.out" >&2
+        die "$p: overlay failed"
+      }
+    grep -qF 'require-test-change.sh' "$out/.github/workflows/ci.yml" ||
+      die "$p: the overlay left the stub ci.yml in place (test is stale)"
     expect_edition_step "$p: the ci.yml laid out in overlay mode" "$(cat "$out/.github/workflows/ci.yml")"
   done
   [ "$n" -eq 5 ] || die "checked $n packs, expected 5"
@@ -788,8 +820,8 @@ test_packs_workflow_runs_each_packs_rules_edition_step_in_the_project() {
     got="$(edition_step_block <<<"$job")"
     [ "$got" = "$want" ] || die "pack-$p does not run the $p pack's edition step word for word (want: $(tr '\n' '/' <<<"$want"); got: $(tr '\n' '/' <<<"$got"))"
     after="$(step_heads <<<"$job" | grep -xF -A1 "name: Check the setup change with the pack's own check" | sed -n 2p)"
-    [ "$after" = "name: Check the Rules edition" ] \
-      || die "pack-$p: the edition step does not come right after the pack's own test-change check (next step: $after)"
+    [ "$after" = "name: Check the Rules edition" ] ||
+      die "pack-$p: the edition step does not come right after the pack's own test-change check (next step: $after)"
   done
   [ "$n" -eq 5 ] || die "checked $n pack jobs, expected 5"
 }
@@ -843,8 +875,8 @@ test_no_job_that_checks_the_rules_edition_can_be_switched_off() {
   done < <(edition_jobs)
   [ "$n" -eq 11 ] || die "checked $n jobs, expected 11"
   for f in bootstrap/stubs/.github/workflows/ci.yml languages/*/ci.yml .github/workflows/packs.yml; do
-    ! grep -nE "^[\"']?defaults[\"']?[[:space:]]*:" "$REPO/$f" >&2 \
-      || die "$f: workflow-level defaults: (it can set the shell of the edition check)"
+    ! grep -nE "^[\"']?defaults[\"']?[[:space:]]*:" "$REPO/$f" >&2 ||
+      die "$f: workflow-level defaults: (it can set the shell of the edition check)"
   done
 }
 
@@ -854,7 +886,8 @@ test_the_switch_off_check_catches_each_key_bare_and_quoted() {
   # steps, must be found and the job named; the jobs as they are pass.
   local f_id f id job key val form line got n=0
   for f_id in "languages/node/ci.yml build" "bootstrap/stubs/.github/workflows/ci.yml build" ".github/workflows/packs.yml pack-csharp"; do
-    f="${f_id% *}"; id="${f_id#* }"
+    f="${f_id% *}"
+    id="${f_id#* }"
     job="$(job_of "$REPO/$f" "$id")"
     [ -n "$job" ] || die "$f: no job $id"
     [ -z "$(job_switch_problems "$id" "$job")" ] || die "$id as it is: $(job_switch_problems "$id" "$job")"
@@ -887,8 +920,8 @@ test_packs_workflow_node_version_matches_pack_ci() {
 
 test_packs_workflow_python_version_matches_pack_ci() {
   local wf="$REPO/.github/workflows/packs.yml" v
-  v="$(grep -oE 'python-version: "[0-9.]+"' "$REPO/languages/python/ci.yml")" \
-    || die "python ci.yml has no python-version"
+  v="$(grep -oE 'python-version: "[0-9.]+"' "$REPO/languages/python/ci.yml")" ||
+    die "python ci.yml has no python-version"
   grep -qF "$v" "$wf" || die "packs.yml lacks $v from the python pack"
 }
 
@@ -932,8 +965,8 @@ test_packs_workflow_creates_the_lockfile_with_the_script_command() {
     ' "$wf")"
     n="$(printf '%s\n' "$got" | grep -c '^Create the lockfile	')" || true
     [ "$n" -eq 1 ] || die "pack-$p: expected 1 \"Create the lockfile\" step, found $n"
-    grep -qxF "Create the lockfile	$want" <<<"$got" \
-      || die "pack-$p: lockfile step does not run exactly: $want (got: $(printf '%s\n' "$got" | grep '^Create the lockfile	' | cut -f2-))"
+    grep -qxF "Create the lockfile	$want" <<<"$got" ||
+      die "pack-$p: lockfile step does not run exactly: $want (got: $(printf '%s\n' "$got" | grep '^Create the lockfile	' | cut -f2-))"
     printf '%s\n' "$got" | awk -F'\t' -v want="$want" '
       $2 == want { seen = 1 } $2 == "npm ci" { ci = 1; if (!seen) exit 1 }
       END { if (!seen || !ci) exit 1 }
@@ -941,8 +974,8 @@ test_packs_workflow_creates_the_lockfile_with_the_script_command() {
   done
   n="$(grep -cE '^ *run: npm (install|i)( |$)' "$wf")" || true
   [ "$n" -eq 3 ] || die "expected exactly 3 npm install steps (the lockfile steps), found $n"
-  ! grep -E '^ *run: npm (install|i)( |$)' "$wf" | grep -vxE " *run: $want" >/dev/null \
-    || die "packs.yml runs an npm install other than: $want"
+  ! grep -E '^ *run: npm (install|i)( |$)' "$wf" | grep -vxE " *run: $want" >/dev/null ||
+    die "packs.yml runs an npm install other than: $want"
 }
 
 test_packs_workflow_uses_the_pack_ci_action_versions() {
@@ -955,8 +988,8 @@ test_packs_workflow_uses_the_pack_ci_action_versions() {
 }
 
 test_template_only_files_are_not_in_the_manifest() {
-  ! grep -qE '^(tools|\.github/workflows/packs\.yml)' "$REPO/bootstrap/manifest.txt" \
-    || die "template-only file listed in the manifest"
+  ! grep -qE '^(tools|\.github/workflows/packs\.yml)' "$REPO/bootstrap/manifest.txt" ||
+    die "template-only file listed in the manifest"
 }
 
 # ---------- run ----------

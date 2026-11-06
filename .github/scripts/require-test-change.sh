@@ -44,14 +44,20 @@ test_pats=()
 ignore_pats=()
 
 err() { echo "::error::require-test-change: $*"; }
-die2() { err "$*"; exit 2; }
+die2() {
+  err "$*"
+  exit 2
+}
 
 # ---------- arguments ----------
 
 mode=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --code|--test|--ignore) mode="$1"; shift ;;
+    --code | --test | --ignore)
+      mode="$1"
+      shift
+      ;;
     --*) die2 "unknown flag: $1" ;;
     *)
       [ -n "$1" ] || die2 "empty pattern after $mode: it would match nothing (is a variable unset?)"
@@ -104,8 +110,8 @@ fi
 if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
   die2 "the checkout is shallow, so the base cannot be compared: checkout needs fetch-depth: 0"
 fi
-git rev-parse --verify --quiet "$base^{commit}" >/dev/null \
-  || die2 "base '$base' not found: checkout needs fetch-depth: 0 (and a fetch of the base branch)"
+git rev-parse --verify --quiet "$base^{commit}" >/dev/null ||
+  die2 "base '$base' not found: checkout needs fetch-depth: 0 (and a fetch of the base branch)"
 
 # ---------- what changed ----------
 

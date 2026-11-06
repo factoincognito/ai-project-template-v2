@@ -51,7 +51,10 @@ SHARD_I=1
 SHARD_N=1
 if [ -n "${BOOTSTRAP_TEST_SHARD:-}" ]; then
   case "$BOOTSTRAP_TEST_SHARD" in
-    [1-9]*/[1-9]*) SHARD_I="${BOOTSTRAP_TEST_SHARD%%/*}"; SHARD_N="${BOOTSTRAP_TEST_SHARD#*/}" ;;
+    [1-9]*/[1-9]*)
+      SHARD_I="${BOOTSTRAP_TEST_SHARD%%/*}"
+      SHARD_N="${BOOTSTRAP_TEST_SHARD#*/}"
+      ;;
     *) SHARD_I=x ;;
   esac
   # More than 6 digits is refused before any arithmetic: a number that
@@ -105,7 +108,10 @@ run_test() {
   local log="$WORK/$name.log" rc
   # Not inside an `if`: errexit is ignored in condition context.
   set +e
-  ( set -euo pipefail; "$name" ) >"$log" 2>&1
+  (
+    set -euo pipefail
+    "$name"
+  ) >"$log" 2>&1
   rc=$?
   set -e
   if [ "$rc" -eq 0 ]; then
@@ -124,7 +130,10 @@ run_test() {
   fi
 }
 
-die() { echo "assertion failed: $*" >&2; exit 1; }
+die() {
+  echo "assertion failed: $*" >&2
+  exit 1
+}
 
 # skip_test <reason>: the calling test checks nothing on this computer,
 # for <reason>. It still counts as passed, but run_test shows the reason
@@ -1268,7 +1277,10 @@ literal_strings() {
 # strings (the helper calls and the messages block, plus every literal),
 # one line per source line.
 all_banned_hits() {
-  { user_strings "$1"; literal_strings "$1"; } | banned_hits | LC_ALL=C sort -t: -k1,1n -u
+  {
+    user_strings "$1"
+    literal_strings "$1"
+  } | banned_hits | LC_ALL=C sort -t: -k1,1n -u
 }
 
 # The first words a copy-paste command may start with: the tools the spec
@@ -1507,9 +1519,18 @@ bypass_lines() {
 
 test_sourcing_the_script_defines_functions_and_runs_nothing() {
   local out="$WORK/out.$RANDOM"
-  ( load_script; type say >/dev/null && type fail >/dev/null ) >"$out" 2>&1 \
-    || { cat "$out" >&2; die "sourcing the script failed or defined no helpers"; }
-  [ ! -s "$out" ] || { cat "$out" >&2; die "sourcing the script printed something (its main part ran)"; }
+  (
+    load_script
+    type say >/dev/null && type fail >/dev/null
+  ) >"$out" 2>&1 ||
+    {
+      cat "$out" >&2
+      die "sourcing the script failed or defined no helpers"
+    }
+  [ ! -s "$out" ] || {
+    cat "$out" >&2
+    die "sourcing the script printed something (its main part ran)"
+  }
 }
 
 test_script_piped_into_bash_still_runs_its_main_part() {
@@ -1519,10 +1540,22 @@ test_script_piped_into_bash_still_runs_its_main_part() {
   # (the questions) it refuses in plain words with exit 2, asking nothing.
   local err="$WORK/err.$RANDOM" out="$WORK/out.$RANDOM" rc=0
   bash <"$SCRIPT" >"$out" 2>"$err" || rc=$?
-  [ "$rc" -eq 2 ] || { cat "$err" >&2; die "piped run exited $rc, want 2"; }
-  sed -n 1p "$err" | grep -E '^What happened: .*(pipe|piped)' >/dev/null || { cat "$err" >&2; die "piped run did not say why it stopped"; }
-  grep -qE '^What to do next: .*README' "$err" || { cat "$err" >&2; die "piped run did not point to the README command"; }
-  ! grep -q ': $' "$out" || { cat "$out" >&2; die "piped run asked a question"; }
+  [ "$rc" -eq 2 ] || {
+    cat "$err" >&2
+    die "piped run exited $rc, want 2"
+  }
+  sed -n 1p "$err" | grep -E '^What happened: .*(pipe|piped)' >/dev/null || {
+    cat "$err" >&2
+    die "piped run did not say why it stopped"
+  }
+  grep -qE '^What to do next: .*README' "$err" || {
+    cat "$err" >&2
+    die "piped run did not point to the README command"
+  }
+  ! grep -q ': $' "$out" || {
+    cat "$out" >&2
+    die "piped run asked a question"
+  }
 }
 
 # ---------- message helpers ----------
@@ -1530,7 +1563,10 @@ test_script_piped_into_bash_still_runs_its_main_part() {
 test_step_start_prints_one_start_line() {
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
   printf '==> Checking your computer\n' >"$want"
-  ( load_script; step_start "Checking your computer" ) >"$got" 2>"$got.err"
+  (
+    load_script
+    step_start "Checking your computer"
+  ) >"$got" 2>"$got.err"
   expect_same "step start line" "$want" "$got"
   [ ! -s "$got.err" ] || die "step_start wrote to stderr"
 }
@@ -1538,21 +1574,30 @@ test_step_start_prints_one_start_line() {
 test_step_end_prints_one_done_line() {
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
   printf '    Done. git is installed\n' >"$want"
-  ( load_script; step_end "git is installed" ) >"$got" 2>"$got.err"
+  (
+    load_script
+    step_end "git is installed"
+  ) >"$got" 2>"$got.err"
   expect_same "step end line" "$want" "$got"
   [ ! -s "$got.err" ] || die "step_end wrote to stderr"
 }
 
 test_say_prints_the_line_to_stdout() {
   local got="$WORK/got.$RANDOM"
-  ( load_script; say "Hello there" ) >"$got" 2>"$got.err"
+  (
+    load_script
+    say "Hello there"
+  ) >"$got" 2>"$got.err"
   [ "$(cat "$got")" = "Hello there" ] || die "say printed: $(cat "$got")"
   [ ! -s "$got.err" ] || die "say wrote to stderr"
 }
 
 test_say_command_prints_the_command_indented() {
   local got="$WORK/got.$RANDOM"
-  ( load_script; say_command "gh auth status" ) >"$got"
+  (
+    load_script
+    say_command "gh auth status"
+  ) >"$got"
   [ "$(cat "$got")" = "    gh auth status" ] || die "say_command printed: $(cat "$got")"
 }
 
@@ -1565,10 +1610,13 @@ Details for support (you can ignore these):
     HTTP 502: Bad Gateway
     (request id 1234)
 EOF
-  ( load_script; fail 1 "GitHub did not accept the request." \
+  (
+    load_script
+    fail 1 "GitHub did not accept the request." \
       "Check your internet connection, then run the script again." \
       "HTTP 502: Bad Gateway
-(request id 1234)" ) >"$got.out" 2>"$got" || rc=$?
+(request id 1234)"
+  ) >"$got.out" 2>"$got" || rc=$?
   [ "$rc" -eq 1 ] || die "fail exited $rc, want 1"
   expect_same "error output" "$want" "$got"
   [ ! -s "$got.out" ] || die "the error went to stdout"
@@ -1577,7 +1625,10 @@ EOF
 test_error_without_raw_text_has_no_support_block() {
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
   printf '%s\n' "What happened: The folder is not empty." "What to do next: Choose an empty folder." >"$want"
-  ( load_script; show_error "The folder is not empty." "Choose an empty folder." ) 2>"$got"
+  (
+    load_script
+    show_error "The folder is not empty." "Choose an empty folder."
+  ) 2>"$got"
   expect_same "error output" "$want" "$got"
 }
 
@@ -1585,25 +1636,46 @@ test_error_never_shows_raw_text_alone() {
   # A call with no message or no next action still says what happened
   # and what to do, above the raw text.
   local got="$WORK/got.$RANDOM"
-  ( load_script; show_error "" "" "HTTP 500" ) 2>"$got"
-  sed -n 1p "$got" | grep -xF 'What happened: Something unexpected happened.' >/dev/null \
-    || { cat "$got" >&2; die "no plain message above the raw text"; }
-  sed -n 2p "$got" | grep -E '^What to do next: .{10,}' >/dev/null \
-    || { cat "$got" >&2; die "no next action above the raw text"; }
-  sed -n 4p "$got" | grep -xF '    HTTP 500' >/dev/null || { cat "$got" >&2; die "raw text not shown below for support"; }
+  (
+    load_script
+    show_error "" "" "HTTP 500"
+  ) 2>"$got"
+  sed -n 1p "$got" | grep -xF 'What happened: Something unexpected happened.' >/dev/null ||
+    {
+      cat "$got" >&2
+      die "no plain message above the raw text"
+    }
+  sed -n 2p "$got" | grep -E '^What to do next: .{10,}' >/dev/null ||
+    {
+      cat "$got" >&2
+      die "no next action above the raw text"
+    }
+  sed -n 4p "$got" | grep -xF '    HTTP 500' >/dev/null || {
+    cat "$got" >&2
+    die "raw text not shown below for support"
+  }
 }
 
 test_error_raw_text_has_carriage_returns_removed() {
   # Windows tools end lines with \r\n; a stray \r would garble the output.
   local got="$WORK/got.$RANDOM"
-  ( load_script; show_error "It failed." "Try again." "$(printf 'line one\r\nline two\r')" ) 2>"$got"
+  (
+    load_script
+    show_error "It failed." "Try again." "$(printf 'line one\r\nline two\r')"
+  ) 2>"$got"
   ! has_cr "$got" || die "a carriage return reached the output"
-  grep -qxF '    line two' "$got" || { cat "$got" >&2; die "raw text lost"; }
+  grep -qxF '    line two' "$got" || {
+    cat "$got" >&2
+    die "raw text lost"
+  }
 }
 
 test_fail_exits_with_the_code_it_is_given() {
   local rc=0
-  ( load_script; fail 3 "It stopped." "Run it again." ) 2>/dev/null || rc=$?
+  (
+    load_script
+    fail 3 "It stopped." "Run it again."
+  ) 2>/dev/null || rc=$?
   [ "$rc" -eq 3 ] || die "fail exited $rc, want 3"
 }
 
@@ -1637,13 +1709,24 @@ test_a_question_after_progress_lines_comes_after_one_blank_line() {
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
   printf '%s\n' '==> Checking your computer' '    Done. git is installed' 'A line of work.' '' \
     'Why it is asked, in one sentence.' 'Name [x]: ' >"$want"
-  ( load_script; step_start "Checking your computer"; step_end "git is installed"; say "A line of work."
-    ask "Why it is asked, in one sentence." "Name" x ) <<<"y" >"$got" 2>"$got.err"
+  (
+    load_script
+    step_start "Checking your computer"
+    step_end "git is installed"
+    say "A line of work."
+    ask "Why it is asked, in one sentence." "Name" x
+  ) <<<"y" >"$got" 2>"$got.err"
   expect_same "a question after progress lines" "$want" "$got"
-  [ ! -s "$got.err" ] || { cat "$got.err" >&2; die "wrote to stderr"; }
+  [ ! -s "$got.err" ] || {
+    cat "$got.err" >&2
+    die "wrote to stderr"
+  }
   # The first thing the script prints has no blank line above it.
   printf '%s\n' 'Why it is asked, in one sentence.' 'Name [x]: ' >"$want"
-  ( load_script; ask "Why it is asked, in one sentence." "Name" x ) <<<"y" >"$got"
+  (
+    load_script
+    ask "Why it is asked, in one sentence." "Name" x
+  ) <<<"y" >"$got"
   expect_same "a question printed first" "$want" "$got"
 }
 
@@ -1655,12 +1738,20 @@ test_the_log_after_a_question_comes_after_one_blank_line() {
   # right after another still has one blank line between.
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
   printf 'no\n' >"$got.tty"
-  ( load_script; export BOOTSTRAP_TTY="$got.tty"
+  (
+    load_script
+    export BOOTSTRAP_TTY="$got.tty"
     ask "Why it is asked, in one sentence." "Your email address for git" a@b.c
-    step_start "Checking that npm is installed"; say "A line of work."
-    ask_terminal "It runs only if you type yes." "Run it now? (yes or no)" || true; step_end "It works."
-    wait_for_enter || true; say_log "Checking again."; step_end "It works now."
-    ask "Why the first one." First a; ask "Why the second one." Second b; step_start "Next"
+    step_start "Checking that npm is installed"
+    say "A line of work."
+    ask_terminal "It runs only if you type yes." "Run it now? (yes or no)" || true
+    step_end "It works."
+    wait_for_enter || true
+    say_log "Checking again."
+    step_end "It works now."
+    ask "Why the first one." First a
+    ask "Why the second one." Second b
+    step_start "Next"
   ) <<<"$(printf 'x@y.z\n\n1\n2')" >"$got" 2>"$got.err"
   printf '%s\n' 'Why it is asked, in one sentence.' 'Your email address for git [a@b.c]: ' \
     '' '==> Checking that npm is installed' 'A line of work.' \
@@ -1668,7 +1759,10 @@ test_the_log_after_a_question_comes_after_one_blank_line() {
     '' 'Press Enter to check again, or type q to stop: ' '' 'Checking again.' '    Done. It works now.' \
     '' 'Why the first one.' 'First [a]: ' '' 'Why the second one.' 'Second [b]: ' '' '==> Next' >"$want"
   expect_same "the log after a question" "$want" "$got"
-  [ ! -s "$got.err" ] || { cat "$got.err" >&2; die "wrote to stderr"; }
+  [ ! -s "$got.err" ] || {
+    cat "$got.err" >&2
+    die "wrote to stderr"
+  }
 }
 
 test_an_offered_command_run_after_yes_never_doubles_a_blank_line() {
@@ -1681,14 +1775,26 @@ test_an_offered_command_run_after_yes_never_doubles_a_blank_line() {
   printf 'yes\n' >"$d/tty"
   printf '%s\n' '#!/bin/sh' 'printf "output of the command: %s\n\n" "$1"' >"$d/run"
   chmod +x "$d/run"
-  ( load_script; export BOOTSTRAP_TTY="$d/tty" BOOTSTRAP_RUN="$d/run"; OFFER=gh-setup-git; offer_command ) >"$d/out" 2>"$d/err"
+  (
+    load_script
+    export BOOTSTRAP_TTY="$d/tty" BOOTSTRAP_RUN="$d/run"
+    OFFER=gh-setup-git
+    offer_command
+  ) >"$d/out" 2>"$d/err"
   want="$(printf '%s\n' 'The script can run this command for you:' '    gh auth setup-git' '' \
     'It runs only if you type yes; Enter or any other answer skips it, and you can run it yourself.' \
     'Run it now? (yes or no) [no]: ' '' 'output of the command: gh auth setup-git' '' \
     'The command finished. Checking again.')"
-  [ "$(cat "$d/out")" = "$want" ] || { printf 'want:\n%s\ngot:\n' "$want" >&2; cat "$d/out" >&2; die "the lines around an offered command differ"; }
-  ! awk 'prev == "" && NR > 1 && $0 == "" { bad = 1 } { prev = $0 } END { exit !bad }' "$d/out" \
-    || { cat "$d/out" >&2; die "two blank lines in a row"; }
+  [ "$(cat "$d/out")" = "$want" ] || {
+    printf 'want:\n%s\ngot:\n' "$want" >&2
+    cat "$d/out" >&2
+    die "the lines around an offered command differ"
+  }
+  ! awk 'prev == "" && NR > 1 && $0 == "" { bad = 1 } { prev = $0 } END { exit !bad }' "$d/out" ||
+    {
+      cat "$d/out" >&2
+      die "two blank lines in a row"
+    }
 }
 
 test_the_log_after_the_command_to_continue_comes_after_one_blank_line() {
@@ -1701,12 +1807,21 @@ test_the_log_after_the_command_to_continue_comes_after_one_blank_line() {
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
-  n="$(grep -nxF "$(load_script; printf '%s' "$ADVANCE_INTRO")" "$d/out" | cut -d: -f1)"
-  [ -n "$n" ] || { cat "$d/out" >&2; die "no command to continue"; }
+  n="$(grep -nxF "$(
+    load_script
+    printf '%s' "$ADVANCE_INTRO"
+  )" "$d/out" | cut -d: -f1)"
+  [ -n "$n" ] || {
+    cat "$d/out" >&2
+    die "no command to continue"
+  }
   [ "$(sed -n "$((n + 2)),$((n + 4))p" "$d/out")" = "$(printf '%s\n\n%s' \
     'If the project was not created yet, that command says so and shows the command to start again.' \
-    '==> Creating the project octo-user/my-app on GitHub')" ] \
-    || { sed -n "$n,$((n + 5))p" "$d/out" >&2; die "no blank line between the command to continue and the log"; }
+    '==> Creating the project octo-user/my-app on GitHub')" ] ||
+    {
+      sed -n "$n,$((n + 5))p" "$d/out" >&2
+      die "no blank line between the command to continue and the log"
+    }
   # Continued with --resume after the limit of the wait: the command, one
   # blank line, the next step.
   d="$(tmpdir)"
@@ -1716,11 +1831,20 @@ test_the_log_after_the_command_to_continue_comes_after_one_blank_line() {
   echo 0 >"$d/build-pending"
   again "$d"
   expect_rc 0 "$d"
-  n="$(grep -nxF "$(load_script; printf '%s' "$ADVANCE_INTRO")" "$d/out" | cut -d: -f1)"
-  [ -n "$n" ] || { cat "$d/out" >&2; die "resume: no command to continue"; }
+  n="$(grep -nxF "$(
+    load_script
+    printf '%s' "$ADVANCE_INTRO"
+  )" "$d/out" | cut -d: -f1)"
+  [ -n "$n" ] || {
+    cat "$d/out" >&2
+    die "resume: no command to continue"
+  }
   # shellcheck disable=SC2015 # die is meant to run when either check fails
-  [ -z "$(sed -n "$((n + 2))p" "$d/out")" ] && sed -n "$((n + 3))p" "$d/out" | grep '^==> ' >/dev/null \
-    || { sed -n "$n,$((n + 4))p" "$d/out" >&2; die "resume: no blank line between the command to continue and the next step"; }
+  [ -z "$(sed -n "$((n + 2))p" "$d/out")" ] && sed -n "$((n + 3))p" "$d/out" | grep '^==> ' >/dev/null ||
+    {
+      sed -n "$n,$((n + 4))p" "$d/out" >&2
+      die "resume: no blank line between the command to continue and the next step"
+    }
 }
 
 test_blocks_one_after_another_have_one_blank_line_between_never_two() {
@@ -1729,18 +1853,35 @@ test_blocks_one_after_another_have_one_blank_line_between_never_two() {
     '' 'The title.' 'Why this is needed: a reason' '  1. Do it.' 'When it has worked: a' \
     'If you see something else: b' 'How the script checks it: c' '' \
     'Press Enter to check again, or type q to stop: ' >"$want"
-  ( load_script; say "Working."; block_start; block_start
-    ask "Why the first one." First a; ask "Why the second one." Second b
-    guide_begin "The title." "a reason"; guide_step "Do it."; guide_end a b c; block_start
-    wait_for_enter || true ) <<<"$(printf '1\n2\nq')" >"$got"
+  (
+    load_script
+    say "Working."
+    block_start
+    block_start
+    ask "Why the first one." First a
+    ask "Why the second one." Second b
+    guide_begin "The title." "a reason"
+    guide_step "Do it."
+    guide_end a b c
+    block_start
+    wait_for_enter || true
+  ) <<<"$(printf '1\n2\nq')" >"$got"
   expect_same "blocks one after another" "$want" "$got"
   # An open line of the wait's stars is ended first, then one blank line;
   # a stop after it puts the blank line on stdout too.
   printf '%s\n' 'Checking the build status *****' '' 'Why it is asked, in one sentence.' 'Name [x]: ' >"$want"
-  ( load_script; say_open "Checking the build status"; say_open " *****"
-    ask "Why it is asked, in one sentence." "Name" x ) <<<"y" >"$got"
+  (
+    load_script
+    say_open "Checking the build status"
+    say_open " *****"
+    ask "Why it is asked, in one sentence." "Name" x
+  ) <<<"y" >"$got"
   expect_same "a question after an open line of stars" "$want" "$got"
-  ( load_script; say_open "Checking the build status ***"; show_error "It broke." "Run it again." ) >"$got" 2>&1
+  (
+    load_script
+    say_open "Checking the build status ***"
+    show_error "It broke." "Run it again."
+  ) >"$got" 2>&1
   printf '%s\n' 'Checking the build status ***' '' 'What happened: It broke.' 'What to do next: Run it again.' >"$want"
   expect_same "a stop after an open line of stars" "$want" "$got"
 }
@@ -1749,33 +1890,59 @@ test_a_stop_and_the_closing_next_step_come_after_one_blank_line() {
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
   # The blank line before a stop goes to stdout, after the progress log
   # it closes, so stderr still begins with "What happened".
-  ( load_script; say "Working."; show_error "It broke." "Run it again." ) >"$got.out" 2>"$got.err"
+  (
+    load_script
+    say "Working."
+    show_error "It broke." "Run it again."
+  ) >"$got.out" 2>"$got.err"
   printf '%s\n' 'Working.' '' >"$want"
   expect_same "stdout before a stop" "$want" "$got.out"
   printf '%s\n' 'What happened: It broke.' 'What to do next: Run it again.' >"$want"
   expect_same "the stop" "$want" "$got.err"
   # As a terminal shows both streams: one blank line between.
-  ( load_script; say "Working."; show_error "It broke." "Run it again." ) >"$got" 2>&1
+  (
+    load_script
+    say "Working."
+    show_error "It broke." "Run it again."
+  ) >"$got" 2>&1
   printf '%s\n' 'Working.' '' 'What happened: It broke.' 'What to do next: Run it again.' >"$want"
   expect_same "the stop, both streams" "$want" "$got"
   # A stop that shows the command to start again or to continue: the
   # command opens the block, and the stop follows it after a blank line.
-  ( load_script; IN_NAME=my-app; RESTART_CMD="bootstrap-project.sh --name my-app"
-    step_end "Checked."; stop_with_error "It broke." "Run it again." "" ) >"$got" 2>&1 || true
+  (
+    load_script
+    IN_NAME=my-app
+    RESTART_CMD="bootstrap-project.sh --name my-app"
+    step_end "Checked."
+    stop_with_error "It broke." "Run it again." ""
+  ) >"$got" 2>&1 || true
   printf '%s\n' '    Done. Checked.' '' 'To start again, run this command:' \
     '    bash bootstrap-project.sh --name my-app' '' 'What happened: It broke.' 'What to do next: Run it again.' >"$want"
   expect_same "a stop with its command" "$want" "$got"
   # The closing "What to do next" said through say, and the plan's heading.
-  ( load_script; say "    Licence: mit"; say "What to do next: open the Claude app."
-    step_end "Checked."; say_heading "Here is the plan."; say "The project:" ) >"$got"
+  (
+    load_script
+    say "    Licence: mit"
+    say "What to do next: open the Claude app."
+    step_end "Checked."
+    say_heading "Here is the plan."
+    say "The project:"
+  ) >"$got"
   printf '%s\n' '    Licence: mit' '' 'What to do next: open the Claude app.' '    Done. Checked.' '' \
     'Here is the plan.' 'The project:' >"$want"
   expect_same "the closing next step and the plan heading" "$want" "$got"
   # The command to continue, shown once before the first change, is a
   # block of its own, plain; the closing help line follows "What to do
   # next" straight on, plain.
-  ( load_script; step_end "Checked."; say "$ADVANCE_INTRO"; say_command "bash x.sh --resume"
-    step_start "Creating"; say "What to do next: open it."; say "If you ever feel stuck, ask Clead." ) >"$got"
+  (
+    load_script
+    step_end "Checked."
+    say "$ADVANCE_INTRO"
+    say_command "bash x.sh --resume"
+    step_start "Creating"
+    say "What to do next: open it."
+    say "If you ever feel stuck, ask Clead."
+  ) >"$got"
   printf '%s\n' '    Done. Checked.' '' "$ADVANCE_INTRO" '    bash x.sh --resume' '==> Creating' '' \
     'What to do next: open it.' 'If you ever feel stuck, ask Clead.' >"$want"
   expect_same "the command to continue and the closing lines" "$want" "$got"
@@ -1783,34 +1950,76 @@ test_a_stop_and_the_closing_next_step_come_after_one_blank_line() {
 
 test_no_colour_codes_by_default_in_a_file_or_pipe() {
   local got="$WORK/got.$RANDOM"
-  ( load_script; unset BOOTSTRAP_COLOR NO_COLOR BOOTSTRAP_STDOUT_TERMINAL; export TERM=xterm BOOTSTRAP_TTY="$got.tty"
+  (
+    load_script
+    unset BOOTSTRAP_COLOR NO_COLOR BOOTSTRAP_STDOUT_TERMINAL
+    export TERM=xterm BOOTSTRAP_TTY="$got.tty"
     printf 'no\n' >"$got.tty"
-    ask "Why it is asked, in one sentence." "Name" x; ask_terminal "It runs only if you type yes." "Run it now?" || true
-    wait_for_enter || true; say_heading "Here is the plan."; say "What to do next: open it."
-    show_colour_key; step_start "Checking"; say "A line of work."; say_open "Waiting"; say_open " *"; step_end "It works."
-    say "$CONTINUE_INTRO"; say_command "bash x.sh --resume"
-    guide_begin "The title." "a reason"; guide_step "Run this command:"; say_command "gh auth status"; guide_end a b c
-    OFFER=gh-setup-git; offer_command || true; say_command "gh auth status" err
-    show_error "It broke." "Run it again." ) <<<"$(printf 'y\nq')" >"$got" 2>"$got.err"
-  ! has_esc "$got" || { od -c "$got" | head >&2; die "colour codes on stdout without a terminal"; }
-  ! has_esc "$got.err" || { od -c "$got.err" | head >&2; die "colour codes on stderr without a terminal"; }
-  ( load_script; unset BOOTSTRAP_COLOR NO_COLOR BOOTSTRAP_STDOUT_TERMINAL; export TERM=xterm; colour_on ) >"$got" \
-    && die "colour_on said yes for a file"
+    ask "Why it is asked, in one sentence." "Name" x
+    ask_terminal "It runs only if you type yes." "Run it now?" || true
+    wait_for_enter || true
+    say_heading "Here is the plan."
+    say "What to do next: open it."
+    show_colour_key
+    step_start "Checking"
+    say "A line of work."
+    say_open "Waiting"
+    say_open " *"
+    step_end "It works."
+    say "$CONTINUE_INTRO"
+    say_command "bash x.sh --resume"
+    guide_begin "The title." "a reason"
+    guide_step "Run this command:"
+    say_command "gh auth status"
+    guide_end a b c
+    OFFER=gh-setup-git
+    offer_command || true
+    say_command "gh auth status" err
+    show_error "It broke." "Run it again."
+  ) <<<"$(printf 'y\nq')" >"$got" 2>"$got.err"
+  ! has_esc "$got" || {
+    od -c "$got" | head >&2
+    die "colour codes on stdout without a terminal"
+  }
+  ! has_esc "$got.err" || {
+    od -c "$got.err" | head >&2
+    die "colour codes on stderr without a terminal"
+  }
+  (
+    load_script
+    unset BOOTSTRAP_COLOR NO_COLOR BOOTSTRAP_STDOUT_TERMINAL
+    export TERM=xterm
+    colour_on
+  ) >"$got" &&
+    die "colour_on said yes for a file"
   return 0
 }
 
 test_the_colour_hook_paints_only_the_lines_the_user_acts_on() {
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
   printf 'no\n' >"$got.tty"
-  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1 BOOTSTRAP_TTY="$got.tty"
-    step_start "Checking"; say "A line of work."; step_end "It works."; say_command "gh auth status"
+  (
+    load_script
+    unset NO_COLOR
+    export TERM=xterm BOOTSTRAP_COLOR=1 BOOTSTRAP_TTY="$got.tty"
+    step_start "Checking"
+    say "A line of work."
+    step_end "It works."
+    say_command "gh auth status"
     ask "Why it is asked, in one sentence." "Pack" "" "1) node: the first choice"
     ask_terminal "It runs only if you type yes." "Run it now? (yes or no)" || true
-    guide_begin "The title." "a reason"; guide_step "Do it."; guide_end a b c
+    guide_begin "The title." "a reason"
+    guide_step "Do it."
+    guide_end a b c
     wait_for_enter || true
-    say_heading "Here is the plan."; say "    On GitHub: a/b"
-    say "What to do next: open the Claude app."; say "If you ever feel stuck, ask Clead."
-    step_start "Checking"; say_note "You can follow the check here: x"; step_end "It works." ) <<<"$(printf 'node\nq')" >"$got" 2>"$got.err"
+    say_heading "Here is the plan."
+    say "    On GitHub: a/b"
+    say "What to do next: open the Claude app."
+    say "If you ever feel stuck, ask Clead."
+    step_start "Checking"
+    say_note "You can follow the check here: x"
+    step_end "It works."
+  ) <<<"$(printf 'node\nq')" >"$got" 2>"$got.err"
   # r1g: the line where the user types an answer in one colour (COLOUR_ON,
   # up to the space where the answer goes); the text read to act (the
   # explanation above a question, a guide's title, why, steps, "When it
@@ -1844,10 +2053,17 @@ test_the_colour_hook_paints_only_the_lines_the_user_acts_on() {
     printf '    %sDone. It works.%s\n' "$LOG_ON" "$COLOUR_OFF"
   } >"$want"
   expect_same "painted lines" "$want" "$got"
-  [ ! -s "$got.err" ] || { cat "$got.err" >&2; die "wrote to stderr"; }
+  [ ! -s "$got.err" ] || {
+    cat "$got.err" >&2
+    die "wrote to stderr"
+  }
   # A stop, on stderr: only its "What to do next" line is painted.
-  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
-    show_error "It broke." "Run it again." "raw text" ) 2>"$got"
+  (
+    load_script
+    unset NO_COLOR
+    export TERM=xterm BOOTSTRAP_COLOR=1
+    show_error "It broke." "Run it again." "raw text"
+  ) 2>"$got"
   {
     printf '%s\n' 'What happened: It broke.'
     printf '%sWhat to do next: Run it again.%s\n' "$READ_ON" "$COLOUR_OFF"
@@ -1861,17 +2077,35 @@ test_the_colour_hook_paints_only_the_lines_the_user_acts_on() {
 every_line_kind() {
   printf 'no\n' >"$1"
   export BOOTSTRAP_TTY="$1"
-  show_colour_key; step_start "Checking"; say "A line of work."; say "Warning: be careful."
-  say_note "You can follow the check here: x"; say_open "Waiting"; say_open " *"; step_end "It works."
+  show_colour_key
+  step_start "Checking"
+  say "A line of work."
+  say "Warning: be careful."
+  say_note "You can follow the check here: x"
+  say_open "Waiting"
+  say_open " *"
+  step_end "It works."
   ask "Why it is asked, in one sentence." "Pack" "" "1) node: the first choice"
   ask_terminal "It runs only if you type yes." "Run it now? (yes or no)" || true
-  guide_begin "The title." "a reason"; guide_step "Run this command:"; say_command "gh auth status"
-  guide_step "Come back to this window."; guide_end a b c; guide_details "raw text"
-  OFFER=gh-setup-git; offer_command || true; wait_for_enter || true
-  say_heading "Here is the plan."; say "    On GitHub: a/b"
-  say "$ADVANCE_INTRO"; say_command "bash x.sh --resume"; say "$CONTINUE_INTRO"; say_command "bash x.sh --resume"
-  say "What to do next: open it."; say "If you ever feel stuck, ask Clead."
-  say_command "gh auth status" err; show_error "It broke." "Run it again." "raw text"
+  guide_begin "The title." "a reason"
+  guide_step "Run this command:"
+  say_command "gh auth status"
+  guide_step "Come back to this window."
+  guide_end a b c
+  guide_details "raw text"
+  OFFER=gh-setup-git
+  offer_command || true
+  wait_for_enter || true
+  say_heading "Here is the plan."
+  say "    On GitHub: a/b"
+  say "$ADVANCE_INTRO"
+  say_command "bash x.sh --resume"
+  say "$CONTINUE_INTRO"
+  say_command "bash x.sh --resume"
+  say "What to do next: open it."
+  say "If you ever feel stuck, ask Clead."
+  say_command "gh auth status" err
+  show_error "It broke." "Run it again." "raw text"
 }
 
 test_colour_off_output_is_the_coloured_output_without_its_codes() {
@@ -1882,24 +2116,39 @@ test_colour_off_output_is_the_coloured_output_without_its_codes() {
   local d esc
   d="$(tmpdir)"
   esc="$(printf '\033')"
-  ( load_script; unset BOOTSTRAP_COLOR NO_COLOR BOOTSTRAP_STDOUT_TERMINAL; export TERM=xterm
-    every_line_kind "$d/tty" ) <<<"$(printf 'node\nq')" >"$d/plain" 2>"$d/plain.err"
+  (
+    load_script
+    unset BOOTSTRAP_COLOR NO_COLOR BOOTSTRAP_STDOUT_TERMINAL
+    export TERM=xterm
+    every_line_kind "$d/tty"
+  ) <<<"$(printf 'node\nq')" >"$d/plain" 2>"$d/plain.err"
   # shellcheck disable=SC2015 # die is meant to run when either check fails
   ! has_esc "$d/plain" && ! has_esc "$d/plain.err" || die "codes without a terminal"
-  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
-    every_line_kind "$d/tty" ) <<<"$(printf 'node\nq')" >"$d/colour" 2>"$d/colour.err"
+  (
+    load_script
+    unset NO_COLOR
+    export TERM=xterm BOOTSTRAP_COLOR=1
+    every_line_kind "$d/tty"
+  ) <<<"$(printf 'node\nq')" >"$d/colour" 2>"$d/colour.err"
   grep -F "$READ_ON" "$d/colour" >/dev/null || die "no line in the read colour"
   grep -F "$COLOUR_ON" "$d/colour" >/dev/null || die "no line in the answer colour"
   sed "s/$esc\\[[0-9;]*m//g" "$d/colour" | sed '/^Colour key: /d' | sed '1{/^$/d;}' >"$d/stripped"
   sed "s/$esc\\[[0-9;]*m//g" "$d/colour.err" >"$d/stripped.err"
   expect_same "stdout with the codes taken out" "$d/plain" "$d/stripped"
   expect_same "stderr with the codes taken out" "$d/plain.err" "$d/stripped.err"
-  ( load_script; export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1
-    every_line_kind "$d/tty" ) <<<"$(printf 'node\nq')" >"$d/nc" 2>"$d/nc.err"
+  (
+    load_script
+    export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1
+    every_line_kind "$d/tty"
+  ) <<<"$(printf 'node\nq')" >"$d/nc" 2>"$d/nc.err"
   # shellcheck disable=SC2015 # die is meant to run when either check fails
   cmp -s "$d/plain" "$d/nc" && cmp -s "$d/plain.err" "$d/nc.err" || die "NO_COLOR output differs from the output without a terminal"
-  ( load_script; unset NO_COLOR; export TERM=dumb BOOTSTRAP_COLOR=1
-    every_line_kind "$d/tty" ) <<<"$(printf 'node\nq')" >"$d/dumb" 2>"$d/dumb.err"
+  (
+    load_script
+    unset NO_COLOR
+    export TERM=dumb BOOTSTRAP_COLOR=1
+    every_line_kind "$d/tty"
+  ) <<<"$(printf 'node\nq')" >"$d/dumb" 2>"$d/dumb.err"
   # shellcheck disable=SC2015 # die is meant to run when either check fails
   cmp -s "$d/plain" "$d/dumb" && cmp -s "$d/plain.err" "$d/dumb.err" || die "TERM=dumb output differs from the output without a terminal"
 }
@@ -1911,19 +2160,32 @@ test_the_read_colour_stays_off_the_log_the_plan_lines_and_the_report() {
   # details for support never carry it.
   local d l
   d="$(tmpdir)"
-  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
-    every_line_kind "$d/tty" ) <<<"$(printf 'node\nq')" >"$d/out" 2>"$d/err"
+  (
+    load_script
+    unset NO_COLOR
+    export TERM=xterm BOOTSTRAP_COLOR=1
+    every_line_kind "$d/tty"
+  ) <<<"$(printf 'node\nq')" >"$d/out" 2>"$d/err"
   for l in '==> Checking' 'A line of work.' 'Warning: be careful.' 'Waiting' 'Done. It works.' \
     '1) node: the first choice' 'How the script checks it: c' 'Details for support' 'raw text' \
     'On GitHub: a/b' 'If you ever feel stuck, ask Clead.' 'What happened: It broke.'; do
-    ! grep -F -- "$l" "$d/out" "$d/err" | grep -F "$READ_ON" >/dev/null || { grep -F -- "$l" "$d/out" "$d/err" | od -c | head >&2; die "in the read colour: $l"; }
+    ! grep -F -- "$l" "$d/out" "$d/err" | grep -F "$READ_ON" >/dev/null || {
+      grep -F -- "$l" "$d/out" "$d/err" | od -c | head >&2
+      die "in the read colour: $l"
+    }
   done
   # The lines offered with a command: its line in the read colour, the
   # question in the answer colour, and the line after a no in the read
   # colour, as it tells the user what to do.
-  grep -qxF "${READ_ON}The script can run this command for you:${COLOUR_OFF}" "$d/out" || { od -c "$d/out" | head -60 >&2; die "the offer's line is not in the read colour"; }
+  grep -qxF "${READ_ON}The script can run this command for you:${COLOUR_OFF}" "$d/out" || {
+    od -c "$d/out" | head -60 >&2
+    die "the offer's line is not in the read colour"
+  }
   grep -qF "${COLOUR_ON}Run it now? (yes or no) [no]:${COLOUR_OFF} " "$d/out" || die "the offer's question is not in the answer colour"
-  grep -qF "${READ_ON}Not run. To run it yourself" "$d/out" || { grep -F 'Not run' "$d/out" | od -c >&2; die "the line after a no is not in the read colour"; }
+  grep -qF "${READ_ON}Not run. To run it yourself" "$d/out" || {
+    grep -F 'Not run' "$d/out" | od -c >&2
+    die "the line after a no is not in the read colour"
+  }
 }
 
 test_no_color_and_a_dumb_terminal_win_over_the_colour_hook() {
@@ -1931,20 +2193,56 @@ test_no_color_and_a_dumb_terminal_win_over_the_colour_hook() {
   # off whatever else says on, the hook and a real terminal; so does a
   # terminal that says it is dumb. An empty NO_COLOR does not count.
   local got="$WORK/got.$RANDOM"
-  ( load_script; export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1
-    show_colour_key; step_start "Checking"; say "A line of work."; say_open "Waiting"; say_open " *"; step_end "It works."
-    say_heading "Here is the plan."; say "$CONTINUE_INTRO"; say_command "bash x.sh --resume"
-    guide_begin "The title." "a reason"; guide_step "Run this command:"; say_command "gh auth status"
-    say_command "gh auth status" err; show_error "It broke." "Run it again." ) >"$got" 2>&1
-  ! has_esc "$got" || { od -c "$got" | head >&2; die "NO_COLOR did not turn colour off"; }
-  ( load_script; unset NO_COLOR; export TERM=dumb BOOTSTRAP_COLOR=1
-    show_colour_key; step_start "Checking"; say "A line of work."; say_open "Waiting"; say_open " *"; step_end "It works."
-    say_heading "Here is the plan."; say "$CONTINUE_INTRO"; say_command "bash x.sh --resume"
-    guide_begin "The title." "a reason"; guide_step "Run this command:"; say_command "gh auth status"
-    say_command "gh auth status" err; show_error "It broke." "Run it again." ) >"$got" 2>&1
-  ! has_esc "$got" || { od -c "$got" | head >&2; die "TERM=dumb did not turn colour off"; }
-  ( load_script; export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=
-    say_heading "Here is the plan." ) >"$got"
+  (
+    load_script
+    export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1
+    show_colour_key
+    step_start "Checking"
+    say "A line of work."
+    say_open "Waiting"
+    say_open " *"
+    step_end "It works."
+    say_heading "Here is the plan."
+    say "$CONTINUE_INTRO"
+    say_command "bash x.sh --resume"
+    guide_begin "The title." "a reason"
+    guide_step "Run this command:"
+    say_command "gh auth status"
+    say_command "gh auth status" err
+    show_error "It broke." "Run it again."
+  ) >"$got" 2>&1
+  ! has_esc "$got" || {
+    od -c "$got" | head >&2
+    die "NO_COLOR did not turn colour off"
+  }
+  (
+    load_script
+    unset NO_COLOR
+    export TERM=dumb BOOTSTRAP_COLOR=1
+    show_colour_key
+    step_start "Checking"
+    say "A line of work."
+    say_open "Waiting"
+    say_open " *"
+    step_end "It works."
+    say_heading "Here is the plan."
+    say "$CONTINUE_INTRO"
+    say_command "bash x.sh --resume"
+    guide_begin "The title." "a reason"
+    guide_step "Run this command:"
+    say_command "gh auth status"
+    say_command "gh auth status" err
+    show_error "It broke." "Run it again."
+  ) >"$got" 2>&1
+  ! has_esc "$got" || {
+    od -c "$got" | head >&2
+    die "TERM=dumb did not turn colour off"
+  }
+  (
+    load_script
+    export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=
+    say_heading "Here is the plan."
+  ) >"$got"
   has_esc "$got" || die "an empty NO_COLOR turned colour off"
 }
 
@@ -1954,18 +2252,41 @@ test_colour_follows_the_terminal_check_of_the_wait() {
   # TERM=dumb still win. A stop on stderr asks whether stderr is a
   # terminal, which a file is not.
   local got="$WORK/got.$RANDOM"
-  ( load_script; unset NO_COLOR BOOTSTRAP_COLOR; export TERM=xterm BOOTSTRAP_STDOUT_TERMINAL=yes
-    say_heading "Here is the plan."; show_error "It broke." "Run it again." ) >"$got" 2>"$got.err"
-  grep -qF "${READ_ON}Here is the plan.${COLOUR_OFF}" "$got" || { od -c "$got" | head >&2; die "no colour with BOOTSTRAP_STDOUT_TERMINAL=yes"; }
-  ! has_esc "$got.err" || { od -c "$got.err" | head >&2; die "colour on stderr that is a file"; }
-  ( load_script; unset NO_COLOR BOOTSTRAP_COLOR; export TERM=xterm BOOTSTRAP_STDOUT_TERMINAL=no
-    say_heading "Here is the plan." ) >"$got"
+  (
+    load_script
+    unset NO_COLOR BOOTSTRAP_COLOR
+    export TERM=xterm BOOTSTRAP_STDOUT_TERMINAL=yes
+    say_heading "Here is the plan."
+    show_error "It broke." "Run it again."
+  ) >"$got" 2>"$got.err"
+  grep -qF "${READ_ON}Here is the plan.${COLOUR_OFF}" "$got" || {
+    od -c "$got" | head >&2
+    die "no colour with BOOTSTRAP_STDOUT_TERMINAL=yes"
+  }
+  ! has_esc "$got.err" || {
+    od -c "$got.err" | head >&2
+    die "colour on stderr that is a file"
+  }
+  (
+    load_script
+    unset NO_COLOR BOOTSTRAP_COLOR
+    export TERM=xterm BOOTSTRAP_STDOUT_TERMINAL=no
+    say_heading "Here is the plan."
+  ) >"$got"
   ! has_esc "$got" || die "colour with BOOTSTRAP_STDOUT_TERMINAL=no"
-  ( load_script; unset BOOTSTRAP_COLOR; export TERM=xterm BOOTSTRAP_STDOUT_TERMINAL=yes NO_COLOR=1
-    say_heading "Here is the plan." ) >"$got"
+  (
+    load_script
+    unset BOOTSTRAP_COLOR
+    export TERM=xterm BOOTSTRAP_STDOUT_TERMINAL=yes NO_COLOR=1
+    say_heading "Here is the plan."
+  ) >"$got"
   ! has_esc "$got" || die "NO_COLOR did not win over BOOTSTRAP_STDOUT_TERMINAL=yes"
-  ( load_script; unset NO_COLOR BOOTSTRAP_COLOR; export TERM=dumb BOOTSTRAP_STDOUT_TERMINAL=yes
-    say_heading "Here is the plan." ) >"$got"
+  (
+    load_script
+    unset NO_COLOR BOOTSTRAP_COLOR
+    export TERM=dumb BOOTSTRAP_STDOUT_TERMINAL=yes
+    say_heading "Here is the plan."
+  ) >"$got"
   ! has_esc "$got" || die "TERM=dumb did not win over BOOTSTRAP_STDOUT_TERMINAL=yes"
 }
 
@@ -1980,11 +2301,25 @@ test_the_progress_log_is_dim_only_when_colour_is_on() {
   # of their own) are not dim, so they are easy to see. r1g: say_log is dim
   # also after a block the user reads (what the script did after an answer).
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
-  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
-    step_start "Checking"; say "A line of work."; say "Warning: be careful."
-    wait_line "Waiting"; say_open "*"; say_open "*"; step_end "It works."; say "After the step."
-    step_start "Checking again"; guide_begin "The title." "a reason"; say "In the guide."
-    guide_end a b c; say_log "Not made public."; step_end "It works now." ) >"$got" 2>"$got.err"
+  (
+    load_script
+    unset NO_COLOR
+    export TERM=xterm BOOTSTRAP_COLOR=1
+    step_start "Checking"
+    say "A line of work."
+    say "Warning: be careful."
+    wait_line "Waiting"
+    say_open "*"
+    say_open "*"
+    step_end "It works."
+    say "After the step."
+    step_start "Checking again"
+    guide_begin "The title." "a reason"
+    say "In the guide."
+    guide_end a b c
+    say_log "Not made public."
+    step_end "It works now."
+  ) >"$got" 2>"$got.err"
   {
     printf '%s==> Checking%s\n' "$LOG_ON" "$COLOUR_OFF"
     printf '%sA line of work.%s\n' "$LOG_ON" "$COLOUR_OFF"
@@ -2002,17 +2337,43 @@ test_the_progress_log_is_dim_only_when_colour_is_on() {
     printf '    %sDone. It works now.%s\n' "$LOG_ON" "$COLOUR_OFF"
   } >"$want"
   expect_same "the dim progress log" "$want" "$got"
-  [ ! -s "$got.err" ] || { cat "$got.err" >&2; die "wrote to stderr"; }
+  [ ! -s "$got.err" ] || {
+    cat "$got.err" >&2
+    die "wrote to stderr"
+  }
   # Colour off (no terminal, NO_COLOR, TERM=dumb): the same lines, plain.
   printf '%s\n' '==> Checking' 'A line of work.' 'Waiting *' '    Done. It works.' >"$want"
-  ( load_script; unset NO_COLOR BOOTSTRAP_COLOR BOOTSTRAP_STDOUT_TERMINAL; export TERM=xterm
-    step_start "Checking"; say "A line of work."; say_open "Waiting"; say_open " *"; step_end "It works." ) >"$got"
+  (
+    load_script
+    unset NO_COLOR BOOTSTRAP_COLOR BOOTSTRAP_STDOUT_TERMINAL
+    export TERM=xterm
+    step_start "Checking"
+    say "A line of work."
+    say_open "Waiting"
+    say_open " *"
+    step_end "It works."
+  ) >"$got"
   expect_same "the progress log with no terminal" "$want" "$got"
-  ( load_script; export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1
-    step_start "Checking"; say "A line of work."; say_open "Waiting"; say_open " *"; step_end "It works." ) >"$got"
+  (
+    load_script
+    export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1
+    step_start "Checking"
+    say "A line of work."
+    say_open "Waiting"
+    say_open " *"
+    step_end "It works."
+  ) >"$got"
   expect_same "the progress log with NO_COLOR" "$want" "$got"
-  ( load_script; unset NO_COLOR; export TERM=dumb BOOTSTRAP_COLOR=1
-    step_start "Checking"; say "A line of work."; say_open "Waiting"; say_open " *"; step_end "It works." ) >"$got"
+  (
+    load_script
+    unset NO_COLOR
+    export TERM=dumb BOOTSTRAP_COLOR=1
+    step_start "Checking"
+    say "A line of work."
+    say_open "Waiting"
+    say_open " *"
+    step_end "It works."
+  ) >"$got"
   expect_same "the progress log with TERM=dumb" "$want" "$got"
 }
 
@@ -2023,9 +2384,16 @@ test_lines_inside_a_step_the_user_may_act_on_are_not_dim() {
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM" d l
   # r1g: such a line is in the read colour, as it tells the user what to
   # read and do.
-  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
-    step_start "Checking"; say "Working."; say_note "You can follow the check here: x"
-    say "More work."; step_end "It works." ) >"$got"
+  (
+    load_script
+    unset NO_COLOR
+    export TERM=xterm BOOTSTRAP_COLOR=1
+    step_start "Checking"
+    say "Working."
+    say_note "You can follow the check here: x"
+    say "More work."
+    step_end "It works."
+  ) >"$got"
   {
     printf '%s==> Checking%s\n' "$LOG_ON" "$COLOUR_OFF"
     printf '%sWorking.%s\n' "$LOG_ON" "$COLOUR_OFF"
@@ -2042,12 +2410,18 @@ test_lines_inside_a_step_the_user_may_act_on_are_not_dim() {
   pre "$d" ni with_vis private preflight_github_permissions
   unset STUB_GH_SCOPES
   expect_rc 0 "$d"
-  grep -qxF "${LOG_ON}==> Checking that gh has the permissions on GitHub that the setup needs${COLOUR_OFF}" "$d/out" \
-    || { od -c "$d/out" | head -20 >&2; die "permissions: the step line is not dim"; }
+  grep -qxF "${LOG_ON}==> Checking that gh has the permissions on GitHub that the setup needs${COLOUR_OFF}" "$d/out" ||
+    {
+      od -c "$d/out" | head -20 >&2
+      die "permissions: the step line is not dim"
+    }
   for l in "GitHub does not say which permissions this sign-in has, as with a fine-grained token (a key made on GitHub with chosen permissions)." \
     "The setup needs these permissions, each set to \"Read and write\": Administration, Contents, Workflows and Pull requests; and your account must be allowed to create repositories (new projects on GitHub)." \
     "If one of them is missing, a later step stops and says so."; do
-    grep -qxF -- "${READ_ON}$l${COLOUR_OFF}" "$d/out" || { od -c "$d/out" | head -40 >&2; die "permissions: not in the read colour: $l"; }
+    grep -qxF -- "${READ_ON}$l${COLOUR_OFF}" "$d/out" || {
+      od -c "$d/out" | head -40 >&2
+      die "permissions: not in the read colour: $l"
+    }
   done
   # Going on without protection (--allow-unprotected), GitHub Actions not
   # checked, and the wait's limit and link to the checks, in one run.
@@ -2060,13 +2434,19 @@ test_lines_inside_a_step_the_user_may_act_on_are_not_dim() {
   again "$d" --allow-unprotected
   unset STUB_GH_PROTECT_FAIL STUB_GH_ACTIONS_FAIL BOOTSTRAP_COLOR
   expect_rc 0 "$d"
-  grep -qxF "${LOG_ON}==> Protecting the main version of the project${COLOUR_OFF}" "$d/out" \
-    || { od -c "$d/out" | head -20 >&2; die "the protection step line is not dim"; }
+  grep -qxF "${LOG_ON}==> Protecting the main version of the project${COLOUR_OFF}" "$d/out" ||
+    {
+      od -c "$d/out" | head -20 >&2
+      die "the protection step line is not dim"
+    }
   for l in "GitHub does not protect the main version of this project on its plan; its answer is below." \
     "You chose to go on without protection with --allow-unprotected, so the script goes on, and writes that decision into the project's memory/decisions.md." \
     "The script could not check whether GitHub Actions is turned on for the project: GitHub did not say (its answer is below). This check only warns early, so the setup goes on." \
     "$WAIT_LIMIT_LINE" "$WAIT_LINK_LINE"; do
-    grep -qxF -- "${READ_ON}$l${COLOUR_OFF}" "$d/out" || { cat "$d/out" >&2; die "not in the read colour: $l"; }
+    grep -qxF -- "${READ_ON}$l${COLOUR_OFF}" "$d/out" || {
+      cat "$d/out" >&2
+      die "not in the read colour: $l"
+    }
   done
   # A licence typed at the question that GitHub does not know (#237
   # delta review, B1): the problem and "Please try again." come inside
@@ -2078,10 +2458,16 @@ test_lines_inside_a_step_the_user_may_act_on_are_not_dim() {
   whole "$d"
   unset BOOTSTRAP_COLOR
   expect_rc 1 "$d"
-  grep -qxF "${LOG_ON}==> Checking that GitHub knows the licence mti${COLOUR_OFF}" "$d/out" \
-    || { od -c "$d/out" | head -20 >&2; die "licence: the step line is not dim"; }
+  grep -qxF "${LOG_ON}==> Checking that GitHub knows the licence mti${COLOUR_OFF}" "$d/out" ||
+    {
+      od -c "$d/out" | head -20 >&2
+      die "licence: the step line is not dim"
+    }
   l="GitHub has no licence with the short name mti. Use none, one of the listed licences, or the short name of a licence on https://choosealicense.com/licenses/ (each licence's page shows its short name, such as mit). Please try again."
-  grep -qxF -- "${READ_ON}$l${COLOUR_OFF}" "$d/out" || { grep -F 'no licence with the short name' "$d/out" | od -c | head -20 >&2; die "licence: not in the read colour: $l"; }
+  grep -qxF -- "${READ_ON}$l${COLOUR_OFF}" "$d/out" || {
+    grep -F 'no licence with the short name' "$d/out" | od -c | head -20 >&2
+    die "licence: not in the read colour: $l"
+  }
 }
 
 test_the_colour_key_says_in_words_what_each_colour_marks() {
@@ -2090,7 +2476,13 @@ test_the_colour_key_says_in_words_what_each_colour_marks() {
   # colour is off. r1g: four colours, the answer line and the text read to
   # act apart.
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
-  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1; show_colour_key; step_start "Checking" ) >"$got"
+  (
+    load_script
+    unset NO_COLOR
+    export TERM=xterm BOOTSTRAP_COLOR=1
+    show_colour_key
+    step_start "Checking"
+  ) >"$got"
   {
     printf '%sColour key: where you type an answer%s\n' "$COLOUR_ON" "$COLOUR_OFF"
     printf '%sColour key: what to read and do%s\n' "$READ_ON" "$COLOUR_OFF"
@@ -2102,8 +2494,14 @@ test_the_colour_key_says_in_words_what_each_colour_marks() {
   # Adam's fallback (r1g, 15:23): the answer line and the text read to act
   # in one colour, changed in one place (READ_COLOUR); the key then shows
   # them as one line, and every such line is in that colour.
-  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1; READ_COLOUR="$ANSWER_COLOUR"
-    show_colour_key; ask "Why it is asked, in one sentence." "Name" x ) <<<"y" >"$got"
+  (
+    load_script
+    unset NO_COLOR
+    export TERM=xterm BOOTSTRAP_COLOR=1
+    READ_COLOUR="$ANSWER_COLOUR"
+    show_colour_key
+    ask "Why it is asked, in one sentence." "Name" x
+  ) <<<"y" >"$got"
   {
     printf '%sColour key: where you type an answer, and what to read and do%s\n' "$COLOUR_ON" "$COLOUR_OFF"
     printf '%sColour key: commands to copy or to run%s\n' "$COMMAND_ON" "$COLOUR_OFF"
@@ -2112,17 +2510,48 @@ test_the_colour_key_says_in_words_what_each_colour_marks() {
     printf '%sName [x]:%s \n' "$COLOUR_ON" "$COLOUR_OFF"
   } >"$want"
   expect_same "the colour key with the answer and read colours the same" "$want" "$got"
-  ( load_script; unset NO_COLOR BOOTSTRAP_COLOR BOOTSTRAP_STDOUT_TERMINAL; export TERM=xterm; show_colour_key ) >"$got"
-  [ ! -s "$got" ] || { cat "$got" >&2; die "a colour key with no terminal"; }
-  ( load_script; export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1; show_colour_key ) >"$got"
-  [ ! -s "$got" ] || { cat "$got" >&2; die "a colour key with NO_COLOR"; }
-  ( load_script; unset NO_COLOR; export TERM=dumb BOOTSTRAP_COLOR=1; show_colour_key ) >"$got"
-  [ ! -s "$got" ] || { cat "$got" >&2; die "a colour key with TERM=dumb"; }
+  (
+    load_script
+    unset NO_COLOR BOOTSTRAP_COLOR BOOTSTRAP_STDOUT_TERMINAL
+    export TERM=xterm
+    show_colour_key
+  ) >"$got"
+  [ ! -s "$got" ] || {
+    cat "$got" >&2
+    die "a colour key with no terminal"
+  }
+  (
+    load_script
+    export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1
+    show_colour_key
+  ) >"$got"
+  [ ! -s "$got" ] || {
+    cat "$got" >&2
+    die "a colour key with NO_COLOR"
+  }
+  (
+    load_script
+    unset NO_COLOR
+    export TERM=dumb BOOTSTRAP_COLOR=1
+    show_colour_key
+  ) >"$got"
+  [ ! -s "$got" ] || {
+    cat "$got" >&2
+    die "a colour key with TERM=dumb"
+  }
   # A question right after the key: one blank line between, never two.
-  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1; show_colour_key
-    ask "Why it is asked, in one sentence." "Name" x ) <<<"y" >"$got"
-  [ "$(sed -n '5p;6p' "$got")" = "$(printf '\n%sWhy it is asked, in one sentence.%s' "$READ_ON" "$COLOUR_OFF")" ] \
-    || { od -c "$got" | head -20 >&2; die "the key and a question are not one blank line apart"; }
+  (
+    load_script
+    unset NO_COLOR
+    export TERM=xterm BOOTSTRAP_COLOR=1
+    show_colour_key
+    ask "Why it is asked, in one sentence." "Name" x
+  ) <<<"y" >"$got"
+  [ "$(sed -n '5p;6p' "$got")" = "$(printf '\n%sWhy it is asked, in one sentence.%s' "$READ_ON" "$COLOUR_OFF")" ] ||
+    {
+      od -c "$got" | head -20 >&2
+      die "the key and a question are not one blank line apart"
+    }
 }
 
 # End-to-end run 1 repeated, finding r1d (Adam): "When the user is
@@ -2134,13 +2563,26 @@ test_the_colour_key_says_in_words_what_each_colour_marks() {
 test_an_instruction_and_the_command_below_it_are_in_two_colours() {
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM" n advance
   [ "$COMMAND_ON" != "$READ_ON" ] || die "the command colour is the instruction colour"
-  advance="$(load_script; printf '%s' "$ADVANCE_INTRO")"
-  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
-    say "$CONTINUE_INTRO"; say_command "bash x.sh --resume"
-    say "$START_AGAIN_INTRO"; say_command "bash x.sh"
-    say "$ADVANCE_INTRO"; say_command "bash x.sh --resume"
-    guide_begin "The title." "a reason"; guide_step "Run this command; it does a thing:"
-    say_command "gh auth status"; guide_step "Come back to this window."; guide_end a b c ) >"$got" 2>"$got.err"
+  advance="$(
+    load_script
+    printf '%s' "$ADVANCE_INTRO"
+  )"
+  (
+    load_script
+    unset NO_COLOR
+    export TERM=xterm BOOTSTRAP_COLOR=1
+    say "$CONTINUE_INTRO"
+    say_command "bash x.sh --resume"
+    say "$START_AGAIN_INTRO"
+    say_command "bash x.sh"
+    say "$ADVANCE_INTRO"
+    say_command "bash x.sh --resume"
+    guide_begin "The title." "a reason"
+    guide_step "Run this command; it does a thing:"
+    say_command "gh auth status"
+    guide_step "Come back to this window."
+    guide_end a b c
+  ) >"$got" 2>"$got.err"
   # r1g: the instruction lines in the read colour, as every step of a
   # guide, with or without a command below it.
   {
@@ -2160,16 +2602,30 @@ test_an_instruction_and_the_command_below_it_are_in_two_colours() {
     printf '%s\n' 'How the script checks it: c'
   } >"$want"
   expect_same "an instruction and its command" "$want" "$got"
-  [ ! -s "$got.err" ] || { cat "$got.err" >&2; die "wrote to stderr"; }
+  [ ! -s "$got.err" ] || {
+    cat "$got.err" >&2
+    die "wrote to stderr"
+  }
   # The command the script offers to run: its line in the instruction
   # colour, the command right below it in the command colour.
   printf 'no\n' >"$got.tty"
-  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1 BOOTSTRAP_TTY="$got.tty"
-    OFFER=gh-setup-git; offer_command || true ) >"$got" 2>"$got.err"
+  (
+    load_script
+    unset NO_COLOR
+    export TERM=xterm BOOTSTRAP_COLOR=1 BOOTSTRAP_TTY="$got.tty"
+    OFFER=gh-setup-git
+    offer_command || true
+  ) >"$got" 2>"$got.err"
   n="$(grep -nxF -- "${READ_ON}The script can run this command for you:${COLOUR_OFF}" "$got" | cut -d: -f1)"
-  [ -n "$n" ] || { od -c "$got" | head -20 >&2; die "the line before the offered command is not in the instruction colour"; }
-  [ "$(sed -n "$((n + 1))p" "$got")" = "    ${COMMAND_ON}gh auth setup-git${COLOUR_OFF}" ] \
-    || { od -c "$got" | head -20 >&2; die "the offered command is not right below its line, in the command colour"; }
+  [ -n "$n" ] || {
+    od -c "$got" | head -20 >&2
+    die "the line before the offered command is not in the instruction colour"
+  }
+  [ "$(sed -n "$((n + 1))p" "$got")" = "    ${COMMAND_ON}gh auth setup-git${COLOUR_OFF}" ] ||
+    {
+      od -c "$got" | head -20 >&2
+      die "the offered command is not right below its line, in the command colour"
+    }
 }
 
 test_a_command_on_stderr_follows_the_terminal_check_of_stderr() {
@@ -2177,19 +2633,34 @@ test_a_command_on_stderr_follows_the_terminal_check_of_stderr() {
   # which a file is not), as the stop does, even when stdout counts as one;
   # the hook forces colour there too, and NO_COLOR still wins.
   local want="$WORK/want.$RANDOM" got="$WORK/got.$RANDOM"
-  ( load_script; unset NO_COLOR BOOTSTRAP_COLOR; export TERM=xterm BOOTSTRAP_STDOUT_TERMINAL=yes
-    say_command "gh auth status"; say_command "gh auth status" err ) >"$got" 2>"$got.err"
+  (
+    load_script
+    unset NO_COLOR BOOTSTRAP_COLOR
+    export TERM=xterm BOOTSTRAP_STDOUT_TERMINAL=yes
+    say_command "gh auth status"
+    say_command "gh auth status" err
+  ) >"$got" 2>"$got.err"
   printf '    %sgh auth status%s\n' "$COMMAND_ON" "$COLOUR_OFF" >"$want"
   expect_same "a command on stdout that counts as a terminal" "$want" "$got"
   printf '%s\n' '    gh auth status' >"$want"
   expect_same "a command on stderr that is a file" "$want" "$got.err"
-  ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
-    say_command "gh auth status" err ) >"$got" 2>"$got.err"
-  [ ! -s "$got" ] || { cat "$got" >&2; die "a command for stderr went to stdout"; }
+  (
+    load_script
+    unset NO_COLOR
+    export TERM=xterm BOOTSTRAP_COLOR=1
+    say_command "gh auth status" err
+  ) >"$got" 2>"$got.err"
+  [ ! -s "$got" ] || {
+    cat "$got" >&2
+    die "a command for stderr went to stdout"
+  }
   printf '    %sgh auth status%s\n' "$COMMAND_ON" "$COLOUR_OFF" >"$want"
   expect_same "a command on stderr with the colour hook" "$want" "$got.err"
-  ( load_script; export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1
-    say_command "gh auth status" err ) 2>"$got"
+  (
+    load_script
+    export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1
+    say_command "gh auth status" err
+  ) 2>"$got"
   printf '%s\n' '    gh auth status' >"$want"
   expect_same "a command on stderr with NO_COLOR" "$want" "$got"
 }
@@ -2229,7 +2700,10 @@ command_intro_faults() {
 test_every_command_comes_right_after_its_instruction_line() {
   local hits bad="$WORK/bad.$RANDOM"
   hits="$(command_intro_faults "$SCRIPT")"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "a command and its instruction line are not together"; }
+  [ -z "$hits" ] || {
+    printf '%s\n' "$hits" >&2
+    die "a command and its instruction line are not together"
+  }
   # The check itself sees each fault: a step with a colon and no command
   # below it, a command below a step with no colon, a command below a
   # plain line; an intro line and a step with a colon (also through a
@@ -2247,59 +2721,106 @@ test_layout_pack_errors_use_the_error_format() {
   # The existing errors keep their wording and exit codes (pinned in
   # tools/test-layout-pack.sh) and now also say what to do next.
   local out err rc
-  out="$(tmpdir)"; touch "$out/x"
-  err="$WORK/err.$RANDOM"; rc=0
+  out="$(tmpdir)"
+  touch "$out/x"
+  err="$WORK/err.$RANDOM"
+  rc=0
   PACKS_DIR="$REPO/languages" bash "$SCRIPT" layout-pack node "$out" 2>"$err" >/dev/null || rc=$?
   [ "$rc" -eq 1 ] || die "non-empty target exited $rc, want 1"
-  grep -qE '^What happened: .*target dir is not empty' "$err" || { cat "$err" >&2; die "no What happened line"; }
-  grep -qE '^What to do next: .{10,}' "$err" || { cat "$err" >&2; die "no next action"; }
+  grep -qE '^What happened: .*target dir is not empty' "$err" || {
+    cat "$err" >&2
+    die "no What happened line"
+  }
+  grep -qE '^What to do next: .{10,}' "$err" || {
+    cat "$err" >&2
+    die "no next action"
+  }
   rc=0
   PACKS_DIR="$REPO/languages" bash "$SCRIPT" layout-pack ruby "$(tmpdir)/new" 2>"$err" >/dev/null || rc=$?
   [ "$rc" -eq 2 ] || die "unknown pack exited $rc, want 2"
-  grep -qE '^What happened: .*unknown pack: ruby' "$err" || { cat "$err" >&2; die "no What happened line"; }
-  grep -qE '^What to do next: .{10,}' "$err" || { cat "$err" >&2; die "no next action"; }
+  grep -qE '^What happened: .*unknown pack: ruby' "$err" || {
+    cat "$err" >&2
+    die "no What happened line"
+  }
+  grep -qE '^What to do next: .{10,}' "$err" || {
+    cat "$err" >&2
+    die "no next action"
+  }
 }
 
 # ---------- hook: BOOTSTRAP_GH ----------
 
 test_gh_hook_runs_the_command_named_in_bootstrap_gh() {
   local d log out
-  d="$(tmpdir)"; log="$d/gh.log"
+  d="$(tmpdir)"
+  log="$d/gh.log"
   make_stub_gh "$d/stub bin/gh"
-  out="$( load_script; STUB_GH_LOG="$log" BOOTSTRAP_GH="$d/stub bin/gh" run_gh --version )" \
-    || die "run_gh failed"
+  out="$(
+    load_script
+    STUB_GH_LOG="$log" BOOTSTRAP_GH="$d/stub bin/gh" run_gh --version
+  )" ||
+    die "run_gh failed"
   [ "$out" = "gh version 0.0.0 (stub)" ] || die "run_gh output: $out"
-  [ "$(cat "$log")" = "$(printf 'GH_PROMPT_DISABLED=1\t--version')" ] || { cat "$log" >&2; die "call not logged as expected"; }
+  [ "$(cat "$log")" = "$(printf 'GH_PROMPT_DISABLED=1\t--version')" ] || {
+    cat "$log" >&2
+    die "call not logged as expected"
+  }
 }
 
 test_gh_hook_passes_arguments_unchanged() {
   # Spaces, quotes and globs reach gh as the same separate arguments.
   local d log
-  d="$(tmpdir)"; log="$d/gh.log"
+  d="$(tmpdir)"
+  log="$d/gh.log"
   make_stub_gh "$d/gh"
-  ( load_script; STUB_GH_LOG="$log" BOOTSTRAP_GH="$d/gh" run_gh api 'a b' '"q"' '*' '' ) 2>/dev/null || true
-  [ "$(cat "$log")" = "$(printf 'GH_PROMPT_DISABLED=1\tapi\ta b\t"q"\t*\t')" ] || { cat "$log" >&2; die "arguments changed"; }
+  (
+    load_script
+    STUB_GH_LOG="$log" BOOTSTRAP_GH="$d/gh" run_gh api 'a b' '"q"' '*' ''
+  ) 2>/dev/null || true
+  [ "$(cat "$log")" = "$(printf 'GH_PROMPT_DISABLED=1\tapi\ta b\t"q"\t*\t')" ] || {
+    cat "$log" >&2
+    die "arguments changed"
+  }
 }
 
 test_gh_hook_returns_gh_exit_code_and_stderr() {
   local d log rc=0 err
-  d="$(tmpdir)"; log="$d/gh.log"; err="$d/err"
+  d="$(tmpdir)"
+  log="$d/gh.log"
+  err="$d/err"
   make_stub_gh "$d/gh"
-  ( load_script; STUB_GH_LOG="$log" BOOTSTRAP_GH="$d/gh" run_gh no-such-command ) 2>"$err" || rc=$?
+  (
+    load_script
+    STUB_GH_LOG="$log" BOOTSTRAP_GH="$d/gh" run_gh no-such-command
+  ) 2>"$err" || rc=$?
   [ "$rc" -eq 64 ] || die "run_gh returned $rc, want the stub's 64"
-  grep -qF 'stub gh: no emulation for: no-such-command' "$err" || { cat "$err" >&2; die "gh stderr lost"; }
+  grep -qF 'stub gh: no emulation for: no-such-command' "$err" || {
+    cat "$err" >&2
+    die "gh stderr lost"
+  }
 }
 
 test_gh_hook_defaults_to_gh_on_the_path() {
   # Unset or empty BOOTSTRAP_GH: the real command name, gh, found on PATH.
   local d log
-  d="$(tmpdir)"; log="$d/gh.log"
+  d="$(tmpdir)"
+  log="$d/gh.log"
   make_stub_gh "$d/bin/gh"
-  ( load_script; unset BOOTSTRAP_GH; PATH="$d/bin:$PATH" STUB_GH_LOG="$log" run_gh --version ) >/dev/null \
-    || die "run_gh with BOOTSTRAP_GH unset failed"
-  ( load_script; PATH="$d/bin:$PATH" STUB_GH_LOG="$log" BOOTSTRAP_GH='' run_gh --version ) >/dev/null \
-    || die "run_gh with BOOTSTRAP_GH empty failed"
-  [ "$(grep -c -- '--version' "$log")" -eq 2 ] || { cat "$log" >&2; die "gh on PATH was not called twice"; }
+  (
+    load_script
+    unset BOOTSTRAP_GH
+    PATH="$d/bin:$PATH" STUB_GH_LOG="$log" run_gh --version
+  ) >/dev/null ||
+    die "run_gh with BOOTSTRAP_GH unset failed"
+  (
+    load_script
+    PATH="$d/bin:$PATH" STUB_GH_LOG="$log" BOOTSTRAP_GH='' run_gh --version
+  ) >/dev/null ||
+    die "run_gh with BOOTSTRAP_GH empty failed"
+  [ "$(grep -c -- '--version' "$log")" -eq 2 ] || {
+    cat "$log" >&2
+    die "gh on PATH was not called twice"
+  }
 }
 
 test_gh_hook_set_means_gh_on_the_path_is_not_called() {
@@ -2310,7 +2831,10 @@ test_gh_hook_set_means_gh_on_the_path_is_not_called() {
   printf '%s\ntouch "%s/path-gh-ran"\n' "$STAND_IN_SHEBANG" "$d" >"$d/bin/gh"
   chmod +x "$d/bin/gh"
   make_stub_gh "$d/hook/gh"
-  ( load_script; PATH="$d/bin:$PATH" STUB_GH_LOG="$d/hook.log" BOOTSTRAP_GH="$d/hook/gh" run_gh --version ) >/dev/null
+  (
+    load_script
+    PATH="$d/bin:$PATH" STUB_GH_LOG="$d/hook.log" BOOTSTRAP_GH="$d/hook/gh" run_gh --version
+  ) >/dev/null
   [ -s "$d/hook.log" ] || die "the hook was not called"
   [ ! -e "$d/path-gh-ran" ] || die "gh on PATH was called although BOOTSTRAP_GH is set"
 }
@@ -2319,7 +2843,10 @@ test_stub_gh_fails_loudly_without_a_log() {
   local d rc=0
   d="$(tmpdir)"
   make_stub_gh "$d/gh"
-  ( unset STUB_GH_LOG; "$d/gh" --version ) >/dev/null 2>&1 || rc=$?
+  (
+    unset STUB_GH_LOG
+    "$d/gh" --version
+  ) >/dev/null 2>&1 || rc=$?
   [ "$rc" -ne 0 ] || die "stub gh ran without STUB_GH_LOG"
 }
 
@@ -2327,28 +2854,46 @@ test_stub_gh_fails_loudly_without_a_log() {
 
 test_run_hook_replaces_the_runner_so_nothing_runs() {
   local d marker
-  d="$(tmpdir)"; marker="$d/it-ran"
+  d="$(tmpdir)"
+  marker="$d/it-ran"
   make_stub_run "$d/run"
-  ( load_script; STUB_RUN_LOG="$d/run.log" BOOTSTRAP_RUN="$d/run" run_offered "touch '$marker'" ) \
-    || die "run_offered failed"
+  (
+    load_script
+    STUB_RUN_LOG="$d/run.log" BOOTSTRAP_RUN="$d/run" run_offered "touch '$marker'"
+  ) ||
+    die "run_offered failed"
   [ ! -e "$marker" ] || die "the offered command really ran"
-  [ "$(cat "$d/run.log")" = "touch '$marker'" ] || { cat "$d/run.log" >&2; die "the runner did not get the exact command"; }
+  [ "$(cat "$d/run.log")" = "touch '$marker'" ] || {
+    cat "$d/run.log" >&2
+    die "the runner did not get the exact command"
+  }
 }
 
 test_run_hook_returns_the_runner_exit_code() {
   local d rc=0
   d="$(tmpdir)"
   make_stub_run "$d/run"
-  ( load_script; STUB_RUN_LOG="$d/run.log" STUB_RUN_RC=5 BOOTSTRAP_RUN="$d/run" run_offered "true" ) || rc=$?
+  (
+    load_script
+    STUB_RUN_LOG="$d/run.log" STUB_RUN_RC=5 BOOTSTRAP_RUN="$d/run" run_offered "true"
+  ) || rc=$?
   [ "$rc" -eq 5 ] || die "run_offered returned $rc, want 5"
 }
 
 test_run_hook_unset_runs_the_command() {
   local d marker rc=0
-  d="$(tmpdir)"; marker="$d/it-ran"
-  ( load_script; unset BOOTSTRAP_RUN; run_offered "touch '$marker'" ) || die "run_offered failed"
+  d="$(tmpdir)"
+  marker="$d/it-ran"
+  (
+    load_script
+    unset BOOTSTRAP_RUN
+    run_offered "touch '$marker'"
+  ) || die "run_offered failed"
   [ -e "$marker" ] || die "with BOOTSTRAP_RUN unset the command did not run"
-  ( load_script; BOOTSTRAP_RUN='' run_offered "exit 7" ) || rc=$?
+  (
+    load_script
+    BOOTSTRAP_RUN='' run_offered "exit 7"
+  ) || rc=$?
   [ "$rc" -eq 7 ] || die "run_offered returned $rc, want the command's 7"
 }
 
@@ -2358,12 +2903,20 @@ test_run_offered_runs_with_gh_prompts_enabled() {
   # them (run_gh sets it for every other gh call).
   local d got
   d="$(tmpdir)"
-  got="$( load_script; export GH_PROMPT_DISABLED=1; unset BOOTSTRAP_RUN
-          run_offered 'printf "%s" "${GH_PROMPT_DISABLED-unset}"' )"
+  got="$(
+    load_script
+    export GH_PROMPT_DISABLED=1
+    unset BOOTSTRAP_RUN
+    run_offered 'printf "%s" "${GH_PROMPT_DISABLED-unset}"'
+  )"
   [ "$got" = unset ] || die "the offered command saw GH_PROMPT_DISABLED=$got"
   make_stub_run "$d/run"
   printf '%s\n' "$STAND_IN_SHEBANG" 'printf "%s\n" "${GH_PROMPT_DISABLED-unset}" >>"$STUB_RUN_LOG"' >"$d/run"
-  ( load_script; export GH_PROMPT_DISABLED=1 STUB_RUN_LOG="$d/run.log"; BOOTSTRAP_RUN="$d/run" run_offered "x" )
+  (
+    load_script
+    export GH_PROMPT_DISABLED=1 STUB_RUN_LOG="$d/run.log"
+    BOOTSTRAP_RUN="$d/run" run_offered "x"
+  )
   [ "$(cat "$d/run.log")" = unset ] || die "the BOOTSTRAP_RUN runner saw GH_PROMPT_DISABLED=$(cat "$d/run.log")"
 }
 
@@ -2373,29 +2926,48 @@ test_a_test_that_forgets_the_hooks_runs_nothing_real() {
   # install, login, gh or npm: the harness defaults each to a stub that
   # refuses loudly (non-zero exit), so the forgetful test fails.
   local d rc
-  d="$(tmpdir)"; mkdir -p "$d/bin"
+  d="$(tmpdir)"
+  mkdir -p "$d/bin"
   printf '%s\ntouch "%s/real-gh-ran"\n' "$STAND_IN_SHEBANG" "$d" >"$d/bin/gh"
   chmod +x "$d/bin/gh"
   rc=0
-  ( load_script; export REFUSE_LOG="$d/refused.log" PATH="$d/bin:$PATH"; run_offered "touch '$d/real-run-ran'" ) \
+  (
+    load_script
+    export REFUSE_LOG="$d/refused.log" PATH="$d/bin:$PATH"
+    run_offered "touch '$d/real-run-ran'"
+  ) \
     2>"$d/err" || rc=$?
   [ ! -e "$d/real-run-ran" ] || die "run_offered ran the real command in a test that set no hook"
   [ "$rc" -ne 0 ] || die "run_offered without a hook returned 0; a forgetful test would pass"
   rc=0
-  ( load_script; export REFUSE_LOG="$d/refused.log" PATH="$d/bin:$PATH"; run_gh --version ) 2>>"$d/err" || rc=$?
+  (
+    load_script
+    export REFUSE_LOG="$d/refused.log" PATH="$d/bin:$PATH"
+    run_gh --version
+  ) 2>>"$d/err" || rc=$?
   [ ! -e "$d/real-gh-ran" ] || die "run_gh ran the gh on PATH in a test that set no hook"
   [ "$rc" -ne 0 ] || die "run_gh without a hook returned 0; a forgetful test would pass"
   # shellcheck disable=SC2015 # die is meant to run when either check fails
-  grep -qF 'BOOTSTRAP_RUN' "$d/err" && grep -qF 'BOOTSTRAP_GH' "$d/err" \
-    || { cat "$d/err" >&2; die "the refusals do not name the hook to set"; }
+  grep -qF 'BOOTSTRAP_RUN' "$d/err" && grep -qF 'BOOTSTRAP_GH' "$d/err" ||
+    {
+      cat "$d/err" >&2
+      die "the refusals do not name the hook to set"
+    }
   # The lockfile step's npm (BOOTSTRAP_NPM), likewise.
   printf '%s\ntouch "%s/real-npm-ran"\n' "$STAND_IN_SHEBANG" "$d" >"$d/bin/npm"
   chmod +x "$d/bin/npm"
   rc=0
-  ( load_script; export REFUSE_LOG="$d/refused.log" PATH="$d/bin:$PATH"; run_npm --version ) 2>>"$d/err" || rc=$?
+  (
+    load_script
+    export REFUSE_LOG="$d/refused.log" PATH="$d/bin:$PATH"
+    run_npm --version
+  ) 2>>"$d/err" || rc=$?
   [ ! -e "$d/real-npm-ran" ] || die "run_npm ran the npm on PATH in a test that set no hook"
   [ "$rc" -ne 0 ] || die "run_npm without a hook returned 0; a forgetful test would pass"
-  grep -qF 'BOOTSTRAP_NPM' "$d/err" || { cat "$d/err" >&2; die "the npm refusal does not name the hook to set"; }
+  grep -qF 'BOOTSTRAP_NPM' "$d/err" || {
+    cat "$d/err" >&2
+    die "the npm refusal does not name the hook to set"
+  }
   [ "$(wc -l <"$d/refused.log" | tr -d ' ')" -eq 3 ] || die "refusals not logged"
 }
 
@@ -2427,14 +2999,20 @@ test_user_facing_strings_are_collected() {
     "Filling in the project's name, description and product owner" 'in which the setup fills in' \
     'left for your first session with Clead' 'If the setup stops before it finishes, for any reason' \
     'that command says so and shows the command to start again'; do
-    grep -qF -- "$t" "$s" || { cat "$s" >&2; die "collector missed: $t"; }
+    grep -qF -- "$t" "$s" || {
+      cat "$s" >&2
+      die "collector missed: $t"
+    }
   done
 }
 
 test_no_output_bypasses_the_message_helpers() {
   local hits
   hits="$(bypass_lines "$SCRIPT")"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "output written outside the message helpers"; }
+  [ -z "$hits" ] || {
+    printf '%s\n' "$hits" >&2
+    die "output written outside the message helpers"
+  }
 }
 
 test_bypass_check_catches_a_planted_echo() {
@@ -2446,13 +3024,19 @@ test_bypass_check_catches_a_planted_echo() {
   printf '%s\n' 'cmd_x() { echo "hello"; }' 'printf "%s\n" hi' 'cat <<EOF' 'x >&2' \
     'echo "to a file" >"$f"  # not-user-facing' 'done <<<"$table"' >>"$copy"
   n="$(bypass_lines "$copy" | awk -F: -v last="$last" '$1 > last' | wc -l | tr -d ' ')"
-  [ "$n" -eq 4 ] || { bypass_lines "$copy" >&2; die "caught $n of 4 planted outputs"; }
+  [ "$n" -eq 4 ] || {
+    bypass_lines "$copy" >&2
+    die "caught $n of 4 planted outputs"
+  }
 }
 
 test_no_banned_words_in_user_facing_strings() {
   local hits
   hits="$(all_banned_hits "$SCRIPT")"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "banned word without its explanation"; }
+  [ -z "$hits" ] || {
+    printf '%s\n' "$hits" >&2
+    die "banned word without its explanation"
+  }
 }
 
 test_banned_words_check_catches_planted_violations() {
@@ -2487,7 +3071,10 @@ The API said no'
   # 12 planted say lines minus "copy (clone)" (one word in brackets is
   # not an explanation of three words, so it is still caught: 12), plus
   # the continuation line: 13.
-  [ "$n" -eq 13 ] || { printf '%s\n' "$hits" >&2; die "caught $n of 13 planted violations"; }
+  [ "$n" -eq 13 ] || {
+    printf '%s\n' "$hits" >&2
+    die "caught $n of 13 planted violations"
+  }
 }
 
 # plant <lines...>: a copy of the script with the lines added at the end;
@@ -2500,7 +3087,7 @@ plant() {
   printf '%s\n' "$@" >>"$copy"
   printf '%s\n' "$copy"
 }
-planted_from() { echo $(( $(wc -l <"$SCRIPT" | tr -d ' ') + 1 )); }
+planted_from() { echo $(($(wc -l <"$SCRIPT" | tr -d ' ') + 1)); }
 
 # only_planted <first line>: keeps the "<line>: ..." / "<line><tab>..."
 # hits at or after that line.
@@ -2517,7 +3104,10 @@ test_banned_words_in_a_message_held_in_a_variable_are_caught() {
     '}')"
   from="$(planted_from)"
   hits="$(all_banned_hits "$copy" | only_planted "$from")"
-  [ "$(printf '%s\n' "$hits" | grep -c .)" -eq 2 ] || { printf '%s\n' "$hits" >&2; die "variable messages not both caught"; }
+  [ "$(printf '%s\n' "$hits" | grep -c .)" -eq 2 ] || {
+    printf '%s\n' "$hits" >&2
+    die "variable messages not both caught"
+  }
 }
 
 test_banned_words_through_an_unlisted_helper_are_caught() {
@@ -2526,7 +3116,10 @@ test_banned_words_through_an_unlisted_helper_are_caught() {
   copy="$(plant 'warn() { say "Warning: $*"; }' 'cmd_x() { warn "The status check failed"; }')"
   from="$(planted_from)"
   hits="$(all_banned_hits "$copy" | only_planted "$from")"
-  [ "$(printf '%s\n' "$hits" | grep -c .)" -eq 1 ] || { printf '%s\n' "$hits" >&2; die "unlisted helper's text not caught"; }
+  [ "$(printf '%s\n' "$hits" | grep -c .)" -eq 1 ] || {
+    printf '%s\n' "$hits" >&2
+    die "unlisted helper's text not caught"
+  }
 }
 
 test_output_routes_without_echo_or_printf_are_caught() {
@@ -2542,7 +3135,10 @@ test_output_routes_without_echo_or_printf_are_caught() {
     '}')"
   from="$(planted_from)"
   n="$(bypass_lines "$copy" | only_planted "$from" | wc -l | tr -d ' ')"
-  [ "$n" -eq 5 ] || { bypass_lines "$copy" >&2; die "caught $n of 5 planted output routes"; }
+  [ "$n" -eq 5 ] || {
+    bypass_lines "$copy" >&2
+    die "caught $n of 5 planted output routes"
+  }
 }
 
 test_captured_or_redirected_gh_output_is_allowed() {
@@ -2564,7 +3160,10 @@ test_captured_or_redirected_gh_output_is_allowed() {
     '}')"
   from="$(planted_from)"
   hits="$(bypass_lines "$copy" | only_planted "$from")"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "captured gh output was flagged"; }
+  [ -z "$hits" ] || {
+    printf '%s\n' "$hits" >&2
+    die "captured gh output was flagged"
+  }
 }
 
 test_output_hidden_by_a_capture_elsewhere_on_the_line_is_caught() {
@@ -2586,7 +3185,10 @@ test_output_hidden_by_a_capture_elsewhere_on_the_line_is_caught() {
     '}')"
   from="$(planted_from)"
   n="$(bypass_lines "$copy" | only_planted "$from" | wc -l | tr -d ' ')"
-  [ "$n" -eq 8 ] || { bypass_lines "$copy" | only_planted "$from" >&2; die "caught $n of 8 planted output routes"; }
+  [ "$n" -eq 8 ] || {
+    bypass_lines "$copy" | only_planted "$from" >&2
+    die "caught $n of 8 planted output routes"
+  }
 }
 
 # flagged_offsets <copy> <first planted line>: the flagged planted lines,
@@ -2601,7 +3203,10 @@ expect_flagged() {
   local what="$1" copy="$2" from="$3" got
   shift 3
   got="$(flagged_offsets "$copy" "$from")"
-  [ "$got" = "$*" ] || { bypass_lines "$copy" | only_planted "$from" >&2; die "$what: flagged planted lines [$got], want [$*]"; }
+  [ "$got" = "$*" ] || {
+    bypass_lines "$copy" | only_planted "$from" >&2
+    die "$what: flagged planted lines [$got], want [$*]"
+  }
 }
 
 test_a_quiet_heredoc_does_not_hide_later_output() {
@@ -2754,15 +3359,24 @@ test_say_command_and_run_offered_take_a_known_command() {
   from="$(planted_from)"
   hits="$(command_arg_violations "$copy" | only_planted "$from")"
   n="$(printf '%s\n' "$hits" | grep -c . || true)"
-  [ "$n" -eq 6 ] || { printf '%s\n' "$hits" >&2; die "flagged $n, want the first 6 planted calls"; }
-  ! printf '%s\n' "$hits" | awk -F'[:\t]' -v f="$from" '$1 >= f + 7' | grep . >/dev/null \
-    || { printf '%s\n' "$hits" >&2; die "an allowed command was flagged"; }
+  [ "$n" -eq 6 ] || {
+    printf '%s\n' "$hits" >&2
+    die "flagged $n, want the first 6 planted calls"
+  }
+  ! printf '%s\n' "$hits" | awk -F'[:\t]' -v f="$from" '$1 >= f + 7' | grep . >/dev/null ||
+    {
+      printf '%s\n' "$hits" >&2
+      die "an allowed command was flagged"
+    }
 }
 
 test_say_command_and_run_offered_calls_in_the_script_are_commands() {
   local hits
   hits="$(command_arg_violations "$SCRIPT")"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "say_command or run_offered with something that is not a known command"; }
+  [ -z "$hits" ] || {
+    printf '%s\n' "$hits" >&2
+    die "say_command or run_offered with something that is not a known command"
+  }
 }
 
 test_banned_word_with_its_explanation_or_in_a_command_passes() {
@@ -2774,7 +3388,10 @@ test_banned_word_with_its_explanation_or_in_a_command_passes() {
     'say_command "gh repo clone $owner/$name"' \
     'say "Problems: none. Approval step done."' >>"$copy"
   hits="$(user_strings "$copy" | banned_hits | awk -F: -v last="$last" '$1 > last')"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "an explained word or a command was flagged"; }
+  [ -z "$hits" ] || {
+    printf '%s\n' "$hits" >&2
+    die "an explained word or a command was flagged"
+  }
 }
 
 # ---------- inputs ----------
@@ -2809,7 +3426,8 @@ inputs() {
   mkdir -p "$d/cwd"
   rm -f "$d/dump"
   set +e
-  ( load_script
+  (
+    load_script
     cd "$d/cwd"
     use_home "$d/home"
     export STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
@@ -2825,9 +3443,15 @@ inputs() {
 expect_inputs() {
   local d="$1" l
   shift
-  [ "$RC" -eq 0 ] && [ -s "$d/dump" ] || { cat "$d/err" >&2; die "no answers collected (exit $RC)"; }
+  [ "$RC" -eq 0 ] && [ -s "$d/dump" ] || {
+    cat "$d/err" >&2
+    die "no answers collected (exit $RC)"
+  }
   for l in "$@"; do
-    grep -qxF -- "$l" "$d/dump" || { cat "$d/dump" >&2; die "answers lack: $l"; }
+    grep -qxF -- "$l" "$d/dump" || {
+      cat "$d/dump" >&2
+      die "answers lack: $l"
+    }
   done
 }
 
@@ -2835,10 +3459,22 @@ expect_inputs() {
 # listed with its problem, and no answers collected.
 expect_refused() {
   local d="$1" opt="$2"
-  [ "$RC" -eq 2 ] || { cat "$d/err" >&2; die "exit $RC, want 2 for $opt"; }
-  sed -n 1p "$d/err" | grep '^What happened: ' >/dev/null || { cat "$d/err" >&2; die "no plain error first"; }
-  grep -qE -- "^    - $opt: .{10,}" "$d/err" || { cat "$d/err" >&2; die "$opt not listed with its problem"; }
-  grep -qE '^What to do next: .{10,}' "$d/err" || { cat "$d/err" >&2; die "no next action"; }
+  [ "$RC" -eq 2 ] || {
+    cat "$d/err" >&2
+    die "exit $RC, want 2 for $opt"
+  }
+  sed -n 1p "$d/err" | grep '^What happened: ' >/dev/null || {
+    cat "$d/err" >&2
+    die "no plain error first"
+  }
+  grep -qE -- "^    - $opt: .{10,}" "$d/err" || {
+    cat "$d/err" >&2
+    die "$opt not listed with its problem"
+  }
+  grep -qE '^What to do next: .{10,}' "$d/err" || {
+    cat "$d/err" >&2
+    die "no next action"
+  }
   [ ! -e "$d/dump" ] || die "answers were collected although $opt was refused"
 }
 
@@ -2874,7 +3510,10 @@ test_inputs_come_from_the_options() {
     "DESCRIPTION=Tracks the things we lend out." "PO_NAME=Ada Lovelace" PACK=web \
     WITH_DEPLOY=yes VISIBILITY=private LICENSE=apache-2.0 "COPYRIGHT_HOLDER=Acme Inc." \
     "DIR=$d/work dir" CI_TIMEOUT=45 SLUG=my-app NON_INTERACTIVE=1
-  [ ! -e "$d/gh.log" ] || { cat "$d/gh.log" >&2; die "GitHub was asked although --owner and --po-name were given"; }
+  [ ! -e "$d/gh.log" ] || {
+    cat "$d/gh.log" >&2
+    die "GitHub was asked although --owner and --po-name were given"
+  }
 }
 
 test_options_also_take_the_name_equals_value_form() {
@@ -2894,8 +3533,11 @@ test_defaults_fill_the_options_left_out() {
     "COPYRIGHT_HOLDER=Octo User" VISIBILITY=public WITH_DEPLOY=no DIR=./my-app \
     CI_TIMEOUT=20 SLUG=my-app YES= DRY_RUN= RESUME=
   # One gh call, with gh's prompts off: the account, with its headers.
-  [ "$(cat "$d/gh.log")" = "$(printf 'GH_PROMPT_DISABLED=1\tapi\t-i\tuser\t--jq\t.login, (.name // "")')" ] \
-    || { cat "$d/gh.log" >&2; die "GitHub was not asked exactly once, as expected"; }
+  [ "$(cat "$d/gh.log")" = "$(printf 'GH_PROMPT_DISABLED=1\tapi\t-i\tuser\t--jq\t.login, (.name // "")')" ] ||
+    {
+      cat "$d/gh.log" >&2
+      die "GitHub was not asked exactly once, as expected"
+    }
 }
 
 test_po_name_defaults_to_the_login_when_the_profile_has_no_name() {
@@ -2923,9 +3565,12 @@ test_github_account_answer_has_carriage_returns_removed() {
   expect_inputs "$d" OWNER=octo-user "PO_NAME=Octo User"
   # Removed where the output is read, not only by the later checks.
   make_stub_gh "$d/gh2"
-  [ "$( load_script; STUB_GH_LOG="$d/gh2.log" BOOTSTRAP_GH="$d/gh2" check_github_account
-        printf '%s|%s|%s' "$GH_LOGIN" "$GH_PROFILE_NAME" "$GH_SCOPES" )" = "octo-user|Octo User|repo,read:org,gist,workflow" ] \
-    || die "a carriage return is left in what GitHub answered"
+  [ "$(
+    load_script
+    STUB_GH_LOG="$d/gh2.log" BOOTSTRAP_GH="$d/gh2" check_github_account
+    printf '%s|%s|%s' "$GH_LOGIN" "$GH_PROFILE_NAME" "$GH_SCOPES"
+  )" = "octo-user|Octo User|repo,read:org,gist,workflow" ] ||
+    die "a carriage return is left in what GitHub answered"
 }
 
 test_github_account_failure_is_explained_with_the_raw_text_below() {
@@ -2936,13 +3581,31 @@ test_github_account_failure_is_explained_with_the_raw_text_below() {
   d="$(tmpdir)"
   export STUB_GH_USER_FAIL=server
   inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}"
-  [ "$RC" -eq 1 ] || { cat "$d/err" >&2; die "exit $RC, want 1"; }
-  sed -n 1p "$d/err" | grep '^What happened: GitHub had a problem of its own' >/dev/null \
-    || { cat "$d/err" >&2; die "no plain message first"; }
-  sed -n 2p "$d/err" | grep -E '^What to do next: .*few minutes' >/dev/null || { cat "$d/err" >&2; die "no next action"; }
-  sed -n 3p "$d/err" | grep -F 'Details for support' >/dev/null || { cat "$d/err" >&2; die "raw text not introduced"; }
-  grep -qxF '    HTTP 503: Service Unavailable' "$d/err" || { cat "$d/err" >&2; die "status and message not shown below"; }
-  grep -qxF '    gh: Service Unavailable (HTTP 503)' "$d/err" || { cat "$d/err" >&2; die "gh's own text not shown below"; }
+  [ "$RC" -eq 1 ] || {
+    cat "$d/err" >&2
+    die "exit $RC, want 1"
+  }
+  sed -n 1p "$d/err" | grep '^What happened: GitHub had a problem of its own' >/dev/null ||
+    {
+      cat "$d/err" >&2
+      die "no plain message first"
+    }
+  sed -n 2p "$d/err" | grep -E '^What to do next: .*few minutes' >/dev/null || {
+    cat "$d/err" >&2
+    die "no next action"
+  }
+  sed -n 3p "$d/err" | grep -F 'Details for support' >/dev/null || {
+    cat "$d/err" >&2
+    die "raw text not introduced"
+  }
+  grep -qxF '    HTTP 503: Service Unavailable' "$d/err" || {
+    cat "$d/err" >&2
+    die "status and message not shown below"
+  }
+  grep -qxF '    gh: Service Unavailable (HTTP 503)' "$d/err" || {
+    cat "$d/err" >&2
+    die "gh's own text not shown below"
+  }
   [ ! -e "$d/dump" ] || die "answers were collected"
 }
 
@@ -2955,7 +3618,10 @@ test_non_interactive_lists_every_missing_required_input() {
   d="$(tmpdir)"
   inputs "$d" --non-interactive --name my-app --pack web
   for o in --description --license; do expect_refused "$d" "$o"; done
-  ! grep -qE -- '^    - --(name|pack):' "$d/err" || { cat "$d/err" >&2; die "a given option was listed as missing"; }
+  ! grep -qE -- '^    - --(name|pack):' "$d/err" || {
+    cat "$d/err" >&2
+    die "a given option was listed as missing"
+  }
 }
 
 test_non_interactive_never_reads_stdin() {
@@ -2967,7 +3633,8 @@ test_non_interactive_never_reads_stdin() {
   fake_home "$d/home" "Test Person" test@example.com
   # Not in a condition, so a failing step stops the subshell (errexit).
   set +e
-  ( load_script
+  (
+    load_script
     use_home "$d/home"
     export STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
     parse_args --non-interactive "${REQUIRED_OPTS[@]}"
@@ -2980,7 +3647,10 @@ test_non_interactive_never_reads_stdin() {
   set -e
   expect_inputs "$d" NAME=my-app OWNER=octo-user
   [ "$(cat "$d/first")" = first-line ] || die "stdin was read: next line is $(cat "$d/first")"
-  ! grep -q ': $' "$d/out" || { cat "$d/out" >&2; die "a question was asked"; }
+  ! grep -q ': $' "$d/out" || {
+    cat "$d/out" >&2
+    die "a question was asked"
+  }
 }
 
 test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
@@ -2996,18 +3666,38 @@ test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
   mkdir -p "$d/cwd"
   use_built "$d"
   rc=0
-  ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
+  (
+    cd "$d/cwd"
+    use_home "$d/home"
+    export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
       STUB_NPM_LOG="$d/npm.log" BOOTSTRAP_NPM="$d/npm"
-    bash "$RUN_SCRIPT" --non-interactive --yes "${REQUIRED_OPTS[@]}" ) </dev/null >"$d/out" 2>"$d/err" || rc=$?
-  [ "$rc" -eq 0 ] || { cat "$d/err" >&2; die "exit $rc, want 0"; }
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "no report"; }
+    bash "$RUN_SCRIPT" --non-interactive --yes "${REQUIRED_OPTS[@]}"
+  ) </dev/null >"$d/out" 2>"$d/err" || rc=$?
+  [ "$rc" -eq 0 ] || {
+    cat "$d/err" >&2
+    die "exit $rc, want 0"
+  }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "no report"
+  }
   rm -rf "$d/created" "$d/remotes" "$d/cwd/my-app" "$d/merge-sha" "$d/pr-bodies"
   rc=0
-  ( cd "$d/cwd"; use_home "$d/home"; export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
+  (
+    cd "$d/cwd"
+    use_home "$d/home"
+    export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
       STUB_NPM_LOG="$d/npm.log" BOOTSTRAP_NPM="$d/npm"
-    bash "$RUN_SCRIPT" --non-interactive --yes "${REQUIRED_OPTS[@]}" ) <&- >"$d/out" 2>"$d/err" || rc=$?
-  [ "$rc" -eq 0 ] || { cat "$d/err" >&2; die "stdin closed: exit $rc, want 0"; }
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "stdin closed: no report"; }
+    bash "$RUN_SCRIPT" --non-interactive --yes "${REQUIRED_OPTS[@]}"
+  ) <&- >"$d/out" 2>"$d/err" || rc=$?
+  [ "$rc" -eq 0 ] || {
+    cat "$d/err" >&2
+    die "stdin closed: exit $rc, want 0"
+  }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "stdin closed: no report"
+  }
   # gh: the two checks on this computer, the GitHub checks (the account,
   # the published version, the name, the licence), then creating and
   # protecting the project, checking that Actions is on, making the copy
@@ -3018,28 +3708,37 @@ test_non_interactive_run_works_with_stdin_from_dev_null_or_closed() {
   # every one with gh's own prompts off; the copy is the only thing made
   # on this computer.
   [ "$(cut -f2- "$d/gh.log" | awk -F'\t' -v OFS='\t' '{ for (i = 2; i <= NF; i++) { if ($(i - 1) == "--body-file") $i = "<file>"; if ($(i - 1) == "--match-head-commit") $i = "<sha>" } print }' | LC_ALL=C sort -u)" = "$(printf '%s\n' '--version' "$(printf 'repo\tcreate\t--help')" \
-      "$(printf 'pr\tchecks\t--help')" "$(printf 'pr\tmerge\t--help')" \
-      "$(printf 'api\t-i\tuser\t--jq\t.login, (.name // "")')" \
-      "$(printf 'api\t-i\t-H\tAccept: application/vnd.github.raw+json\trepos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md')" \
-      "$(printf 'api\t-i\trepos/octo-user/my-app')" \
-      "$(printf 'api\t-i\tlicenses/mit\t--jq\t.key')" \
-      "$(printf 'repo\tcreate\tocto-user/my-app\t--template\tfactoincognito/ai-project-bootstrap\t--public\t--description\tLends tools to neighbours.')" \
-      "$(printf 'api\t-i\trepos/octo-user/my-app/branches/main')" \
-      "$(printf 'api\t-i\trepos/octo-user/my-app/contents/CHANGELOG.md')" \
-      "$(printf 'api\t-i\t-X\tPUT\trepos/octo-user/my-app/branches/main/protection\t--input\t-')" \
-      "$(printf 'repo\tedit\tocto-user/my-app\t--delete-branch-on-merge\t--enable-squash-merge')" \
-      "$(printf 'api\t-i\trepos/octo-user/my-app/actions/permissions\t--jq\t.enabled')" \
-      "$(printf 'repo\tclone\tocto-user/my-app\t./my-app')" \
-      "$(printf 'api\t-i\tlicenses/mit\t--jq\t.body')" \
-      "$(printf 'pr\tcreate\t--repo\tocto-user/my-app\t--base\tmain\t--head\tbootstrap-setup\t--title\tSet up my-app\t--body-file\t<file>')" \
-      "$(printf 'pr\tchecks\t1\t--repo\tocto-user/my-app\t--json\tname,bucket,event\t--jq\t%s' "$BUILD_JQ")" \
-      "$(printf 'api\t-i\trepos/octo-user/my-app/branches/main/protection\t--jq\t%s' "$READBACK_JQ")" \
-      "$(printf 'pr\tmerge\t1\t--squash\t--delete-branch\t--match-head-commit\t<sha>')" \
-      "$(printf 'api\t-i\trepos/octo-user/my-app/pulls/1\t--jq\t%s' "$MERGED_JQ")" | LC_ALL=C sort)" ] \
-    || { cat "$d/gh.log" >&2; die "gh was used for more than its checks and the steps built so far"; }
-  [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] \
-    || { cat "$d/gh.log" >&2; die "a gh call ran with gh's prompts on"; }
-  [ "$(ls -A "$d/cwd")" = my-app ] || { ls -A "$d/cwd" >&2; die "something other than the copy was made"; }
+    "$(printf 'pr\tchecks\t--help')" "$(printf 'pr\tmerge\t--help')" \
+    "$(printf 'api\t-i\tuser\t--jq\t.login, (.name // "")')" \
+    "$(printf 'api\t-i\t-H\tAccept: application/vnd.github.raw+json\trepos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md')" \
+    "$(printf 'api\t-i\trepos/octo-user/my-app')" \
+    "$(printf 'api\t-i\tlicenses/mit\t--jq\t.key')" \
+    "$(printf 'repo\tcreate\tocto-user/my-app\t--template\tfactoincognito/ai-project-bootstrap\t--public\t--description\tLends tools to neighbours.')" \
+    "$(printf 'api\t-i\trepos/octo-user/my-app/branches/main')" \
+    "$(printf 'api\t-i\trepos/octo-user/my-app/contents/CHANGELOG.md')" \
+    "$(printf 'api\t-i\t-X\tPUT\trepos/octo-user/my-app/branches/main/protection\t--input\t-')" \
+    "$(printf 'repo\tedit\tocto-user/my-app\t--delete-branch-on-merge\t--enable-squash-merge')" \
+    "$(printf 'api\t-i\trepos/octo-user/my-app/actions/permissions\t--jq\t.enabled')" \
+    "$(printf 'repo\tclone\tocto-user/my-app\t./my-app')" \
+    "$(printf 'api\t-i\tlicenses/mit\t--jq\t.body')" \
+    "$(printf 'pr\tcreate\t--repo\tocto-user/my-app\t--base\tmain\t--head\tbootstrap-setup\t--title\tSet up my-app\t--body-file\t<file>')" \
+    "$(printf 'pr\tchecks\t1\t--repo\tocto-user/my-app\t--json\tname,bucket,event\t--jq\t%s' "$BUILD_JQ")" \
+    "$(printf 'api\t-i\trepos/octo-user/my-app/branches/main/protection\t--jq\t%s' "$READBACK_JQ")" \
+    "$(printf 'pr\tmerge\t1\t--squash\t--delete-branch\t--match-head-commit\t<sha>')" \
+    "$(printf 'api\t-i\trepos/octo-user/my-app/pulls/1\t--jq\t%s' "$MERGED_JQ")" | LC_ALL=C sort)" ] ||
+    {
+      cat "$d/gh.log" >&2
+      die "gh was used for more than its checks and the steps built so far"
+    }
+  [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] ||
+    {
+      cat "$d/gh.log" >&2
+      die "a gh call ran with gh's prompts on"
+    }
+  [ "$(ls -A "$d/cwd")" = my-app ] || {
+    ls -A "$d/cwd" >&2
+    die "something other than the copy was made"
+  }
   [ -f "$d/cwd/my-app/package.json" ] || die "the node pack was not laid out in the copy"
 }
 
@@ -3047,39 +3746,74 @@ test_running_with_no_options_starts_the_questions() {
   local d rc=0
   d="$(tmpdir)"
   make_stub_gh "$d/gh"
-  ( export STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
-    bash "$SCRIPT" ) </dev/null >"$d/out" 2>"$d/err" || rc=$?
-  [ "$rc" -eq 2 ] || { cat "$d/err" >&2; die "exit $rc, want 2 (no answer)"; }
-  grep -q '^Project name: $' "$d/out" || { cat "$d/out" >&2; die "the first question was not asked"; }
+  (
+    export STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh"
+    bash "$SCRIPT"
+  ) </dev/null >"$d/out" 2>"$d/err" || rc=$?
+  [ "$rc" -eq 2 ] || {
+    cat "$d/err" >&2
+    die "exit $rc, want 2 (no answer)"
+  }
+  grep -q '^Project name: $' "$d/out" || {
+    cat "$d/out" >&2
+    die "the first question was not asked"
+  }
 }
 
 test_unknown_option_is_refused() {
   local d
   d="$(tmpdir)"
   inputs "$d" --nmae my-app
-  [ "$RC" -eq 2 ] || { cat "$d/err" >&2; die "exit $RC, want 2"; }
-  sed -n 1p "$d/err" | grep -E '^What happened: .*--nmae' >/dev/null || { cat "$d/err" >&2; die "the option is not named"; }
-  grep -qE '^What to do next: .*--help' "$d/err" || { cat "$d/err" >&2; die "no pointer to --help"; }
+  [ "$RC" -eq 2 ] || {
+    cat "$d/err" >&2
+    die "exit $RC, want 2"
+  }
+  sed -n 1p "$d/err" | grep -E '^What happened: .*--nmae' >/dev/null || {
+    cat "$d/err" >&2
+    die "the option is not named"
+  }
+  grep -qE '^What to do next: .*--help' "$d/err" || {
+    cat "$d/err" >&2
+    die "no pointer to --help"
+  }
 }
 
 test_option_without_its_value_is_refused() {
   local d
   d="$(tmpdir)"
   inputs "$d" --non-interactive --name
-  [ "$RC" -eq 2 ] || { cat "$d/err" >&2; die "exit $RC, want 2"; }
-  sed -n 1p "$d/err" | grep -E '^What happened: .*--name.*needs a value' >/dev/null || { cat "$d/err" >&2; die "not explained"; }
+  [ "$RC" -eq 2 ] || {
+    cat "$d/err" >&2
+    die "exit $RC, want 2"
+  }
+  sed -n 1p "$d/err" | grep -E '^What happened: .*--name.*needs a value' >/dev/null || {
+    cat "$d/err" >&2
+    die "not explained"
+  }
   d="$(tmpdir)"
   inputs "$d" --non-interactive --description "" --name my-app
-  [ "$RC" -eq 2 ] || { cat "$d/err" >&2; die "empty value: exit $RC, want 2"; }
-  sed -n 1p "$d/err" | grep -E '^What happened: .*--description.*needs a value' >/dev/null || { cat "$d/err" >&2; die "empty value not explained"; }
+  [ "$RC" -eq 2 ] || {
+    cat "$d/err" >&2
+    die "empty value: exit $RC, want 2"
+  }
+  sed -n 1p "$d/err" | grep -E '^What happened: .*--description.*needs a value' >/dev/null || {
+    cat "$d/err" >&2
+    die "empty value not explained"
+  }
 }
 
 test_switch_given_a_value_is_refused() {
   local d
   d="$(tmpdir)"
   inputs "$d" --yes=no
-  [ "$RC" -eq 2 ] || { cat "$d/err" >&2; die "exit $RC, want 2"; }
-  sed -n 1p "$d/err" | grep -E '^What happened: .*--yes' >/dev/null || { cat "$d/err" >&2; die "not explained"; }
+  [ "$RC" -eq 2 ] || {
+    cat "$d/err" >&2
+    die "exit $RC, want 2"
+  }
+  sed -n 1p "$d/err" | grep -E '^What happened: .*--yes' >/dev/null || {
+    cat "$d/err" >&2
+    die "not explained"
+  }
 }
 
 test_a_word_that_is_not_an_option_gets_what_happened_and_what_to_do_next() {
@@ -3089,34 +3823,61 @@ test_a_word_that_is_not_an_option_gets_what_happened_and_what_to_do_next() {
   local d rc=0
   d="$(tmpdir)"
   bash "$SCRIPT" my-app </dev/null >"$d/out" 2>"$d/err" || rc=$?
-  [ "$rc" -eq 2 ] || { cat "$d/err" >&2; die "exit $rc, want 2"; }
-  sed -n 1p "$d/err" | grep -E '^What happened: .*my-app' >/dev/null || { cat "$d/err" >&2; die "the word is not named"; }
-  sed -n 2p "$d/err" | grep -E '^What to do next: .*--help' >/dev/null || { cat "$d/err" >&2; die "no next action pointing to --help"; }
-  ! grep -qF 'usage:' "$d/err" || { cat "$d/err" >&2; die "the plain usage text was shown"; }
+  [ "$rc" -eq 2 ] || {
+    cat "$d/err" >&2
+    die "exit $rc, want 2"
+  }
+  sed -n 1p "$d/err" | grep -E '^What happened: .*my-app' >/dev/null || {
+    cat "$d/err" >&2
+    die "the word is not named"
+  }
+  sed -n 2p "$d/err" | grep -E '^What to do next: .*--help' >/dev/null || {
+    cat "$d/err" >&2
+    die "no next action pointing to --help"
+  }
+  ! grep -qF 'usage:' "$d/err" || {
+    cat "$d/err" >&2
+    die "the plain usage text was shown"
+  }
 }
 
 test_help_lists_every_option() {
   local d rc=0 o
   d="$(tmpdir)"
   bash "$SCRIPT" --help </dev/null >"$d/out" 2>"$d/err" || rc=$?
-  [ "$rc" -eq 0 ] || { cat "$d/err" >&2; die "exit $rc, want 0"; }
+  [ "$rc" -eq 0 ] || {
+    cat "$d/err" >&2
+    die "exit $rc, want 0"
+  }
   for o in --name --owner --project-name --description --po-name --pack --with-deploy --without-deploy \
     --public --private --license --copyright-holder --dir --ci-timeout --non-interactive \
     --yes --dry-run --resume --help --git-name --git-email layout-pack; do
-    grep -qF -- "$o" "$d/out" || { cat "$d/out" >&2; die "help lacks $o"; }
+    grep -qF -- "$o" "$d/out" || {
+      cat "$d/out" >&2
+      die "help lacks $o"
+    }
   done
   # S18b: --non-interactive alone is refused, so the help says what it needs.
-  grep -qF -- "(needs --yes or --dry-run)" "$d/out" || { cat "$d/out" >&2; die "help does not say --non-interactive needs --yes or --dry-run"; }
+  grep -qF -- "(needs --yes or --dry-run)" "$d/out" || {
+    cat "$d/out" >&2
+    die "help does not say --non-interactive needs --yes or --dry-run"
+  }
 }
 
 test_help_stays_plain_with_the_colour_hook() {
   local d rc=0
   d="$(tmpdir)"
   BOOTSTRAP_COLOR=1 TERM=xterm bash "$SCRIPT" --help </dev/null >"$d/out" 2>"$d/err" || rc=$?
-  [ "$rc" -eq 0 ] || { cat "$d/err" >&2; die "exit $rc, want 0"; }
+  [ "$rc" -eq 0 ] || {
+    cat "$d/err" >&2
+    die "exit $rc, want 0"
+  }
   ! has_esc "$d/out" || die "the help has colour codes"
   bash "$SCRIPT" --help </dev/null >"$d/plain"
-  cmp -s "$d/plain" "$d/out" || { diff "$d/plain" "$d/out" >&2; die "the help changed with the hook"; }
+  cmp -s "$d/plain" "$d/out" || {
+    diff "$d/plain" "$d/out" >&2
+    die "the help changed with the hook"
+  }
 }
 
 # --version (product owner, 2026-10-27): one line with the version and
@@ -3137,21 +3898,35 @@ version_run() {
   make_stub_npm "$d/npm"
   for t in git npm curl wget; do fake_tool "$d" "$t"; done
   RC=0
-  ( export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" STUB_RUN_LOG="$d/run.log" \
+  (
+    export PATH="$d/bin:$PATH" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" STUB_RUN_LOG="$d/run.log" \
       BOOTSTRAP_RUN="$d/run" STUB_NPM_LOG="$d/npm.log" BOOTSTRAP_NPM="$d/npm"
-    bash "$s" "$@" ) </dev/null >"$d/out" 2>"$d/err" || RC=$?
+    bash "$s" "$@"
+  ) </dev/null >"$d/out" 2>"$d/err" || RC=$?
 }
 
 # expect_version_line <dir> <line>: exit 0, exactly that line on stdout,
 # nothing on stderr, and no tool was called.
 expect_version_line() {
   local d="$1" f
-  [ "$RC" -eq 0 ] || { cat "$d/out" "$d/err" >&2; die "exit $RC, want 0"; }
-  [ "$(cat "$d/out")" = "$2" ] && [ "$(wc -l <"$d/out" | tr -d ' ')" -eq 1 ] \
-    || { cat "$d/out" >&2; die "stdout is not the one line: $2"; }
-  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "wrote to stderr"; }
+  [ "$RC" -eq 0 ] || {
+    cat "$d/out" "$d/err" >&2
+    die "exit $RC, want 0"
+  }
+  [ "$(cat "$d/out")" = "$2" ] && [ "$(wc -l <"$d/out" | tr -d ' ')" -eq 1 ] ||
+    {
+      cat "$d/out" >&2
+      die "stdout is not the one line: $2"
+    }
+  [ ! -s "$d/err" ] || {
+    cat "$d/err" >&2
+    die "wrote to stderr"
+  }
   for f in gh.log tools.log npm.log run.log; do
-    [ ! -s "$d/$f" ] || { cat "$d/$f" >&2; die "a tool was called ($f)"; }
+    [ ! -s "$d/$f" ] || {
+      cat "$d/$f" >&2
+      die "a tool was called ($f)"
+    }
   done
 }
 
@@ -3162,7 +3937,10 @@ test_version_prints_one_line_and_calls_nothing() {
   expect_version_line "$d" "$UNSTAMPED_VERSION_LINE"
   # Plain, also where colour is forced, as the help is.
   BOOTSTRAP_COLOR=1 TERM=xterm bash "$SCRIPT" --version </dev/null >"$d/colour" 2>&1
-  cmp -s "$d/out" "$d/colour" || { diff "$d/out" "$d/colour" >&2; die "the line changed with the colour hook"; }
+  cmp -s "$d/out" "$d/colour" || {
+    diff "$d/out" "$d/colour" >&2
+    die "the line changed with the colour hook"
+  }
   # The built script, as a user gets it: its stamped version and commit.
   built_bootstrapper
   d="$(tmpdir)"
@@ -3183,27 +3961,57 @@ test_version_with_other_options_is_read_where_it_stands_as_help_is() {
   expect_version_line "$d" "$UNSTAMPED_VERSION_LINE"
   d="$(tmpdir)"
   version_run "$d" "$SCRIPT" --help --version
-  [ "$RC" -eq 0 ] || { cat "$d/err" >&2; die "--help --version: exit $RC, want 0"; }
-  [ "$(sed -n 1p "$d/out")" = "usage: bootstrap-project.sh [options]" ] || { cat "$d/out" >&2; die "--help --version: not the help"; }
-  ! grep -qF 'not a release' "$d/out" || { cat "$d/out" >&2; die "--help --version: the version line was shown too"; }
+  [ "$RC" -eq 0 ] || {
+    cat "$d/err" >&2
+    die "--help --version: exit $RC, want 0"
+  }
+  [ "$(sed -n 1p "$d/out")" = "usage: bootstrap-project.sh [options]" ] || {
+    cat "$d/out" >&2
+    die "--help --version: not the help"
+  }
+  ! grep -qF 'not a release' "$d/out" || {
+    cat "$d/out" >&2
+    die "--help --version: the version line was shown too"
+  }
   d="$(tmpdir)"
   version_run "$d" "$SCRIPT" --nmae x --version
-  [ "$RC" -eq 2 ] || { cat "$d/out" "$d/err" >&2; die "--nmae x --version: exit $RC, want 2"; }
-  sed -n 1p "$d/err" | grep -E '^What happened: .*--nmae' >/dev/null || { cat "$d/err" >&2; die "--nmae x --version: not refused"; }
-  [ ! -s "$d/out" ] || { cat "$d/out" >&2; die "--nmae x --version: something on stdout"; }
+  [ "$RC" -eq 2 ] || {
+    cat "$d/out" "$d/err" >&2
+    die "--nmae x --version: exit $RC, want 2"
+  }
+  sed -n 1p "$d/err" | grep -E '^What happened: .*--nmae' >/dev/null || {
+    cat "$d/err" >&2
+    die "--nmae x --version: not refused"
+  }
+  [ ! -s "$d/out" ] || {
+    cat "$d/out" >&2
+    die "--nmae x --version: something on stdout"
+  }
   d="$(tmpdir)"
   version_run "$d" "$SCRIPT" --version=yes
-  [ "$RC" -eq 2 ] || { cat "$d/out" "$d/err" >&2; die "--version=yes: exit $RC, want 2"; }
-  sed -n 1p "$d/err" | grep -E '^What happened: The option --version does not take a value\.$' >/dev/null \
-    || { cat "$d/err" >&2; die "--version=yes: not refused"; }
+  [ "$RC" -eq 2 ] || {
+    cat "$d/out" "$d/err" >&2
+    die "--version=yes: exit $RC, want 2"
+  }
+  sed -n 1p "$d/err" | grep -E '^What happened: The option --version does not take a value\.$' >/dev/null ||
+    {
+      cat "$d/err" >&2
+      die "--version=yes: not refused"
+    }
 }
 
 test_help_lists_the_version_option() {
   local d rc=0
   d="$(tmpdir)"
   bash "$SCRIPT" --help </dev/null >"$d/out" 2>"$d/err" || rc=$?
-  [ "$rc" -eq 0 ] || { cat "$d/err" >&2; die "exit $rc, want 0"; }
-  grep -qE '^  --version +[a-z]' "$d/out" || { cat "$d/out" >&2; die "help lacks --version"; }
+  [ "$rc" -eq 0 ] || {
+    cat "$d/err" >&2
+    die "exit $rc, want 0"
+  }
+  grep -qE '^  --version +[a-z]' "$d/out" || {
+    cat "$d/out" >&2
+    die "help lacks --version"
+  }
 }
 
 test_name_takes_letters_digits_dots_dashes_and_underscores() {
@@ -3292,7 +4100,10 @@ test_without_deploy_gives_the_answer_no_to_the_publishing_files() {
   printf '%s\n' "" "" "" "" "" "" "" "" >"$d/in"
   inputs "$d" --name x --description "x y." --pack web --license mit --without-deploy
   expect_inputs "$d" PACK=web WITH_DEPLOY=no
-  ! grep -qF 'Add the publishing files' "$d/out" || { cat "$d/out" >&2; die "the publishing question was asked although --without-deploy was given"; }
+  ! grep -qF 'Add the publishing files' "$d/out" || {
+    cat "$d/out" >&2
+    die "the publishing question was asked although --without-deploy was given"
+  }
   # Another pack has no publishing files, so the no does no harm.
   d="$(tmpdir)"
   inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner a --po-name b --without-deploy
@@ -3303,8 +4114,14 @@ test_without_deploy_gives_the_answer_no_to_the_publishing_files() {
   expect_refused "$d" --without-deploy
   d="$(tmpdir)"
   inputs "$d" --non-interactive --name x --description "x y." --pack web --license mit --owner a --po-name b --without-deploy=yes
-  [ "$RC" -eq 2 ] || { cat "$d/err" >&2; die "--without-deploy=yes: exit $RC, want 2"; }
-  sed -n 1p "$d/err" | grep -F 'What happened: The option --without-deploy does not take a value.' >/dev/null || { cat "$d/err" >&2; die "--without-deploy=yes is not refused as an option without a value"; }
+  [ "$RC" -eq 2 ] || {
+    cat "$d/err" >&2
+    die "--without-deploy=yes: exit $RC, want 2"
+  }
+  sed -n 1p "$d/err" | grep -F 'What happened: The option --without-deploy does not take a value.' >/dev/null || {
+    cat "$d/err" >&2
+    die "--without-deploy=yes is not refused as an option without a value"
+  }
 }
 
 test_public_and_private_cannot_both_be_given() {
@@ -3387,7 +4204,10 @@ test_questions_are_asked_for_every_input_not_given() {
     OWNER=octo-user "PO_NAME=Octo User" PACK=web WITH_DEPLOY=yes VISIBILITY=private \
     LICENSE=mit "COPYRIGHT_HOLDER=Octo User" DIR=./my-app CI_TIMEOUT=20 NON_INTERACTIVE= \
     "GIT_NAME=Ada Lovelace" GIT_EMAIL=ada@example.com
-  [ "$(grep -c ': $' "$d/out")" -eq 13 ] || { cat "$d/out" >&2; die "not 13 questions"; }
+  [ "$(grep -c ': $' "$d/out")" -eq 13 ] || {
+    cat "$d/out" >&2
+    die "not 13 questions"
+  }
 }
 
 test_an_empty_answer_takes_the_default_shown() {
@@ -3398,8 +4218,14 @@ test_an_empty_answer_takes_the_default_shown() {
   expect_inputs "$d" PROJECT_NAME=my-app OWNER=octo-user "PO_NAME=Octo User" VISIBILITY=public \
     "COPYRIGHT_HOLDER=Octo User" DIR=./my-app WITH_DEPLOY=no "GIT_NAME=Test Person" \
     GIT_EMAIL=test@example.com
-  grep -qxF 'Display name [my-app]: ' "$d/out" || { cat "$d/out" >&2; die "default not shown"; }
-  grep -qxF 'Owner [octo-user]: ' "$d/out" || { cat "$d/out" >&2; die "owner default not shown"; }
+  grep -qxF 'Display name [my-app]: ' "$d/out" || {
+    cat "$d/out" >&2
+    die "default not shown"
+  }
+  grep -qxF 'Owner [octo-user]: ' "$d/out" || {
+    cat "$d/out" >&2
+    die "owner default not shown"
+  }
 }
 
 # line_above <file> <exact line>: the line just above the first line
@@ -3416,10 +4242,16 @@ test_po_name_question_says_its_default_is_the_github_profile_name() {
   printf '%s\n' my-app "" "Lends tools." "" "" python "" mit "" "" "" "" >"$d/in"
   inputs "$d"
   expect_inputs "$d" "PO_NAME=Octo User"
-  why="$(line_above "$d/out" 'Product owner name [Octo User]: ')" \
-    || { cat "$d/out" >&2; die "the product owner question with its default was not asked"; }
-  [ "$why" = "The name of the product owner, the person who decides what the project should do (usually you). The default is the name on the GitHub profile of octo-user, the account gh is signed in to." ] \
-    || { cat "$d/out" >&2; die "the explanation does not say the default is the profile name: [$why]"; }
+  why="$(line_above "$d/out" 'Product owner name [Octo User]: ')" ||
+    {
+      cat "$d/out" >&2
+      die "the product owner question with its default was not asked"
+    }
+  [ "$why" = "The name of the product owner, the person who decides what the project should do (usually you). The default is the name on the GitHub profile of octo-user, the account gh is signed in to." ] ||
+    {
+      cat "$d/out" >&2
+      die "the explanation does not say the default is the profile name: [$why]"
+    }
 }
 
 test_po_name_question_says_its_default_is_the_account_name_when_the_profile_has_none() {
@@ -3429,10 +4261,16 @@ test_po_name_question_says_its_default_is_the_account_name_when_the_profile_has_
   printf '%s\n' my-app "" "Lends tools." "" "" python "" mit "" "" "" "" >"$d/in"
   inputs "$d"
   expect_inputs "$d" PO_NAME=octo-user
-  why="$(line_above "$d/out" 'Product owner name [octo-user]: ')" \
-    || { cat "$d/out" >&2; die "the product owner question with its default was not asked"; }
-  [ "$why" = "The name of the product owner, the person who decides what the project should do (usually you). The default is octo-user, the name of the GitHub account gh is signed in to, because its profile has no name." ] \
-    || { cat "$d/out" >&2; die "the explanation does not say the default is the account name: [$why]"; }
+  why="$(line_above "$d/out" 'Product owner name [octo-user]: ')" ||
+    {
+      cat "$d/out" >&2
+      die "the product owner question with its default was not asked"
+    }
+  [ "$why" = "The name of the product owner, the person who decides what the project should do (usually you). The default is octo-user, the name of the GitHub account gh is signed in to, because its profile has no name." ] ||
+    {
+      cat "$d/out" >&2
+      die "the explanation does not say the default is the account name: [$why]"
+    }
 }
 
 test_answers_have_spaces_and_carriage_returns_removed() {
@@ -3457,9 +4295,15 @@ test_questions_are_skipped_for_inputs_given_as_options() {
   inputs "$d" --name my-app --pack python --license none
   expect_inputs "$d" NAME=my-app PACK=python LICENSE=none "DESCRIPTION=Lends tools." WITH_DEPLOY=no \
     "COPYRIGHT_HOLDER=Octo User"
-  [ "$(grep -c ': $' "$d/out")" -eq 8 ] || { cat "$d/out" >&2; die "not 8 questions"; }
-  ! grep -qE '^(Project name|Language pack|Licence|Add the publishing files|Copyright holder)' "$d/out" \
-    || { cat "$d/out" >&2; die "asked for something given or not needed"; }
+  [ "$(grep -c ': $' "$d/out")" -eq 8 ] || {
+    cat "$d/out" >&2
+    die "not 8 questions"
+  }
+  ! grep -qE '^(Project name|Language pack|Licence|Add the publishing files|Copyright holder)' "$d/out" ||
+    {
+      cat "$d/out" >&2
+      die "asked for something given or not needed"
+    }
 }
 
 test_a_wrong_answer_is_explained_and_asked_again() {
@@ -3468,15 +4312,33 @@ test_a_wrong_answer_is_explained_and_asked_again() {
   printf '%s\n' "my app" my-app "" "" "Lends tools." "" "" ruby 2 maybe n "" 7 mit "" "" "" "" >"$d/in"
   inputs "$d"
   expect_inputs "$d" NAME=my-app PACK=web WITH_DEPLOY=no LICENSE=mit "DESCRIPTION=Lends tools."
-  [ "$(grep -c '^Project name: $' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "name not asked again"; }
-  [ "$(grep -c '^Description: $' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "empty required answer not asked again"; }
-  [ "$(grep -c '^Language pack' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "pack not asked again"; }
-  [ "$(grep -c '^Licence' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "licence not asked again"; }
-  [ "$(grep -c 'Please try again\.$' "$d/out")" -eq 5 ] || { cat "$d/out" >&2; die "not 5 retries"; }
+  [ "$(grep -c '^Project name: $' "$d/out")" -eq 2 ] || {
+    cat "$d/out" >&2
+    die "name not asked again"
+  }
+  [ "$(grep -c '^Description: $' "$d/out")" -eq 2 ] || {
+    cat "$d/out" >&2
+    die "empty required answer not asked again"
+  }
+  [ "$(grep -c '^Language pack' "$d/out")" -eq 2 ] || {
+    cat "$d/out" >&2
+    die "pack not asked again"
+  }
+  [ "$(grep -c '^Licence' "$d/out")" -eq 2 ] || {
+    cat "$d/out" >&2
+    die "licence not asked again"
+  }
+  [ "$(grep -c 'Please try again\.$' "$d/out")" -eq 5 ] || {
+    cat "$d/out" >&2
+    die "not 5 retries"
+  }
   # Each retry first says what was wrong with the answer.
   for t in '^Use only letters, digits' '^An answer is needed here' '^Choose one of the packs' \
     '^Answer yes or no' '^Choose a number from 1 to 6'; do
-    grep -qE "$t.* Please try again\.$" "$d/out" || { cat "$d/out" >&2; die "retry not explained: $t"; }
+    grep -qE "$t.* Please try again\.$" "$d/out" || {
+      cat "$d/out" >&2
+      die "retry not explained: $t"
+    }
   done
 }
 
@@ -3501,9 +4363,18 @@ test_running_out_of_answers_stops_with_exit_2() {
   d="$(tmpdir)"
   printf '%s\n' my-app >"$d/in"
   inputs "$d"
-  [ "$RC" -eq 2 ] || { cat "$d/err" >&2; die "exit $RC, want 2"; }
-  sed -n 1p "$d/err" | grep '^What happened: .*a question got no answer' >/dev/null || { cat "$d/err" >&2; die "not explained"; }
-  grep -qE '^What to do next: .*--non-interactive' "$d/err" || { cat "$d/err" >&2; die "no next action"; }
+  [ "$RC" -eq 2 ] || {
+    cat "$d/err" >&2
+    die "exit $RC, want 2"
+  }
+  sed -n 1p "$d/err" | grep '^What happened: .*a question got no answer' >/dev/null || {
+    cat "$d/err" >&2
+    die "not explained"
+  }
+  grep -qE '^What to do next: .*--non-interactive' "$d/err" || {
+    cat "$d/err" >&2
+    die "no next action"
+  }
   [ ! -e "$d/dump" ] || die "answers were collected"
 }
 
@@ -3513,7 +4384,10 @@ test_invalid_options_are_refused_before_any_question() {
   printf '%s\n' my-app >"$d/in"
   inputs "$d" --pack ruby
   expect_refused "$d" --pack
-  ! grep -q ': $' "$d/out" || { cat "$d/out" >&2; die "a question was asked"; }
+  ! grep -q ': $' "$d/out" || {
+    cat "$d/out" >&2
+    die "a question was asked"
+  }
 }
 
 test_deploy_question_on_another_pack_than_web_is_refused() {
@@ -3524,7 +4398,10 @@ test_deploy_question_on_another_pack_than_web_is_refused() {
   inputs "$d" --with-deploy
   expect_refused "$d" --with-deploy
   # It stops at once: no question after the pack.
-  ! grep -qE '^(Visibility|Licence|Folder)' "$d/out" || { cat "$d/out" >&2; die "questions went on after the conflict"; }
+  ! grep -qE '^(Visibility|Licence|Folder)' "$d/out" || {
+    cat "$d/out" >&2
+    die "questions went on after the conflict"
+  }
 }
 
 # A full question run (web, a licence): every question is asked.
@@ -3532,7 +4409,10 @@ full_transcript() {
   local d="$1"
   printf '%s\n' my-app "" "Lends tools." "" "" web "" "" mit "" "" "" "" >"$d/in"
   inputs "$d"
-  [ "$RC" -eq 0 ] || { cat "$d/err" >&2; die "the question run failed"; }
+  [ "$RC" -eq 0 ] || {
+    cat "$d/err" >&2
+    die "the question run failed"
+  }
 }
 
 test_every_question_has_a_one_line_explanation_above_it() {
@@ -3551,7 +4431,11 @@ test_every_question_has_a_one_line_explanation_above_it() {
     /^  / { next }
     { why = $0 }
   ' "$d/out")"
-  [ -z "$bad" ] || { cat "$d/out" >&2; printf '%s\n' "$bad" >&2; die "a question has no explanation"; }
+  [ -z "$bad" ] || {
+    cat "$d/out" >&2
+    printf '%s\n' "$bad" >&2
+    die "a question has no explanation"
+  }
 }
 
 test_required_questions_have_no_default_and_say_why() {
@@ -3568,8 +4452,11 @@ test_required_questions_have_no_default_and_say_why() {
     { why = $0 }
   ' "$d/out")"
   [ "$got" = "$(printf '%s\n' 'Project name: WHY' 'Description: WHY' \
-    'Language pack (type the number or the name): WHY' 'Licence (type the number or the name): WHY')" ] \
-    || { printf '%s\n' "$got" >&2; die "required questions are not exactly the four, each saying why"; }
+    'Language pack (type the number or the name): WHY' 'Licence (type the number or the name): WHY')" ] ||
+    {
+      printf '%s\n' "$got" >&2
+      die "required questions are not exactly the four, each saying why"
+    }
 }
 
 test_pack_and_licence_questions_explain_each_choice() {
@@ -3579,7 +4466,10 @@ test_pack_and_licence_questions_explain_each_choice() {
   for c in '1) node' '2) web' '3) python' '4) react-native' '1) none' '2) mit' '3) apache-2.0' \
     '4) gpl-3.0' '5) bsd-3-clause' '6) polyform-noncommercial-1.0.0'; do
     line="$(grep -F -- "  $c: " "$d/out" | head -1)"
-    [ -n "$line" ] || { cat "$d/out" >&2; die "choice not shown: $c"; }
+    [ -n "$line" ] || {
+      cat "$d/out" >&2
+      die "choice not shown: $c"
+    }
     [ "$(printf '%s\n' "${line#*: }" | wc -w | tr -d ' ')" -ge 5 ] || die "choice not explained in words: $line"
   done
 }
@@ -3659,7 +4549,8 @@ test_a_run_finds_git_and_what_git_needs_for_a_copy_on_this_computer() {
   prepare "$d"
   bare="$d/a remote.git"
   "$REAL_GIT" -c init.defaultBranch=main init -q --bare "$bare"
-  ( in_env "$d"
+  (
+    in_env "$d"
     command -v git >/dev/null || die "no git on the run's PATH"
     git -c init.defaultBranch=main init -q "$d/w"
     printf 'x\n' >"$d/w/f"
@@ -3667,7 +4558,8 @@ test_a_run_finds_git_and_what_git_needs_for_a_copy_on_this_computer() {
     git -C "$d/w" -c user.name=T -c user.email=t@example.com commit -q -m one
     git -C "$d/w" push -q "$bare" main || die "git could not send to a project in a folder"
     git clone -q "$bare" "$d/c" || die "git could not copy a project from a folder"
-    [ "$(cat "$d/c/f")" = x ] || die "the copy lacks the file" ) || exit 1
+    [ "$(cat "$d/c/f")" = x ] || die "the copy lacks the file"
+  ) || exit 1
 }
 
 test_the_git_folder_of_a_run_holds_only_git_and_its_helpers() {
@@ -3687,8 +4579,11 @@ test_the_git_folder_of_a_run_holds_only_git_and_its_helpers() {
   done
   make_git_only_dir "$src" "$d/only"
   # shellcheck disable=SC2012 # the names are the test's own, plain ones
-  [ "$(cd "$d/only" && ls | LC_ALL=C sort | tr '\n' ' ')" = "git git-receive-pack git-upload-pack " ] \
-    || { ls -A "$d/only" >&2; die "the folder holds more than git and its helpers"; }
+  [ "$(cd "$d/only" && ls | LC_ALL=C sort | tr '\n' ' ')" = "git git-receive-pack git-upload-pack " ] ||
+    {
+      ls -A "$d/only" >&2
+      die "the folder holds more than git and its helpers"
+    }
   for t in git git-upload-pack git-receive-pack; do
     [ "$("$d/only/$t" a 'b c')" = "$t a b c" ] || die "$t does not run the real $t with its arguments"
   done
@@ -3723,23 +4618,36 @@ test_every_stand_in_starts_the_harness_bash_directly() {
     skip || NR == 1 { next }
     /#!\/usr\/bin\/env bash|#!\/bin\/bash/ { print NR ": " $0 }
   ' "$HERE/test-bootstrap-project.sh")"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "a stand-in writes its own bash shebang"; }
+  [ -z "$hits" ] || {
+    printf '%s\n' "$hits" >&2
+    die "a stand-in writes its own bash shebang"
+  }
   d="$(tmpdir)"
   # Each file as the harness wrote it, checked where it was written.
   first_line_is() {
     [ -x "$1" ] || die "$2 is not executable"
     [ "$(sed -n 1p "$1")" = "$want" ] || die "$2 starts with '$(sed -n 1p "$1")', want '$want'"
   }
-  make_stub_gh "$d/s/gh"; first_line_is "$d/s/gh" "the stub gh"
-  make_stub_run "$d/s/run"; first_line_is "$d/s/run" "the stub runner"
-  make_stub_npm "$d/s/npm"; first_line_is "$d/s/npm" "the stub npm"
-  make_refuser "$d/s/refuser" BOOTSTRAP_GH; first_line_is "$d/s/refuser" "a refuser"
-  first_line_is "$WORK/refuse/gh" "the gh refuser"; first_line_is "$WORK/refuse/sleep" "the sleep stand-in"
-  fake_tool "$d" git; first_line_is "$d/bin/git" "the fake git"
-  fake_tool "$d" uname Linux; first_line_is "$d/bin/uname" "a fake tool"
-  failing_push "$d" auth; first_line_is "$d/push-hook" "the failing-push hook"
-  finish_hook "$d" offline; first_line_is "$d/push-hook" "the finish hook"
-  use_built "$d"; first_line_is "$d/bin/date" "the fake date"
+  make_stub_gh "$d/s/gh"
+  first_line_is "$d/s/gh" "the stub gh"
+  make_stub_run "$d/s/run"
+  first_line_is "$d/s/run" "the stub runner"
+  make_stub_npm "$d/s/npm"
+  first_line_is "$d/s/npm" "the stub npm"
+  make_refuser "$d/s/refuser" BOOTSTRAP_GH
+  first_line_is "$d/s/refuser" "a refuser"
+  first_line_is "$WORK/refuse/gh" "the gh refuser"
+  first_line_is "$WORK/refuse/sleep" "the sleep stand-in"
+  fake_tool "$d" git
+  first_line_is "$d/bin/git" "the fake git"
+  fake_tool "$d" uname Linux
+  first_line_is "$d/bin/uname" "a fake tool"
+  failing_push "$d" auth
+  first_line_is "$d/push-hook" "the failing-push hook"
+  finish_hook "$d" offline
+  first_line_is "$d/push-hook" "the finish hook"
+  use_built "$d"
+  first_line_is "$d/bin/date" "the fake date"
 }
 
 test_write_stand_in_refuses_a_path_with_no_folder_and_makes_its_folder() {
@@ -3749,9 +4657,12 @@ test_write_stand_in_refuses_a_path_with_no_folder_and_makes_its_folder() {
   # "$d/stub bin/gh" needs.
   local d rc=0
   d="$(tmpdir)"
-  ( cd "$d" && write_stand_in no-folder 'exit 0' ) 2>"$d/err" || rc=$?
+  (cd "$d" && write_stand_in no-folder 'exit 0') 2>"$d/err" || rc=$?
   [ "$rc" -ne 0 ] || die "a path with no folder was accepted"
-  grep -qF "write_stand_in: 'no-folder' has no folder" "$d/err" || { cat "$d/err" >&2; die "the refusal does not say why"; }
+  grep -qF "write_stand_in: 'no-folder' has no folder" "$d/err" || {
+    cat "$d/err" >&2
+    die "the refusal does not say why"
+  }
   [ ! -e "$d/no-folder" ] || die "something was made for a path with no folder"
   write_stand_in "$d/new folder/tool" 'echo ran'
   [ "$("$d/new folder/tool")" = ran ] || die "the stand-in in a new folder did not run"
@@ -3766,12 +4677,20 @@ test_fake_home_writes_what_git_config_writes_without_starting_git() {
   for v in "Test Person|test@example.com" "Grace Hopper|grace@example.com" "Grace Hopper|" "|grace@example.com" "|" \
     "Ada Lovelace-King 2|a.b_c@x-y.org"; do
     rm -rf "$d/want" "$d/got"
-    mkdir -p "$d/want"; : >"$d/want/.gitconfig"
+    mkdir -p "$d/want"
+    : >"$d/want/.gitconfig"
     [ -z "${v%%|*}" ] || "$REAL_GIT" config --file "$d/want/.gitconfig" user.name "${v%%|*}"
     [ -z "${v#*|}" ] || "$REAL_GIT" config --file "$d/want/.gitconfig" user.email "${v#*|}"
-    ( REAL_GIT="$d/no-git"; fake_home "$d/got" "${v%%|*}" "${v#*|}" ) 2>"$d/err" || true
-    cmp -s "$d/want/.gitconfig" "$d/got/.gitconfig" \
-      || { od -c "$d/want/.gitconfig" "$d/got/.gitconfig" >&2; cat "$d/err" >&2; die "fake_home '$v' differs from git config"; }
+    (
+      REAL_GIT="$d/no-git"
+      fake_home "$d/got" "${v%%|*}" "${v#*|}"
+    ) 2>"$d/err" || true
+    cmp -s "$d/want/.gitconfig" "$d/got/.gitconfig" ||
+      {
+        od -c "$d/want/.gitconfig" "$d/got/.gitconfig" >&2
+        cat "$d/err" >&2
+        die "fake_home '$v' differs from git config"
+      }
   done
   # A value git quotes or escapes still goes through git config.
   for v in 'Ada "the first"' ' lead' 'trail ' 'semi;colon' 'hash#tag' 'back\slash'; do
@@ -3788,14 +4707,19 @@ test_a_failing_push_hook_counts_down_and_names_its_mode() {
   d="$(tmpdir)"
   failing_push "$d" offline 2
   for want in 128 128 0; do
-    rc=0; "$d/push-hook" -C x push origin main 2>"$d/err" || rc=$?
+    rc=0
+    "$d/push-hook" -C x push origin main 2>"$d/err" || rc=$?
     [ "$rc" -eq "$want" ] || die "exit $rc, want $want"
   done
-  rc=0; "$d/push-hook" -C x status 2>"$d/err" || rc=$?
+  rc=0
+  "$d/push-hook" -C x status 2>"$d/err" || rc=$?
   [ "$rc" -eq 0 ] || die "a call without push failed"
   failing_push "$d" offline 1
   "$d/push-hook" push 2>"$d/err" || true
-  grep -qF 'Could not resolve host: github.com' "$d/err" || { cat "$d/err" >&2; die "the offline text is missing"; }
+  grep -qF 'Could not resolve host: github.com' "$d/err" || {
+    cat "$d/err" >&2
+    die "the offline text is missing"
+  }
   [ "$(grep -c . "$d/push-prompt")" -eq 4 ] || die "not every push recorded GIT_TERMINAL_PROMPT"
 }
 
@@ -3806,11 +4730,13 @@ test_a_run_has_no_brew_or_winget_unless_a_test_fakes_them() {
   local d
   d="$(tmpdir)"
   prepare "$d"
-  ( in_env "$d"
+  (
+    in_env "$d"
     ! command -v brew >/dev/null 2>&1 || die "brew is on the run's PATH: $(command -v brew)"
     ! command -v winget >/dev/null 2>&1 || die "winget is on the run's PATH: $(command -v winget)"
     # The same git on every OS: the wrapper, so it is what the tests run.
-    [ "$(command -v git)" = "$GIT_ONLY_DIR/git" ] || die "git on the run's PATH is not the wrapper: $(command -v git)" ) || exit 1
+    [ "$(command -v git)" = "$GIT_ONLY_DIR/git" ] || die "git on the run's PATH is not the wrapper: $(command -v git)"
+  ) || exit 1
 }
 
 pre_from_stdin() {
@@ -3818,7 +4744,12 @@ pre_from_stdin() {
   shift
   prepare "$d"
   set +e
-  ( load_script; in_env "$d"; detect_os; "$@" ) >"$d/out" 2>"$d/err"
+  (
+    load_script
+    in_env "$d"
+    detect_os
+    "$@"
+  ) >"$d/out" 2>"$d/err"
   RC=$?
   set -e
 }
@@ -3854,15 +4785,23 @@ long_of() {
   line="$(strip_cd "$d" "$2")"
   case "$line" in
     "    bash "*" --again" | "    bash "*" --again "* | "bash "*" --again" | "bash "*" --again "*) ;;
-    *) printf '%s\n' "$line"; return 0 ;;
+    *)
+      printf '%s\n' "$line"
+      return 0
+      ;;
   esac
   f="$(again_file_of "$d")"
   [ -f "$f" ] || die "the short command was shown, and there is no saved file $f: $line"
-  ( load_script
+  (
+    load_script
     head="${line%% --again*}"
     rest="${line#"$head --again"}"
-    while IFS= read -r w; do quote_word "$w"; head="$head $QUOTED"; done <"$f"
-    printf '%s\n' "$head$rest" )
+    while IFS= read -r w; do
+      quote_word "$w"
+      head="$head $QUOTED"
+    done <"$f"
+    printf '%s\n' "$head$rest"
+  )
 }
 
 # strip_cd <dir> <line>: the shown line without the cd to the run's
@@ -3902,23 +4841,55 @@ whole() {
   s="$(run_script_of "$d")"
   if [ -z "${RUN_SCRIPT:-}" ] && [ ! -f "$s" ]; then mkdir -p "${s%/*}" && cp "$SCRIPT" "$s"; fi
   set +e
-  ( in_env "$d"; "$BASH" "$s" "$@" ) <"$d/in" >"$d/out" 2>"$d/err"
+  (
+    in_env "$d"
+    "$BASH" "$s" "$@"
+  ) <"$d/in" >"$d/out" 2>"$d/err"
   RC=$?
   set -e
 }
 
 # Settings for `pre`, run before the function they wrap.
-ni() { OPT_NON_INTERACTIVE=1; "$@"; }
-yes_opt() { OPT_YES=1; "$@"; }
-resume() { OPT_RESUME=1; "$@"; }
-with_pack() { IN_PACK="$1"; shift; "$@"; }
-with_dir() { IN_DIR="$1"; shift; "$@"; }
+ni() {
+  OPT_NON_INTERACTIVE=1
+  "$@"
+}
+yes_opt() {
+  OPT_YES=1
+  "$@"
+}
+resume() {
+  OPT_RESUME=1
+  "$@"
+}
+with_pack() {
+  IN_PACK="$1"
+  shift
+  "$@"
+}
+with_dir() {
+  IN_DIR="$1"
+  shift
+  "$@"
+}
 # path_first <folder>: the folder comes first on the run's PATH.
-path_first() { PATH="$1:$PATH"; shift; "$@"; }
+path_first() {
+  PATH="$1:$PATH"
+  shift
+  "$@"
+}
 # in_folder <folder>: the run goes on in that folder.
-in_folder() { cd "$1"; shift; "$@"; }
+in_folder() {
+  cd "$1"
+  shift
+  "$@"
+}
 # path_last <folder>: the folder comes last on the run's PATH.
-path_last() { PATH="$PATH:$1"; shift; "$@"; }
+path_last() {
+  PATH="$PATH:$1"
+  shift
+  "$@"
+}
 # tty_answers: the Nth question asked at the terminal reads line N of
 # <dir>/tty-answers (no line left: no answer), for a test whose answers
 # differ from one question to the next; the test makes <dir>/tty too.
@@ -3973,22 +4944,37 @@ echo 11.16.0
 
 # missing <dir> <tool> [times]: the fake <tool> fails as a missing
 # command that many times (default: always), then works.
-missing() { fake_tool "$1" "$2" 1.0.0; echo "${3:-9999}" >"$1/$2-fails"; }
+missing() {
+  fake_tool "$1" "$2" 1.0.0
+  echo "${3:-9999}" >"$1/$2-fails"
+}
 
 # A git that works, from the fakes (it runs the real git).
 working_git() { fake_tool "$1" git; }
 
 expect_rc() {
-  [ "$RC" -eq "$1" ] || { cat "$2/out" "$2/err" >&2; die "exit $RC, want $1"; }
+  [ "$RC" -eq "$1" ] || {
+    cat "$2/out" "$2/err" >&2
+    die "exit $RC, want $1"
+  }
 }
 expect_out() {
-  grep -qF -- "$2" "$1/out" || { cat "$1/out" "$1/err" >&2; die "output lacks: $2"; }
+  grep -qF -- "$2" "$1/out" || {
+    cat "$1/out" "$1/err" >&2
+    die "output lacks: $2"
+  }
 }
 expect_no_out() {
-  ! grep -qF -- "$2" "$1/out" || { cat "$1/out" >&2; die "output has: $2"; }
+  ! grep -qF -- "$2" "$1/out" || {
+    cat "$1/out" >&2
+    die "output has: $2"
+  }
 }
 expect_nothing_ran() {
-  [ ! -s "$1/run.log" ] || { cat "$1/run.log" >&2; die "an offered command ran"; }
+  [ ! -s "$1/run.log" ] || {
+    cat "$1/run.log" >&2
+    die "an offered command ran"
+  }
 }
 
 test_git_missing_is_guided_and_checked_again_after_enter() {
@@ -4002,8 +4988,14 @@ test_git_missing_is_guided_and_checked_again_after_enter() {
   expect_out "$d" "git is not installed."
   expect_out "$d" "  1. "
   expect_out "$d" "Press Enter to check again, or type q to stop: "
-  [ "$(tail -1 "$d/out")" = "    Done. git is installed." ] || { cat "$d/out" >&2; die "no done line after the check passed"; }
-  [ "$(grep -c '^git --version' "$d/tools.log")" -eq 2 ] || { cat "$d/tools.log" >&2; die "git was not checked twice"; }
+  [ "$(tail -1 "$d/out")" = "    Done. git is installed." ] || {
+    cat "$d/out" >&2
+    die "no done line after the check passed"
+  }
+  [ "$(grep -c '^git --version' "$d/tools.log")" -eq 2 ] || {
+    cat "$d/tools.log" >&2
+    die "git was not checked twice"
+  }
 }
 
 test_a_guide_shows_again_until_the_check_passes() {
@@ -4014,11 +5006,20 @@ test_a_guide_shows_again_until_the_check_passes() {
   printf '\n\n' >"$d/in"
   pre "$d" preflight_git
   expect_rc 0 "$d"
-  [ "$(grep -c '^git is not installed\.$' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "the guide was not shown twice"; }
+  [ "$(grep -c '^git is not installed\.$' "$d/out")" -eq 2 ] || {
+    cat "$d/out" >&2
+    die "the guide was not shown twice"
+  }
   [ "$(grep -c '^git --version' "$d/tools.log")" -eq 3 ] || die "git was not checked three times"
   # Each showing numbers its steps from 1 (#148 review, finding 1).
-  [ "$(grep -c '^  1\. ' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "the second showing does not start at 1."; }
-  ! grep -q '^  3\. ' "$d/out" || { cat "$d/out" >&2; die "the step numbers carried on into the second showing"; }
+  [ "$(grep -c '^  1\. ' "$d/out")" -eq 2 ] || {
+    cat "$d/out" >&2
+    die "the second showing does not start at 1."
+  }
+  ! grep -q '^  3\. ' "$d/out" || {
+    cat "$d/out" >&2
+    die "the step numbers carried on into the second showing"
+  }
 }
 
 test_stopping_at_a_guide_prints_the_command_to_start_again() {
@@ -4033,14 +5034,26 @@ test_stopping_at_a_guide_prints_the_command_to_start_again() {
     [ -z "$input" ] || printf '%s\n' "$input" "" "" >"$d/in"
     whole "$d" --name my-app --description "Lends tools." --pack node
     expect_rc 3 "$d"
-    [ "$(grep -c '^git is not installed\.$' "$d/out")" -eq 1 ] \
-      || { cat "$d/out" >&2; die "the guide was shown again after '$input'"; }
+    [ "$(grep -c '^git is not installed\.$' "$d/out")" -eq 1 ] ||
+      {
+        cat "$d/out" >&2
+        die "the guide was shown again after '$input'"
+      }
     expect_out "$d" "To start again, run this command:"
-    shown_after "$d" "To start again, run this command:" \
-      | grep -E "^    bash .*bootstrap-project\.sh --name my-app --description 'Lends tools\.' --pack node$" >/dev/null \
-      || { cat "$d/out" >&2; die "the command to start again is not the one that was run (input '$input')"; }
-    sed -n 1p "$d/err" | grep -E '^What happened: .*git is not installed' >/dev/null || { cat "$d/err" >&2; die "no plain message"; }
-    grep -qE '^What to do next: .{10,}' "$d/err" || { cat "$d/err" >&2; die "no next action"; }
+    shown_after "$d" "To start again, run this command:" |
+      grep -E "^    bash .*bootstrap-project\.sh --name my-app --description 'Lends tools\.' --pack node$" >/dev/null ||
+      {
+        cat "$d/out" >&2
+        die "the command to start again is not the one that was run (input '$input')"
+      }
+    sed -n 1p "$d/err" | grep -E '^What happened: .*git is not installed' >/dev/null || {
+      cat "$d/err" >&2
+      die "no plain message"
+    }
+    grep -qE '^What to do next: .{10,}' "$d/err" || {
+      cat "$d/err" >&2
+      die "no next action"
+    }
     [ -z "$(ls -A "$d/cwd")" ] || die "something was created"
   done
 }
@@ -4071,10 +5084,14 @@ test_non_interactive_never_reads_stdin_at_a_guide() {
   printf '%s\n' first-line >"$d/in"
   prepare "$d"
   set +e
-  ( load_script; in_env "$d"; detect_os
-    ( ni preflight_git ) || true
+  (
+    load_script
+    in_env "$d"
+    detect_os
+    (ni preflight_git) || true
     IFS= read -r line
-    printf '%s\n' "$line" >"$d/first" ) <"$d/in" >"$d/out" 2>"$d/err"
+    printf '%s\n' "$line" >"$d/first"
+  ) <"$d/in" >"$d/out" 2>"$d/err"
   set -e
   [ "$(cat "$d/first")" = first-line ] || die "stdin was read at the guide"
 }
@@ -4090,7 +5107,10 @@ test_an_offered_command_runs_after_yes_through_the_runner() {
   printf 'yes\n' >"$d/tty"
   pre "$d" preflight_git
   expect_rc 0 "$d"
-  [ "$(cat "$d/run.log")" = "xcode-select --install" ] || { cat "$d/run.log" >&2; die "the runner did not get the offered command"; }
+  [ "$(cat "$d/run.log")" = "xcode-select --install" ] || {
+    cat "$d/run.log" >&2
+    die "the runner did not get the offered command"
+  }
   expect_out "$d" "Run it now? (yes or no) [no]: "
   expect_no_out "$d" "Press Enter"
   expect_out "$d" "    Done. git is installed."
@@ -4157,7 +5177,10 @@ test_a_command_is_offered_once_per_check() {
   printf '\n' >"$d/in"
   pre "$d" preflight_git
   expect_rc 0 "$d"
-  [ "$(grep -c . "$d/run.log")" -eq 1 ] || { cat "$d/run.log" >&2; die "the command was offered and run more than once"; }
+  [ "$(grep -c . "$d/run.log")" -eq 1 ] || {
+    cat "$d/run.log" >&2
+    die "the command was offered and run more than once"
+  }
   [ "$(grep -c 'Run it now?' "$d/out")" -eq 1 ] || die "offered more than once"
 }
 
@@ -4174,10 +5197,22 @@ test_an_accidental_no_is_offered_again_and_a_yes_then_runs_it() {
   printf '\n' >"$d/in"
   pre "$d" tty_answers preflight_git
   expect_rc 0 "$d"
-  [ "$(grep -c 'Run it now?' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "not offered again after the no"; }
-  [ "$(cat "$d/run.log")" = "xcode-select --install" ] || { cat "$d/run.log" >&2; die "the yes did not run the command once"; }
-  [ "$(grep -c 'Press Enter to check again' "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "not one wait, after the no"; }
-  [ "$(tail -1 "$d/out")" = "    Done. git is installed." ] || { cat "$d/out" >&2; die "no done line"; }
+  [ "$(grep -c 'Run it now?' "$d/out")" -eq 2 ] || {
+    cat "$d/out" >&2
+    die "not offered again after the no"
+  }
+  [ "$(cat "$d/run.log")" = "xcode-select --install" ] || {
+    cat "$d/run.log" >&2
+    die "the yes did not run the command once"
+  }
+  [ "$(grep -c 'Press Enter to check again' "$d/out")" -eq 1 ] || {
+    cat "$d/out" >&2
+    die "not one wait, after the no"
+  }
+  [ "$(tail -1 "$d/out")" = "    Done. git is installed." ] || {
+    cat "$d/out" >&2
+    die "no done line"
+  }
 }
 
 test_answering_no_every_time_reads_input_on_every_round() {
@@ -4195,9 +5230,18 @@ test_answering_no_every_time_reads_input_on_every_round() {
     pre "$d" preflight_git
     expect_rc 3 "$d"
     expect_nothing_ran "$d"
-    [ "$(grep -c 'Run it now?' "$d/out")" -eq 4 ] || { cat "$d/out" >&2; die "$os: not offered on each of the 4 rounds"; }
-    [ "$(grep -c 'Press Enter to check again' "$d/out")" -eq 4 ] || { cat "$d/out" >&2; die "$os: not a wait on each round"; }
-    [ "$(grep -c '^git --version' "$d/tools.log")" -eq 4 ] || { cat "$d/tools.log" >&2; die "$os: checked other than once per round"; }
+    [ "$(grep -c 'Run it now?' "$d/out")" -eq 4 ] || {
+      cat "$d/out" >&2
+      die "$os: not offered on each of the 4 rounds"
+    }
+    [ "$(grep -c 'Press Enter to check again' "$d/out")" -eq 4 ] || {
+      cat "$d/out" >&2
+      die "$os: not a wait on each round"
+    }
+    [ "$(grep -c '^git --version' "$d/tools.log")" -eq 4 ] || {
+      cat "$d/tools.log" >&2
+      die "$os: checked other than once per round"
+    }
   done
 }
 
@@ -4215,9 +5259,18 @@ test_a_command_that_ran_is_offered_again_only_after_enter() {
   printf '\n\n' >"$d/in"
   pre "$d" tty_answers preflight_git
   expect_rc 3 "$d"
-  [ "$(grep -c . "$d/run.log")" -eq 3 ] || { cat "$d/run.log" >&2; die "not run 3 times (one more than the Enters)"; }
-  [ "$(grep -c 'Run it now?' "$d/out")" -eq 3 ] || { cat "$d/out" >&2; die "not offered 3 times"; }
-  [ "$(grep -c 'Press Enter to check again' "$d/out")" -eq 3 ] || { cat "$d/out" >&2; die "not a wait after each run"; }
+  [ "$(grep -c . "$d/run.log")" -eq 3 ] || {
+    cat "$d/run.log" >&2
+    die "not run 3 times (one more than the Enters)"
+  }
+  [ "$(grep -c 'Run it now?' "$d/out")" -eq 3 ] || {
+    cat "$d/out" >&2
+    die "not offered 3 times"
+  }
+  [ "$(grep -c 'Press Enter to check again' "$d/out")" -eq 3 ] || {
+    cat "$d/out" >&2
+    die "not a wait after each run"
+  }
 }
 
 # The "Not run." lines: the offers whose guide says to come back to this
@@ -4242,20 +5295,43 @@ test_not_run_says_where_to_run_the_command() {
     printf 'no\n' >"$d/tty"
     printf 'q\n' >"$d/in"
     case "$c" in
-      macos-git) missing "$d" git; pre "$d" preflight_git; want="$NOT_RUN_TERMINAL" ;;
+      macos-git)
+        missing "$d" git
+        pre "$d" preflight_git
+        want="$NOT_RUN_TERMINAL"
+        ;;
       windows-refresh)
         export STUB_GH_SCOPES="repo"
         pre "$d" with_vis public preflight_github_permissions
         unset STUB_GH_SCOPES
         want="$NOT_RUN_GIT_BASH"
         ;;
-      windows-gh) make_stub_gh "$d/gh"; echo 9999 >"$d/gh-missing"; working_git "$d"; pre "$d" preflight_gh; want="$NOT_RUN_WINGET" ;;
-      windows-gh-old) make_stub_gh "$d/gh"; echo 9999 >"$d/gh-old"; working_git "$d"; pre "$d" preflight_gh; want="$NOT_RUN_WINGET" ;;
-      windows-git) missing "$d" git; pre "$d" preflight_git; want="$NOT_RUN_WINGET" ;;
+      windows-gh)
+        make_stub_gh "$d/gh"
+        echo 9999 >"$d/gh-missing"
+        working_git "$d"
+        pre "$d" preflight_gh
+        want="$NOT_RUN_WINGET"
+        ;;
+      windows-gh-old)
+        make_stub_gh "$d/gh"
+        echo 9999 >"$d/gh-old"
+        working_git "$d"
+        pre "$d" preflight_gh
+        want="$NOT_RUN_WINGET"
+        ;;
+      windows-git)
+        missing "$d" git
+        pre "$d" preflight_git
+        want="$NOT_RUN_WINGET"
+        ;;
     esac
     expect_rc 3 "$d"
     expect_out "$d" "Run it now?"
-    grep -qxF "$want" "$d/out" || { cat "$d/out" >&2; die "$c: the Not run line is not: $want"; }
+    grep -qxF "$want" "$d/out" || {
+      cat "$d/out" >&2
+      die "$c: the Not run line is not: $want"
+    }
     expect_no_out "$d" "Follow the steps above yourself."
     if [ "$want" = "$NOT_RUN_WINGET" ]; then expect_no_out "$d" "come back here and press Enter"; fi
   done
@@ -4273,14 +5349,34 @@ test_a_winget_install_that_ran_is_not_offered_again_in_this_window() {
     printf 'yes\n' >"$d/tty"
     printf '\n\n' >"$d/in"
     case "$c" in
-      git) missing "$d" git; pre "$d" preflight_git ;;
-      *) make_stub_gh "$d/gh"; echo 9999 >"$d/$c"; working_git "$d"; pre "$d" preflight_gh ;;
+      git)
+        missing "$d" git
+        pre "$d" preflight_git
+        ;;
+      *)
+        make_stub_gh "$d/gh"
+        echo 9999 >"$d/$c"
+        working_git "$d"
+        pre "$d" preflight_gh
+        ;;
     esac
     expect_rc 3 "$d"
-    [ "$(grep -c . "$d/run.log")" -eq 1 ] || { cat "$d/run.log" >&2; die "$c: the install ran other than once"; }
-    [ "$(grep -c 'Run it now?' "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "$c: offered again in this window"; }
-    [ "$(grep -cxF "$NEW_WINDOW_NEEDED" "$d/out")" -eq 3 ] || { cat "$d/out" >&2; die "$c: not told on each of the 3 rounds after the install to start again in a new window"; }
-    [ "$(grep -c 'Press Enter to check again' "$d/out")" -eq 3 ] || { cat "$d/out" >&2; die "$c: not a wait on each round"; }
+    [ "$(grep -c . "$d/run.log")" -eq 1 ] || {
+      cat "$d/run.log" >&2
+      die "$c: the install ran other than once"
+    }
+    [ "$(grep -c 'Run it now?' "$d/out")" -eq 1 ] || {
+      cat "$d/out" >&2
+      die "$c: offered again in this window"
+    }
+    [ "$(grep -cxF "$NEW_WINDOW_NEEDED" "$d/out")" -eq 3 ] || {
+      cat "$d/out" >&2
+      die "$c: not told on each of the 3 rounds after the install to start again in a new window"
+    }
+    [ "$(grep -c 'Press Enter to check again' "$d/out")" -eq 3 ] || {
+      cat "$d/out" >&2
+      die "$c: not a wait on each round"
+    }
   done
   # The gh refresh is not a winget install: after a yes that did not fix
   # it, the round after the Enter offers it again.
@@ -4291,7 +5387,10 @@ test_a_winget_install_that_ran_is_not_offered_again_in_this_window() {
   printf '\n' >"$d/in"
   pre "$d" with_vis public preflight_github_permissions
   expect_rc 3 "$d"
-  [ "$(grep -c 'Run it now?' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "refresh: not offered again after Enter"; }
+  [ "$(grep -c 'Run it now?' "$d/out")" -eq 2 ] || {
+    cat "$d/out" >&2
+    die "refresh: not offered again after Enter"
+  }
   expect_no_out "$d" "$NEW_WINDOW_NEEDED"
 }
 
@@ -4307,19 +5406,35 @@ test_each_offered_command_is_the_one_shown_in_the_guide() {
     "windows gh-old 1 winget upgrade --id GitHub.cli -e --source winget"; do
     # shellcheck disable=SC2086 # split the case into its words on purpose
     set -- $case_
-    os="$1" tool="$2" times="$3"; shift 3; want="$*"
+    os="$1" tool="$2" times="$3"
+    shift 3
+    want="$*"
     d="$(tmpdir)"
     on_os "$d" "$os"
     fake_tool "$d" brew
     fake_tool "$d" winget
     printf 'yes\n' >"$d/tty"
     case "$tool" in
-      git) missing "$d" git "$times"; pre "$d" preflight_git ;;
-      *) make_stub_gh "$d/gh"; echo "$times" >"$d/$tool"; working_git "$d"; pre "$d" preflight_gh ;;
+      git)
+        missing "$d" git "$times"
+        pre "$d" preflight_git
+        ;;
+      *)
+        make_stub_gh "$d/gh"
+        echo "$times" >"$d/$tool"
+        working_git "$d"
+        pre "$d" preflight_gh
+        ;;
     esac
     expect_rc 0 "$d"
-    [ "$(cat "$d/run.log")" = "$want" ] || { cat "$d/out" "$d/run.log" >&2; die "$case_: ran something else"; }
-    grep -qxF "    $want" "$d/out" || { cat "$d/out" >&2; die "$case_: the command run was not shown"; }
+    [ "$(cat "$d/run.log")" = "$want" ] || {
+      cat "$d/out" "$d/run.log" >&2
+      die "$case_: ran something else"
+    }
+    grep -qxF "    $want" "$d/out" || {
+      cat "$d/out" >&2
+      die "$case_: the command run was not shown"
+    }
   done
 }
 
@@ -4331,8 +5446,11 @@ test_the_gh_guide_on_windows_without_winget_names_the_msi_download() {
   local d
   d="$(tmpdir)"
   on_os "$d" windows
-  make_stub_gh "$d/gh"; echo 1 >"$d/gh-missing"; working_git "$d"
-  printf 'yes\n' >"$d/tty"; printf '\n' >"$d/in"
+  make_stub_gh "$d/gh"
+  echo 1 >"$d/gh-missing"
+  working_git "$d"
+  printf 'yes\n' >"$d/tty"
+  printf '\n' >"$d/in"
   pre "$d" preflight_gh
   expect_nothing_ran "$d"
   expect_out "$d" "Open https://cli.github.com in your browser, choose the Windows option that says Download MSI (not the one that says WinGet), and run the downloaded installer, keeping the default choices."
@@ -4362,7 +5480,9 @@ test_the_git_and_gh_guides_on_windows_have_you_type_q_first() {
           step="When the install has finished, type q here if the script waits, and copy the command it shows to start again. Then close this window, open Git Bash again from the Start menu, and run that command there, so that it finds git."
           ;;
         *)
-          make_stub_gh "$d/gh"; echo 9999 >"$d/$tool"; working_git "$d"
+          make_stub_gh "$d/gh"
+          echo 9999 >"$d/$tool"
+          working_git "$d"
           pre "$d" ni preflight_gh
           step="When the install has finished, type q here if the script waits, and copy the command it shows to start again. Then close this window, open Git Bash again from the Start menu, and run that command there, so that it finds the new gh."
           if [ "$tool" = gh-old ]; then again="if the script still says that gh is too old"; else again="if the script still says that gh is not installed"; fi
@@ -4381,7 +5501,9 @@ test_the_git_and_gh_guides_on_windows_have_you_type_q_first() {
   # Other systems keep their steps.
   d="$(tmpdir)"
   on_os "$d" macos
-  make_stub_gh "$d/gh"; echo 9999 >"$d/gh-missing"; working_git "$d"
+  make_stub_gh "$d/gh"
+  echo 9999 >"$d/gh-missing"
+  working_git "$d"
   pre "$d" ni preflight_gh
   expect_rc 3 "$d"
   expect_out "$d" "if the script still says that gh is not installed, close this window, open a new one, and start the script again there."
@@ -4395,17 +5517,25 @@ test_no_offer_without_brew_or_winget_and_never_on_linux() {
   local d
   d="$(tmpdir)"
   on_os "$d" macos
-  make_stub_gh "$d/gh"; echo 1 >"$d/gh-missing"; working_git "$d"
-  printf 'yes\n' >"$d/tty"; printf '\n' >"$d/in"
+  make_stub_gh "$d/gh"
+  echo 1 >"$d/gh-missing"
+  working_git "$d"
+  printf 'yes\n' >"$d/tty"
+  printf '\n' >"$d/in"
   pre "$d" preflight_gh
-  expect_rc 0 "$d"; expect_nothing_ran "$d"; expect_no_out "$d" "Run it now?"
+  expect_rc 0 "$d"
+  expect_nothing_ran "$d"
+  expect_no_out "$d" "Run it now?"
   expect_out "$d" "https://cli.github.com"
   d="$(tmpdir)"
   on_os "$d" windows
   missing "$d" git 1
-  printf 'yes\n' >"$d/tty"; printf '\n' >"$d/in"
+  printf 'yes\n' >"$d/tty"
+  printf '\n' >"$d/in"
   pre "$d" preflight_git
-  expect_rc 0 "$d"; expect_nothing_ran "$d"; expect_no_out "$d" "Run it now?"
+  expect_rc 0 "$d"
+  expect_nothing_ran "$d"
+  expect_no_out "$d" "Run it now?"
   expect_out "$d" "https://git-scm.com/download/win"
   local distro line
   for distro in "debian sudo apt install git" "fedora sudo dnf install git" \
@@ -4413,13 +5543,21 @@ test_no_offer_without_brew_or_winget_and_never_on_linux() {
     # shellcheck disable=SC2086 # split the case into its words on purpose
     set -- $distro
     d="$(tmpdir)"
-    on_os "$d" linux "$1"; shift; line="$*"
+    on_os "$d" linux "$1"
+    shift
+    line="$*"
     missing "$d" git 1
     fake_tool "$d" sudo
-    printf 'yes\n' >"$d/tty"; printf '\n' >"$d/in"
+    printf 'yes\n' >"$d/tty"
+    printf '\n' >"$d/in"
     pre "$d" preflight_git
-    expect_rc 0 "$d"; expect_nothing_ran "$d"; expect_no_out "$d" "Run it now?"
-    grep -qxF "    $line" "$d/out" || { cat "$d/out" >&2; die "$distro: package line not shown"; }
+    expect_rc 0 "$d"
+    expect_nothing_ran "$d"
+    expect_no_out "$d" "Run it now?"
+    grep -qxF "    $line" "$d/out" || {
+      cat "$d/out" >&2
+      die "$distro: package line not shown"
+    }
     ! grep -q '^sudo' "$d/tools.log" || die "sudo ran"
   done
   d="$(tmpdir)"
@@ -4436,7 +5574,8 @@ test_gh_missing_or_too_old_is_guided() {
   d="$(tmpdir)"
   on_os "$d" linux debian
   working_git "$d"
-  make_stub_gh "$d/gh"; echo 1 >"$d/gh-missing"
+  make_stub_gh "$d/gh"
+  echo 1 >"$d/gh-missing"
   printf '\n' >"$d/in"
   pre "$d" preflight_gh
   expect_rc 0 "$d"
@@ -4444,15 +5583,19 @@ test_gh_missing_or_too_old_is_guided() {
   expect_out "$d" "    Done. gh is installed and can create a project from a template."
   d="$(tmpdir)"
   on_os "$d" linux debian
-  make_stub_gh "$d/gh"; echo 1 >"$d/gh-old"
+  make_stub_gh "$d/gh"
+  echo 1 >"$d/gh-old"
   printf '\n' >"$d/in"
   pre "$d" preflight_gh
   expect_rc 0 "$d"
   expect_out "$d" "The GitHub command-line tool (gh) on this computer is too old."
   # The feature check, not a version number: repo create --help lists
   # --template. gh's prompts are off for both checks.
-  [ "$(grep -c "$(printf '^GH_PROMPT_DISABLED=1\trepo\tcreate\t--help$')" "$d/gh.log")" -eq 2 ] \
-    || { cat "$d/gh.log" >&2; die "the feature was not checked twice through run_gh"; }
+  [ "$(grep -c "$(printf '^GH_PROMPT_DISABLED=1\trepo\tcreate\t--help$')" "$d/gh.log")" -eq 2 ] ||
+    {
+      cat "$d/gh.log" >&2
+      die "the feature was not checked twice through run_gh"
+    }
   ! grep -q '^GH_PROMPT_DISABLED=<unset>' "$d/gh.log" || die "gh ran with its prompts on"
 }
 
@@ -4470,8 +5613,14 @@ test_a_gh_too_old_to_read_checks_or_merge_stops_before_anything_is_made() {
     expect_out "$d" "The GitHub command-line tool (gh) on this computer is too old."
     expect_out "$d" "How the script checks it: it checks that gh's commands for creating a project, for reading its checks and for adding a proposed change offer the options the script uses: --template, --json and --match-head-commit."
     [ ! -e "$d/created" ] || die "$mode: a project was created"
-    ! grep -q "$(printf '\trepo\tcreate\t[^-]')" "$d/gh.log" || { cat "$d/gh.log" >&2; die "$mode: gh repo create ran"; }
-    ! grep -q "$(printf '\tapi\t')" "$d/gh.log" || { cat "$d/gh.log" >&2; die "$mode: GitHub was asked before the checks passed"; }
+    ! grep -q "$(printf '\trepo\tcreate\t[^-]')" "$d/gh.log" || {
+      cat "$d/gh.log" >&2
+      die "$mode: gh repo create ran"
+    }
+    ! grep -q "$(printf '\tapi\t')" "$d/gh.log" || {
+      cat "$d/gh.log" >&2
+      die "$mode: GitHub was asked before the checks passed"
+    }
   done
 }
 
@@ -4481,8 +5630,14 @@ test_npm_is_needed_only_for_node_web_and_react_native() {
   missing "$d" npm
   pre "$d" ni with_pack python preflight_npm
   expect_rc 0 "$d"
-  [ ! -e "$d/tools.log" ] || { cat "$d/tools.log" >&2; die "npm was checked for python"; }
-  [ ! -s "$d/out" ] || { cat "$d/out" >&2; die "python printed an npm check"; }
+  [ ! -e "$d/tools.log" ] || {
+    cat "$d/tools.log" >&2
+    die "npm was checked for python"
+  }
+  [ ! -s "$d/out" ] || {
+    cat "$d/out" >&2
+    die "python printed an npm check"
+  }
   for p in node web react-native; do
     d="$(tmpdir)"
     on_os "$d" linux debian
@@ -4608,7 +5763,10 @@ test_in_wsl_the_windows_npm_counts_as_no_npm_and_its_guide_says_why() {
     expect_out "$d" "To start again, run this command:"
     expect_no_out "$d" "    Done. npm is installed."
     expect_no_out "$d" "npm (part of Node.js) is not installed."
-    [ ! -e "$d/tools.log" ] || ! grep -q '^windows-npm' "$d/tools.log" || { cat "$d/tools.log" >&2; die "$p: the Windows npm was run"; }
+    [ ! -e "$d/tools.log" ] || ! grep -q '^windows-npm' "$d/tools.log" || {
+      cat "$d/tools.log" >&2
+      die "$p: the Windows npm was run"
+    }
     expect_nothing_ran "$d"
   done
 }
@@ -4628,10 +5786,22 @@ test_in_wsl_the_npm_check_passes_once_npm_is_installed_in_linux() {
   # The Linux folder npm moves to comes first (path_first prepends).
   pre "$d" with_pack node linux_npm_on_enter "$d" path_first "$(windows_npm_dir "$d")" path_first "$d/linux bin" preflight_npm
   expect_rc 0 "$d"
-  [ "$(grep -c '^The npm this Linux finds is the Windows one' "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "the guide was not shown once"; }
-  [ "$(tail -1 "$d/out")" = "    Done. npm is installed." ] || { cat "$d/out" >&2; die "no done line after npm was installed in Linux"; }
-  [ "$(grep -c '^npm --version' "$d/tools.log")" -eq 1 ] || { cat "$d/tools.log" >&2; die "the Linux npm was not checked once"; }
-  ! grep -q '^windows-npm' "$d/tools.log" || { cat "$d/tools.log" >&2; die "the Windows npm was run"; }
+  [ "$(grep -c '^The npm this Linux finds is the Windows one' "$d/out")" -eq 1 ] || {
+    cat "$d/out" >&2
+    die "the guide was not shown once"
+  }
+  [ "$(tail -1 "$d/out")" = "    Done. npm is installed." ] || {
+    cat "$d/out" >&2
+    die "no done line after npm was installed in Linux"
+  }
+  [ "$(grep -c '^npm --version' "$d/tools.log")" -eq 1 ] || {
+    cat "$d/tools.log" >&2
+    die "the Linux npm was not checked once"
+  }
+  ! grep -q '^windows-npm' "$d/tools.log" || {
+    cat "$d/tools.log" >&2
+    die "the Windows npm was run"
+  }
 }
 
 # linux_npm_on_enter <dir> <command...>: at the first Enter the user
@@ -4645,7 +5815,10 @@ linux_npm_on_enter() {
   # shellcheck disable=SC2329 # the setup script calls it, in place of its own
   wait_for_enter() {
     real_wait_for_enter || return 1
-    [ ! -e "$LATER_DIR/later/npm" ] || { mkdir -p "$LATER_DIR/linux bin"; mv "$LATER_DIR/later/npm" "$LATER_DIR/linux bin/npm"; }
+    [ ! -e "$LATER_DIR/later/npm" ] || {
+      mkdir -p "$LATER_DIR/linux bin"
+      mv "$LATER_DIR/later/npm" "$LATER_DIR/linux bin/npm"
+    }
   }
   "$@"
 }
@@ -4668,7 +5841,10 @@ test_in_wsl_a_link_to_the_windows_npm_counts_as_no_npm() {
   pre "$d" ni with_pack node path_first "$d/linux bin" preflight_npm
   expect_rc 3 "$d"
   expect_out "$d" "The npm this Linux finds is the Windows one"
-  [ ! -e "$d/tools.log" ] || ! grep -q '^windows-npm' "$d/tools.log" || { cat "$d/tools.log" >&2; die "the Windows npm was run through a link"; }
+  [ ! -e "$d/tools.log" ] || ! grep -q '^windows-npm' "$d/tools.log" || {
+    cat "$d/tools.log" >&2
+    die "the Windows npm was run through a link"
+  }
 }
 
 test_in_wsl_dot_on_path_in_a_windows_folder_counts_as_no_npm() {
@@ -4695,7 +5871,10 @@ test_in_wsl_dot_on_path_in_a_windows_folder_counts_as_no_npm() {
   pre "$d" ni with_pack node in_folder "$(windows_npm_dir "$d")" path_first . preflight_npm
   expect_rc 3 "$d"
   expect_out "$d" "The npm this Linux finds is the Windows one"
-  [ ! -e "$d/tools.log" ] || ! grep -q '^windows-npm' "$d/tools.log" || { cat "$d/tools.log" >&2; die "the Windows npm was run through . on PATH"; }
+  [ ! -e "$d/tools.log" ] || ! grep -q '^windows-npm' "$d/tools.log" || {
+    cat "$d/tools.log" >&2
+    die "the Windows npm was run through . on PATH"
+  }
 }
 
 test_in_wsl_a_linux_npm_passes_and_a_missing_one_gets_the_usual_guide() {
@@ -4752,7 +5931,10 @@ test_outside_wsl_an_npm_under_mnt_is_not_refused() {
   pre "$d" ni with_pack node path_first "$(windows_npm_dir "$d")" preflight_npm
   expect_rc 0 "$d"
   expect_out "$d" "    Done. npm is installed."
-  grep -q '^windows-npm --version' "$d/tools.log" || { cat "$d/tools.log" >&2; die "the npm under /mnt was not run"; }
+  grep -q '^windows-npm --version' "$d/tools.log" || {
+    cat "$d/tools.log" >&2
+    die "the npm under /mnt was not run"
+  }
   d="$(tmpdir)"
   on_wsl "$d" 6.8.0-45-generic
   windows_npm "$d"
@@ -4765,11 +5947,17 @@ test_bash_older_than_3_2_is_refused_with_steps() {
   local d v
   for v in "3 2" "3 10" "4 0" "5 2"; do
     # shellcheck disable=SC2086 # the version is passed as two words
-    ( load_script; check_bash_version $v ) || die "bash $v refused"
+    (
+      load_script
+      check_bash_version $v
+    ) || die "bash $v refused"
   done
   for v in "3 1" "3 0" "2 9"; do
     # shellcheck disable=SC2086 # the version is passed as two words
-    ! ( load_script; check_bash_version $v ) || die "bash $v accepted"
+    ! (
+      load_script
+      check_bash_version $v
+    ) || die "bash $v accepted"
   done
   d="$(tmpdir)"
   on_os "$d" linux debian
@@ -4794,11 +5982,23 @@ test_the_tool_checks_print_a_start_and_a_done_line() {
   fake_tool "$d" npm 10.0.0
   pre "$d" ni preflight_tools
   expect_rc 0 "$d"
-  grep -qE '^==> Checking .*bash' "$d/out" || { cat "$d/out" >&2; die "no start line for bash"; }
-  grep -qE '^==> Checking .*git' "$d/out" || { cat "$d/out" >&2; die "no start line for git"; }
-  grep -qE '^==> Checking .*gh' "$d/out" || { cat "$d/out" >&2; die "no start line for gh"; }
-  [ "$(grep -c '^==> ' "$d/out")" -eq "$(grep -c '^    Done\. ' "$d/out")" ] \
-    || { cat "$d/out" >&2; die "not every start line has a done line"; }
+  grep -qE '^==> Checking .*bash' "$d/out" || {
+    cat "$d/out" >&2
+    die "no start line for bash"
+  }
+  grep -qE '^==> Checking .*git' "$d/out" || {
+    cat "$d/out" >&2
+    die "no start line for git"
+  }
+  grep -qE '^==> Checking .*gh' "$d/out" || {
+    cat "$d/out" >&2
+    die "no start line for gh"
+  }
+  [ "$(grep -c '^==> ' "$d/out")" -eq "$(grep -c '^    Done\. ' "$d/out")" ] ||
+    {
+      cat "$d/out" >&2
+      die "not every start line has a done line"
+    }
 }
 
 test_target_folder_absent_or_empty_passes_and_nothing_is_made() {
@@ -4816,7 +6016,8 @@ test_target_folder_absent_or_empty_passes_and_nothing_is_made() {
 test_target_folder_with_files_is_a_guided_refusal() {
   local d
   d="$(tmpdir)"
-  mkdir "$d/full"; touch "$d/full/.hidden"
+  mkdir "$d/full"
+  touch "$d/full/.hidden"
   pre "$d" ni with_dir "$d/full" preflight_target_dir
   expect_rc 3 "$d"
   expect_out "$d" "The folder $d/full already has files in it."
@@ -4833,16 +6034,30 @@ test_a_folder_emptied_after_the_guide_passes_on_the_next_check() {
   # The user empties the folder while the script waits; Enter checks again.
   local d n=0
   d="$(tmpdir)"
-  mkdir "$d/full"; touch "$d/full/x"
+  mkdir "$d/full"
+  touch "$d/full/x"
   prepare "$d"
-  { while ! grep -q 'Press Enter' "$d/out" 2>/dev/null; do
-      n=$((n + 1)); [ "$n" -lt 600 ] || break; sleep 0.1
+  {
+    while ! grep -q 'Press Enter' "$d/out" 2>/dev/null; do
+      n=$((n + 1))
+      [ "$n" -lt 600 ] || break
+      sleep 0.1
     done
-    rm -f "$d/full/x"; echo
-  } | { pre_from_stdin "$d" with_dir "$d/full" preflight_target_dir; echo "$RC" >"$d/rc"; }
-  [ "$(cat "$d/rc")" -eq 0 ] || { cat "$d/out" "$d/err" >&2; die "exit $(cat "$d/rc"), want 0"; }
+    rm -f "$d/full/x"
+    echo
+  } | {
+    pre_from_stdin "$d" with_dir "$d/full" preflight_target_dir
+    echo "$RC" >"$d/rc"
+  }
+  [ "$(cat "$d/rc")" -eq 0 ] || {
+    cat "$d/out" "$d/err" >&2
+    die "exit $(cat "$d/rc"), want 0"
+  }
   [ "$(grep -c 'already has files in it' "$d/out")" -eq 1 ] || die "guide not shown exactly once"
-  [ "$(tail -1 "$d/out")" = "    Done. The folder is new or empty." ] || { cat "$d/out" >&2; die "no done line"; }
+  [ "$(tail -1 "$d/out")" = "    Done. The folder is new or empty." ] || {
+    cat "$d/out" >&2
+    die "no done line"
+  }
 }
 
 # own_copy <dir> <origin>: a git project in <dir> with one saved change
@@ -4900,7 +6115,8 @@ test_the_folder_must_be_in_a_folder_that_exists_and_is_outside_any_git_project()
   expect_rc 3 "$d"
   expect_out "$d" "is inside another project that git keeps track of"
   # With --resume too: a kept folder is checked by the folder above it.
-  mkdir -p "$d/outer/sub/kept"; touch "$d/outer/sub/kept/x"
+  mkdir -p "$d/outer/sub/kept"
+  touch "$d/outer/sub/kept/x"
   pre "$d" ni resume with_dir "$d/outer/sub/kept" preflight_target_dir
   expect_rc 3 "$d"
   # A copy that is a git project of its own, in a plain folder, still
@@ -4940,7 +6156,10 @@ test_the_project_around_the_folder_is_named_as_the_user_wrote_the_path() {
   mkdir -p "$d/real"
   "$REAL_GIT" init -q "$d/real/outer"
   mkdir -p "$d/real/outer/sub" "$d/real/outer/deep/er"
-  ln -s "$d/real" "$d/link" 2>/dev/null || { echo "no symbolic links here; skipped"; return 0; }
+  ln -s "$d/real" "$d/link" 2>/dev/null || {
+    echo "no symbolic links here; skipped"
+    return 0
+  }
   # Below the top folder, and straight in it.
   pre "$d" ni with_dir "$d/link/outer/sub/app" preflight_target_dir
   expect_rc 3 "$d"
@@ -5017,7 +6236,8 @@ test_a_tilde_folder_is_refused_when_the_home_folder_is_not_known() {
   # #148 review, finding 1: the branch of check_dir for an empty HOME.
   local h
   for h in empty unset; do
-    ( load_script
+    (
+      load_script
       if [ "$h" = empty ]; then HOME=""; else unset HOME; fi
       # shellcheck disable=SC2088 # the test passes a ~ for check_dir to expand
       ! check_dir "~/projects/app" || die "HOME $h: ~/projects/app was taken as $CHECKED"
@@ -5035,8 +6255,14 @@ test_a_dangling_link_at_the_folder_path_is_refused_like_a_file() {
   # "absent": the copy cannot be made there, with or without --resume.
   local d
   d="$(tmpdir)"
-  ln -s "$d/gone" "$d/link" 2>/dev/null || { echo "no symbolic links here; skipped" >&2; return 0; }
-  [ -L "$d/link" ] && [ ! -e "$d/link" ] || { echo "not a dangling link here; skipped" >&2; return 0; }
+  ln -s "$d/gone" "$d/link" 2>/dev/null || {
+    echo "no symbolic links here; skipped" >&2
+    return 0
+  }
+  [ -L "$d/link" ] && [ ! -e "$d/link" ] || {
+    echo "not a dangling link here; skipped" >&2
+    return 0
+  }
   pre "$d" ni with_dir "$d/link" preflight_target_dir
   expect_rc 3 "$d"
   expect_out "$d" "$d/link is a file, not a folder."
@@ -5089,8 +6315,14 @@ test_git_questions_without_a_default_need_an_answer() {
   printf '%s\n' my-app "" "Lends tools." "" "" python "" none "" "" "Ada L" "" ada@example.com >"$d/in"
   inputs "$d"
   expect_inputs "$d" "GIT_NAME=Ada L" GIT_EMAIL=ada@example.com
-  [ "$(grep -c '^Your name for git: $' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "name not asked again"; }
-  [ "$(grep -c '^Your email address for git: $' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "email not asked again"; }
+  [ "$(grep -c '^Your name for git: $' "$d/out")" -eq 2 ] || {
+    cat "$d/out" >&2
+    die "name not asked again"
+  }
+  [ "$(grep -c '^Your email address for git: $' "$d/out")" -eq 2 ] || {
+    cat "$d/out" >&2
+    die "email not asked again"
+  }
 }
 
 test_git_name_and_email_are_checked_like_the_other_names() {
@@ -5136,7 +6368,10 @@ test_checks_on_this_computer_come_before_any_github_call_and_question() {
   printf '%s\n' my-app q >"$d/in"
   whole "$d"
   expect_rc 3 "$d"
-  ! grep -q "$(printf '\tapi\t')" "$d/gh.log" || { cat "$d/gh.log" >&2; die "GitHub was asked before the checks passed"; }
+  ! grep -q "$(printf '\tapi\t')" "$d/gh.log" || {
+    cat "$d/gh.log" >&2
+    die "GitHub was asked before the checks passed"
+  }
   expect_no_out "$d" "Project name"
   # All pass: the tool checks come first, then the account and the
   # published version (before the questions), then the permissions (a
@@ -5148,9 +6383,12 @@ test_checks_on_this_computer_come_before_any_github_call_and_question() {
   whole "$d" --non-interactive --dry-run "${REQUIRED_OPTS[@]}"
   expect_rc 0 "$d"
   [ "$(awk -F'\t' '{ print $2 " " $NF }' "$d/gh.log")" = "$(printf '%s\n' '--version --version' 'repo --help' 'pr --help' 'pr --help' \
-      'api .login, (.name // "")' 'api repos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md' \
-      'api .login, (.name // "")' 'api repos/octo-user/my-app' 'api .key')" ] \
-    || { cat "$d/gh.log" >&2; die "gh calls not in the order: tools, account, version, name, licence"; }
+    'api .login, (.name // "")' 'api repos/factoincognito/ai-project-bootstrap/contents/CHANGELOG.md' \
+    'api .login, (.name // "")' 'api repos/octo-user/my-app' 'api .key')" ] ||
+    {
+      cat "$d/gh.log" >&2
+      die "gh calls not in the order: tools, account, version, name, licence"
+    }
 }
 
 test_npm_and_folder_checks_come_after_the_questions() {
@@ -5165,11 +6403,15 @@ test_npm_and_folder_checks_come_after_the_questions() {
   expect_out "$d" "npm (part of Node.js) is not installed."
   grep -n 'Your email address for git' "$d/out" | head -1 | cut -d: -f1 >"$d/q"
   grep -n 'npm (part of Node.js)' "$d/out" | head -1 | cut -d: -f1 >"$d/g"
-  [ "$(cat "$d/q")" -lt "$(cat "$d/g")" ] || { cat "$d/out" >&2; die "npm was checked before the questions"; }
+  [ "$(cat "$d/q")" -lt "$(cat "$d/g")" ] || {
+    cat "$d/out" >&2
+    die "npm was checked before the questions"
+  }
   d="$(tmpdir)"
   working_git "$d"
   fake_tool "$d" npm 10.0.0
-  mkdir -p "$d/cwd/my-app"; touch "$d/cwd/my-app/x"
+  mkdir -p "$d/cwd/my-app"
+  touch "$d/cwd/my-app/x"
   whole "$d" --non-interactive --yes "${REQUIRED_OPTS[@]}"
   expect_rc 3 "$d"
   expect_out "$d" "The folder ./my-app already has files in it."
@@ -5185,31 +6427,101 @@ guide_cases() {
     guide_dir_no_parent gg_dir_not_writable gg_dir_in_git gg_dir_in_git_unknown \
     gg_actions_off gg_actions_local_only
 }
-gg_actions_off() { IN_OWNER=acme; IN_NAME=my-app; ACTIONS_PROBLEM=off; guide_actions_off; }
-gg_actions_local_only() {
-  IN_OWNER=acme; IN_NAME=my-app; PR_URL=https://github.com/acme/my-app/pull/1
-  ACTIONS_PROBLEM=local-only; guide_actions_off
+gg_actions_off() {
+  IN_OWNER=acme
+  IN_NAME=my-app
+  ACTIONS_PROBLEM=off
+  guide_actions_off
 }
-gg_npm_windows() { NPM_PROBLEM=windows; NPM_WINDOWS_PATH="/mnt/c/Program Files/nodejs//npm"; guide_npm; }
-gg_dir_not_writable() { DIR_UNWRITABLE=/srv/shared; guide_dir_not_writable; }
-gg_dir_in_git() { DIR_OUTER=/home/me/work; guide_dir_in_git; }
-gg_dir_in_git_unknown() { DIR_OUTER=""; guide_dir_in_git; }
-gg_signed_out() { ACCOUNT_PROBLEM=signed-out; guide_github_account; }
-gg_expired() { ACCOUNT_PROBLEM=expired; API_STATUS=401; API_MESSAGE="Bad credentials"; guide_github_account; }
-gg_offline() { ACCOUNT_PROBLEM=offline; API_ERR="error connecting to api.github.com"; guide_github_account; }
-gg_permissions() { PERM_PROBLEM=missing; PERM_MISSING=workflow; IN_VISIBILITY=public; guide_github_permissions; }
-gg_permissions_repo() { PERM_PROBLEM=missing; PERM_MISSING="repo workflow"; IN_VISIBILITY=private; guide_github_permissions; }
-gg_permissions_token() { GH_TOKEN=x; PERM_PROBLEM=missing; PERM_MISSING=workflow; IN_VISIBILITY=public; guide_github_permissions; }
-gg_old_script() { PUBLISHED_VERSION=v9.9.9; guide_old_script; }
-gg_project_exists() { IN_OWNER=acme; IN_NAME=my-app; guide_project_exists; }
-gg_create_taken() { IN_OWNER=acme; IN_NAME=my-app; CREATE_ERR="GraphQL: Name already exists on this account"; guide_create_taken; }
+gg_actions_local_only() {
+  IN_OWNER=acme
+  IN_NAME=my-app
+  PR_URL=https://github.com/acme/my-app/pull/1
+  ACTIONS_PROBLEM=local-only
+  guide_actions_off
+}
+gg_npm_windows() {
+  NPM_PROBLEM=windows
+  NPM_WINDOWS_PATH="/mnt/c/Program Files/nodejs//npm"
+  guide_npm
+}
+gg_dir_not_writable() {
+  DIR_UNWRITABLE=/srv/shared
+  guide_dir_not_writable
+}
+gg_dir_in_git() {
+  DIR_OUTER=/home/me/work
+  guide_dir_in_git
+}
+gg_dir_in_git_unknown() {
+  DIR_OUTER=""
+  guide_dir_in_git
+}
+gg_signed_out() {
+  ACCOUNT_PROBLEM=signed-out
+  guide_github_account
+}
+gg_expired() {
+  ACCOUNT_PROBLEM=expired
+  API_STATUS=401
+  API_MESSAGE="Bad credentials"
+  guide_github_account
+}
+gg_offline() {
+  ACCOUNT_PROBLEM=offline
+  API_ERR="error connecting to api.github.com"
+  guide_github_account
+}
+gg_permissions() {
+  PERM_PROBLEM=missing
+  PERM_MISSING=workflow
+  IN_VISIBILITY=public
+  guide_github_permissions
+}
+gg_permissions_repo() {
+  PERM_PROBLEM=missing
+  PERM_MISSING="repo workflow"
+  IN_VISIBILITY=private
+  guide_github_permissions
+}
+gg_permissions_token() {
+  GH_TOKEN=x
+  PERM_PROBLEM=missing
+  PERM_MISSING=workflow
+  IN_VISIBILITY=public
+  guide_github_permissions
+}
+gg_old_script() {
+  PUBLISHED_VERSION=v9.9.9
+  guide_old_script
+}
+gg_project_exists() {
+  IN_OWNER=acme
+  IN_NAME=my-app
+  guide_project_exists
+}
+gg_create_taken() {
+  IN_OWNER=acme
+  IN_NAME=my-app
+  CREATE_ERR="GraphQL: Name already exists on this account"
+  guide_create_taken
+}
 gg_create_refused() {
-  IN_OWNER=acme; IN_NAME=my-app; GH_LOGIN=octo-user; GH_SCOPES_SEEN=""
-  CREATE_ERR="GraphQL: Resource not accessible by personal access token"; guide_create_refused
+  IN_OWNER=acme
+  IN_NAME=my-app
+  GH_LOGIN=octo-user
+  GH_SCOPES_SEEN=""
+  CREATE_ERR="GraphQL: Resource not accessible by personal access token"
+  guide_create_refused
 }
 gg_protect() {
-  IN_OWNER=acme; IN_NAME=my-app; RESTART_CMD="bootstrap-project.sh --resume"
-  PROTECT_PROBLEM="$1"; API_STATUS=403; API_MESSAGE="$2"; guide_protect
+  IN_OWNER=acme
+  IN_NAME=my-app
+  RESTART_CMD="bootstrap-project.sh --resume"
+  PROTECT_PROBLEM="$1"
+  API_STATUS=403
+  API_MESSAGE="$2"
+  guide_protect
 }
 gg_protect_plan() { gg_protect plan "Upgrade to GitHub Pro or make this repository public to enable this feature."; }
 gg_protect_token() { gg_protect token "Resource not accessible by personal access token"; }
@@ -5237,12 +6549,18 @@ guide_shape_problem() {
     if [[ $line =~ $GUIDE_RE_ELSE ]]; then other=1; fi
     if [[ $line =~ $GUIDE_RE_HOW ]]; then how=1; fi
   done <"$1"
-  if [ -z "$title" ]; then echo "no one-line title first"
-  elif [ -z "$why" ]; then echo "no why"
-  elif [ -z "$step" ]; then echo "no numbered step"
-  elif [ -z "$worked" ]; then echo "no result"
-  elif [ -z "$other" ]; then echo "no fallback"
-  elif [ -z "$how" ]; then echo "no check named"
+  if [ -z "$title" ]; then
+    echo "no one-line title first"
+  elif [ -z "$why" ]; then
+    echo "no why"
+  elif [ -z "$step" ]; then
+    echo "no numbered step"
+  elif [ -z "$worked" ]; then
+    echo "no result"
+  elif [ -z "$other" ]; then
+    echo "no fallback"
+  elif [ -z "$how" ]; then
+    echo "no check named"
   fi
 }
 
@@ -5291,7 +6609,8 @@ test_every_guide_says_why_how_what_you_see_and_how_it_is_checked() {
   local d os g with label problem hits prose cases=0
   prose="$(tmpdir)/prose"
   : >"$prose"
-  PROSE_N=0; PROSE_LABEL=()
+  PROSE_N=0
+  PROSE_LABEL=()
   for os in macos linux windows; do
     for with in "" brew winget; do
       d="$(tmpdir)"
@@ -5300,9 +6619,15 @@ test_every_guide_says_why_how_what_you_see_and_how_it_is_checked() {
       for g in $(guide_cases); do
         pre "$d" with_pack web with_dir "$d/f" "$g"
         label="$os/${with:-none}/$g"
-        [ "$RC" -eq 0 ] || { cat "$d/err" >&2; die "$label failed"; }
+        [ "$RC" -eq 0 ] || {
+          cat "$d/err" >&2
+          die "$label failed"
+        }
         problem="$(guide_shape_problem "$d/out")"
-        [ -z "$problem" ] || { cat "$d/out" >&2; die "$label: $problem"; }
+        [ -z "$problem" ] || {
+          cat "$d/out" >&2
+          die "$label: $problem"
+        }
         numbered_prose "$d/out" "$label" >>"$prose"
         [ "$PROSE_CASE_LINES" -gt 0 ] || die "$label: no prose collected"
         cases=$((cases + 1))
@@ -5311,7 +6636,10 @@ test_every_guide_says_why_how_what_you_see_and_how_it_is_checked() {
   done
   [ "$cases" -eq $((3 * 3 * $(guide_cases | grep -c .))) ] || die "only $cases cases were checked"
   hits="$(banned_hits <"$prose")"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" | labelled_hits >&2; die "banned word in a guide (cases above)"; }
+  [ -z "$hits" ] || {
+    printf '%s\n' "$hits" | labelled_hits >&2
+    die "banned word in a guide (cases above)"
+  }
 }
 
 test_the_every_guide_checks_catch_what_they_look_for() {
@@ -5333,8 +6661,8 @@ test_the_every_guide_checks_catch_what_they_look_for() {
     'no one-line title first|1s/.*/Short./' 'no one-line title first|1s/^/  /' \
     'no why|s/^Why this is needed: .*/Why this is needed: too short./' 'no numbered step|s/^  1\. /1. /'; do
     sed "${f#*|}" "$good" >"$d/bad"
-    [ "$(guide_shape_problem "$d/bad")" = "${f%%|*}" ] \
-      || die "'${f#*|}': got '$(guide_shape_problem "$d/bad")', want '${f%%|*}'"
+    [ "$(guide_shape_problem "$d/bad")" = "${f%%|*}" ] ||
+      die "'${f#*|}': got '$(guide_shape_problem "$d/bad")', want '${f%%|*}'"
   done
   # The last line counts even without a line break after it.
   printf '%s' "$(cat "$good")" >"$d/last"
@@ -5344,13 +6672,14 @@ test_the_every_guide_checks_catch_what_they_look_for() {
   # case's line is number 2 overall and number 1 within its case.
   printf '%s\n' '    open the repo page' 'Open the repo page.' >"$d/words"
   printf '%s\n' 'All is well here.' >"$d/clean"
-  PROSE_N=0; PROSE_LABEL=()
+  PROSE_N=0
+  PROSE_LABEL=()
   numbered_prose "$d/clean" linux/none/guide_npm >"$d/prose"
   numbered_prose "$d/words" macos/none/guide_git >>"$d/prose"
   [ "$PROSE_CASE_LINES" -eq 1 ] || die "numbered_prose counted $PROSE_CASE_LINES lines for one prose line"
   [ "$(sed -n 2p "$d/prose")" = "2: Open the repo page." ] || die "numbered_prose read the command line or counted it"
-  [ "$(banned_hits <"$d/prose" | labelled_hits)" = "macos/none/guide_git 1: Open the repo page." ] \
-    || die "the banned word in prose was not caught with its case, or the command line was read"
+  [ "$(banned_hits <"$d/prose" | labelled_hits)" = "macos/none/guide_git 1: Open the repo page." ] ||
+    die "the banned word in prose was not caught with its case, or the command line was read"
   # The why needs at least 6 words (5 words, each followed by a space,
   # then more): 5 in all is refused, 6 accepted.
   sed 's/^Why this is needed: .*/Why this is needed: one two three four five/' "$good" >"$d/bad"
@@ -5400,7 +6729,10 @@ test_wsl_is_read_from_the_kernel_release_on_linux_only() {
     d="$(tmpdir)"
     on_wsl "$d" "$1"
     pre "$d" eval 'say "${LINUX_WSL:-none}"'
-    [ "$(cat "$d/out")" = "$2" ] || { cat "$d/err" >&2; die "kernel release $1 gave $(cat "$d/out"), want $2"; }
+    [ "$(cat "$d/out")" = "$2" ] || {
+      cat "$d/err" >&2
+      die "kernel release $1 gave $(cat "$d/out"), want $2"
+    }
   done
   # Error paths: no kernel release file, an empty one, one with carriage
   # returns and no line break; and a Microsoft release on another OS
@@ -5441,9 +6773,15 @@ test_every_say_command_call_on_a_line_is_checked() {
   from="$(planted_from)"
   hits="$(command_arg_violations "$copy" | only_planted "$from")"
   n="$(printf '%s\n' "$hits" | grep -c . || true)"
-  [ "$n" -eq 3 ] || { printf '%s\n' "$hits" >&2; die "flagged $n, want the first 3 planted lines"; }
-  ! printf '%s\n' "$hits" | awk -F'[:\t]' -v f="$from" '$1 == f + 4' | grep . >/dev/null \
-    || { printf '%s\n' "$hits" >&2; die "two good commands on one line were flagged"; }
+  [ "$n" -eq 3 ] || {
+    printf '%s\n' "$hits" >&2
+    die "flagged $n, want the first 3 planted lines"
+  }
+  ! printf '%s\n' "$hits" | awk -F'[:\t]' -v f="$from" '$1 == f + 4' | grep . >/dev/null ||
+    {
+      printf '%s\n' "$hits" >&2
+      die "two good commands on one line were flagged"
+    }
 }
 
 test_the_literal_scan_opt_out_marker_leaves_out_only_its_own_line() {
@@ -5473,7 +6811,10 @@ test_the_literal_scan_opt_out_marker_leaves_out_only_its_own_line() {
   from="$(planted_from)"
   hits="$(all_banned_hits "$copy" | only_planted "$from")"
   got="$(printf '%s\n' "$hits" | awk -F: -v f="$from" 'NF { printf "%s%d", sep, $1 - f + 1; sep = " " }')"
-  [ "$got" = "3 4 6 7 9 11" ] || { printf '%s\n' "$hits" >&2; die "flagged planted lines [$got], want [3 4 6 7 9 11]"; }
+  [ "$got" = "3 4 6 7 9 11" ] || {
+    printf '%s\n' "$hits" >&2
+    die "flagged planted lines [$got], want [3 4 6 7 9 11]"
+  }
 }
 
 test_ask_terminal_says_no_at_once_when_there_is_no_terminal() {
@@ -5483,17 +6824,25 @@ test_ask_terminal_says_no_at_once_when_there_is_no_terminal() {
   d="$(tmpdir)"
   printf 'yes\n' >"$d/in"
   set +e
-  ( load_script
+  (
+    load_script
     export BOOTSTRAP_TTY="$d/no-such-terminal"
     rc=0
     ask_terminal "Why it is asked, in a sentence." "Run it now? (yes or no)" || rc=$?
     echo "rc=$rc"
-    IFS= read -r line; echo "stdin=$line"
+    IFS= read -r line
+    echo "stdin=$line"
   ) <"$d/in" >"$d/out" 2>"$d/err"
   set -e
-  [ "$(cat "$d/out")" = "$(printf '%s\n' 'Why it is asked, in a sentence.' 'Run it now? (yes or no) [no]: ' 'rc=1' 'stdin=yes')" ] \
-    || { cat "$d/out" "$d/err" >&2; die "no terminal: not a plain no"; }
-  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "an error was shown"; }
+  [ "$(cat "$d/out")" = "$(printf '%s\n' 'Why it is asked, in a sentence.' 'Run it now? (yes or no) [no]: ' 'rc=1' 'stdin=yes')" ] ||
+    {
+      cat "$d/out" "$d/err" >&2
+      die "no terminal: not a plain no"
+    }
+  [ ! -s "$d/err" ] || {
+    cat "$d/err" >&2
+    die "an error was shown"
+  }
 }
 
 # Keys typed before a question (end-to-end run 1 on v2.7.0, finding r1f):
@@ -5551,18 +6900,29 @@ test_the_run_offer_is_not_answered_by_keys_typed_before_it() {
   printf '\nyes\n' >"$d/tty"
   printf 'from stdin\n' >"$d/in"
   set +e
-  ( load_script
+  (
+    load_script
     export PATH="$d/bin:$PATH" BOOTSTRAP_TTY="$d/tty" BOOTSTRAP_INPUT_TERMINAL=yes
     rc=0
     ask_terminal "Why it is asked, in a sentence." "Run it now? (yes or no)" || rc=$?
     echo "rc=$rc"
-    IFS= read -r line; echo "stdin=$line"
+    IFS= read -r line
+    echo "stdin=$line"
   ) <"$d/in" >"$d/out" 2>"$d/err"
   set -e
-  [ "$(cat "$d/out")" = "$(printf '%s\n' 'Why it is asked, in a sentence.' 'Run it now? (yes or no) [no]: ' 'rc=0' 'stdin=from stdin')" ] \
-    || { cat "$d/out" "$d/err" "$d/tty.log" >&2; die "the waiting line answered the offer"; }
-  [ "$(cat "$d/tty.log")" = "$TYPEAHEAD_DISCARDED" ] || { cat "$d/tty.log" >&2; die "not discarded as expected"; }
-  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "an error was shown"; }
+  [ "$(cat "$d/out")" = "$(printf '%s\n' 'Why it is asked, in a sentence.' 'Run it now? (yes or no) [no]: ' 'rc=0' 'stdin=from stdin')" ] ||
+    {
+      cat "$d/out" "$d/err" "$d/tty.log" >&2
+      die "the waiting line answered the offer"
+    }
+  [ "$(cat "$d/tty.log")" = "$TYPEAHEAD_DISCARDED" ] || {
+    cat "$d/tty.log" >&2
+    die "not discarded as expected"
+  }
+  [ ! -s "$d/err" ] || {
+    cat "$d/err" >&2
+    die "an error was shown"
+  }
 }
 
 test_keys_are_discarded_only_at_a_terminal_never_from_a_file_or_pipe() {
@@ -5578,7 +6938,8 @@ test_keys_are_discarded_only_at_a_terminal_never_from_a_file_or_pipe() {
     printf '\nyes\n' >"$d/tty"
     printf '\nyes\n' >"$d/in"
     set +e
-    ( load_script
+    (
+      load_script
       export PATH="$d/bin:$PATH" BOOTSTRAP_TTY="$d/tty"
       if [ "$hook" = unset ]; then unset BOOTSTRAP_INPUT_TERMINAL; else export BOOTSTRAP_INPUT_TERMINAL=no; fi
       rc=0
@@ -5591,12 +6952,24 @@ test_keys_are_discarded_only_at_a_terminal_never_from_a_file_or_pipe() {
     ) <"$d/in" >"$d/out" 2>"$d/err"
     rc=$?
     set -e
-    grep -qx 'offer rc=1' "$d/out" || { cat "$d/out" >&2; die "[$hook] the offer did not read the first line of the file"; }
-    grep -qx 'pause rc=0' "$d/out" || { cat "$d/out" >&2; die "[$hook] the pause did not read the first line of the pipe"; }
+    grep -qx 'offer rc=1' "$d/out" || {
+      cat "$d/out" >&2
+      die "[$hook] the offer did not read the first line of the file"
+    }
+    grep -qx 'pause rc=0' "$d/out" || {
+      cat "$d/out" >&2
+      die "[$hook] the pause did not read the first line of the pipe"
+    }
     # shellcheck disable=SC2015 # die is meant to run when either check fails
-    [ "$rc" -eq 1 ] && grep '^What happened: You answered no' "$d/err" >/dev/null \
-      || { cat "$d/out" "$d/err" >&2; die "[$hook] Proceed? did not read the first line of the file"; }
-    [ ! -e "$d/tty.log" ] || { cat "$d/tty.log" >&2; die "[$hook] stty or dd ran for answers from a file"; }
+    [ "$rc" -eq 1 ] && grep '^What happened: You answered no' "$d/err" >/dev/null ||
+      {
+        cat "$d/out" "$d/err" >&2
+        die "[$hook] Proceed? did not read the first line of the file"
+      }
+    [ ! -e "$d/tty.log" ] || {
+      cat "$d/tty.log" >&2
+      die "[$hook] stty or dd ran for answers from a file"
+    }
   done
 }
 
@@ -5613,22 +6986,41 @@ test_a_terminal_whose_mode_cannot_be_set_is_read_as_it_is() {
     typeahead_tools "$d"
     printf '\nyes\n' >"$d/tty"
     case "$fails" in
-      g) want="stty -g"; rc_want=1 ;;
-      set) want="$(printf '%s\n' 'stty -g' 'stty -icanon min 0 time 0' 'stty saved-state')"; rc_want=1 ;;
-      restore) want="$(printf '%s\n' "$TYPEAHEAD_DISCARDED" 'stty sane')"; rc_want=0 ;;
+      g)
+        want="stty -g"
+        rc_want=1
+        ;;
+      set)
+        want="$(printf '%s\n' 'stty -g' 'stty -icanon min 0 time 0' 'stty saved-state')"
+        rc_want=1
+        ;;
+      restore)
+        want="$(printf '%s\n' "$TYPEAHEAD_DISCARDED" 'stty sane')"
+        rc_want=0
+        ;;
     esac
     set +e
-    ( load_script
+    (
+      load_script
       export PATH="$d/bin:$PATH" BOOTSTRAP_TTY="$d/tty" BOOTSTRAP_INPUT_TERMINAL=yes STUB_STTY_FAILS="$fails"
       rc=0
       ask_terminal "Why it is asked, in a sentence." "Run it now? (yes or no)" || rc=$?
       echo "rc=$rc"
     ) </dev/null >"$d/out" 2>"$d/err"
     set -e
-    [ "$(cat "$d/tty.log")" = "$want" ] || { cat "$d/tty.log" >&2; die "[$fails] calls differ"; }
-    [ "$(cat "$d/out")" = "$(printf '%s\n' 'Why it is asked, in a sentence.' 'Run it now? (yes or no) [no]: ' "rc=$rc_want")" ] \
-      || { cat "$d/out" "$d/err" >&2; die "[$fails] the question was not asked and read"; }
-    [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "[$fails] an error was shown"; }
+    [ "$(cat "$d/tty.log")" = "$want" ] || {
+      cat "$d/tty.log" >&2
+      die "[$fails] calls differ"
+    }
+    [ "$(cat "$d/out")" = "$(printf '%s\n' 'Why it is asked, in a sentence.' 'Run it now? (yes or no) [no]: ' "rc=$rc_want")" ] ||
+      {
+        cat "$d/out" "$d/err" >&2
+        die "[$fails] the question was not asked and read"
+      }
+    [ ! -s "$d/err" ] || {
+      cat "$d/err" >&2
+      die "[$fails] an error was shown"
+    }
   done
 }
 
@@ -5646,7 +7038,8 @@ test_ctrl_c_during_the_discard_puts_the_terminal_mode_back() {
     printf '\nyes\n' >"$d/tty"
     printf '\nyes\n' >"$d/in"
     set +e
-    ( load_script
+    (
+      load_script
       export PATH="$d/bin:$PATH" BOOTSTRAP_TTY="$d/tty" BOOTSTRAP_INPUT_TERMINAL=yes STUB_DD_INT=1
       catch_stops
       case "$mode" in
@@ -5657,9 +7050,15 @@ test_ctrl_c_during_the_discard_puts_the_terminal_mode_back() {
     ) <"$d/in" >"$d/out" 2>"$d/err"
     rc=$?
     set -e
-    [ "$rc" -eq 130 ] || { cat "$d/out" "$d/err" "$d/tty.log" >&2; die "[$mode] exit $rc, want 130 (Ctrl-C)"; }
-    [ "$(cat "$d/tty.log")" = "$TYPEAHEAD_DISCARDED" ] \
-      || { cat "$d/tty.log" >&2; die "[$mode] the saved mode was not put back once after Ctrl-C"; }
+    [ "$rc" -eq 130 ] || {
+      cat "$d/out" "$d/err" "$d/tty.log" >&2
+      die "[$mode] exit $rc, want 130 (Ctrl-C)"
+    }
+    [ "$(cat "$d/tty.log")" = "$TYPEAHEAD_DISCARDED" ] ||
+      {
+        cat "$d/tty.log" >&2
+        die "[$mode] the saved mode was not put back once after Ctrl-C"
+      }
   done
 }
 
@@ -5679,7 +7078,8 @@ test_the_discard_comes_before_the_question_is_shown() {
       pause) shown='Press Enter' ;;
     esac
     set +e
-    ( load_script
+    (
+      load_script
       export PATH="$d/bin:$PATH" BOOTSTRAP_TTY="$d/tty" BOOTSTRAP_INPUT_TERMINAL=yes STUB_DD_SHOWN="$shown"
       case "$mode" in
         offer) ask_terminal "Why it is asked, in a sentence." "Run it now? (yes or no)" ;;
@@ -5688,9 +7088,15 @@ test_the_discard_comes_before_the_question_is_shown() {
       esac
     ) <"$d/in" >"$d/out" 2>"$d/err"
     set -e
-    grep -F -e "$shown" "$d/out" >/dev/null || { cat "$d/out" "$d/err" >&2; die "[$mode] the question was not shown"; }
-    grep -qx 'dd: question already shown: no' "$d/tty.log" \
-      || { cat "$d/tty.log" "$d/out" >&2; die "[$mode] the discard did not come before the question"; }
+    grep -F -e "$shown" "$d/out" >/dev/null || {
+      cat "$d/out" "$d/err" >&2
+      die "[$mode] the question was not shown"
+    }
+    grep -qx 'dd: question already shown: no' "$d/tty.log" ||
+      {
+        cat "$d/tty.log" "$d/out" >&2
+        die "[$mode] the discard did not come before the question"
+      }
   done
 }
 
@@ -5710,7 +7116,10 @@ test_keys_typed_before_a_question_are_discarded_at_a_real_terminal() {
   local d mode waiting call real_dd
   if ! command -v python3 >/dev/null 2>&1 || ! python3 -I -c 'import pty, termios' >/dev/null 2>&1; then
     case "$(uname -s)" in
-      MINGW* | MSYS* | CYGWIN*) skip_test "no python3 with a pty module on Windows"; return 0 ;;
+      MINGW* | MSYS* | CYGWIN*)
+        skip_test "no python3 with a pty module on Windows"
+        return 0
+        ;;
     esac
     die "python3 with its pty module is needed for this test here (it is skipped only on Windows)"
   fi
@@ -5757,8 +7166,11 @@ EOF
       call="if ( $call ); then echo ANSWER=yes; else echo ANSWER=no; fi"
       if [ "$waiting" = yes ]; then first='go||'; else first='go|'; fi
       python3 -I "$d/drive.py" "$BASH" "$SCRIPT" "$call" "$first" >"$d/out.$mode.$waiting" 2>&1 || true
-      grep -q 'ANSWER=yes' "$d/out.$mode.$waiting" \
-        || { cat "$d/out.$mode.$waiting" >&2; die "[$mode, line waiting: $waiting] the yes typed after the question was not what answered it"; }
+      grep -q 'ANSWER=yes' "$d/out.$mode.$waiting" ||
+        {
+          cat "$d/out.$mode.$waiting" >&2
+          die "[$mode, line waiting: $waiting] the yes typed after the question was not what answered it"
+        }
     done
   done
   for mode in offer proceed; do
@@ -5769,9 +7181,15 @@ EOF
     # The script sets -e: the 130 is caught, so the shell goes on to stty -a.
     call="rc=0; ( PATH=\"$d/int:\$PATH\"; catch_stops; $call ) || rc=\$?; echo \"EXIT=\$rc\"; stty -a"
     python3 -I "$d/drive.py" "$BASH" "$SCRIPT" "$call" 'go|' >"$d/out.$mode.int" 2>&1 || true
-    grep -q 'EXIT=130' "$d/out.$mode.int" || { cat "$d/out.$mode.int" >&2; die "[$mode, Ctrl-C] not stopped with 130"; }
-    grep -E '(^|[[:space:]])icanon([[:space:];]|$)' "$d/out.$mode.int" >/dev/null \
-      || { cat "$d/out.$mode.int" >&2; die "[$mode, Ctrl-C] the terminal was left without icanon"; }
+    grep -q 'EXIT=130' "$d/out.$mode.int" || {
+      cat "$d/out.$mode.int" >&2
+      die "[$mode, Ctrl-C] not stopped with 130"
+    }
+    grep -E '(^|[[:space:]])icanon([[:space:];]|$)' "$d/out.$mode.int" >/dev/null ||
+      {
+        cat "$d/out.$mode.int" >&2
+        die "[$mode, Ctrl-C] the terminal was left without icanon"
+      }
   done
 }
 
@@ -5786,10 +7204,22 @@ test_non_interactive_reports_every_option_problem_before_the_checks() {
   echo 9999 >"$d/gh-missing"
   whole "$d" --non-interactive --name my-app --pack nodes
   expect_rc 2 "$d"
-  grep -qE -- '^    - --pack: ' "$d/err" || { cat "$d/err" >&2; die "the wrong pack was not listed"; }
-  grep -qE -- '^    - --description: ' "$d/err" || { cat "$d/err" >&2; die "the missing description was not listed"; }
-  grep -qE -- '^    - --license: ' "$d/err" || { cat "$d/err" >&2; die "the missing licence was not listed"; }
-  [ ! -e "$d/gh.log" ] || { cat "$d/gh.log" >&2; die "gh was used before the options were reported"; }
+  grep -qE -- '^    - --pack: ' "$d/err" || {
+    cat "$d/err" >&2
+    die "the wrong pack was not listed"
+  }
+  grep -qE -- '^    - --description: ' "$d/err" || {
+    cat "$d/err" >&2
+    die "the missing description was not listed"
+  }
+  grep -qE -- '^    - --license: ' "$d/err" || {
+    cat "$d/err" >&2
+    die "the missing licence was not listed"
+  }
+  [ ! -e "$d/gh.log" ] || {
+    cat "$d/gh.log" >&2
+    die "gh was used before the options were reported"
+  }
   expect_no_out "$d" "==> Checking"
   # With git missing, git's settings cannot be read: the git name and
   # email are not reported as missing; the git guide comes first.
@@ -5800,7 +7230,10 @@ test_non_interactive_reports_every_option_problem_before_the_checks() {
   whole "$d" --non-interactive --yes "${REQUIRED_OPTS[@]}"
   expect_rc 3 "$d"
   expect_out "$d" "git is not installed."
-  ! grep -q -- '--git-name' "$d/err" || { cat "$d/err" >&2; die "the git name was listed although git is missing"; }
+  ! grep -q -- '--git-name' "$d/err" || {
+    cat "$d/err" >&2
+    die "the git name was listed although git is missing"
+  }
 }
 
 # ---------- guided preflight: GitHub checks ----------
@@ -5815,16 +7248,37 @@ test_non_interactive_reports_every_option_problem_before_the_checks() {
 # has no guide stops with a plain message, the next action and gh's raw
 # text below it, exit 1.
 
-with_vis() { IN_VISIBILITY="$1"; shift; "$@"; }
-with_project() { IN_OWNER="$1"; IN_NAME="$2"; shift 2; "$@"; }
+with_vis() {
+  IN_VISIBILITY="$1"
+  shift
+  "$@"
+}
+with_project() {
+  IN_OWNER="$1"
+  IN_NAME="$2"
+  shift 2
+  "$@"
+}
 
 # expect_err_shape <dir> <first line pattern>: the plain error, then the
 # next action, then the raw text under "Details for support".
 expect_err_shape() {
-  sed -n 1p "$1/err" | grep -E "^What happened: $2" >/dev/null || { cat "$1/err" >&2; die "first line is not: $2"; }
-  sed -n 2p "$1/err" | grep -E '^What to do next: .{10,}' >/dev/null || { cat "$1/err" >&2; die "no next action"; }
-  sed -n 3p "$1/err" | grep -xF 'Details for support (you can ignore these):' >/dev/null || { cat "$1/err" >&2; die "raw text not introduced"; }
-  [ "$(sed -n '4,$p' "$1/err" | grep -vc '^    ')" -eq 0 ] || { cat "$1/err" >&2; die "raw text not indented below"; }
+  sed -n 1p "$1/err" | grep -E "^What happened: $2" >/dev/null || {
+    cat "$1/err" >&2
+    die "first line is not: $2"
+  }
+  sed -n 2p "$1/err" | grep -E '^What to do next: .{10,}' >/dev/null || {
+    cat "$1/err" >&2
+    die "no next action"
+  }
+  sed -n 3p "$1/err" | grep -xF 'Details for support (you can ignore these):' >/dev/null || {
+    cat "$1/err" >&2
+    die "raw text not introduced"
+  }
+  [ "$(sed -n '4,$p' "$1/err" | grep -vc '^    ')" -eq 0 ] || {
+    cat "$1/err" >&2
+    die "raw text not indented below"
+  }
 }
 
 # expect_sign_in_first_before_the_code <dir>: the guide says that GitHub
@@ -5835,7 +7289,10 @@ expect_sign_in_first_before_the_code() {
   expect_out "$1" "If your browser is not signed in to GitHub, GitHub first asks you to sign in: your user name or email address, your password, and a two-factor code if you use one. Then it shows the page for the code."
   s="$(grep -nF 'If your browser is not signed in to GitHub' "$1/out" | head -1 | cut -d: -f1)"
   c="$(grep -nF 'paste the code' "$1/out" | head -1 | cut -d: -f1)"
-  [ -n "$c" ] && [ "$s" -lt "$c" ] || { cat "$1/out" >&2; die "the sign-in step does not come before the step with the code"; }
+  [ -n "$c" ] && [ "$s" -lt "$c" ] || {
+    cat "$1/out" >&2
+    die "the sign-in step does not come before the step with the code"
+  }
 }
 
 test_a_signed_out_gh_is_guided_to_sign_in() {
@@ -5849,8 +7306,11 @@ test_a_signed_out_gh_is_guided_to_sign_in() {
   pre "$d" ni preflight_github_account
   expect_rc 3 "$d"
   expect_out "$d" "gh (the GitHub command-line tool) is not signed in to your GitHub account."
-  grep -qxF '    gh auth login -h github.com -p https -w -s workflow' "$d/out" \
-    || { cat "$d/out" >&2; die "the sign-in command is not shown"; }
+  grep -qxF '    gh auth login -h github.com -p https -w -s workflow' "$d/out" ||
+    {
+      cat "$d/out" >&2
+      die "the sign-in command is not shown"
+    }
   expect_out "$d" "Authenticate Git"
   # End-to-end run 2, r2c: under WSL gh cannot open a browser; the guide
   # says to open the device page yourself, as the README does.
@@ -5862,7 +7322,10 @@ test_a_signed_out_gh_is_guided_to_sign_in() {
   expect_out "$d" "To start again, run this command:"
   expect_no_out "$d" "Run it now?"
   expect_nothing_ran "$d"
-  sed -n 1p "$d/err" | grep -E '^What happened: gh .* is not signed in' >/dev/null || { cat "$d/err" >&2; die "no plain error"; }
+  sed -n 1p "$d/err" | grep -E '^What happened: gh .* is not signed in' >/dev/null || {
+    cat "$d/err" >&2
+    die "no plain error"
+  }
   # Interactive: signed in while the script waits, Enter checks again.
   d="$(tmpdir)"
   echo 1 >"$d/user-fails"
@@ -5870,8 +7333,14 @@ test_a_signed_out_gh_is_guided_to_sign_in() {
   pre "$d" preflight_github_account
   expect_rc 0 "$d"
   expect_out "$d" "Press Enter to check again"
-  [ "$(tail -1 "$d/out")" = "    Done. gh is signed in to GitHub as octo-user." ] || { cat "$d/out" >&2; die "no done line"; }
-  [ "$(grep -c "$(printf '\tuser\t')" "$d/gh.log")" -eq 2 ] || { cat "$d/gh.log" >&2; die "the account was not read twice"; }
+  [ "$(tail -1 "$d/out")" = "    Done. gh is signed in to GitHub as octo-user." ] || {
+    cat "$d/out" >&2
+    die "no done line"
+  }
+  [ "$(grep -c "$(printf '\tuser\t')" "$d/gh.log")" -eq 2 ] || {
+    cat "$d/gh.log" >&2
+    die "the account was not read twice"
+  }
 }
 
 test_a_sign_in_github_no_longer_accepts_is_guided_with_details() {
@@ -5881,9 +7350,15 @@ test_a_sign_in_github_no_longer_accepts_is_guided_with_details() {
   pre "$d" ni preflight_github_account
   expect_rc 3 "$d"
   expect_out "$d" "GitHub no longer accepts the sign-in that gh (the GitHub command-line tool) has on this computer."
-  grep -qxF '    gh auth login -h github.com -p https -w -s workflow' "$d/out" || { cat "$d/out" >&2; die "no sign-in command"; }
+  grep -qxF '    gh auth login -h github.com -p https -w -s workflow' "$d/out" || {
+    cat "$d/out" >&2
+    die "no sign-in command"
+  }
   expect_out "$d" "Details for support (you can ignore these):"
-  grep -qxF '    HTTP 401: Bad credentials' "$d/out" || { cat "$d/out" >&2; die "raw text not shown below the guide"; }
+  grep -qxF '    HTTP 401: Bad credentials' "$d/out" || {
+    cat "$d/out" >&2
+    die "raw text not shown below the guide"
+  }
 }
 
 test_github_out_of_reach_is_guided_and_checked_again() {
@@ -5896,8 +7371,14 @@ test_github_out_of_reach_is_guided_and_checked_again() {
   expect_rc 0 "$d"
   expect_out "$d" "The script could not reach GitHub."
   expect_out "$d" "https://www.githubstatus.com"
-  grep -qxF '    error connecting to api.github.com' "$d/out" || { cat "$d/out" >&2; die "gh's text not shown below the guide"; }
-  [ "$(tail -1 "$d/out")" = "    Done. gh is signed in to GitHub as octo-user." ] || { cat "$d/out" >&2; die "no done line"; }
+  grep -qxF '    error connecting to api.github.com' "$d/out" || {
+    cat "$d/out" >&2
+    die "gh's text not shown below the guide"
+  }
+  [ "$(tail -1 "$d/out")" = "    Done. gh is signed in to GitHub as octo-user." ] || {
+    cat "$d/out" >&2
+    die "no done line"
+  }
 }
 
 test_other_github_errors_are_explained_with_the_raw_text_below() {
@@ -5907,14 +7388,21 @@ test_other_github_errors_are_explained_with_the_raw_text_below() {
   local d mode want
   for mode in "server GitHub had a problem of its own" "rate-limit GitHub has paused" \
     "forbidden GitHub refused" "teapot Something unexpected happened"; do
-    want="${mode#* }"; mode="${mode%% *}"
+    want="${mode#* }"
+    mode="${mode%% *}"
     d="$(tmpdir)"
     export STUB_GH_USER_FAIL="$mode"
     pre "$d" ni preflight_github_account
     expect_rc 1 "$d"
     expect_err_shape "$d" "$want"
-    grep -qE '^    HTTP [0-9]{3}: .' "$d/err" || { cat "$d/err" >&2; die "$mode: status and message not below"; }
-    grep -qE '^    gh: .*\(HTTP [0-9]{3}\)$' "$d/err" || { cat "$d/err" >&2; die "$mode: gh's text not below"; }
+    grep -qE '^    HTTP [0-9]{3}: .' "$d/err" || {
+      cat "$d/err" >&2
+      die "$mode: status and message not below"
+    }
+    grep -qE '^    gh: .*\(HTTP [0-9]{3}\)$' "$d/err" || {
+      cat "$d/err" >&2
+      die "$mode: gh's text not below"
+    }
     expect_out "$d" "To start again, run this command:"
     unset STUB_GH_USER_FAIL
   done
@@ -5923,14 +7411,20 @@ test_other_github_errors_are_explained_with_the_raw_text_below() {
   pre "$d" ni preflight_published_version
   expect_rc 1 "$d"
   expect_err_shape "$d" ".*(current version|bootstrapper)"
-  grep -qxF '    HTTP 404: Not Found' "$d/err" || { cat "$d/err" >&2; die "404 not shown below"; }
+  grep -qxF '    HTTP 404: Not Found' "$d/err" || {
+    cat "$d/err" >&2
+    die "404 not shown below"
+  }
   unset STUB_GH_CHANGELOG_FAIL
   d="$(tmpdir)"
   export STUB_GH_REPO_FAIL=forbidden
   pre "$d" ni with_project acme my-app preflight_project_absent
   expect_rc 1 "$d"
   expect_err_shape "$d" "GitHub refused"
-  grep -qxF '    HTTP 403: Resource not accessible by integration' "$d/err" || { cat "$d/err" >&2; die "403 not shown below"; }
+  grep -qxF '    HTTP 403: Resource not accessible by integration' "$d/err" || {
+    cat "$d/err" >&2
+    die "403 not shown below"
+  }
 }
 
 test_github_sign_in_is_checked_before_the_questions() {
@@ -5962,11 +7456,17 @@ test_github_sign_in_is_checked_before_the_questions() {
   whole "$d"
   expect_rc 1 "$d"
   expect_out "$d" "Owner [octo-user]: "
-  [ "$(grep -c "$(printf '\tuser\t')" "$d/gh.log")" -eq 2 ] \
-    || { cat "$d/gh.log" >&2; die "the account was not read once before the questions and once for the permissions"; }
+  [ "$(grep -c "$(printf '\tuser\t')" "$d/gh.log")" -eq 2 ] ||
+    {
+      cat "$d/gh.log" >&2
+      die "the account was not read once before the questions and once for the permissions"
+    }
   grep -n '==> Checking that gh is signed in' "$d/out" | head -1 | cut -d: -f1 >"$d/a"
   grep -n '^Project name: ' "$d/out" | head -1 | cut -d: -f1 >"$d/q"
-  [ "$(cat "$d/a")" -lt "$(cat "$d/q")" ] || { cat "$d/out" >&2; die "the sign-in was checked after the questions"; }
+  [ "$(cat "$d/a")" -lt "$(cat "$d/q")" ] || {
+    cat "$d/out" >&2
+    die "the sign-in was checked after the questions"
+  }
 }
 
 test_a_missing_workflow_permission_offers_the_refresh_and_checks_again() {
@@ -5988,13 +7488,22 @@ RUN
   expect_rc 0 "$d"
   expect_out "$d" "does not have every permission on GitHub that the setup needs."
   expect_out "$d" "workflow (to add and change the files that run your project's checks)"
-  grep -qxF '    gh auth refresh -h github.com -s workflow' "$d/out" || { cat "$d/out" >&2; die "the refresh command is not shown"; }
+  grep -qxF '    gh auth refresh -h github.com -s workflow' "$d/out" || {
+    cat "$d/out" >&2
+    die "the refresh command is not shown"
+  }
   expect_out "$d" "https://github.com/login/device"
   expect_sign_in_first_before_the_code "$d"
-  [ "$(cat "$d/run.log")" = "gh auth refresh -h github.com -s workflow|<unset>" ] \
-    || { cat "$d/run.log" >&2; die "the refresh did not run once, with gh's prompts on"; }
+  [ "$(cat "$d/run.log")" = "gh auth refresh -h github.com -s workflow|<unset>" ] ||
+    {
+      cat "$d/run.log" >&2
+      die "the refresh did not run once, with gh's prompts on"
+    }
   expect_no_out "$d" "Press Enter"
-  [ "$(tail -1 "$d/out")" = "    Done. gh has the permissions on GitHub that the setup needs." ] || { cat "$d/out" >&2; die "no done line"; }
+  [ "$(tail -1 "$d/out")" = "    Done. gh has the permissions on GitHub that the setup needs." ] || {
+    cat "$d/out" >&2
+    die "no done line"
+  }
   ! grep -q "$(printf '\tauth\t')" "$d/gh.log" || die "the refresh ran through gh with prompts off"
 }
 
@@ -6007,16 +7516,25 @@ test_the_refresh_asks_for_every_missing_permission() {
     "private|read:org|gh auth refresh -h github.com -s repo,workflow" \
     "public|public_repo|gh auth refresh -h github.com -s workflow" \
     "private|repo|gh auth refresh -h github.com -s workflow"; do
-    vis="${c%%|*}"; scopes="${c#*|}"; want="${scopes#*|}"; scopes="${scopes%%|*}"
+    vis="${c%%|*}"
+    scopes="${c#*|}"
+    want="${scopes#*|}"
+    scopes="${scopes%%|*}"
     d="$(tmpdir)"
     export STUB_GH_SCOPES="$scopes"
     printf 'yes\n' >"$d/tty"
     printf 'q\n' >"$d/in"
     pre "$d" with_vis "$vis" preflight_github_permissions
     expect_rc 3 "$d"
-    grep -qxF "    $want" "$d/out" || { cat "$d/out" >&2; die "$c: offer not shown"; }
+    grep -qxF "    $want" "$d/out" || {
+      cat "$d/out" >&2
+      die "$c: offer not shown"
+    }
     # What ran is exactly what was shown, once.
-    [ "$(cat "$d/run.log")" = "$want" ] || { cat "$d/run.log" >&2; die "$c: ran something else"; }
+    [ "$(cat "$d/run.log")" = "$want" ] || {
+      cat "$d/run.log" >&2
+      die "$c: ran something else"
+    }
   done
   for c in "public|public_repo, workflow" "public|repo, workflow" "private|repo, workflow, gist"; do
     d="$(tmpdir)"
@@ -6034,7 +7552,12 @@ test_the_refresh_asks_for_every_missing_permission() {
 # asks it, default Yes, before the one-time code, unless gh already signs
 # git in to GitHub; so "If", and right after the command.
 GH_GIT_QUESTION='If gh asks "Authenticate Git with your GitHub credentials?", answer Yes: type y and press Enter, or just press Enter.'
-gg_permissions_public() { PERM_PROBLEM=missing; PERM_MISSING="public_repo workflow"; IN_VISIBILITY=public; guide_github_permissions; }
+gg_permissions_public() {
+  PERM_PROBLEM=missing
+  PERM_MISSING="public_repo workflow"
+  IN_VISIBILITY=public
+  guide_github_permissions
+}
 
 test_every_gh_sign_in_guide_says_what_to_answer_when_gh_asks_to_authenticate_git() {
   # For the sign-in guide (signed out, sign-in no longer accepted) and
@@ -6046,34 +7569,65 @@ test_every_gh_sign_in_guide_says_what_to_answer_when_gh_asks_to_authenticate_git
     "gg_permissions|gh auth refresh -h github.com -s workflow" \
     "gg_permissions_public|gh auth refresh -h github.com -s public_repo,workflow" \
     "gg_permissions_repo|gh auth refresh -h github.com -s repo,workflow"; do
-    g="${c%%|*}"; want="${c#*|}"
+    g="${c%%|*}"
+    want="${c#*|}"
     d="$(tmpdir)"
     pre "$d" "$g"
-    [ "$RC" -eq 0 ] || { cat "$d/err" >&2; die "$g failed"; }
+    [ "$RC" -eq 0 ] || {
+      cat "$d/err" >&2
+      die "$g failed"
+    }
     cmd_n="$(grep -nxF -- "    $want" "$d/out" | cut -d: -f1)"
-    [ -n "$cmd_n" ] || { cat "$d/out" >&2; die "$g: the command $want is not shown"; }
-    [ "$(grep -cF -- "$GH_GIT_QUESTION" "$d/out")" -eq 1 ] \
-      || { cat "$d/out" >&2; die "$g: the Authenticate Git step is not there exactly once"; }
+    [ -n "$cmd_n" ] || {
+      cat "$d/out" >&2
+      die "$g: the command $want is not shown"
+    }
+    [ "$(grep -cF -- "$GH_GIT_QUESTION" "$d/out")" -eq 1 ] ||
+      {
+        cat "$d/out" >&2
+        die "$g: the Authenticate Git step is not there exactly once"
+      }
     q_n="$(grep -nF -- "$GH_GIT_QUESTION" "$d/out" | cut -d: -f1)"
-    grep -qE '^  [0-9]+\. If gh asks ' <<<"$(sed -n "${q_n}p" "$d/out")" \
-      || { cat "$d/out" >&2; die "$g: the Authenticate Git text is not a numbered step of its own"; }
-    [ "$q_n" -eq $((cmd_n + 1)) ] || { cat "$d/out" >&2; die "$g: the Authenticate Git step does not come right after the command"; }
+    grep -qE '^  [0-9]+\. If gh asks ' <<<"$(sed -n "${q_n}p" "$d/out")" ||
+      {
+        cat "$d/out" >&2
+        die "$g: the Authenticate Git text is not a numbered step of its own"
+      }
+    [ "$q_n" -eq $((cmd_n + 1)) ] || {
+      cat "$d/out" >&2
+      die "$g: the Authenticate Git step does not come right after the command"
+    }
     code_n="$(grep -n 'one-time code' "$d/out" | head -1 | cut -d: -f1)"
-    [ -n "$code_n" ] && [ "$q_n" -lt "$code_n" ] \
-      || { cat "$d/out" >&2; die "$g: the Authenticate Git step does not come before the one-time code step"; }
+    [ -n "$code_n" ] && [ "$q_n" -lt "$code_n" ] ||
+      {
+        cat "$d/out" >&2
+        die "$g: the Authenticate Git step does not come before the one-time code step"
+      }
   done
   # No gh auth command, no question: a token in GH_TOKEN (gh cannot
   # refresh it), and GitHub out of reach.
   for g in gg_permissions_token gg_offline; do
     d="$(tmpdir)"
     pre "$d" "$g"
-    [ "$RC" -eq 0 ] || { cat "$d/err" >&2; die "$g failed"; }
+    [ "$RC" -eq 0 ] || {
+      cat "$d/err" >&2
+      die "$g failed"
+    }
     expect_no_out "$d" "Authenticate Git"
-    ! grep -qE '^    gh auth (login|refresh)' "$d/out" || { cat "$d/out" >&2; die "$g: a gh auth command is shown"; }
+    ! grep -qE '^    gh auth (login|refresh)' "$d/out" || {
+      cat "$d/out" >&2
+      die "$g: a gh auth command is shown"
+    }
   done
 }
 
-api_signed_out() { CREATED_NOTE="$1"; API_STATUS=""; API_RC=4; API_MESSAGE=""; api_fail "read your GitHub account"; }
+api_signed_out() {
+  CREATED_NOTE="$1"
+  API_STATUS=""
+  API_RC=4
+  API_MESSAGE=""
+  api_fail "read your GitHub account"
+}
 
 test_the_sign_in_next_actions_say_what_to_answer_when_gh_asks_to_authenticate_git() {
   # Review of #235, N1: the stop messages that give gh auth login as the
@@ -6083,10 +7637,16 @@ test_the_sign_in_next_actions_say_what_to_answer_when_gh_asks_to_authenticate_gi
   for note in "" "The project acme/my-app exists on GitHub."; do
     d="$(tmpdir)"
     pre "$d" api_signed_out "$note"
-    [ "$RC" -ne 0 ] || { cat "$d/out" "$d/err" >&2; die "[$note]: did not stop"; }
+    [ "$RC" -ne 0 ] || {
+      cat "$d/out" "$d/err" >&2
+      die "[$note]: did not stop"
+    }
     want='gh auth login -h github.com -p https -w -s workflow (if gh asks "Authenticate Git with your GitHub credentials?", answer Yes), then '
-    grep -F -- "$want" <<<"$(sed -n 2p "$d/err")" >/dev/null \
-      || { cat "$d/err" >&2; die "[$note]: the next action does not say what to answer when gh asks to authenticate Git"; }
+    grep -F -- "$want" <<<"$(sed -n 2p "$d/err")" >/dev/null ||
+      {
+        cat "$d/err" >&2
+        die "[$note]: the next action does not say what to answer when gh asks to authenticate Git"
+      }
   done
 }
 
@@ -6095,12 +7655,21 @@ test_the_authenticate_git_step_is_one_shared_text_in_every_gh_sign_in_guide() {
   # question once, and every guide that shows gh auth login or offers a
   # gh auth refresh gives it through that one text.
   local g body found=""
-  ( load_script; [ "$GH_GIT_QUESTION_STEP" = "$GH_GIT_QUESTION" ] ) \
-    || die "the script's GH_GIT_QUESTION_STEP is not the step this test expects"
-  ( load_script; [ "$GH_GIT_QUESTION_TEXT" = 'Authenticate Git with your GitHub credentials?' ] ) \
-    || die "the script's GH_GIT_QUESTION_TEXT is not gh's question"
-  [ "$(grep -cF 'Authenticate Git with your GitHub credentials' "$SCRIPT")" -eq 1 ] \
-    || { grep -nF 'Authenticate Git with your GitHub credentials' "$SCRIPT" >&2; die "gh's question is written more than once in the script"; }
+  (
+    load_script
+    [ "$GH_GIT_QUESTION_STEP" = "$GH_GIT_QUESTION" ]
+  ) ||
+    die "the script's GH_GIT_QUESTION_STEP is not the step this test expects"
+  (
+    load_script
+    [ "$GH_GIT_QUESTION_TEXT" = 'Authenticate Git with your GitHub credentials?' ]
+  ) ||
+    die "the script's GH_GIT_QUESTION_TEXT is not gh's question"
+  [ "$(grep -cF 'Authenticate Git with your GitHub credentials' "$SCRIPT")" -eq 1 ] ||
+    {
+      grep -nF 'Authenticate Git with your GitHub credentials' "$SCRIPT" >&2
+      die "gh's question is written more than once in the script"
+    }
   # shellcheck disable=SC2013 # the guide names are single words
   for g in $(grep -oE '^guide_[a-z_]+\(\)' "$SCRIPT" | sed 's/()//'); do
     body="$(G="$g() {" awk '$0 == ENVIRON["G"] { on = 1; next } on && /^}/ { exit } on { print }' "$SCRIPT")"
@@ -6109,8 +7678,8 @@ test_the_authenticate_git_step_is_one_shared_text_in_every_gh_sign_in_guide() {
       *) continue ;;
     esac
     found="$found $g"
-    grep -qxF '  guide_step "$GH_GIT_QUESTION_STEP"' <<<"$body" \
-      || die "$g has the user run gh auth login or gh auth refresh but does not give GH_GIT_QUESTION_STEP"
+    grep -qxF '  guide_step "$GH_GIT_QUESTION_STEP"' <<<"$body" ||
+      die "$g has the user run gh auth login or gh auth refresh but does not give GH_GIT_QUESTION_STEP"
   done
   # The search itself works: it finds the two guides known to have one.
   case "$found " in *" guide_github_account "*) ;; *) die "the search did not find guide_github_account (found:$found)" ;; esac
@@ -6121,7 +7690,10 @@ test_the_authenticate_git_step_is_one_shared_text_in_every_gh_sign_in_guide() {
   local missing
   missing="$(tmpdir)/missing"
   gh_auth_words_without_answer "$SCRIPT" >"$missing"
-  [ ! -s "$missing" ] || { cat "$missing" >&2; die "a message names gh auth login or gh auth refresh without GH_GIT_QUESTION_TEXT (lines above)"; }
+  [ ! -s "$missing" ] || {
+    cat "$missing" >&2
+    die "a message names gh auth login or gh auth refresh without GH_GIT_QUESTION_TEXT (lines above)"
+  }
   [ "$GH_AUTH_WORD_LINES" -ge 1 ] || die "the search found no message that names gh auth login or gh auth refresh (the push refusal for workflow files has one)"
 }
 
@@ -6137,7 +7709,7 @@ gh_auth_words_without_answer() {
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in *'gh auth login'* | *'gh auth refresh'*) ;; *) continue ;; esac
     case "${line#"${line%%[![:space:]]*}"}" in '#'*) continue ;; esac
-    case "$line" in *say_command*|*run_offered*) continue ;; esac
+    case "$line" in *say_command* | *run_offered*) continue ;; esac
     GH_AUTH_WORD_LINES=$((GH_AUTH_WORD_LINES + 1))
     case "$line" in *'$GH_GIT_QUESTION_TEXT'*) ;; *) printf '%s\n' "$line" ;; esac
   done <"$1"
@@ -6161,7 +7733,10 @@ test_the_gh_auth_words_check_catches_what_it_looks_for() {
     'NEXT="Run gh auth login (if gh asks \"$GH_GIT_QUESTION_TEXT\", answer Yes), then start again."' \
     'OTHER="Run gh auth refresh (if gh asks \"$GH_GIT_QUESTION_TEXT\", answer Yes), then continue."' >"$d/script"
   gh_auth_words_without_answer "$d/script" >"$d/missing"
-  [ "$(grep -c . "$d/missing")" -eq 3 ] || { cat "$d/missing" >&2; die "want the 3 lines without the answer, got the lines above"; }
+  [ "$(grep -c . "$d/missing")" -eq 3 ] || {
+    cat "$d/missing" >&2
+    die "want the 3 lines without the answer, got the lines above"
+  }
   grep -qF 'guide_step "Sign in again with gh auth login' "$d/missing" || die "a guide step naming gh auth login was not caught"
   grep -qF 'Run gh auth login -h github.com -p https -w -s workflow, then start' "$d/missing" || die "a stop message naming gh auth login was not caught"
   grep -qF 'gh auth refresh -h github.com -s delete_repo' "$d/missing" || die "a stop message naming gh auth refresh was not caught"
@@ -6223,7 +7798,10 @@ test_a_fine_grained_token_gets_a_warning_and_the_setup_carries_on() {
   done
   expect_no_out "$d" "does not have every permission"
   expect_nothing_ran "$d"
-  grep -q '^    Done\. ' "$d/out" || { cat "$d/out" >&2; die "no done line"; }
+  grep -q '^    Done\. ' "$d/out" || {
+    cat "$d/out" >&2
+    die "no done line"
+  }
 }
 
 test_an_older_script_is_told_to_download_the_current_one() {
@@ -6242,10 +7820,16 @@ test_an_older_script_is_told_to_download_the_current_one() {
   expect_rc 3 "$d"
   expect_out "$d" "This copy of the script is not the current version"
   expect_out "$d" "v9.9.9"
-  grep -qxF '    gh api repos/factoincognito/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh' "$d/out" \
-    || { cat "$d/out" >&2; die "the download command is not shown"; }
-  grep -qxF "    $(start_cd_of "$d")bash bootstrap-project.sh --name my-app --description 'Lends tools.'" "$d/out" \
-    || { cat "$d/out" >&2; die "the command to start the downloaded copy is not shown"; }
+  grep -qxF '    gh api repos/factoincognito/ai-project-bootstrap/contents/bootstrap-project.sh -H "Accept: application/vnd.github.raw+json" > bootstrap-project.sh' "$d/out" ||
+    {
+      cat "$d/out" >&2
+      die "the download command is not shown"
+    }
+  grep -qxF "    $(start_cd_of "$d")bash bootstrap-project.sh --name my-app --description 'Lends tools.'" "$d/out" ||
+    {
+      cat "$d/out" >&2
+      die "the command to start the downloaded copy is not shown"
+    }
   expect_no_out "$d" "Press Enter"
   expect_no_out "$d" "Project name"
   [ -z "$(ls -A "$d/cwd")" ] || die "something was created"
@@ -6260,7 +7844,10 @@ test_the_published_version_is_compared_with_the_script_version() {
   d="$(tmpdir)"
   pre "$d" ni preflight_published_version
   expect_rc 0 "$d"
-  grep -q '^    Done\. This is the current version of the script' "$d/out" || { cat "$d/out" >&2; die "no done line"; }
+  grep -q '^    Done\. This is the current version of the script' "$d/out" || {
+    cat "$d/out" >&2
+    die "no done line"
+  }
   d="$(tmpdir)"
   sed -e 's/{{TEMPLATE_VERSION}}/v2.4.0/' -e "s/{{TEMPLATE_COMMIT}}/$sha/" \
     "$REPO/bootstrap/stubs/CHANGELOG.md" >"$d/published.md"
@@ -6280,11 +7867,17 @@ test_the_published_version_is_read_from_the_built_changelog() {
   bash "$REPO/bootstrap/build.sh" "$out" v7.8.9 "$(printf '%040d' 1)" >/dev/null || die "build failed"
   want="$(sed -n "s/^SCRIPT_VERSION='\(.*\)'$/\1/p" "$out/bootstrap-project.sh")"
   [ "$want" = v7.8.9 ] || die "the shipped script is not stamped v7.8.9: $want"
-  got="$( load_script; read_published_version "$(cat "$out/CHANGELOG.md")" && printf '%s' "$PUBLISHED_VERSION" )" \
-    || die "no version found in the built CHANGELOG.md"
+  got="$(
+    load_script
+    read_published_version "$(cat "$out/CHANGELOG.md")" && printf '%s' "$PUBLISHED_VERSION"
+  )" ||
+    die "no version found in the built CHANGELOG.md"
   [ "$got" = "$want" ] || die "read $got from the built CHANGELOG.md, want $want"
   # Carriage returns (a copy saved on Windows) do not change it.
-  got="$( load_script; read_published_version "$(sed 's/$/\r/' "$out/CHANGELOG.md")" && printf '%s' "$PUBLISHED_VERSION" )"
+  got="$(
+    load_script
+    read_published_version "$(sed 's/$/\r/' "$out/CHANGELOG.md")" && printf '%s' "$PUBLISHED_VERSION"
+  )"
   [ "$got" = "$want" ] || die "with carriage returns: read $got"
 }
 
@@ -6321,7 +7914,10 @@ test_an_existing_project_is_refused_unless_resume() {
   pre "$d" with_project acme my-app preflight_project_absent
   expect_rc 0 "$d"
   expect_out "$d" "Press Enter to check again"
-  [ "$(tail -1 "$d/out")" = "    Done. No project named acme/my-app exists on GitHub yet." ] || { cat "$d/out" >&2; die "no done line"; }
+  [ "$(tail -1 "$d/out")" = "    Done. No project named acme/my-app exists on GitHub yet." ] || {
+    cat "$d/out" >&2
+    die "no done line"
+  }
 }
 
 test_the_name_and_permissions_are_checked_after_the_questions() {
@@ -6337,7 +7933,10 @@ test_the_name_and_permissions_are_checked_after_the_questions() {
   expect_rc 3 "$d"
   grep -n 'Your email address for git' "$d/out" | head -1 | cut -d: -f1 >"$d/q"
   grep -n 'does not have every permission' "$d/out" | head -1 | cut -d: -f1 >"$d/g"
-  [ -s "$d/g" ] && [ "$(cat "$d/q")" -lt "$(cat "$d/g")" ] || { cat "$d/out" >&2; die "permissions not checked after the questions"; }
+  [ -s "$d/g" ] && [ "$(cat "$d/q")" -lt "$(cat "$d/g")" ] || {
+    cat "$d/out" >&2
+    die "permissions not checked after the questions"
+  }
   d="$(tmpdir)"
   working_git "$d"
   export STUB_GH_SCOPES="repo, workflow"
@@ -6363,7 +7962,7 @@ test_the_name_and_permissions_are_checked_after_the_questions() {
 
 # Every answer given as an option, so a run without --non-interactive asks
 # only "Proceed?". The visibility is added by setup_run.
-ALL_OPTS=(--owner octo-user --project-name "My App" --po-name Ada --copyright-holder "Ada L" \
+ALL_OPTS=(--owner octo-user --project-name "My App" --po-name Ada --copyright-holder "Ada L"
   --dir ./my-app --git-name "Test Person" --git-email test@example.com)
 CREATE_CALL='repo create octo-user/my-app --template factoincognito/ai-project-bootstrap --public --description Lends tools to neighbours.'
 BRANCH_CALL='api -i repos/octo-user/my-app/branches/main'
@@ -6474,12 +8073,21 @@ expect_calls() {
   shift
   got="$(calls_from_create "$d")"
   want="$(printf '%s\n' "$@")"
-  [ "$got" = "$want" ] || { printf 'want:\n%s\ngot:\n%s\n' "$want" "$got" >&2; die "gh calls from the create step differ"; }
+  [ "$got" = "$want" ] || {
+    printf 'want:\n%s\ngot:\n%s\n' "$want" "$got" >&2
+    die "gh calls from the create step differ"
+  }
 }
 
 expect_nothing_created() {
-  [ -z "$(calls_from_create "$1")" ] || { cat "$1/gh.log" >&2; die "the project was created"; }
-  [ -z "$(ls -A "$1/cwd")" ] || { ls -A "$1/cwd" >&2; die "something was made on this computer"; }
+  [ -z "$(calls_from_create "$1")" ] || {
+    cat "$1/gh.log" >&2
+    die "the project was created"
+  }
+  [ -z "$(ls -A "$1/cwd")" ] || {
+    ls -A "$1/cwd" >&2
+    die "something was made on this computer"
+  }
 }
 
 # expect_continue_command <dir> <words>: the command to continue is
@@ -6491,7 +8099,10 @@ expect_continue_command() {
   line="$(shown_after "$1" 'To continue the setup, run this command:')"
   case "$line " in
     "    bash "*"$2 "*) ;;
-    *) cat "$1/out" >&2; die "no command to continue with: $2 (got: $line)" ;;
+    *)
+      cat "$1/out" >&2
+      die "no command to continue with: $2 (got: $line)"
+      ;;
   esac
 }
 
@@ -6507,20 +8118,32 @@ test_the_plan_is_shown_after_the_checks_and_a_dry_run_creates_nothing() {
     expect_out "$d" "$v"
   done
   # Finding 9: the minutes are a limit, and what happens when it is reached.
-  grep -qxF "    Waiting for the project's checks: at most 20 minutes; if build has not passed by then, the script stops, leaves the proposed change open and shows how to continue (--ci-timeout sets a different limit)" "$d/out" \
-    || { cat "$d/out" >&2; die "the plan does not say the wait is a limit"; }
+  grep -qxF "    Waiting for the project's checks: at most 20 minutes; if build has not passed by then, the script stops, leaves the proposed change open and shows how to continue (--ci-timeout sets a different limit)" "$d/out" ||
+    {
+      cat "$d/out" >&2
+      die "the plan does not say the wait is a limit"
+    }
   expect_out "$d" "This was a dry run (--dry-run): the checks passed, and nothing was created."
   expect_no_out "$d" "Proceed?"
   expect_no_out "$d" "needs a paid GitHub plan"
   # A new setup marks no step (finding 7 marks them only on --resume).
-  [ "$(plan_section "$d/out" | step_marks)" = "- - - - - -" ] || { cat "$d/out" >&2; die "a step of a new setup's plan is marked"; }
+  [ "$(plan_section "$d/out" | step_marks)" = "- - - - - -" ] || {
+    cat "$d/out" >&2
+    die "a step of a new setup's plan is marked"
+  }
   grep -n 'Done. No project named octo-user/my-app exists on GitHub yet.' "$d/out" | cut -d: -f1 >"$d/a"
   grep -n 'Here is the plan' "$d/out" | cut -d: -f1 >"$d/p"
-  [ -s "$d/a" ] && [ "$(cat "$d/a")" -lt "$(cat "$d/p")" ] || { cat "$d/out" >&2; die "the plan came before the checks"; }
+  [ -s "$d/a" ] && [ "$(cat "$d/a")" -lt "$(cat "$d/p")" ] || {
+    cat "$d/out" >&2
+    die "the plan came before the checks"
+  }
   expect_nothing_created "$d"
   # Every line of the plan, the indented value lines too (#150 review,
   # finding 7: none of the values given here has a banned word).
-  [ -z "$(sed -n '/^Here is the plan/,$p' "$d/out" | awk '{print NR ": " $0}' | banned_hits)" ] || { cat "$d/out" >&2; die "banned word in the plan"; }
+  [ -z "$(sed -n '/^Here is the plan/,$p' "$d/out" | awk '{print NR ": " $0}' | banned_hits)" ] || {
+    cat "$d/out" >&2
+    die "banned word in the plan"
+  }
   # A private project: the plan warns that protection needs a paid plan.
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --dry-run --private
@@ -6555,9 +8178,15 @@ expect_resume_steps() {
   local d="$1" h w got
   h="$(grep -n -xF "$RESUME_STEPS_HEADING" "$d/out" | head -1 | cut -d: -f1 || true)"
   w="$(grep -n -xF '==> Working out where the setup stopped, from GitHub and from the copy on this computer' "$d/out" | head -1 | cut -d: -f1 || true)"
-  [ -n "$h" ] && [ -n "$w" ] && [ "$w" -lt "$h" ] || { cat "$d/out" >&2; die "no marked steps after working out where the setup stopped"; }
+  [ -n "$h" ] && [ -n "$w" ] && [ "$w" -lt "$h" ] || {
+    cat "$d/out" >&2
+    die "no marked steps after working out where the setup stopped"
+  }
   got="$(plan_section "$d/out" | step_marks)"
-  [ "$got" = "$2" ] || { cat "$d/out" >&2; die "the steps are marked $got, want $2"; }
+  [ "$got" = "$2" ] || {
+    cat "$d/out" >&2
+    die "the steps are marked $got, want $2"
+  }
 }
 
 test_the_steps_of_the_plan_are_marked_from_the_resume_state() {
@@ -6570,9 +8199,19 @@ test_the_steps_of_the_plan_are_marked_from_the_resume_state() {
   # only re-checks the protection and reports, and makes no copy.
   local d c state copy want got
   d="$(tmpdir)"
-  ( load_script; IN_DIR=./my-app IN_LICENSE=mit; plan_steps ) >"$d/new"
-  [ "$(sed -n 1p "$d/new")" = "  1. Create the project on GitHub, with the bootstrapper's files in it." ] || { cat "$d/new" >&2; die "a new setup's steps do not start with step 1 (show_plan gives their heading)"; }
-  [ "$(step_marks <"$d/new")" = "- - - - - -" ] || { cat "$d/new" >&2; die "the steps of a new setup are marked"; }
+  (
+    load_script
+    IN_DIR=./my-app IN_LICENSE=mit
+    plan_steps
+  ) >"$d/new"
+  [ "$(sed -n 1p "$d/new")" = "  1. Create the project on GitHub, with the bootstrapper's files in it." ] || {
+    cat "$d/new" >&2
+    die "a new setup's steps do not start with step 1 (show_plan gives their heading)"
+  }
+  [ "$(step_marks <"$d/new")" = "- - - - - -" ] || {
+    cat "$d/new" >&2
+    die "the steps of a new setup are marked"
+  }
   grep '^  [1-6]\. ' "$d/new" >"$d/new-steps"
   grep -v '^  4\. ' "$d/new-steps" >"$d/new-but-4"
   for c in "template|-|done next - - - -" "fresh|1|done next done - - -" \
@@ -6585,10 +8224,20 @@ test_the_steps_of_the_plan_are_marked_from_the_resume_state() {
     copy="${copy%%|*}"
     want="${c##*|}"
     [ "$copy" != - ] || copy=""
-    ( load_script; IN_DIR=./my-app IN_LICENSE=mit COPY_PRESENT="$copy"; plan_steps "$state" ) >"$d/$state$copy"
-    [ "$(sed -n 1p "$d/$state$copy")" = "$RESUME_STEPS_HEADING" ] || { cat "$d/$state$copy" >&2; die "$state: not the heading of a resumed setup"; }
+    (
+      load_script
+      IN_DIR=./my-app IN_LICENSE=mit COPY_PRESENT="$copy"
+      plan_steps "$state"
+    ) >"$d/$state$copy"
+    [ "$(sed -n 1p "$d/$state$copy")" = "$RESUME_STEPS_HEADING" ] || {
+      cat "$d/$state$copy" >&2
+      die "$state: not the heading of a resumed setup"
+    }
     got="$(step_marks <"$d/$state$copy")"
-    [ "$got" = "$want" ] || { cat "$d/$state$copy" >&2; die "$state (copy: ${copy:-none}): marks $got, want $want"; }
+    [ "$got" = "$want" ] || {
+      cat "$d/$state$copy" >&2
+      die "$state (copy: ${copy:-none}): marks $got, want $want"
+    }
     # The same words as a new setup's steps, the mark aside. A step 4 done
     # already does not name this run's licence: the change was made with
     # the licence chosen then.
@@ -6598,24 +8247,51 @@ test_the_steps_of_the_plan_are_marked_from_the_resume_state() {
       *)
         grep -v '^  4\. ' "$d/bare" >"$d/bare-but-4"
         expect_same "$state: steps 1 to 3, 5 and 6" "$d/new-but-4" "$d/bare-but-4"
-        ! grep -q '^  4\. .*mit' "$d/bare" || { cat "$d/bare" >&2; die "$state: step 4 names this run's licence"; }
+        ! grep -q '^  4\. .*mit' "$d/bare" || {
+          cat "$d/bare" >&2
+          die "$state: step 4 names this run's licence"
+        }
         ;;
     esac
   done
   # The skipped mark says why, in plain words.
-  grep -qxF "  3. Make a copy of the project on this computer, in ./my-app. (skipped: the script makes no copy of a project that is set up already)" "$d/added" \
-    || { cat "$d/added" >&2; die "added with no copy: step 3 does not say why it is skipped"; }
+  grep -qxF "  3. Make a copy of the project on this computer, in ./my-app. (skipped: the script makes no copy of a project that is set up already)" "$d/added" ||
+    {
+      cat "$d/added" >&2
+      die "added with no copy: step 3 does not say why it is skipped"
+    }
   # With --allow-unprotected the protection may have been left out, so a
   # step 2 that is past is not said to be simply done; one still to come
   # is (next) as before.
-  ( load_script; IN_DIR=./my-app IN_LICENSE=mit COPY_PRESENT=1 OPT_ALLOW_UNPROTECTED=1; plan_steps sent ) >"$d/allow"
-  grep -qxF "  2. Protect its main version, so that from then on every change comes as a proposed change, not straight into it. (done, or skipped with --allow-unprotected)" "$d/allow" \
-    || { cat "$d/allow" >&2; die "sent with --allow-unprotected: step 2 is said to be done"; }
-  ( load_script; IN_DIR=./my-app IN_LICENSE=mit COPY_PRESENT="" OPT_ALLOW_UNPROTECTED=1; plan_steps template ) >"$d/allow2"
-  [ "$(step_marks <"$d/allow2")" = "done next - - - -" ] || { cat "$d/allow2" >&2; die "template with --allow-unprotected: marks changed"; }
+  (
+    load_script
+    IN_DIR=./my-app IN_LICENSE=mit COPY_PRESENT=1 OPT_ALLOW_UNPROTECTED=1
+    plan_steps sent
+  ) >"$d/allow"
+  grep -qxF "  2. Protect its main version, so that from then on every change comes as a proposed change, not straight into it. (done, or skipped with --allow-unprotected)" "$d/allow" ||
+    {
+      cat "$d/allow" >&2
+      die "sent with --allow-unprotected: step 2 is said to be done"
+    }
+  (
+    load_script
+    IN_DIR=./my-app IN_LICENSE=mit COPY_PRESENT="" OPT_ALLOW_UNPROTECTED=1
+    plan_steps template
+  ) >"$d/allow2"
+  [ "$(step_marks <"$d/allow2")" = "done next - - - -" ] || {
+    cat "$d/allow2" >&2
+    die "template with --allow-unprotected: marks changed"
+  }
   # With --license none a step 4 done already does not say none was chosen.
-  ( load_script; IN_DIR=./my-app IN_LICENSE=none COPY_PRESENT=1; plan_steps saved ) >"$d/none"
-  ! grep -qF 'you chose none' "$d/none" || { cat "$d/none" >&2; die "saved: step 4 speaks of this run's licence none"; }
+  (
+    load_script
+    IN_DIR=./my-app IN_LICENSE=none COPY_PRESENT=1
+    plan_steps saved
+  ) >"$d/none"
+  ! grep -qF 'you chose none' "$d/none" || {
+    cat "$d/none" >&2
+    die "saved: step 4 speaks of this run's licence none"
+  }
   # Every word of every list passes the plain-language check.
   [ -z "$(cat "$d"/* | awk '{print NR ": " $0}' | banned_hits)" ] || die "banned word in the steps"
 }
@@ -6628,18 +8304,30 @@ test_proceed_is_asked_with_no_as_its_default() {
   setup_run "$d"
   expect_rc 0 "$d"
   n="$(grep -c -xF 'Proceed? (yes or no) [no]: ' "$d/out" || true)"
-  [ "$n" -eq 1 ] || { cat "$d/out" >&2; die "Proceed? asked $n times"; }
+  [ "$n" -eq 1 ] || {
+    cat "$d/out" >&2
+    die "Proceed? asked $n times"
+  }
   why="$(grep -B1 -xF 'Proceed? (yes or no) [no]: ' "$d/out" | sed -n 1p)"
-  [ "$(printf '%s\n' "$why" | wc -w | tr -d ' ')" -ge 6 ] && [ "${why%.}" != "$why" ] \
-    || { cat "$d/out" >&2; die "Proceed? has no explanation above it: $why"; }
-  [ "$(calls_from_create "$d" | sed -n 1p)" = "$CREATE_CALL" ] || { cat "$d/gh.log" >&2; die "not created after yes"; }
+  [ "$(printf '%s\n' "$why" | wc -w | tr -d ' ')" -ge 6 ] && [ "${why%.}" != "$why" ] ||
+    {
+      cat "$d/out" >&2
+      die "Proceed? has no explanation above it: $why"
+    }
+  [ "$(calls_from_create "$d" | sed -n 1p)" = "$CREATE_CALL" ] || {
+    cat "$d/gh.log" >&2
+    die "not created after yes"
+  }
   # no, or Enter (the default): nothing is created, exit 1.
   for a in no ""; do
     d="$(tmpdir)"
     printf '%s\n' "$a" >"$d/in"
     setup_run "$d"
     expect_rc 1 "$d"
-    sed -n 1p "$d/err" | grep '^What happened: You answered no' >/dev/null || { cat "$d/err" >&2; die "answer [$a]: no plain stop"; }
+    sed -n 1p "$d/err" | grep '^What happened: You answered no' >/dev/null || {
+      cat "$d/err" >&2
+      die "answer [$a]: no plain stop"
+    }
     expect_nothing_created "$d"
   done
   # Another answer is explained and asked again.
@@ -6647,7 +8335,10 @@ test_proceed_is_asked_with_no_as_its_default() {
   printf '%s\n' maybe yes >"$d/in"
   setup_run "$d"
   expect_out "$d" "Answer yes or no. Please try again."
-  [ "$(calls_from_create "$d" | sed -n 1p)" = "$CREATE_CALL" ] || { cat "$d/gh.log" >&2; die "not created after the second answer"; }
+  [ "$(calls_from_create "$d" | sed -n 1p)" = "$CREATE_CALL" ] || {
+    cat "$d/gh.log" >&2
+    die "not created after the second answer"
+  }
   # No answer at all (stdin ends): exit 2, nothing created.
   d="$(tmpdir)"
   setup_run "$d"
@@ -6665,7 +8356,8 @@ test_proceed_says_why_its_default_is_no() {
     d="$(tmpdir)"
     printf '\n' >"$d/in"
     set +e
-    ( load_script
+    (
+      load_script
       [ "$mode" = first ] || OPT_RESUME=1
       confirm_plan
     ) <"$d/in" >"$d/out" 2>"$d/err"
@@ -6679,9 +8371,15 @@ test_proceed_says_why_its_default_is_no() {
       enter="Pressing Enter alone answers no, so nothing is changed by accident; type yes to go on."
     fi
     why="$(grep -B1 -xF 'Proceed? (yes or no) [no]: ' "$d/out" | sed -n 1p)"
-    [ "$why" = "$keep $enter" ] || { cat "$d/out" >&2; die "[$mode] explanation is: $why"; }
+    [ "$why" = "$keep $enter" ] || {
+      cat "$d/out" >&2
+      die "[$mode] explanation is: $why"
+    }
     expect_rc 1 "$d"
-    sed -n 1p "$d/err" | grep '^What happened: You answered no' >/dev/null || { cat "$d/err" >&2; die "[$mode] Enter did not stop as a no"; }
+    sed -n 1p "$d/err" | grep '^What happened: You answered no' >/dev/null || {
+      cat "$d/err" >&2
+      die "[$mode] Enter did not stop as a no"
+    }
   done
 }
 
@@ -6699,14 +8397,20 @@ test_a_no_at_proceed_saves_the_answers_and_shows_the_command_to_start_again() {
   printf '%s\n' "${ANSWERS_IN[@]}" no >"$d/in"
   whole "$d"
   expect_rc 1 "$d"
-  grep -q '^What happened: You answered no' "$d/err" || { cat "$d/err" >&2; die "did not stop as a no"; }
+  grep -q '^What happened: You answered no' "$d/err" || {
+    cat "$d/err" >&2
+    die "did not stop as a no"
+  }
   expect_out "$d" "To start again, run this command:"
   expect_short_command "$d" "To start again, run this command:"
   expect_again_file "$d" --owner octo-user --name my-app --project-name my-app --description "Lends tools." \
     --po-name "Octo User" --pack python --public --license none --dir ./my-app --git-name "Test Person" \
     --git-email test@example.com
   expect_nothing_created "$d"
-  grep -qxF "What to do next: Run the command shown to start again, and answer yes." "$d/err" || { cat "$d/err" >&2; die "the next step does not point at the command shown"; }
+  grep -qxF "What to do next: Run the command shown to start again, and answer yes." "$d/err" || {
+    cat "$d/err" >&2
+    die "the next step does not point at the command shown"
+  }
   # A --resume run (the project exists) answered no: the command to
   # continue, with --resume saved.
   d="$(tmpdir)"
@@ -6717,12 +8421,21 @@ test_a_no_at_proceed_saves_the_answers_and_shows_the_command_to_start_again() {
   printf 'no\n' >"$d/in"
   setup_run "$d" --resume
   expect_rc 1 "$d"
-  grep -q '^What happened: You answered no' "$d/err" || { cat "$d/err" >&2; die "--resume: did not stop as a no"; }
+  grep -q '^What happened: You answered no' "$d/err" || {
+    cat "$d/err" >&2
+    die "--resume: did not stop as a no"
+  }
   expect_out "$d" "To continue the setup, run this command:"
   expect_short_command "$d" "To continue the setup, run this command:"
   f="$(again_file_of "$d")"
-  grep -qx -- --resume "$f" || { cat "$f" >&2; die "--resume: the saved answers lack --resume"; }
-  grep -qxF "What to do next: Run the command shown to continue the setup, and answer yes." "$d/err" || { cat "$d/err" >&2; die "the next step does not point at the command shown"; }
+  grep -qx -- --resume "$f" || {
+    cat "$f" >&2
+    die "--resume: the saved answers lack --resume"
+  }
+  grep -qxF "What to do next: Run the command shown to continue the setup, and answer yes." "$d/err" || {
+    cat "$d/err" >&2
+    die "the next step does not point at the command shown"
+  }
 }
 
 test_proceed_and_the_guide_pause_are_not_answered_by_keys_typed_before_them() {
@@ -6738,20 +8451,41 @@ test_proceed_and_the_guide_pause_are_not_answered_by_keys_typed_before_them() {
     typeahead_tools "$d"
     if [ "$mode" = pause ]; then printf '\nq\n' >"$d/in"; else printf '\nyes\n' >"$d/in"; fi
     set +e
-    ( load_script
+    (
+      load_script
       export PATH="$d/bin:$PATH" BOOTSTRAP_INPUT_TERMINAL=yes
       case "$mode" in
-        first) confirm_plan; echo "went on" ;;
-        resume) OPT_RESUME=1; confirm_plan; echo "went on" ;;
-        pause) rc=0; wait_for_enter || rc=$?; echo "pause rc=$rc" ;;
+        first)
+          confirm_plan
+          echo "went on"
+          ;;
+        resume)
+          OPT_RESUME=1
+          confirm_plan
+          echo "went on"
+          ;;
+        pause)
+          rc=0
+          wait_for_enter || rc=$?
+          echo "pause rc=$rc"
+          ;;
       esac
     ) <"$d/in" >"$d/out" 2>"$d/err"
     set -e
     case "$mode" in
-      pause) grep -qx 'pause rc=1' "$d/out" || { cat "$d/out" "$d/err" >&2; die "[pause] the waiting line answered the pause"; } ;;
-      *) grep -qx 'went on' "$d/out" || { cat "$d/out" "$d/err" >&2; die "[$mode] the waiting line answered Proceed?"; } ;;
+      pause) grep -qx 'pause rc=1' "$d/out" || {
+        cat "$d/out" "$d/err" >&2
+        die "[pause] the waiting line answered the pause"
+      } ;;
+      *) grep -qx 'went on' "$d/out" || {
+        cat "$d/out" "$d/err" >&2
+        die "[$mode] the waiting line answered Proceed?"
+      } ;;
     esac
-    [ "$(cat "$d/tty.log")" = "$TYPEAHEAD_DISCARDED" ] || { cat "$d/tty.log" >&2; die "[$mode] not discarded as expected"; }
+    [ "$(cat "$d/tty.log")" = "$TYPEAHEAD_DISCARDED" ] || {
+      cat "$d/tty.log" >&2
+      die "[$mode] not discarded as expected"
+    }
   done
 }
 
@@ -6761,14 +8495,23 @@ test_yes_skips_proceed_and_non_interactive_needs_yes_or_dry_run() {
   setup_run "$d" --yes
   expect_rc 0 "$d"
   expect_no_out "$d" "Proceed?"
-  [ "$(calls_from_create "$d" | sed -n 1p)" = "$CREATE_CALL" ] || { cat "$d/gh.log" >&2; die "not created with --yes"; }
+  [ "$(calls_from_create "$d" | sed -n 1p)" = "$CREATE_CALL" ] || {
+    cat "$d/gh.log" >&2
+    die "not created with --yes"
+  }
   # --non-interactive alone cannot ask: refused with the other option
   # problems, before any check.
   d="$(tmpdir)"
   setup_run "$d" --non-interactive
   expect_rc 2 "$d"
-  grep -qE -- '^    - --yes: .*--dry-run' "$d/err" || { cat "$d/err" >&2; die "--yes not listed as needed"; }
-  [ ! -e "$d/gh.log" ] || { cat "$d/gh.log" >&2; die "gh was used"; }
+  grep -qE -- '^    - --yes: .*--dry-run' "$d/err" || {
+    cat "$d/err" >&2
+    die "--yes not listed as needed"
+  }
+  [ ! -e "$d/gh.log" ] || {
+    cat "$d/gh.log" >&2
+    die "gh was used"
+  }
   expect_nothing_created "$d"
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --dry-run --yes
@@ -6786,7 +8529,10 @@ ADVANCE_INTRO='If the setup stops before it finishes, for any reason, also with 
 advance_command() {
   local n
   n="$(grep -cxF "$ADVANCE_INTRO" "$1/out" || true)"
-  [ "$n" -eq 1 ] || { cat "$1/out" >&2; die "the command to continue was shown $n times before the first change, want 1"; }
+  [ "$n" -eq 1 ] || {
+    cat "$1/out" >&2
+    die "the command to continue was shown $n times before the first change, want 1"
+  }
   long_of "$1" "$(grep -A1 -xF "$ADVANCE_INTRO" "$1/out" | sed -n 2p | sed 's/^    //')"
 }
 
@@ -6814,19 +8560,31 @@ test_the_command_to_continue_is_shown_after_yes_and_before_the_project_is_create
   p="$(line_of "$d" 'Proceed? (yes or no) [no]: ')"
   a="$(line_of "$d" "$ADVANCE_INTRO")"
   c="$(line_of "$d" '==> Creating the project octo-user/my-app on GitHub')"
-  [ "$p" -gt 0 ] && [ "$p" -lt "$a" ] && [ "$a" -lt "$c" ] || { cat "$d/out" >&2; die "not in the order Proceed? ($p), the command ($a), create ($c)"; }
+  [ "$p" -gt 0 ] && [ "$p" -lt "$a" ] && [ "$a" -lt "$c" ] || {
+    cat "$d/out" >&2
+    die "not in the order Proceed? ($p), the command ($a), create ($c)"
+  }
   expect_out "$d" "If the project was not created yet, that command says so and shows the command to start again."
   # #203 review, N1: after a closed window the command helps only if the
   # user kept it, so the line above it says to copy it and keep it.
-  grep -B1 -xF "    $cmd" "$d/out" | sed -n 1p | grep -F 'Copy it now and keep it until the setup has finished:' >/dev/null \
-    || { cat "$d/out" >&2; die "the line above the command does not say to copy it and keep it"; }
+  grep -B1 -xF "    $cmd" "$d/out" | sed -n 1p | grep -F 'Copy it now and keep it until the setup has finished:' >/dev/null ||
+    {
+      cat "$d/out" >&2
+      die "the line above the command does not say to copy it and keep it"
+    }
   # --yes: the same, without Proceed?.
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
-  [ "$(grep -A1 -xF "$ADVANCE_INTRO" "$d/out" | sed -n 2p)" = "    $(start_cd_of "$d")bash $(shown_script_of "$d") --again" ] \
-    || { cat "$d/out" >&2; die "--yes: not the short command"; }
-  [ "$(line_of "$d" "$ADVANCE_INTRO")" -lt "$(line_of "$d" '==> Creating the project octo-user/my-app on GitHub')" ] || { cat "$d/out" >&2; die "--yes: the command came after create"; }
+  [ "$(grep -A1 -xF "$ADVANCE_INTRO" "$d/out" | sed -n 2p)" = "    $(start_cd_of "$d")bash $(shown_script_of "$d") --again" ] ||
+    {
+      cat "$d/out" >&2
+      die "--yes: not the short command"
+    }
+  [ "$(line_of "$d" "$ADVANCE_INTRO")" -lt "$(line_of "$d" '==> Creating the project octo-user/my-app on GitHub')" ] || {
+    cat "$d/out" >&2
+    die "--yes: the command came after create"
+  }
   # No, Enter, or a dry run: nothing is changed, so no command to continue.
   for a in no ""; do
     d="$(tmpdir)"
@@ -6867,27 +8625,48 @@ test_create_waits_for_the_files_then_protects_main_with_the_exact_body() {
   # (a here-string ends in one too, so two in all). The second body, of
   # step 16, is checked in test_build_is_required_after_it_passed_with_the_exact_body_and_read_back.
   printf '%s\n\n' "$PROTECT_BODY" >"$d/want-body"
-  head -2 "$d/protection-bodies" | cmp -s "$d/want-body" - || { od -c "$d/protection-bodies" | head -5 >&2; die "protection body is not the spec's"; }
-  [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] || { cat "$d/gh.log" >&2; die "a gh call ran with prompts on"; }
+  head -2 "$d/protection-bodies" | cmp -s "$d/want-body" - || {
+    od -c "$d/protection-bodies" | head -5 >&2
+    die "protection body is not the spec's"
+  }
+  [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] || {
+    cat "$d/gh.log" >&2
+    die "a gh call ran with prompts on"
+  }
   [ ! -s "$d/sleep.log" ] || die "it waited although the files were there"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not go through to the report"; }
-  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "a run that went through wrote to stderr"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "did not go through to the report"
+  }
+  [ ! -s "$d/err" ] || {
+    cat "$d/err" >&2
+    die "a run that went through wrote to stderr"
+  }
   for t in "==> Creating the project octo-user/my-app on GitHub" "==> Waiting for GitHub to put the bootstrapper's files into the project" \
     "==> Protecting the main version of the project" "==> Setting how proposed changes are added to the project"; do
     expect_out "$d" "$t"
   done
   n_start="$(grep -c '^==> ' "$d/out")"
   n_done="$(grep -c '^    Done\. ' "$d/out")"
-  [ "$n_start" -eq "$n_done" ] || { cat "$d/out" >&2; die "$n_start steps started, $n_done ended"; }
+  [ "$n_start" -eq "$n_done" ] || {
+    cat "$d/out" >&2
+    die "$n_start steps started, $n_done ended"
+  }
   expect_no_out "$d" "needs a paid GitHub plan"
   # Private: the flag, and the plan warned before creating.
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes --private
   expect_rc 0 "$d"
-  [ "$(calls_from_create "$d" | sed -n 1p)" = "${CREATE_CALL/--public/--private}" ] || { cat "$d/gh.log" >&2; die "not created private"; }
+  [ "$(calls_from_create "$d" | sed -n 1p)" = "${CREATE_CALL/--public/--private}" ] || {
+    cat "$d/gh.log" >&2
+    die "not created private"
+  }
   grep -n 'needs a paid GitHub plan' "$d/out" | head -1 | cut -d: -f1 >"$d/w"
   grep -n '==> Creating the project' "$d/out" | cut -d: -f1 >"$d/c"
-  [ -s "$d/w" ] && [ "$(cat "$d/w")" -lt "$(cat "$d/c")" ] || { cat "$d/out" >&2; die "no warning before creating a private project"; }
+  [ -s "$d/w" ] && [ "$(cat "$d/w")" -lt "$(cat "$d/c")" ] || {
+    cat "$d/out" >&2
+    die "no warning before creating a private project"
+  }
 }
 
 test_the_files_are_waited_for_retrying_on_404_for_up_to_a_minute() {
@@ -6899,17 +8678,32 @@ test_the_files_are_waited_for_retrying_on_404_for_up_to_a_minute() {
   expect_rc 0 "$d"
   expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$BRANCH_CALL" "$BRANCH_CALL" "$BRANCH_CALL" \
     "$FILES_CALL" "$FILES_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL" "${END_CALLS[@]}"
-  [ "$(cat "$d/sleep.log")" = "$(printf '2\n2\n2\n2\n2')" ] || { cat "$d/sleep.log" >&2; die "not 5 waits of 2 seconds"; }
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/err" >&2; die "did not reach the end of step 3"; }
+  [ "$(cat "$d/sleep.log")" = "$(printf '2\n2\n2\n2\n2')" ] || {
+    cat "$d/sleep.log" >&2
+    die "not 5 waits of 2 seconds"
+  }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/err" >&2
+    die "did not reach the end of step 3"
+  }
   # Never there: 30 waits of 2 seconds (60 s), then a plain stop with the
   # command to continue; protection is not touched.
   d="$(tmpdir)"
   echo 9999 >"$d/main-missing"
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
-  [ "$(grep -c . "$d/sleep.log")" -eq 30 ] && [ "$(sort -u "$d/sleep.log")" = 2 ] || { cat "$d/sleep.log" >&2; die "not 30 waits of 2 seconds"; }
-  [ "$(calls_from_create "$d" | grep -cxF "$BRANCH_CALL")" -eq 31 ] || { cat "$d/gh.log" >&2; die "not 31 checks"; }
-  ! calls_from_create "$d" | grep -F -- '-X PUT' >/dev/null || { cat "$d/gh.log" >&2; die "protection was touched"; }
+  [ "$(grep -c . "$d/sleep.log")" -eq 30 ] && [ "$(sort -u "$d/sleep.log")" = 2 ] || {
+    cat "$d/sleep.log" >&2
+    die "not 30 waits of 2 seconds"
+  }
+  [ "$(calls_from_create "$d" | grep -cxF "$BRANCH_CALL")" -eq 31 ] || {
+    cat "$d/gh.log" >&2
+    die "not 31 checks"
+  }
+  ! calls_from_create "$d" | grep -F -- '-X PUT' >/dev/null || {
+    cat "$d/gh.log" >&2
+    die "protection was touched"
+  }
   expect_err_shape "$d" "GitHub has not finished .* after a minute"
   expect_continue_command "$d" " --resume"
   # #150 review, finding 3: the minute is shared by the two reads: 20
@@ -6919,8 +8713,14 @@ test_the_files_are_waited_for_retrying_on_404_for_up_to_a_minute() {
   echo 9999 >"$d/changelog-missing"
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
-  [ "$(grep -c . "$d/sleep.log")" -eq 30 ] || { cat "$d/sleep.log" >&2; die "not 30 waits in all"; }
-  [ "$(calls_from_create "$d" | grep -cxF "$FILES_CALL")" -eq 11 ] || { cat "$d/gh.log" >&2; die "not 11 reads of CHANGELOG.md"; }
+  [ "$(grep -c . "$d/sleep.log")" -eq 30 ] || {
+    cat "$d/sleep.log" >&2
+    die "not 30 waits in all"
+  }
+  [ "$(calls_from_create "$d" | grep -cxF "$FILES_CALL")" -eq 11 ] || {
+    cat "$d/gh.log" >&2
+    die "not 11 reads of CHANGELOG.md"
+  }
   expect_err_shape "$d" "GitHub has not finished .* after a minute"
   # Another answer while waiting: explained, nothing more.
   d="$(tmpdir)"
@@ -6948,28 +8748,49 @@ test_a_403_on_protection_stops_before_anything_else_with_its_guide() {
       expect_calls "$d" "${CREATE_CALL/--public/--private}" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL"
     fi
     expect_out "$d" "Details for support (you can ignore these):"
-    grep -qE '^    HTTP 403: .' "$d/out" || { cat "$d/out" >&2; die "$mode: GitHub's message not shown below"; }
+    grep -qE '^    HTTP 403: .' "$d/out" || {
+      cat "$d/out" >&2
+      die "$mode: GitHub's message not shown below"
+    }
     expect_continue_command "$d" " --resume"
     expect_no_out "$d" "Press Enter"
-    sed -n 1p "$d/err" | grep '^What happened: .*octo-user/my-app exists on GitHub' >/dev/null || { cat "$d/err" >&2; die "$mode: the stop does not say the project exists"; }
+    sed -n 1p "$d/err" | grep '^What happened: .*octo-user/my-app exists on GitHub' >/dev/null || {
+      cat "$d/err" >&2
+      die "$mode: the stop does not say the project exists"
+    }
     expect_no_out "$d" "$FINISHED"
     [ -z "$(ls -A "$d/cwd")" ] || die "$mode: something was made on this computer"
     case "$mode" in
       plan)
         expect_out "$d" "needs a paid GitHub plan"
-        grep -qxF '    gh repo edit octo-user/my-app --visibility public --accept-visibility-change-consequences' "$d/out" \
-          || { cat "$d/out" >&2; die "$mode: the command to make it public is not shown"; }
-        grep -E '^    (cd .* && )?bash .* --allow-unprotected$' "$d/out" | while IFS= read -r l; do long_of "$d" "$l"; done \
-          | grep -E '^    bash .* --resume( .*)? --allow-unprotected$' >/dev/null || { cat "$d/out" >&2; die "$mode: --allow-unprotected not shown"; }
+        grep -qxF '    gh repo edit octo-user/my-app --visibility public --accept-visibility-change-consequences' "$d/out" ||
+          {
+            cat "$d/out" >&2
+            die "$mode: the command to make it public is not shown"
+          }
+        grep -E '^    (cd .* && )?bash .* --allow-unprotected$' "$d/out" | while IFS= read -r l; do long_of "$d" "$l"; done |
+          grep -E '^    bash .* --resume( .*)? --allow-unprotected$' >/dev/null || {
+          cat "$d/out" >&2
+          die "$mode: --allow-unprotected not shown"
+        }
         ;;
       mystery)
         # Round 3, N2: a message that does not say why, on a project
         # GitHub says is private, gets both explanations (the plan steps and
         # the token steps), and still no --allow-unprotected.
         sed -n '/^==> Protecting/,$p' "$d/out" >"$d/guide"
-        grep -qF 'https://github.com/settings/billing' "$d/guide" || { cat "$d/guide" >&2; die "mystery: the plan steps are not shown"; }
-        grep -qxF '    gh repo edit octo-user/my-app --visibility public --accept-visibility-change-consequences' "$d/guide" || { cat "$d/guide" >&2; die "mystery: the command to make it public is not shown"; }
-        ! grep -qF -- '--allow-unprotected' "$d/guide" || { cat "$d/guide" >&2; die "mystery: --allow-unprotected is offered"; }
+        grep -qF 'https://github.com/settings/billing' "$d/guide" || {
+          cat "$d/guide" >&2
+          die "mystery: the plan steps are not shown"
+        }
+        grep -qxF '    gh repo edit octo-user/my-app --visibility public --accept-visibility-change-consequences' "$d/guide" || {
+          cat "$d/guide" >&2
+          die "mystery: the command to make it public is not shown"
+        }
+        ! grep -qF -- '--allow-unprotected' "$d/guide" || {
+          cat "$d/guide" >&2
+          die "mystery: --allow-unprotected is offered"
+        }
         ;;
     esac
     case "$mode" in
@@ -6982,8 +8803,14 @@ test_a_403_on_protection_stops_before_anything_else_with_its_guide() {
     # about the paid plan already, because the project is private).
     sed -n '/^==> Protecting/,$p' "$d/out" >"$d/guide"
     case "$mode" in
-      plan) ! grep -qF "Administration" "$d/guide" || { cat "$d/guide" >&2; die "plan: the token steps are shown"; } ;;
-      token) ! grep -qF "needs a paid GitHub plan" "$d/guide" || { cat "$d/guide" >&2; die "token: the plan steps are shown"; } ;;
+      plan) ! grep -qF "Administration" "$d/guide" || {
+        cat "$d/guide" >&2
+        die "plan: the token steps are shown"
+      } ;;
+      token) ! grep -qF "needs a paid GitHub plan" "$d/guide" || {
+        cat "$d/guide" >&2
+        die "token: the plan steps are shown"
+      } ;;
     esac
     unset STUB_GH_PROTECT_FAIL
   done
@@ -6994,7 +8821,10 @@ test_a_403_on_protection_stops_before_anything_else_with_its_guide() {
   setup_run "$d" --non-interactive --yes --private
   expect_rc 1 "$d"
   expect_err_shape "$d" "GitHub has paused"
-  sed -n '/^==> Protecting/,$p' "$d/out" | grep -F 'Why this is needed' >/dev/null && { cat "$d/out" >&2; die "rate limit: a guide was shown"; }
+  sed -n '/^==> Protecting/,$p' "$d/out" | grep -F 'Why this is needed' >/dev/null && {
+    cat "$d/out" >&2
+    die "rate limit: a guide was shown"
+  }
   unset STUB_GH_PROTECT_FAIL
   # Interactive too: it stops at once, with no wait.
   d="$(tmpdir)"
@@ -7028,9 +8858,18 @@ test_the_continue_command_carries_every_answer_given_at_the_questions() {
   printf 'yes\n' >"$d/in"
   again "$d"
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "the continued run did not go through"; }
-  [ "$(grep -c 'Proceed? (yes or no) \[no\]: ' "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "Proceed? not asked once"; }
-  ! grep -qE '^(Project name|Description|Language pack|Licence|Folder|Your name for git)' "$d/out" || { cat "$d/out" >&2; die "a question was asked again"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "the continued run did not go through"
+  }
+  [ "$(grep -c 'Proceed? (yes or no) \[no\]: ' "$d/out")" -eq 1 ] || {
+    cat "$d/out" >&2
+    die "Proceed? not asked once"
+  }
+  ! grep -qE '^(Project name|Description|Language pack|Licence|Folder|Your name for git)' "$d/out" || {
+    cat "$d/out" >&2
+    die "a question was asked again"
+  }
   # A stop before the project exists (a guide the user leaves with q)
   # shows the command to start again, with the answers too.
   d="$(tmpdir)"
@@ -7044,7 +8883,10 @@ test_the_continue_command_carries_every_answer_given_at_the_questions() {
   line="$(shown_after "$d" 'To start again, run this command:')"
   case "$line" in
     "    bash "*"$CARRIED") ;;
-    *) cat "$d/out" >&2; die "the command to start again does not carry the answers: $line" ;;
+    *)
+      cat "$d/out" >&2
+      die "the command to start again does not carry the answers: $line"
+      ;;
   esac
   case "$line" in *" --resume"*) die "the command to start again has --resume" ;; esac
 }
@@ -7069,15 +8911,24 @@ test_the_commands_shown_carry_a_no_to_the_publishing_files() {
   expect_continue_command "$d" " --without-deploy"
   case " $(advance_command "$d") " in
     *" --resume "*" --without-deploy "*) ;;
-    *) cat "$d/out" >&2; die "the command shown before the first change does not carry the no: $(advance_command "$d")" ;;
+    *)
+      cat "$d/out" >&2
+      die "the command shown before the first change does not carry the no: $(advance_command "$d")"
+      ;;
   esac
   # Run as shown, with no answers at all on stdin, it asks nothing and
   # goes through without the publishing files.
   : >"$d/in"
   again "$d"
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "the continued run did not go through"; }
-  ! grep -qF 'Add the publishing files' "$d/out" || { cat "$d/out" >&2; die "the publishing question was asked again"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "the continued run did not go through"
+  }
+  ! grep -qF 'Add the publishing files' "$d/out" || {
+    cat "$d/out" >&2
+    die "the publishing question was asked again"
+  }
   [ ! -e "$(copy_of "$d")/.github/workflows/deploy.yml" ] || die "the publishing files were added after a no"
   # The command to start again carries it too.
   d="$(tmpdir)"
@@ -7092,7 +8943,10 @@ test_the_commands_shown_carry_a_no_to_the_publishing_files() {
   line="$(shown_after "$d" 'To start again, run this command:')"
   case "$line " in
     "    bash "*" --without-deploy "*) ;;
-    *) cat "$d/out" >&2; die "the command to start again does not carry the no: $line" ;;
+    *)
+      cat "$d/out" >&2
+      die "the command to start again does not carry the no: $line"
+      ;;
   esac
   # A yes is carried as --with-deploy, as before.
   d="$(tmpdir)"
@@ -7107,7 +8961,10 @@ test_the_commands_shown_carry_a_no_to_the_publishing_files() {
   line="$(shown_after "$d" 'To start again, run this command:')"
   case "$line " in
     "    bash "*" --with-deploy "*) ;;
-    *) cat "$d/out" >&2; die "the command to start again does not carry the yes: $line" ;;
+    *)
+      cat "$d/out" >&2
+      die "the command to start again does not carry the yes: $line"
+      ;;
   esac
 }
 
@@ -7120,7 +8977,11 @@ test_the_commands_shown_carry_a_no_to_the_publishing_files() {
 AGAIN_FILE=.bootstrap-project.again
 
 # again_file_of <dir>: the file a whole run in <dir> saves its answers to.
-again_file_of() { local s; s="$(run_script_of "$1")"; printf '%s\n' "${s%/*}/$AGAIN_FILE"; }
+again_file_of() {
+  local s
+  s="$(run_script_of "$1")"
+  printf '%s\n' "${s%/*}/$AGAIN_FILE"
+}
 
 # expect_again_file <dir> <word...>: the saved file holds exactly these
 # words, one per line.
@@ -7128,22 +8989,32 @@ expect_again_file() {
   local d="$1" f
   shift
   f="$(again_file_of "$d")"
-  [ -f "$f" ] || { cat "$d/out" "$d/err" >&2; die "no saved file $f"; }
+  [ -f "$f" ] || {
+    cat "$d/out" "$d/err" >&2
+    die "no saved file $f"
+  }
   printf '%s\n' "$@" >"$d/want-again"
   expect_same "the saved answers" "$d/want-again" "$f"
 }
 
 # shown_script_of <dir>: the script of a whole run in <dir>, as the
 # commands shown write it (quoted where it has a space).
-shown_script_of() { ( load_script; quote_word "$(run_script_of "$1")"; printf '%s\n' "$QUOTED" ); }
+shown_script_of() { (
+  load_script
+  quote_word "$(run_script_of "$1")"
+  printf '%s\n' "$QUOTED"
+); }
 
 # expect_short_command <dir> <intro> [extra]: the line under <intro> is the
 # short command, with the script as the run started it.
 expect_short_command() {
   local line
   line="$(grep -A1 -xF -- "$2" "$1/out" | sed -n 2p)"
-  [ "$line" = "    $(start_cd_of "$1")bash $(shown_script_of "$1") --again${3:-}" ] \
-    || { cat "$1/out" >&2; die "not the short command under '$2': $line"; }
+  [ "$line" = "    $(start_cd_of "$1")bash $(shown_script_of "$1") --again${3:-}" ] ||
+    {
+      cat "$1/out" >&2
+      die "not the short command under '$2': $line"
+    }
 }
 
 test_a_stop_at_a_guide_shows_the_short_command_and_saves_the_long_ones_arguments() {
@@ -7186,8 +9057,11 @@ test_a_stop_after_the_project_exists_saves_resume_and_the_guide_offers_the_short
   expect_again_file "$d" "${REQUIRED_OPTS[@]}" --pack python "${ALL_OPTS[@]}" --non-interactive --yes --private --resume
   # The guide's way on without protection: the same file, with the option
   # added on the command line.
-  grep -qxF "    $(start_cd_of "$d")bash $(shown_script_of "$d") --again --allow-unprotected" "$d/out" \
-    || { cat "$d/out" >&2; die "the short command with --allow-unprotected is not shown"; }
+  grep -qxF "    $(start_cd_of "$d")bash $(shown_script_of "$d") --again --allow-unprotected" "$d/out" ||
+    {
+      cat "$d/out" >&2
+      die "the short command with --allow-unprotected is not shown"
+    }
   # Run as shown, it goes on without protection.
   again "$d" --allow-unprotected
   unset STUB_GH_PROTECT_FAIL
@@ -7209,10 +9083,16 @@ test_again_runs_with_the_saved_answers_and_adds_the_options_after_them() {
   : >"$d/in"
   whole "$d" --again --name my-app-2 --dry-run
   expect_rc 0 "$d"
-  [ "$(sed -n 1p "$d/out")" = "Using the answers saved when the script stopped last time, for the project octo-user/my-app." ] \
-    || { cat "$d/out" >&2; die "the first line does not say whose answers are used"; }
-  ! grep -qE '^(Project name|Description|Language pack|Licence|Folder|Your name for git)' "$d/out" \
-    || { cat "$d/out" >&2; die "a question was asked again"; }
+  [ "$(sed -n 1p "$d/out")" = "Using the answers saved when the script stopped last time, for the project octo-user/my-app." ] ||
+    {
+      cat "$d/out" >&2
+      die "the first line does not say whose answers are used"
+    }
+  ! grep -qE '^(Project name|Description|Language pack|Licence|Folder|Your name for git)' "$d/out" ||
+    {
+      cat "$d/out" >&2
+      die "a question was asked again"
+    }
   # The option given after --again comes after the saved ones, so it wins.
   expect_out "$d" "    On GitHub: octo-user/my-app-2,"
   expect_out "$d" "    Description: Lends tools."
@@ -7235,32 +9115,52 @@ expect_macos_stop() {
   expect_rc 1 "$d"
   lines="$(grep -v '^$' "$d/err" || true)"
   [ "$lines" = "$MACOS_STOP_WHAT
-$MACOS_STOP_NEXT" ] || { cat "$d/err" >&2; die "stderr is not exactly the two lines of the macOS stop"; }
-  [ ! -s "$d/gh.log" ] || { cat "$d/gh.log" >&2; die "gh was called"; }
-  ! grep -qE '^git ' "$d/tools.log" 2>/dev/null || { cat "$d/tools.log" >&2; die "git was called"; }
+$MACOS_STOP_NEXT" ] || {
+    cat "$d/err" >&2
+    die "stderr is not exactly the two lines of the macOS stop"
+  }
+  [ ! -s "$d/gh.log" ] || {
+    cat "$d/gh.log" >&2
+    die "gh was called"
+  }
+  ! grep -qE '^git ' "$d/tools.log" 2>/dev/null || {
+    cat "$d/tools.log" >&2
+    die "git was called"
+  }
   [ -z "$(ls -A "$d/cwd")" ] || die "something was created in the folder the run started in"
   # Nothing on stdout but --again's own first line: no colour key, no
   # command to start again.
-  [ -z "$(grep -v '^$' "$d/out" | grep -v '^Using the answers saved when the script stopped last time' || true)" ] || { cat "$d/out" >&2; die "stdout is not empty (a colour key or a command to start again?)"; }
+  [ -z "$(grep -v '^$' "$d/out" | grep -v '^Using the answers saved when the script stopped last time' || true)" ] || {
+    cat "$d/out" >&2
+    die "stdout is not empty (a colour key or a command to start again?)"
+  }
 }
 
 test_the_setup_stops_on_macos_before_it_changes_anything() {
   local d f
   # The plain command.
-  d="$(tmpdir)"; working_git "$d"; on_os "$d" macos
+  d="$(tmpdir)"
+  working_git "$d"
+  on_os "$d" macos
   whole "$d"
   expect_macos_stop "$d"
   # Every answer given, nothing to ask.
-  d="$(tmpdir)"; working_git "$d"; on_os "$d" macos
+  d="$(tmpdir)"
+  working_git "$d"
+  on_os "$d" macos
   whole "$d" --non-interactive --yes "${REQUIRED_OPTS[@]}"
   expect_macos_stop "$d"
   # --resume.
-  d="$(tmpdir)"; working_git "$d"; on_os "$d" macos
+  d="$(tmpdir)"
+  working_git "$d"
+  on_os "$d" macos
   whole "$d" --resume --owner octo-user --name my-app
   expect_macos_stop "$d"
   # --again, with an answers file saved by an earlier stop on Linux: the
   # file is not written again and not changed.
-  d="$(tmpdir)"; working_git "$d"; use_built "$d"
+  d="$(tmpdir)"
+  working_git "$d"
+  use_built "$d"
   export STUB_GH_EXISTING="octo-user/my-app"
   printf '%s\n' "${ANSWERS_IN[@]}" q >"$d/in"
   whole "$d"
@@ -7269,7 +9169,8 @@ test_the_setup_stops_on_macos_before_it_changes_anything() {
   f="$(again_file_of "$d")"
   [ -f "$f" ] || die "no saved file to start from"
   cp "$f" "$d/again-before"
-  : >"$d/gh.log"; : >"$d/tools.log"
+  : >"$d/gh.log"
+  : >"$d/tools.log"
   on_os "$d" macos
   : >"$d/in"
   whole "$d" --again
@@ -7278,7 +9179,9 @@ test_the_setup_stops_on_macos_before_it_changes_anything() {
   # A plain run on a Mac writes no saved file at all (not the built script
   # of the run above: the copy of the template's script in a folder of its own).
   RUN_SCRIPT=""
-  d="$(tmpdir)"; working_git "$d"; on_os "$d" macos
+  d="$(tmpdir)"
+  working_git "$d"
+  on_os "$d" macos
   whole "$d"
   [ ! -e "$(again_file_of "$d")" ] || die "a saved file was written"
 }
@@ -7286,40 +9189,53 @@ test_the_setup_stops_on_macos_before_it_changes_anything() {
 test_help_and_version_still_work_on_macos() {
   local d m opt
   for opt in --help --version; do
-    d="$(tmpdir)"; on_os "$d" linux
+    d="$(tmpdir)"
+    on_os "$d" linux
     whole "$d" "$opt"
     expect_rc 0 "$d"
-    m="$(tmpdir)"; on_os "$m" macos
+    m="$(tmpdir)"
+    on_os "$m" macos
     whole "$m" "$opt"
     expect_rc 0 "$m"
     [ -s "$m/out" ] || die "$opt printed nothing on macOS"
-    cmp -s "$d/out" "$m/out" || { diff "$d/out" "$m/out" >&2 || true; die "$opt prints something else on macOS"; }
+    cmp -s "$d/out" "$m/out" || {
+      diff "$d/out" "$m/out" >&2 || true
+      die "$opt prints something else on macOS"
+    }
   done
 }
 
 test_the_macos_stop_is_not_shown_on_linux_or_windows() {
   local d os
   for os in linux windows; do
-    d="$(tmpdir)"; working_git "$d"; on_os "$d" "$os"
+    d="$(tmpdir)"
+    working_git "$d"
+    on_os "$d" "$os"
     whole "$d" --non-interactive
-    ! grep -qF "which the setup does not support for now" "$d/err" "$d/out" || { cat "$d/err" >&2; die "the macOS stop is shown on $os"; }
+    ! grep -qF "which the setup does not support for now" "$d/err" "$d/out" || {
+      cat "$d/err" >&2
+      die "the macOS stop is shown on $os"
+    }
   done
 }
 
 test_the_readmes_say_macos_is_not_supported_for_now() {
   local f
-  grep -qxF '   - **macOS:** not supported for now: the setup stops on a Mac. Use a computer with Windows or Linux.' "$TEMPLATE_README" \
-    || die "README.md step 0 lacks the macOS line"
-  grep -qxF '  - a bash that is too old (Windows: install the current Git for Windows);' "$TEMPLATE_README" \
-    || die "README.md lacks the bash line without macOS"
-  grep -qxF -- '- **A computer** with Windows or Linux. macOS is not supported for now: the setup stops on a Mac.' "$REPO/bootstrap/bootstrapper-README.md" \
-    || die "the bootstrapper README lacks the computer line"
+  grep -qxF '   - **macOS:** not supported for now: the setup stops on a Mac. Use a computer with Windows or Linux.' "$TEMPLATE_README" ||
+    die "README.md step 0 lacks the macOS line"
+  grep -qxF '  - a bash that is too old (Windows: install the current Git for Windows);' "$TEMPLATE_README" ||
+    die "README.md lacks the bash line without macOS"
+  grep -qxF -- '- **A computer** with Windows or Linux. macOS is not supported for now: the setup stops on a Mac.' "$REPO/bootstrap/bootstrapper-README.md" ||
+    die "the bootstrapper README lacks the computer line"
   grep -qF -- '- **On Linux: Git.**' "$REPO/bootstrap/bootstrapper-README.md" || die "the bootstrapper README lacks the Git line for Linux"
-  grep -qF 'in Git Bash (Windows) or a terminal (Linux; the setup does not support macOS for now)' "$STUB_README" \
-    || die "the stub README lacks the terminal line"
+  grep -qF 'in Git Bash (Windows) or a terminal (Linux; the setup does not support macOS for now)' "$STUB_README" ||
+    die "the stub README lacks the terminal line"
   for f in "$STUB_README" "$TEMPLATE_README" "$REPO/bootstrap/bootstrapper-README.md"; do
     grep -qi 'macos is not supported for now\|macos:\*\* not supported for now\|does not support macos for now' "$f" || die "$f does not say macOS is not supported for now"
-    ! grep -qE 'brew install gh|Download for Mac|/bin/bash|Terminal app' "$f" || { grep -nE 'brew install gh|Download for Mac|/bin/bash|Terminal app' "$f" >&2; die "$f still has a macOS step"; }
+    ! grep -qE 'brew install gh|Download for Mac|/bin/bash|Terminal app' "$f" || {
+      grep -nE 'brew install gh|Download for Mac|/bin/bash|Terminal app' "$f" >&2
+      die "$f still has a macOS step"
+    }
   done
 }
 
@@ -7332,9 +9248,18 @@ test_again_without_a_saved_file_stops_with_a_plain_error_and_runs_nothing() {
     [ "$how" != folder ] || mkdir "$f"
     whole "$d" --again
     expect_rc 2 "$d"
-    sed -n 1p "$d/err" | grep -E '^What happened: .*saved answers' >/dev/null || { cat "$d/err" >&2; die "$how: no plain message"; }
-    grep -qE '^What to do next: .*step 1 of the README' "$d/err" || { cat "$d/err" >&2; die "$how: does not point to step 1 of the README"; }
-    [ ! -s "$d/gh.log" ] || { cat "$d/gh.log" >&2; die "$how: gh was called"; }
+    sed -n 1p "$d/err" | grep -E '^What happened: .*saved answers' >/dev/null || {
+      cat "$d/err" >&2
+      die "$how: no plain message"
+    }
+    grep -qE '^What to do next: .*step 1 of the README' "$d/err" || {
+      cat "$d/err" >&2
+      die "$how: does not point to step 1 of the README"
+    }
+    [ ! -s "$d/gh.log" ] || {
+      cat "$d/gh.log" >&2
+      die "$how: gh was called"
+    }
     [ -z "$(ls -A "$d/cwd")" ] || die "$how: something was created"
     expect_no_out "$d" "Using the answers saved"
   done
@@ -7345,25 +9270,59 @@ test_an_answer_with_a_newline_or_a_folder_inside_the_copy_is_not_saved_and_the_l
   t="$(tmpdir)"
   # Control: AGAIN_DIR set by hand (a sourced script saves nothing), a
   # plain answer is saved, and the short command shown.
-  out="$( load_script; remember_command --name my-app; AGAIN_DIR="$t"; RESTART_SCRIPT=x.sh
-    stop_at_guide 2>/dev/null )" || true
-  [ -f "$t/$AGAIN_FILE" ] || { printf '%s\n' "$out" >&2; die "control: nothing saved"; }
-  grep -qxF '    bash x.sh --again' <<<"$out" || { printf '%s\n' "$out" >&2; die "control: no short command"; }
+  out="$(
+    load_script
+    remember_command --name my-app
+    AGAIN_DIR="$t"
+    RESTART_SCRIPT=x.sh
+    stop_at_guide 2>/dev/null
+  )" || true
+  [ -f "$t/$AGAIN_FILE" ] || {
+    printf '%s\n' "$out" >&2
+    die "control: nothing saved"
+  }
+  grep -qxF '    bash x.sh --again' <<<"$out" || {
+    printf '%s\n' "$out" >&2
+    die "control: no short command"
+  }
   rm -f "$t/$AGAIN_FILE"
   # An answer with a newline cannot be one line: no file, the long command.
-  out="$( load_script; remember_command --name my-app --description "$(printf 'one\ntwo')"; AGAIN_DIR="$t"
-    RESTART_SCRIPT=x.sh; stop_at_guide 2>/dev/null )" || true
+  out="$(
+    load_script
+    remember_command --name my-app --description "$(printf 'one\ntwo')"
+    AGAIN_DIR="$t"
+    RESTART_SCRIPT=x.sh
+    stop_at_guide 2>/dev/null
+  )" || true
   [ ! -e "$t/$AGAIN_FILE" ] || die "an answer with a newline was saved"
-  ! grep -qF -- '--again' <<<"$out" || { printf '%s\n' "$out" >&2; die "the short command was shown"; }
-  grep -qF -- "--name my-app --description 'one" <<<"$out" || { printf '%s\n' "$out" >&2; die "the long command is not shown"; }
-  [ -z "$(ls -A "$t")" ] || { ls -A "$t" >&2; die "a file was left in the folder"; }
+  ! grep -qF -- '--again' <<<"$out" || {
+    printf '%s\n' "$out" >&2
+    die "the short command was shown"
+  }
+  grep -qF -- "--name my-app --description 'one" <<<"$out" || {
+    printf '%s\n' "$out" >&2
+    die "the long command is not shown"
+  }
+  [ -z "$(ls -A "$t")" ] || {
+    ls -A "$t" >&2
+    die "a file was left in the folder"
+  }
   # The script's folder is the project's copy (or inside it): the file
   # would be a change in the copy, so it is not saved there.
   mkdir -p "$t/copy/sub"
-  out="$( load_script; remember_command --name my-app; AGAIN_DIR="$t/copy/sub"; IN_DIR="$t/copy"
-    RESTART_SCRIPT=x.sh; stop_at_guide 2>/dev/null )" || true
+  out="$(
+    load_script
+    remember_command --name my-app
+    AGAIN_DIR="$t/copy/sub"
+    IN_DIR="$t/copy"
+    RESTART_SCRIPT=x.sh
+    stop_at_guide 2>/dev/null
+  )" || true
   [ ! -e "$t/copy/sub/$AGAIN_FILE" ] || die "saved inside the copy"
-  grep -qE '^    bash .* --name my-app$' <<<"$out" || { printf '%s\n' "$out" >&2; die "inside the copy: the long command is not shown"; }
+  grep -qE '^    bash .* --name my-app$' <<<"$out" || {
+    printf '%s\n' "$out" >&2
+    die "inside the copy: the long command is not shown"
+  }
 }
 
 test_a_finished_setup_removes_its_saved_file_and_nothing_else() {
@@ -7379,11 +9338,17 @@ test_a_finished_setup_removes_its_saved_file_and_nothing_else() {
   : >"${f%/*}/other-file"
   again "$d"
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "the run did not go through"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "the run did not go through"
+  }
   [ ! -e "$f" ] || die "the saved file is still there"
   # shellcheck disable=SC2012 # the names are the test's own, plain ones
-  [ "$(ls -A "${f%/*}" | LC_ALL=C sort | tr '\n' ' ')" = "bootstrap-project.sh other-file " ] \
-    || { ls -A "${f%/*}" >&2; die "other files in the folder changed"; }
+  [ "$(ls -A "${f%/*}" | LC_ALL=C sort | tr '\n' ' ')" = "bootstrap-project.sh other-file " ] ||
+    {
+      ls -A "${f%/*}" >&2
+      die "other files in the folder changed"
+    }
   # A run that goes through at once leaves no file either.
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
@@ -7399,16 +9364,26 @@ test_the_saved_file_is_readable_by_the_user_only() {
   # shellcheck disable=SC2012 # ls -l gives the mode the same way on Linux, macOS and Git Bash; stat does not
   case "$(ls -l "$probe" | cut -c1-10)" in
     -rw-------) ;;
-    *) skip_test "chmod 600 is not honoured here (Git Bash on Windows shows every file as readable by all)"; return 0 ;;
+    *)
+      skip_test "chmod 600 is not honoured here (Git Bash on Windows shows every file as readable by all)"
+      return 0
+      ;;
   esac
   d="$(tmpdir)"
   on_os "$d" linux debian
   missing "$d" git
-  ( umask 022; printf 'q\n' >"$d/in"; whole "$d" --name my-app --git-email test@example.com ) || exit 1
+  (
+    umask 022
+    printf 'q\n' >"$d/in"
+    whole "$d" --name my-app --git-email test@example.com
+  ) || exit 1
   f="$(again_file_of "$d")"
   [ -f "$f" ] || die "no file saved"
   # shellcheck disable=SC2012 # ls -l gives the mode the same way on Linux, macOS and Git Bash; stat does not
-  [ "$(ls -l "$f" | cut -c1-10)" = "-rw-------" ] || { ls -l "$f" >&2; die "the file is not readable by the user only"; }
+  [ "$(ls -l "$f" | cut -c1-10)" = "-rw-------" ] || {
+    ls -l "$f" >&2
+    die "the file is not readable by the user only"
+  }
 }
 
 test_the_saved_file_is_read_as_words_never_run() {
@@ -7421,12 +9396,15 @@ test_the_saved_file_is_read_as_words_never_run() {
     --pack python --license none --owner octo-user --po-name Ada --dir ./my-app --git-name "Test Person" \
     --git-email test@example.com --public --non-interactive --dry-run >"$f"
   whole "$d" --again
-  [ ! -e "$d/cwd/pwned" ] && [ ! -e "$d/cwd/pwned2" ] && [ ! -e "$d/dl/pwned" ] && [ ! -e "$d/dl/pwned2" ] \
-    || die "a line of the file was run"
+  [ ! -e "$d/cwd/pwned" ] && [ ! -e "$d/cwd/pwned2" ] && [ ! -e "$d/dl/pwned" ] && [ ! -e "$d/dl/pwned2" ] ||
+    die "a line of the file was run"
   # The value reached the script as it is: check_text refuses its
   # backticks, so the run stops on it, and says which option.
   expect_rc 2 "$d"
-  grep -qF -- '--description' "$d/err" || { cat "$d/err" >&2; die "the description was not read as the value of --description"; }
+  grep -qF -- '--description' "$d/err" || {
+    cat "$d/err" >&2
+    die "the description was not read as the value of --description"
+  }
   # Without the backticks the value goes through, word for word.
   printf '%s\n' --name my-app --description '$(touch pwned); touch pwned' --project-name '; touch pwned2' \
     --pack python --license none --owner octo-user --po-name Ada --dir ./my-app --git-name "Test Person" \
@@ -7435,7 +9413,10 @@ test_the_saved_file_is_read_as_words_never_run() {
   expect_rc 0 "$d"
   expect_out "$d" '    Description: $(touch pwned); touch pwned'
   expect_out "$d" '    Display name: ; touch pwned2'
-  [ -z "$(find "$d" -name 'pwned*')" ] || { find "$d" -name 'pwned*' >&2; die "a line of the file was run"; }
+  [ -z "$(find "$d" -name 'pwned*')" ] || {
+    find "$d" -name 'pwned*' >&2
+    die "a line of the file was run"
+  }
 }
 
 test_help_and_readme_name_the_short_command() {
@@ -7443,7 +9424,10 @@ test_help_and_readme_name_the_short_command() {
   d="$(tmpdir)"
   bash "$SCRIPT" --help </dev/null >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 0 ] || die "--help exit $rc"
-  [ "$(grep -c -- '--again' "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "--help does not list --again in one line"; }
+  [ "$(grep -c -- '--again' "$d/out")" -eq 1 ] || {
+    cat "$d/out" >&2
+    die "--help does not list --again in one line"
+  }
   step="$(sed -n '/^\*\*Step 1: /,/^\*\*What the script guides you through/p' "$TEMPLATE_README" | tr '\n' ' ' | sed 's/  */ /g')"
   # #267 review, B1 (Clead): the command goes to the folder itself, so it
   # works from a new window too; the README says so, not "the same folder".
@@ -7470,8 +9454,19 @@ start_cd_of() {
   home="$(cd "$1/home" && pwd)" || die "start_cd_of: no folder $1/home"
   case "$f" in
     "$home") printf 'cd ~ && ' ;;
-    "$home/"*) rest="${f#"$home/"}"; ( load_script; quote_word "$rest"; printf 'cd ~/%s && ' "$QUOTED" ) ;;
-    *) ( load_script; quote_word "$f"; printf 'cd %s && ' "$QUOTED" ) ;;
+    "$home/"*)
+      rest="${f#"$home/"}"
+      (
+        load_script
+        quote_word "$rest"
+        printf 'cd ~/%s && ' "$QUOTED"
+      )
+      ;;
+    *) (
+      load_script
+      quote_word "$f"
+      printf 'cd %s && ' "$QUOTED"
+    ) ;;
   esac
 }
 
@@ -7482,7 +9477,11 @@ run_shown_from() {
   mv "$d/out" "$d/out.prev"
   mv "$d/err" "$d/err.prev"
   set +e
-  ( in_env "$d"; cd "$f"; "$BASH" -c "$line" ) <"$d/in" >"$d/out" 2>"$d/err"
+  (
+    in_env "$d"
+    cd "$f"
+    "$BASH" -c "$line"
+  ) <"$d/in" >"$d/out" 2>"$d/err"
   RC=$?
   set -e
 }
@@ -7498,12 +9497,19 @@ test_the_command_shown_goes_to_the_folder_the_script_started_in() {
   whole "$d" --name my-app --description "Lends tools." --pack node
   expect_rc 3 "$d"
   line="$(grep -A1 -xF 'To start again, run this command:' "$d/out" | sed -n 2p)"
-  [ "$line" = "    $(start_cd_of "$d")bash $(shown_script_of "$d") --again" ] || { cat "$d/out" >&2; die "start again: not the command with its cd: $line"; }
-  other="$d/other"; mkdir -p "$other"
+  [ "$line" = "    $(start_cd_of "$d")bash $(shown_script_of "$d") --again" ] || {
+    cat "$d/out" >&2
+    die "start again: not the command with its cd: $line"
+  }
+  other="$d/other"
+  mkdir -p "$other"
   printf 'q\n' >"$d/in"
   run_shown_from "$d" "$other" "$line"
   expect_rc 3 "$d"
-  [ "$(sed -n 1p "$d/out")" = "Using the answers saved when the script stopped last time, for the project my-app." ] || { cat "$d/out" "$d/err" >&2; die "start again: the saved answers were not used"; }
+  [ "$(sed -n 1p "$d/out")" = "Using the answers saved when the script stopped last time, for the project my-app." ] || {
+    cat "$d/out" "$d/err" >&2
+    die "start again: the saved answers were not used"
+  }
   expect_out "$d" "git is not installed."
   [ -z "$(ls -A "$other")" ] || die "start again: something was made in the other folder"
   # Continue: once the project exists, the command run from another folder
@@ -7515,8 +9521,12 @@ test_the_command_shown_goes_to_the_folder_the_script_started_in() {
   unset STUB_GH_PR_FAIL
   expect_rc 1 "$d"
   line="$(grep -A1 -xF 'To continue the setup, run this command:' "$d/out" | sed -n 2p)"
-  [ "$line" = "    $(start_cd_of "$d")bash $(shown_script_of "$d") --again" ] || { cat "$d/out" >&2; die "continue: not the command with its cd: $line"; }
-  other="$d/other"; mkdir -p "$other"
+  [ "$line" = "    $(start_cd_of "$d")bash $(shown_script_of "$d") --again" ] || {
+    cat "$d/out" >&2
+    die "continue: not the command with its cd: $line"
+  }
+  other="$d/other"
+  mkdir -p "$other"
   run_shown_from "$d" "$other" "$line"
   expect_rc 0 "$d"
   expect_one_of_each "$d"
@@ -7533,12 +9543,22 @@ test_the_command_shown_goes_to_the_folder_the_script_started_in() {
     RUN_CWD="$d/$sub" whole "$d" --name my-app --description "Lends tools." --pack node
     expect_rc 3 "$d"
     line="$(grep -A1 -xF 'To start again, run this command:' "$d/out" | sed -n 2p)"
-    [ "$line" = "    $(RUN_CWD="$d/$sub" start_cd_of "$d")bash $(shown_script_of "$d") --again" ] || { cat "$d/out" >&2; die "$sub: not the command with its cd: $line"; }
+    [ "$line" = "    $(RUN_CWD="$d/$sub" start_cd_of "$d")bash $(shown_script_of "$d") --again" ] || {
+      cat "$d/out" >&2
+      die "$sub: not the command with its cd: $line"
+    }
     case "$sub" in home/projects) [ "$line" = "    cd ~/projects && bash $(shown_script_of "$d") --again" ] || die "home: not written with ~: $line" ;; esac
     mkdir -p "$d/other"
     printf 'q\n' >"$d/in"
-    ( in_env "$d"; cd "$d/other"; "$BASH" -c "${line#    }" ) <"$d/in" >"$d/out2" 2>&1 || true
-    grep -qF 'Using the answers saved when the script stopped last time, for the project my-app.' "$d/out2" || { cat "$d/out2" >&2; die "$sub: the command did not run from another folder"; }
+    (
+      in_env "$d"
+      cd "$d/other"
+      "$BASH" -c "${line#    }"
+    ) <"$d/in" >"$d/out2" 2>&1 || true
+    grep -qF 'Using the answers saved when the script stopped last time, for the project my-app.' "$d/out2" || {
+      cat "$d/out2" >&2
+      die "$sub: the command did not run from another folder"
+    }
     [ -z "$(ls -A "$d/other")" ] || die "$sub: something was made in the other folder"
   done
 }
@@ -7555,9 +9575,15 @@ test_a_stop_before_any_answer_shows_the_plain_command_and_it_works() {
   whole "$d"
   expect_rc 3 "$d"
   f="$(again_file_of "$d")"
-  [ ! -e "$f" ] || { od -c "$f" >&2; die "a file was saved with no answers"; }
+  [ ! -e "$f" ] || {
+    od -c "$f" >&2
+    die "a file was saved with no answers"
+  }
   line="$(grep -A1 -xF 'To start again, run this command:' "$d/out" | sed -n 2p)"
-  [ "$line" = "    $(start_cd_of "$d")bash $(shown_script_of "$d")" ] || { cat "$d/out" >&2; die "not the plain command: $line"; }
+  [ "$line" = "    $(start_cd_of "$d")bash $(shown_script_of "$d")" ] || {
+    cat "$d/out" >&2
+    die "not the plain command: $line"
+  }
   printf 'q\n' >"$d/in"
   run_shown_from "$d" "$d/cwd" "$line"
   expect_rc 3 "$d"
@@ -7567,7 +9593,10 @@ test_a_stop_before_any_answer_shows_the_plain_command_and_it_works() {
   printf '\n\n' >"$f"
   whole "$d" --again
   expect_rc 2 "$d"
-  sed -n 1p "$d/err" | grep -E '^What happened: .*no saved answers' >/dev/null || { cat "$d/err" >&2; die "an empty file was not refused as no saved answers"; }
+  sed -n 1p "$d/err" | grep -E '^What happened: .*no saved answers' >/dev/null || {
+    cat "$d/err" >&2
+    die "an empty file was not refused as no saved answers"
+  }
   [ ! -s "$d/gh.log" ] || die "gh was called"
 }
 
@@ -7577,7 +9606,13 @@ test_a_temporary_file_of_the_saved_answers_is_removed_on_the_way_out() {
   local t rc=0
   t="$(tmpdir)"
   : >"$t/.bootstrap-project.again.Xy12Zq"
-  ( load_script; catch_stops; AGAIN_TMP="$t/.bootstrap-project.again.Xy12Zq"; CLEAN=1; exit 1 ) >/dev/null 2>&1 || rc=$?
+  (
+    load_script
+    catch_stops
+    AGAIN_TMP="$t/.bootstrap-project.again.Xy12Zq"
+    CLEAN=1
+    exit 1
+  ) >/dev/null 2>&1 || rc=$?
   [ "$rc" -eq 1 ] || die "exit $rc, want 1"
   [ ! -e "$t/.bootstrap-project.again.Xy12Zq" ] || die "the temporary file was left"
 }
@@ -7589,8 +9624,14 @@ test_other_answers_to_the_protection_request_are_explained() {
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
   expect_err_shape "$d" "GitHub did not find"
-  ! grep -qF 'Check the names you gave' "$d/err" || { cat "$d/err" >&2; die "the 404 next action is the generic one"; }
-  grep -qF 'https://github.com/octo-user/my-app' "$d/err" || { cat "$d/err" >&2; die "the 404 next action does not point at the project"; }
+  ! grep -qF 'Check the names you gave' "$d/err" || {
+    cat "$d/err" >&2
+    die "the 404 next action is the generic one"
+  }
+  grep -qF 'https://github.com/octo-user/my-app' "$d/err" || {
+    cat "$d/err" >&2
+    die "the 404 next action does not point at the project"
+  }
   expect_continue_command "$d" " --resume"
   ! calls_from_create "$d" | grep -F "$EDIT_CALL" >/dev/null || die "settings changed after the 404"
   d="$(tmpdir)"
@@ -7620,25 +9661,46 @@ test_the_licence_is_checked_with_github_before_anything_is_created() {
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
-  [ "$(grep -F "$(printf '\t--jq\t.key')" "$d/gh.log")" = "$(printf 'GH_PROMPT_DISABLED=1\tapi\t-i\tlicenses/mit\t--jq\t.key')" ] \
-    || { cat "$d/gh.log" >&2; die "the licence was not checked once, with gh's prompts off"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "did not reach the end"
+  }
+  [ "$(grep -F "$(printf '\t--jq\t.key')" "$d/gh.log")" = "$(printf 'GH_PROMPT_DISABLED=1\tapi\t-i\tlicenses/mit\t--jq\t.key')" ] ||
+    {
+      cat "$d/gh.log" >&2
+      die "the licence was not checked once, with gh's prompts off"
+    }
   grep -n "$(printf '\tlicenses/mit\t--jq\t.key')" "$d/gh.log" | cut -d: -f1 >"$d/k"
   grep -n "$(printf '\trepo\tcreate\tocto-user/my-app')" "$d/gh.log" | cut -d: -f1 >"$d/c"
-  [ -s "$d/k" ] && [ -s "$d/c" ] && [ "$(cat "$d/k")" -lt "$(cat "$d/c")" ] || { cat "$d/gh.log" >&2; die "the licence was not checked before create"; }
+  [ -s "$d/k" ] && [ -s "$d/c" ] && [ "$(cat "$d/k")" -lt "$(cat "$d/c")" ] || {
+    cat "$d/gh.log" >&2
+    die "the licence was not checked before create"
+  }
   # Its own step, a start and a done line straight after it, before the plan.
   grep -A1 -xF '==> Checking that GitHub knows the licence mit' "$d/out" | sed -n 2p >"$d/done"
-  [ "$(cat "$d/done")" = "    Done. GitHub knows the licence mit." ] || { cat "$d/out" >&2; die "no step lines for the licence check"; }
+  [ "$(cat "$d/done")" = "    Done. GitHub knows the licence mit." ] || {
+    cat "$d/out" >&2
+    die "no step lines for the licence check"
+  }
   grep -n '^    Done. GitHub knows the licence mit.$' "$d/out" | cut -d: -f1 >"$d/a"
   grep -n '^Here is the plan' "$d/out" | cut -d: -f1 >"$d/p"
-  [ "$(cat "$d/a")" -lt "$(cat "$d/p")" ] || { cat "$d/out" >&2; die "the licence was checked after the plan"; }
+  [ "$(cat "$d/a")" -lt "$(cat "$d/p")" ] || {
+    cat "$d/out" >&2
+    die "the licence was checked after the plan"
+  }
   # Step 10 still reads the text.
-  calls_from_create "$d" | grep -xF "$LICENSE_CALL" >/dev/null || { cat "$d/gh.log" >&2; die "step 10 did not read the text"; }
+  calls_from_create "$d" | grep -xF "$LICENSE_CALL" >/dev/null || {
+    cat "$d/gh.log" >&2
+    die "step 10 did not read the text"
+  }
   # A dry run checks it too (spec: --dry-run runs the preflight).
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --dry-run --license apache-2.0
   expect_rc 0 "$d"
-  grep -qF "$(printf '\tapi\t-i\tlicenses/apache-2.0\t--jq\t.key')" "$d/gh.log" || { cat "$d/gh.log" >&2; die "dry run: apache-2.0 not checked"; }
+  grep -qF "$(printf '\tapi\t-i\tlicenses/apache-2.0\t--jq\t.key')" "$d/gh.log" || {
+    cat "$d/gh.log" >&2
+    die "dry run: apache-2.0 not checked"
+  }
   expect_out "$d" "    Done. GitHub knows the licence apache-2.0."
   expect_nothing_created "$d"
 }
@@ -7649,7 +9711,10 @@ test_none_and_polyform_need_no_licence_check() {
     d="$(tmpdir)"
     setup_run "$d" --non-interactive --dry-run --license "$l"
     expect_rc 0 "$d"
-    ! grep -qF 'licenses/' "$d/gh.log" || { cat "$d/gh.log" >&2; die "$l: GitHub was asked about the licence"; }
+    ! grep -qF 'licenses/' "$d/gh.log" || {
+      cat "$d/gh.log" >&2
+      die "$l: GitHub was asked about the licence"
+    }
     expect_no_out "$d" "==> Checking that GitHub knows the licence"
   done
 }
@@ -7663,10 +9728,22 @@ test_an_unknown_licence_given_as_an_option_stops_before_anything_is_created() {
     d="$(tmpdir)"
     setup_run "$d" $mode --yes --license made-up-2.0
     expect_rc 2 "$d"
-    sed -n 1p "$d/err" | grep -xF 'What happened: Some options are missing or cannot be used:' >/dev/null || { cat "$d/err" >&2; die "[$mode] not the options stop"; }
-    grep -qF -- '    - --license: GitHub has no licence with the short name made-up-2.0. ' "$d/err" || { cat "$d/err" >&2; die "[$mode] the unknown licence is not named"; }
-    grep -qF 'https://choosealicense.com/licenses/' "$d/err" || { cat "$d/err" >&2; die "[$mode] where to find the name is not said"; }
-    [ "$(grep -cF "$(printf '\tapi\t-i\tlicenses/made-up-2.0\t--jq\t.key')" "$d/gh.log")" -eq 1 ] || { cat "$d/gh.log" >&2; die "[$mode] not checked once"; }
+    sed -n 1p "$d/err" | grep -xF 'What happened: Some options are missing or cannot be used:' >/dev/null || {
+      cat "$d/err" >&2
+      die "[$mode] not the options stop"
+    }
+    grep -qF -- '    - --license: GitHub has no licence with the short name made-up-2.0. ' "$d/err" || {
+      cat "$d/err" >&2
+      die "[$mode] the unknown licence is not named"
+    }
+    grep -qF 'https://choosealicense.com/licenses/' "$d/err" || {
+      cat "$d/err" >&2
+      die "[$mode] where to find the name is not said"
+    }
+    [ "$(grep -cF "$(printf '\tapi\t-i\tlicenses/made-up-2.0\t--jq\t.key')" "$d/gh.log")" -eq 1 ] || {
+      cat "$d/gh.log" >&2
+      die "[$mode] not checked once"
+    }
     expect_no_out "$d" "Here is the plan"
     expect_no_out "$d" "Proceed?"
     expect_nothing_created "$d"
@@ -7678,7 +9755,10 @@ test_an_unknown_licence_given_as_an_option_stops_before_anything_is_created() {
   unset STUB_GH_LICENSE_CHECK_FAIL
   expect_rc 1 "$d"
   expect_err_shape "$d" "GitHub had a problem of its own, so the script could not check the licence mit with GitHub\."
-  sed -n 2p "$d/err" | grep -F 'start the script again' >/dev/null || { cat "$d/err" >&2; die "server: next action is not to start again"; }
+  sed -n 2p "$d/err" | grep -F 'start the script again' >/dev/null || {
+    cat "$d/err" >&2
+    die "server: next action is not to start again"
+  }
   expect_nothing_created "$d"
 }
 
@@ -7698,10 +9778,19 @@ test_an_unknown_licence_typed_at_the_question_is_asked_again() {
     printf '%s\n' my-app "" "Lends tools." "" "" python "" mti "" "" "" "" "$again" no >"$d/in"
     whole "$d"
     expect_rc 1 "$d"
-    sed -n 1p "$d/err" | grep '^What happened: You answered no' >/dev/null || { cat "$d/err" >&2; die "[$again] did not reach Proceed?"; }
+    sed -n 1p "$d/err" | grep '^What happened: You answered no' >/dev/null || {
+      cat "$d/err" >&2
+      die "[$again] did not reach Proceed?"
+    }
     expect_out "$d" "GitHub has no licence with the short name mti. "
-    grep -F 'GitHub has no licence with the short name mti. ' "$d/out" | grep -F "Please try again." >/dev/null || { cat "$d/out" >&2; die "[$again] not asked to try again"; }
-    [ "$(grep -cF 'Licence (type the number or the name): ' "$d/out")" -eq 2 ] || { cat "$d/out" >&2; die "[$again] the licence question was not asked twice"; }
+    grep -F 'GitHub has no licence with the short name mti. ' "$d/out" | grep -F "Please try again." >/dev/null || {
+      cat "$d/out" >&2
+      die "[$again] not asked to try again"
+    }
+    [ "$(grep -cF 'Licence (type the number or the name): ' "$d/out")" -eq 2 ] || {
+      cat "$d/out" >&2
+      die "[$again] the licence question was not asked twice"
+    }
     if [ "$again" = mit ]; then
       want="$(printf 'api\t-i\tlicenses/mti\t--jq\t.key\napi\t-i\tlicenses/mit\t--jq\t.key')"
       expect_out "$d" "    Licence: mit, in the name of"
@@ -7716,11 +9805,20 @@ test_an_unknown_licence_typed_at_the_question_is_asked_again() {
         expect_out "$d" "    Licence: polyform-noncommercial-1.0.0, in the name of"
       fi
       grep -A2 -F 'Licence (type the number or the name): ' "$d/out" | tail -2 >"$d/done"
-      [ "$(cat "$d/done")" = "$(printf '\n    Done. Nothing to check with GitHub for the licence %s.' "$lic")" ] \
-        || { cat "$d/out" >&2; die "[$again] the step does not end with its done line after the question"; }
+      [ "$(cat "$d/done")" = "$(printf '\n    Done. Nothing to check with GitHub for the licence %s.' "$lic")" ] ||
+        {
+          cat "$d/out" >&2
+          die "[$again] the step does not end with its done line after the question"
+        }
     fi
-    [ "$(grep -F "$(printf '\tlicenses/')" "$d/gh.log" | cut -f2-)" = "$want" ] || { cat "$d/gh.log" >&2; die "[$again] the licence checks were not as expected"; }
-    [ "$(grep -c '^==> Checking that GitHub knows the licence' "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "[$again] the step did not start once"; }
+    [ "$(grep -F "$(printf '\tlicenses/')" "$d/gh.log" | cut -f2-)" = "$want" ] || {
+      cat "$d/gh.log" >&2
+      die "[$again] the licence checks were not as expected"
+    }
+    [ "$(grep -c '^==> Checking that GitHub knows the licence' "$d/out")" -eq 1 ] || {
+      cat "$d/out" >&2
+      die "[$again] the step did not start once"
+    }
     expect_nothing_created "$d"
   done
 }
@@ -7730,13 +9828,22 @@ test_actions_turned_on_are_checked_right_after_protection() {
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "did not reach the end"
+  }
   # After the settings of step 3, before the copy (expect_calls is exact).
   expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL" "${END_CALLS[@]}"
   grep -A1 -xF "==> Checking that GitHub Actions, which runs the project's checks, is turned on for it" "$d/out" | sed -n 2p >"$d/done"
-  [ "$(cat "$d/done")" = "    Done. GitHub Actions is turned on for the project, so its checks can run there." ] \
-    || { cat "$d/out" >&2; die "no step lines for the Actions check"; }
-  [ "$(grep -F "$(printf '\t--jq\t.enabled')" "$d/gh.log" | cut -f1)" = GH_PROMPT_DISABLED=1 ] || { cat "$d/gh.log" >&2; die "asked with gh's prompts on"; }
+  [ "$(cat "$d/done")" = "    Done. GitHub Actions is turned on for the project, so its checks can run there." ] ||
+    {
+      cat "$d/out" >&2
+      die "no step lines for the Actions check"
+    }
+  [ "$(grep -F "$(printf '\t--jq\t.enabled')" "$d/gh.log" | cut -f1)" = GH_PROMPT_DISABLED=1 ] || {
+    cat "$d/gh.log" >&2
+    die "asked with gh's prompts on"
+  }
 }
 
 test_actions_turned_off_stop_before_the_copy_with_their_guide() {
@@ -7754,9 +9861,15 @@ test_actions_turned_off_stop_before_the_copy_with_their_guide() {
   expect_out "$d" "How the script checks it: "
   expect_no_out "$d" "Press Enter"
   expect_continue_command "$d" " --resume"
-  sed -n 1p "$d/err" | grep -F "What happened: GitHub Actions, the GitHub service that runs your project's checks, is turned off for the project octo-user/my-app. The script stopped here. The project octo-user/my-app exists on GitHub" >/dev/null \
-    || { cat "$d/err" >&2; die "the stop does not say what is off and what exists"; }
-  [ -z "$(ls -A "$d/cwd")" ] || { ls -A "$d/cwd" >&2; die "something was made on this computer"; }
+  sed -n 1p "$d/err" | grep -F "What happened: GitHub Actions, the GitHub service that runs your project's checks, is turned off for the project octo-user/my-app. The script stopped here. The project octo-user/my-app exists on GitHub" >/dev/null ||
+    {
+      cat "$d/err" >&2
+      die "the stop does not say what is off and what exists"
+    }
+  [ -z "$(ls -A "$d/cwd")" ] || {
+    ls -A "$d/cwd" >&2
+    die "something was made on this computer"
+  }
   ! grep -qxF "$FINISHED" "$d/out" || die "it went on with Actions off"
   # Interactive: turned on while the script waits; Enter checks again and
   # the setup goes on.
@@ -7767,7 +9880,10 @@ test_actions_turned_off_stop_before_the_copy_with_their_guide() {
   expect_rc 0 "$d"
   expect_out "$d" "Press Enter to check again"
   expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL" "${END_CALLS[@]}"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not go on after Actions was turned on"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "did not go on after Actions was turned on"
+  }
   # Interactive, stopped at the guide (q): the command to continue, and
   # nothing on this computer.
   d="$(tmpdir)"
@@ -7776,7 +9892,10 @@ test_actions_turned_off_stop_before_the_copy_with_their_guide() {
   setup_run "$d"
   expect_rc 3 "$d"
   expect_continue_command "$d" " --resume"
-  [ -z "$(ls -A "$d/cwd")" ] || { ls -A "$d/cwd" >&2; die "q: something was made on this computer"; }
+  [ -z "$(ls -A "$d/cwd")" ] || {
+    ls -A "$d/cwd" >&2
+    die "q: something was made on this computer"
+  }
   expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL"
 }
 
@@ -7789,22 +9908,46 @@ test_an_actions_check_github_does_not_answer_carries_on_with_a_note() {
   for mode in forbidden not-found odd; do
     d="$(tmpdir)"
     case "$mode" in
-      odd) export STUB_GH_ACTIONS_ANSWER=null; raw='    HTTP 200: enabled is null' ;;
-      forbidden) export STUB_GH_ACTIONS_FAIL=forbidden; raw='    HTTP 403: Resource not accessible by integration' ;;
-      not-found) export STUB_GH_ACTIONS_FAIL=not-found; raw='    HTTP 404: Not Found' ;;
+      odd)
+        export STUB_GH_ACTIONS_ANSWER=null
+        raw='    HTTP 200: enabled is null'
+        ;;
+      forbidden)
+        export STUB_GH_ACTIONS_FAIL=forbidden
+        raw='    HTTP 403: Resource not accessible by integration'
+        ;;
+      not-found)
+        export STUB_GH_ACTIONS_FAIL=not-found
+        raw='    HTTP 404: Not Found'
+        ;;
     esac
     setup_run "$d" --non-interactive --yes
     unset STUB_GH_ACTIONS_ANSWER STUB_GH_ACTIONS_FAIL
     expect_rc 0 "$d"
-    grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "$mode: did not go on"; }
+    grep -qxF "$FINISHED" "$d/out" || {
+      cat "$d/out" "$d/err" >&2
+      die "$mode: did not go on"
+    }
     expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL" "${END_CALLS[@]}"
     sed -n "/^==> Checking that GitHub Actions/,/^    Done\. /p" "$d/out" >"$d/step"
-    grep -qF "The script could not check whether GitHub Actions is turned on for the project" "$d/step" || { cat "$d/out" >&2; die "$mode: no note"; }
-    grep -qxF 'Details for support (you can ignore these):' "$d/step" || { cat "$d/out" >&2; die "$mode: the answer is not introduced"; }
-    grep -qxF "$raw" "$d/step" || { cat "$d/out" >&2; die "$mode: GitHub's answer is not below"; }
+    grep -qF "The script could not check whether GitHub Actions is turned on for the project" "$d/step" || {
+      cat "$d/out" >&2
+      die "$mode: no note"
+    }
+    grep -qxF 'Details for support (you can ignore these):' "$d/step" || {
+      cat "$d/out" >&2
+      die "$mode: the answer is not introduced"
+    }
+    grep -qxF "$raw" "$d/step" || {
+      cat "$d/out" >&2
+      die "$mode: GitHub's answer is not below"
+    }
     # shellcheck disable=SC2015 # die is meant to run when either check fails
-    [ "$(tail -1 "$d/step")" != "${raw}" ] && tail -1 "$d/step" | grep '^    Done\. Carrying on without this check' >/dev/null \
-      || { cat "$d/out" >&2; die "$mode: the step does not end by carrying on"; }
+    [ "$(tail -1 "$d/step")" != "${raw}" ] && tail -1 "$d/step" | grep '^    Done\. Carrying on without this check' >/dev/null ||
+      {
+        cat "$d/out" >&2
+        die "$mode: the step does not end by carrying on"
+      }
     expect_no_out "$d" "turned off for the project"
   done
   # Any other answer stops like the other calls after create: the plain
@@ -7817,7 +9960,10 @@ test_an_actions_check_github_does_not_answer_carries_on_with_a_note() {
   expect_err_shape "$d" "GitHub had a problem of its own, so the script could not check whether GitHub Actions is turned on for the project\. The project octo-user/my-app exists on GitHub"
   expect_continue_command "$d" " --resume"
   expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL"
-  [ -z "$(ls -A "$d/cwd")" ] || { ls -A "$d/cwd" >&2; die "server: something was made on this computer"; }
+  [ -z "$(ls -A "$d/cwd")" ] || {
+    ls -A "$d/cwd" >&2
+    die "server: something was made on this computer"
+  }
 }
 
 test_create_failures_are_guided_or_explained_and_nothing_else_runs() {
@@ -7833,9 +9979,18 @@ test_create_failures_are_guided_or_explained_and_nothing_else_runs() {
   expect_out "$d" "--name my-app-2"
   shown_after "$d" 'To start again, run this command:' >"$d/cmd"
   # shellcheck disable=SC2015 # die is meant to run when either check fails
-  grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "taken: not a plain new run"; }
-  sed -n 1p "$d/err" | grep 'nothing was created' >/dev/null || { cat "$d/err" >&2; die "taken: does not say nothing was created"; }
-  grep -qxF '    GraphQL: Name already exists on this account (cloneTemplateRepository)' "$d/out" || { cat "$d/out" >&2; die "taken: gh's text not below"; }
+  grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || {
+    cat "$d/out" >&2
+    die "taken: not a plain new run"
+  }
+  sed -n 1p "$d/err" | grep 'nothing was created' >/dev/null || {
+    cat "$d/err" >&2
+    die "taken: does not say nothing was created"
+  }
+  grep -qxF '    GraphQL: Name already exists on this account (cloneTemplateRepository)' "$d/out" || {
+    cat "$d/out" >&2
+    die "taken: gh's text not below"
+  }
   # Refused, for an organisation, with a fine-grained token: the guide
   # covers both, and keeps the warning's promise ("a later step stops
   # and says so").
@@ -7873,7 +10028,10 @@ test_create_failures_are_guided_or_explained_and_nothing_else_runs() {
   expect_rc 1 "$d"
   expect_err_shape "$d" "gh .* could not create the project octo-user/my-app"
   expect_calls "$d" "$CREATE_CALL" "$PROBE_CALL"
-  grep -qxF '    stub gh: the connection broke off' "$d/err" || { cat "$d/err" >&2; die "broken: gh's text not below"; }
+  grep -qxF '    stub gh: the connection broke off' "$d/err" || {
+    cat "$d/err" >&2
+    die "broken: gh's text not below"
+  }
   expect_out "$d" "To start again, run this command:"
   d="$(tmpdir)"
   export STUB_GH_CREATE_FAIL=broken-but-made
@@ -7892,7 +10050,10 @@ test_a_failed_settings_change_is_explained_with_the_continue_command() {
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
   expect_err_shape "$d" ".{10,}"
-  grep -qF 'Must have admin rights' "$d/err" || { cat "$d/err" >&2; die "gh's text not below"; }
+  grep -qF 'Must have admin rights' "$d/err" || {
+    cat "$d/err" >&2
+    die "gh's text not below"
+  }
   expect_continue_command "$d" " --resume"
   expect_no_out "$d" "$FINISHED"
 }
@@ -7906,29 +10067,46 @@ test_an_unknown_answer_after_create_says_what_failed_and_how_to_continue() {
   local d mode want
   for mode in "PROTECT protect the main version of the project" \
     "BRANCH check that the project's files are there"; do
-    want="${mode#* }"; mode="${mode%% *}"
+    want="${mode#* }"
+    mode="${mode%% *}"
     d="$(tmpdir)"
     export "STUB_GH_${mode}_FAIL=teapot"
     setup_run "$d" --non-interactive --yes
     expect_rc 1 "$d"
     expect_err_shape "$d" "Something unexpected happened, so the script could not $want\. The project octo-user/my-app exists on GitHub"
-    sed -n 2p "$d/err" | grep -F 'continue the setup with the command shown above' >/dev/null || { cat "$d/err" >&2; die "$mode: next action is not to continue"; }
-    ! grep -qiE 'run the script again|start the script again' "$d/err" || { cat "$d/err" >&2; die "$mode: told to start again after create"; }
-    grep -qxF '    HTTP 418: Short and stout' "$d/err" || { cat "$d/err" >&2; die "$mode: raw text not below"; }
+    sed -n 2p "$d/err" | grep -F 'continue the setup with the command shown above' >/dev/null || {
+      cat "$d/err" >&2
+      die "$mode: next action is not to continue"
+    }
+    ! grep -qiE 'run the script again|start the script again' "$d/err" || {
+      cat "$d/err" >&2
+      die "$mode: told to start again after create"
+    }
+    grep -qxF '    HTTP 418: Short and stout' "$d/err" || {
+      cat "$d/err" >&2
+      die "$mode: raw text not below"
+    }
     expect_continue_command "$d" " --resume"
     unset "STUB_GH_${mode}_FAIL"
   done
   # Mapped answers after create continue too: a 503 and a 401 at the
   # wait, a rate limit at the protection request.
   for mode in "BRANCH server" "BRANCH expired" "PROTECT rate-limit"; do
-    want="${mode#* }"; mode="${mode%% *}"
+    want="${mode#* }"
+    mode="${mode%% *}"
     d="$(tmpdir)"
     export "STUB_GH_${mode}_FAIL=$want"
     setup_run "$d" --non-interactive --yes
     expect_rc 1 "$d"
     expect_err_shape "$d" ".*octo-user/my-app exists on GitHub"
-    sed -n 2p "$d/err" | grep -F 'continue the setup with the command shown above' >/dev/null || { cat "$d/err" >&2; die "$want: next action is not to continue"; }
-    ! grep -qiE 'run the script again|start the script again' "$d/err" || { cat "$d/err" >&2; die "$want: told to start again after create"; }
+    sed -n 2p "$d/err" | grep -F 'continue the setup with the command shown above' >/dev/null || {
+      cat "$d/err" >&2
+      die "$want: next action is not to continue"
+    }
+    ! grep -qiE 'run the script again|start the script again' "$d/err" || {
+      cat "$d/err" >&2
+      die "$want: told to start again after create"
+    }
     unset "STUB_GH_${mode}_FAIL"
   done
   # Before create the same answer still says to start again.
@@ -7937,7 +10115,10 @@ test_an_unknown_answer_after_create_says_what_failed_and_how_to_continue() {
   pre "$d" ni preflight_github_account
   expect_rc 1 "$d"
   expect_err_shape "$d" "Something unexpected happened, so the script could not read your GitHub account\.\$"
-  sed -n 2p "$d/err" | grep -F 'start the script again' >/dev/null || { cat "$d/err" >&2; die "before create: next action is not to start again"; }
+  sed -n 2p "$d/err" | grep -F 'start the script again' >/dev/null || {
+    cat "$d/err" >&2
+    die "before create: next action is not to start again"
+  }
 }
 
 test_the_lines_that_opt_out_of_the_literal_scan_are_pinned() {
@@ -7946,8 +10127,11 @@ test_the_lines_that_opt_out_of_the_literal_scan_are_pinned() {
   # one is a test change a reviewer sees.
   local got
   got="$(grep -E '# not-a-message[[:space:]]*$' "$SCRIPT" | sed -E 's/^[[:space:]]+//')"
-  [ "$got" = 'help="$(run_gh repo create --help 2>&1)" || help="" # not-a-message' ] \
-    || { printf '%s\n' "$got" >&2; die "the lines marked # not-a-message changed"; }
+  [ "$got" = 'help="$(run_gh repo create --help 2>&1)" || help="" # not-a-message' ] ||
+    {
+      printf '%s\n' "$got" >&2
+      die "the lines marked # not-a-message changed"
+    }
 }
 
 test_a_404_or_429_gets_the_next_action_of_its_own_call() {
@@ -7961,8 +10145,14 @@ test_a_404_or_429_gets_the_next_action_of_its_own_call() {
   pre "$d" ni preflight_published_version
   expect_rc 1 "$d"
   expect_err_shape "$d" ".{10,}"
-  ! grep -qF 'Check the names you gave' "$d/err" || { cat "$d/err" >&2; die "the CHANGELOG 404 asks to check names"; }
-  grep -q '^What to do next: .*[Dd]ownload' "$d/err" || { cat "$d/err" >&2; die "the CHANGELOG 404 does not say to download again"; }
+  ! grep -qF 'Check the names you gave' "$d/err" || {
+    cat "$d/err" >&2
+    die "the CHANGELOG 404 asks to check names"
+  }
+  grep -q '^What to do next: .*[Dd]ownload' "$d/err" || {
+    cat "$d/err" >&2
+    die "the CHANGELOG 404 does not say to download again"
+  }
   unset STUB_GH_CHANGELOG_FAIL
   d="$(tmpdir)"
   export STUB_GH_USER_FAIL=too-many
@@ -8021,19 +10211,34 @@ test_the_copy_is_made_by_gh_and_checked_against_the_script_version() {
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
   expect_calls "$d" "$CREATE_CALL" "$BRANCH_CALL" "$FILES_CALL" "$PROTECT_CALL" "$EDIT_CALL" "$ACTIONS_CALL" "$CLONE_CALL" "$LICENSE_CALL" "$PR_CALL" "${END_CALLS[@]}"
-  [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] || { cat "$d/gh.log" >&2; die "a gh call ran with prompts on"; }
+  [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] || {
+    cat "$d/gh.log" >&2
+    die "a gh call ran with prompts on"
+  }
   c="$(copy_of "$d")"
-  [ "$(in_git -C "$c" rev-parse origin/main)" = "$(in_git --git-dir="$(bare_of "$d")" rev-parse main)" ] \
-    || die "the copy is not of the project that was made"
+  [ "$(in_git -C "$c" rev-parse origin/main)" = "$(in_git --git-dir="$(bare_of "$d")" rev-parse main)" ] ||
+    die "the copy is not of the project that was made"
   # The new steps, in order, each with a start and a done line.
-  [ "$(grep '^==> ' "$d/out" | sed -n '/^==> Setting how proposed/,$p' | sed 1d)" = "$STEPS_AFTER_SETTINGS" ] \
-    || { cat "$d/out" >&2; die "the steps after the settings are not the Actions check, the copy, name, line of work, pack, tidy-up, fill, licence, CHANGELOG, self-check, save, send, propose, wait, require, add, update"; }
-  [ "$(grep -c '^==> ' "$d/out")" -eq "$(grep -c '^    Done\. ' "$d/out")" ] || { cat "$d/out" >&2; die "a step has no done line"; }
+  [ "$(grep '^==> ' "$d/out" | sed -n '/^==> Setting how proposed/,$p' | sed 1d)" = "$STEPS_AFTER_SETTINGS" ] ||
+    {
+      cat "$d/out" >&2
+      die "the steps after the settings are not the Actions check, the copy, name, line of work, pack, tidy-up, fill, licence, CHANGELOG, self-check, save, send, propose, wait, require, add, update"
+    }
+  [ "$(grep -c '^==> ' "$d/out")" -eq "$(grep -c '^    Done\. ' "$d/out")" ] || {
+    cat "$d/out" >&2
+    die "a step has no done line"
+  }
   expect_out "$d" "    Done. The copy is in ./my-app, with the files of version $BUILT_VERSION of the bootstrapper."
   # It goes through to the report, with nothing on stderr and no command
   # to continue.
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not go through to the report"; }
-  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "a run that went through wrote to stderr"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "did not go through to the report"
+  }
+  [ ! -s "$d/err" ] || {
+    cat "$d/err" >&2
+    die "a run that went through wrote to stderr"
+  }
   expect_no_out "$d" "To continue the setup, run this command:"
 }
 
@@ -8047,13 +10252,22 @@ test_the_git_name_and_email_are_written_into_the_copy_only() {
   c="$(copy_of "$d")"
   [ "$(in_git -C "$c" config --local --get user.name)" = "Ada Lovelace" ] || die "the name is not in the copy's settings"
   [ "$(in_git -C "$c" config --local --get user.email)" = ada@example.com ] || die "the email is not in the copy's settings"
-  cmp -s "$d/global-before" "$d/home/.gitconfig" || { cat "$d/home/.gitconfig" >&2; die "the global git settings changed"; }
+  cmp -s "$d/global-before" "$d/home/.gitconfig" || {
+    cat "$d/home/.gitconfig" >&2
+    die "the global git settings changed"
+  }
   # Written right after the copy is made, before the line of work starts,
   # and never with --global or --system.
   grep -n 'config user\.name Ada Lovelace' "$d/tools.log" | head -1 | cut -d: -f1 >"$d/n"
   grep -n ' checkout ' "$d/tools.log" | head -1 | cut -d: -f1 >"$d/b"
-  [ -s "$d/n" ] && [ -s "$d/b" ] && [ "$(cat "$d/n")" -lt "$(cat "$d/b")" ] || { cat "$d/tools.log" >&2; die "the name was not written before the line of work"; }
-  ! grep -E 'config (--global|--system|--file)' "$d/tools.log" | grep -v -- ' --get ' >/dev/null || { cat "$d/tools.log" >&2; die "git settings outside the copy were written"; }
+  [ -s "$d/n" ] && [ -s "$d/b" ] && [ "$(cat "$d/n")" -lt "$(cat "$d/b")" ] || {
+    cat "$d/tools.log" >&2
+    die "the name was not written before the line of work"
+  }
+  ! grep -E 'config (--global|--system|--file)' "$d/tools.log" | grep -v -- ' --get ' >/dev/null || {
+    cat "$d/tools.log" >&2
+    die "git settings outside the copy were written"
+  }
 }
 
 test_the_setup_is_saved_as_one_change_sent_on_its_line_of_work_and_proposed() {
@@ -8076,28 +10290,46 @@ test_the_setup_is_saved_as_one_change_sent_on_its_line_of_work_and_proposed() {
   [ "$(in_git -C "$c" symbolic-ref --short HEAD)" = bootstrap-setup ] || die "the copy is not on bootstrap-setup"
   [ "$(in_git -C "$c" rev-parse HEAD~1)" = "$(in_git --git-dir="$bare" rev-parse main)" ] || die "the saved change does not come right after main"
   [ "$(in_git -C "$c" rev-list --count HEAD)" -eq 2 ] || die "not exactly one change was saved"
-  [ "$(in_git -C "$c" log -1 --format=%s%n%b)" = "Set up my-app" ] || { in_git -C "$c" log -1 >&2; die "the change is not named Set up my-app"; }
-  [ "$(in_git -C "$c" log -1 --format='%an <%ae>|%cn <%ce>')" = "Test Person <test@example.com>|Test Person <test@example.com>" ] \
-    || { in_git -C "$c" log -1 --format=fuller >&2; die "the change is not saved under the git name and email given"; }
-  [ -z "$(in_git -C "$c" status --porcelain --untracked-files=all)" ] || { in_git -C "$c" status >&2; die "something is left unsaved"; }
+  [ "$(in_git -C "$c" log -1 --format=%s%n%b)" = "Set up my-app" ] || {
+    in_git -C "$c" log -1 >&2
+    die "the change is not named Set up my-app"
+  }
+  [ "$(in_git -C "$c" log -1 --format='%an <%ae>|%cn <%ce>')" = "Test Person <test@example.com>|Test Person <test@example.com>" ] ||
+    {
+      in_git -C "$c" log -1 --format=fuller >&2
+      die "the change is not saved under the git name and email given"
+    }
+  [ -z "$(in_git -C "$c" status --porcelain --untracked-files=all)" ] || {
+    in_git -C "$c" status >&2
+    die "something is left unsaved"
+  }
   ! in_git -C "$c" rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1 || die "bootstrap-setup follows a branch on GitHub"
   [ "$(in_git --git-dir="$bare" rev-parse refs/heads/bootstrap-setup)" = "$(in_git -C "$c" rev-parse HEAD)" ] || die "the change was not sent on bootstrap-setup"
   [ "$(in_git --git-dir="$bare" rev-parse main)" = "$(in_git -C "$c" rev-parse origin/main)" ] || die "main on GitHub was changed"
-  [ "$(in_git --git-dir="$bare" for-each-ref --format='%(refname)' | LC_ALL=C sort)" = "$(printf '%s\n' refs/heads/bootstrap-setup refs/heads/main)" ] \
-    || die "something else was sent to GitHub"
+  [ "$(in_git --git-dir="$bare" for-each-ref --format='%(refname)' | LC_ALL=C sort)" = "$(printf '%s\n' refs/heads/bootstrap-setup refs/heads/main)" ] ||
+    die "something else was sent to GitHub"
   # gh after the copy: the licence, then the proposed change (then the
   # look at build and, as it failed, at the actions allowed); its body
   # file is a temporary file outside the copy, gone afterwards.
-  [ "$(calls_from_create "$d" | sed -n '/^repo clone /,$p')" = "$CLONE_CALL"$'\n'"$LICENSE_CALL"$'\n'"$PR_CALL"$'\n'"$CHECKS_CALL"$'\n'"$ALLOWED_CALL" ] || { cat "$d/gh.log" >&2; die "gh was not used for the licence and then the proposed change"; }
+  [ "$(calls_from_create "$d" | sed -n '/^repo clone /,$p')" = "$CLONE_CALL"$'\n'"$LICENSE_CALL"$'\n'"$PR_CALL"$'\n'"$CHECKS_CALL"$'\n'"$ALLOWED_CALL" ] || {
+    cat "$d/gh.log" >&2
+    die "gh was not used for the licence and then the proposed change"
+  }
   body="$(awk -F'\t' '$2 == "pr" { for (i = 3; i <= NF; i++) if ($(i - 1) == "--body-file") print $i }' "$d/gh.log")"
   case "$body" in "$c"/*) die "the body file was in the copy: $body" ;; esac
   [ ! -e "$body" ] || die "the body file was left behind: $body"
   # The body says in plain words what the change is.
   for t in "This proposed change sets up My App." "version $BUILT_VERSION of the bootstrapper" \
     "the python language pack" "Licence: mit, in the name of Ada L." "-----"; do
-    grep -qF -- "$t" "$d/pr-bodies" || { cat "$d/pr-bodies" >&2; die "the body lacks: $t"; }
+    grep -qF -- "$t" "$d/pr-bodies" || {
+      cat "$d/pr-bodies" >&2
+      die "the body lacks: $t"
+    }
   done
-  [ -z "$(banned_hits <"$d/pr-bodies")" ] || { cat "$d/pr-bodies" >&2; die "a banned word in the body"; }
+  [ -z "$(banned_hits <"$d/pr-bodies")" ] || {
+    cat "$d/pr-bodies" >&2
+    die "a banned word in the body"
+  }
   expect_out "$d" "    Done. The proposed change is on GitHub: https://github.com/octo-user/my-app/pull/1"
 }
 
@@ -8123,7 +10355,8 @@ want_fill_rows() {
     'memory/project.md|[What the project is, who it is for, and what problem\nit solves.]|description'
   case "$1" in
     node | web | react-native)
-      printf '%s\n' 'package.json|[project-description]|description' 'package.json|[project-name]|slug' ;;
+      printf '%s\n' 'package.json|[project-description]|description' 'package.json|[project-name]|slug'
+      ;;
   esac
   case "$1" in
     web)
@@ -8160,7 +10393,10 @@ want_value() {
 # <dir>/applied, so the caller can check that every row was used.
 filled_as() {
   local d="$1" p="$2" deploy="$3" f="$4" s rf t key v nl=$'\n'
-  s="$(cat "$5"; printf x)"
+  s="$(
+    cat "$5"
+    printf x
+  )"
   s="${s%x}"
   while IFS='|' read -r rf t key; do
     [ "$rf" = "$f" ] || continue
@@ -8200,7 +10436,10 @@ want_licence() {
 # same mode.
 expect_filled() {
   filled_as "$1" "$2" "$3" "$4" "$5" "$1/filled"
-  cmp -s "$1/filled" "$6" || { diff "$1/filled" "$6" >&2 || true; die "$2$3: $4 is not the template's with exactly its texts filled in (want, then got, above)"; }
+  cmp -s "$1/filled" "$6" || {
+    diff "$1/filled" "$6" >&2 || true
+    die "$2$3: $4 is not the template's with exactly its texts filled in (want, then got, above)"
+  }
   [ "$(xbit "$5")" = "$(xbit "$6")" ] || die "$2$3: the mode of $4 changed"
 }
 
@@ -8215,7 +10454,8 @@ expect_setup_tree() {
   PACKS_DIR="$BUILT/languages" bash "$BUILT/bootstrap-project.sh" layout-pack "$p" "$fresh" >/dev/null
   kept="code-standards.md"
   [ "$p" != web ] || [ -n "$deploy" ] || kept="$kept deploy.yml wrangler.jsonc"
-  { tree_of "$BUILT" | grep -v '^languages/' | grep -vx 'bootstrap-project.sh' | grep -vxF '.github/README.md'
+  {
+    tree_of "$BUILT" | grep -v '^languages/' | grep -vx 'bootstrap-project.sh' | grep -vxF '.github/README.md'
     tree_of "$fresh"
     for f in $kept; do echo "languages/$p/$f"; done
     [ -z "$deploy" ] || printf '%s\n' .github/workflows/deploy.yml wrangler.jsonc
@@ -8245,10 +10485,10 @@ expect_setup_tree() {
   for f in $kept; do
     cmp -s "$BUILT/languages/$p/$f" "$c/languages/$p/$f" || die "$p$deploy: kept $f changed"
   done
-  [ "$p" != react-native ] || grep -qF '[project-slug]' "$c/languages/react-native/code-standards.md" \
-    || die "react-native: code-standards.md lost its [project-slug]"
-  [ "$p" != web ] || [ -n "$deploy" ] || grep -qF '"[project-name]"' "$c/languages/web/wrangler.jsonc" \
-    || die "web: the kept wrangler.jsonc lost its [project-name]"
+  [ "$p" != react-native ] || grep -qF '[project-slug]' "$c/languages/react-native/code-standards.md" ||
+    die "react-native: code-standards.md lost its [project-slug]"
+  [ "$p" != web ] || [ -n "$deploy" ] || grep -qF '"[project-name]"' "$c/languages/web/wrangler.jsonc" ||
+    die "web: the kept wrangler.jsonc lost its [project-name]"
   # Every other file of the bootstrapper is unchanged, mode included,
   # except for the fill rows of that file.
   while IFS= read -r f; do
@@ -8261,7 +10501,8 @@ expect_setup_tree() {
   [ ! -e "$c/.github/README.md" ] || die "$p$deploy: the bootstrapper's own README is still in the copy"
   [ -d "$c/.github/workflows" ] || die "$p$deploy: the tidy-up removed more of .github/ than its README"
   # .gitignore: the bootstrapper's, then the pack's lines it lacked.
-  { cat "$BUILT/.gitignore"
+  {
+    cat "$BUILT/.gitignore"
     while IFS= read -r f; do grep -qxF -- "$f" "$BUILT/.gitignore" || printf '%s\n' "$f"; done <"$BUILT/languages/$p/gitignore"
   } >"$d/gitignore"
   expect_same "$p$deploy: .gitignore" "$d/gitignore" "$c/.gitignore"
@@ -8291,11 +10532,11 @@ expect_setup_tree() {
     ! grep -qE "(^|[^/])languages/$other/" "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: a link to the removed $other pack is left"
     ! grep -qF "(\`$other\` pack)" "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: the section of the removed $other pack is left"
     # Part 2 (the packs' own sections) no longer speaks of another pack.
-    ! sed -n '/^## Part 2/,$p' "$c/docs/DEV_INFRASTRUCTURE.md" | grep -F "\`$other\` pack" >&2 \
-      || die "$p$deploy: Part 2 still refers to the removed $other pack"
+    ! sed -n '/^## Part 2/,$p' "$c/docs/DEV_INFRASTRUCTURE.md" | grep -F "\`$other\` pack" >&2 ||
+      die "$p$deploy: Part 2 still refers to the removed $other pack"
   done
-  [ -z "$(tail -c 1 "$c/docs/DEV_INFRASTRUCTURE.md")" ] && [ -n "$(tail -n 1 "$c/docs/DEV_INFRASTRUCTURE.md")" ] \
-    || die "$p$deploy: DEV_INFRASTRUCTURE.md ends with a blank line"
+  [ -z "$(tail -c 1 "$c/docs/DEV_INFRASTRUCTURE.md")" ] && [ -n "$(tail -n 1 "$c/docs/DEV_INFRASTRUCTURE.md")" ] ||
+    die "$p$deploy: DEV_INFRASTRUCTURE.md ends with a blank line"
   ! grep -qF 'ai-project-template-v2' "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: DEV_INFRASTRUCTURE.md points to the template"
   expect_same "$p$deploy: DEV_INFRASTRUCTURE.md" "$d/dev" "$c/docs/DEV_INFRASTRUCTURE.md"
   grep -qF "\`languages/$p/code-standards.md\`" "$c/docs/DEV_INFRASTRUCTURE.md" || die "$p$deploy: the link to its own pack was rewritten"
@@ -8310,8 +10551,11 @@ expect_setup_tree() {
   # copy after the fill, so it names the project, not [project-name].
   case "$p" in
     node | web | react-native)
-      [ "$(sed -n 2p "$c/package-lock.json")" = "  \"name\": \"$W_SLUG\"," ] \
-        || { cat "$c/package-lock.json" >&2; die "$p$deploy: the lockfile does not name the project $W_SLUG"; }
+      [ "$(sed -n 2p "$c/package-lock.json")" = "  \"name\": \"$W_SLUG\"," ] ||
+        {
+          cat "$c/package-lock.json" >&2
+          die "$p$deploy: the lockfile does not name the project $W_SLUG"
+        }
       ;;
   esac
   # The licence (step 10).
@@ -8359,12 +10603,18 @@ test_every_pack_leaves_exactly_the_expected_tree() {
   built_bootstrapper
   for p in node web python react-native web+deploy; do
     deploy=""
-    [ "$p" != web+deploy ] || { p=web; deploy=--with-deploy; }
+    [ "$p" != web+deploy ] || {
+      p=web
+      deploy=--with-deploy
+    }
     d="$(tmpdir)"
     fake_tool "$d" npm 10.0.0
     setup_run "$d" --non-interactive --yes --pack "$p" $deploy
     expect_rc 0 "$d"
-    grep -qxF "$FINISHED" "$d/out" || { cat "$d/err" >&2; die "$p$deploy: did not reach the end"; }
+    grep -qxF "$FINISHED" "$d/out" || {
+      cat "$d/err" >&2
+      die "$p$deploy: did not reach the end"
+    }
     expect_setup_tree "$d" "$(copy_of "$d")" "$p" "$deploy"
   done
 }
@@ -8378,8 +10628,14 @@ test_the_pack_overlay_replaces_ci_yml_adds_missing_gitignore_lines_and_refuses_o
   printf 'node_modules/\n.env\n*.log' >"$out/.gitignore"
   printf 'keep\n' >"$out/README.md"
   rc=0
-  ( load_script; layout_into node "$REPO/languages" "$out" overlay ) >"$d/out" 2>"$d/err" || rc=$?
-  [ "$rc" -eq 0 ] || { cat "$d/out" "$d/err" >&2; die "overlay failed"; }
+  (
+    load_script
+    layout_into node "$REPO/languages" "$out" overlay
+  ) >"$d/out" 2>"$d/err" || rc=$?
+  [ "$rc" -eq 0 ] || {
+    cat "$d/out" "$d/err" >&2
+    die "overlay failed"
+  }
   cmp -s "$REPO/languages/node/ci.yml" "$out/.github/workflows/ci.yml" || die "ci.yml was not replaced"
   # The lines that were there stay, the missing ones follow in the pack's
   # order, none twice, and the last line of the old file is ended first.
@@ -8395,32 +10651,64 @@ test_the_pack_overlay_replaces_ci_yml_adds_missing_gitignore_lines_and_refuses_o
   printf 'x\n' >"$out/.gitignore"
   printf '{}\n' >"$out/tsconfig.json"
   rc=0
-  ( load_script; layout_into node "$REPO/languages" "$out" overlay ) >"$d/out" 2>"$d/err" || rc=$?
-  [ "$rc" -eq 1 ] || { cat "$d/err" >&2; die "exit $rc, want 1"; }
-  sed -n 1p "$d/err" | grep -F "What happened: The copy of the project on this computer already has tsconfig.json, which the node pack would add." >/dev/null \
-    || { cat "$d/err" >&2; die "the existing target is not named"; }
-  sed -n 2p "$d/err" | grep -E '^What to do next: .{10,}' >/dev/null || { cat "$d/err" >&2; die "no next action"; }
-  [ ! -e "$out/package.json" ] && [ "$(cat "$out/.github/workflows/ci.yml")" = stub ] && [ "$(cat "$out/.gitignore")" = x ] \
-    && [ "$(cat "$out/tsconfig.json")" = '{}' ] || die "something was written before the error"
+  (
+    load_script
+    layout_into node "$REPO/languages" "$out" overlay
+  ) >"$d/out" 2>"$d/err" || rc=$?
+  [ "$rc" -eq 1 ] || {
+    cat "$d/err" >&2
+    die "exit $rc, want 1"
+  }
+  sed -n 1p "$d/err" | grep -F "What happened: The copy of the project on this computer already has tsconfig.json, which the node pack would add." >/dev/null ||
+    {
+      cat "$d/err" >&2
+      die "the existing target is not named"
+    }
+  sed -n 2p "$d/err" | grep -E '^What to do next: .{10,}' >/dev/null || {
+    cat "$d/err" >&2
+    die "no next action"
+  }
+  [ ! -e "$out/package.json" ] && [ "$(cat "$out/.github/workflows/ci.yml")" = stub ] && [ "$(cat "$out/.gitignore")" = x ] &&
+    [ "$(cat "$out/tsconfig.json")" = '{}' ] || die "something was written before the error"
   # A folder target (python: starter/src/ to src/) that is there already.
   out="$d/copy3"
   mkdir -p "$out/src"
   rc=0
-  ( load_script; layout_into python "$REPO/languages" "$out" overlay ) >"$d/out" 2>"$d/err" || rc=$?
+  (
+    load_script
+    layout_into python "$REPO/languages" "$out" overlay
+  ) >"$d/out" 2>"$d/err" || rc=$?
   [ "$rc" -eq 1 ] || die "src/ there: exit $rc, want 1"
-  sed -n 1p "$d/err" | grep -F "already has src/, which the python pack would add." >/dev/null || { cat "$d/err" >&2; die "src/ not named"; }
+  sed -n 1p "$d/err" | grep -F "already has src/, which the python pack would add." >/dev/null || {
+    cat "$d/err" >&2
+    die "src/ not named"
+  }
   [ ! -e "$out/pyproject.toml" ] || die "src/ there: something was written"
   # web with the deploy files: laid out, and only code-standards.md is
   # kept in the pack; without them, the deploy files are kept.
   out="$d/copy4"
-  ( load_script; layout_into web "$REPO/languages" "$out" overlay yes; printf '%s\n' "$LP_KEPT" >"$d/kept" ) >"$d/out" 2>"$d/err" \
-    || { cat "$d/err" >&2; die "web with deploy failed"; }
+  (
+    load_script
+    layout_into web "$REPO/languages" "$out" overlay yes
+    printf '%s\n' "$LP_KEPT" >"$d/kept"
+  ) >"$d/out" 2>"$d/err" ||
+    {
+      cat "$d/err" >&2
+      die "web with deploy failed"
+    }
   cmp -s "$REPO/languages/web/deploy.yml" "$out/.github/workflows/deploy.yml" || die "deploy.yml not laid out"
   cmp -s "$REPO/languages/web/wrangler.jsonc" "$out/wrangler.jsonc" || die "wrangler.jsonc not laid out"
   [ "$(cat "$d/kept")" = code-standards.md ] || die "kept with deploy: $(cat "$d/kept")"
   out="$d/copy5"
-  ( load_script; layout_into web "$REPO/languages" "$out" overlay; printf '%s\n' "$LP_KEPT" >"$d/kept" ) >"$d/out" 2>"$d/err" \
-    || { cat "$d/err" >&2; die "web without deploy failed"; }
+  (
+    load_script
+    layout_into web "$REPO/languages" "$out" overlay
+    printf '%s\n' "$LP_KEPT" >"$d/kept"
+  ) >"$d/out" 2>"$d/err" ||
+    {
+      cat "$d/err" >&2
+      die "web without deploy failed"
+    }
   [ ! -e "$out/.github/workflows/deploy.yml" ] && [ ! -e "$out/wrangler.jsonc" ] || die "deploy files laid out without --with-deploy"
   [ "$(cat "$d/kept")" = "code-standards.md deploy.yml wrangler.jsonc" ] || die "kept without deploy: $(cat "$d/kept")"
 }
@@ -8430,12 +10718,18 @@ test_the_readme_setup_section_is_removed_up_to_the_next_heading() {
   d="$(tmpdir)"
   printf '%s\n' '# App' '' 'Intro.' '' '## Finishing the setup' '' 'Steps.' \
     '### A smaller heading' '##Not a heading' '' '## Setup' '' 'Run it.' >"$d/a"
-  ( load_script; remove_setup_section "$d/a" ) || die "the section was not found"
+  (
+    load_script
+    remove_setup_section "$d/a"
+  ) || die "the section was not found"
   printf '%s\n' '# App' '' 'Intro.' '' '## Setup' '' 'Run it.' >"$d/want"
   expect_same "README" "$d/want" "$d/a"
   # The last section: removed up to the end of the file.
   printf '%s\n' '# App' '' '## Setup' 'x' '' '## Finishing the setup' 'y' >"$d/b"
-  ( load_script; remove_setup_section "$d/b" ) || die "the last section was not found"
+  (
+    load_script
+    remove_setup_section "$d/b"
+  ) || die "the last section was not found"
   printf '%s\n' '# App' '' '## Setup' 'x' '' >"$d/want"
   expect_same "README, last section" "$d/want" "$d/b"
   # No such section: the file is left as it is, and the function says so.
@@ -8447,7 +10741,10 @@ test_the_readme_setup_section_is_removed_up_to_the_next_heading() {
     printf '%s\n' '# App' '## Setup' "$t" 'more' >"$d/c"
     cp "$d/c" "$d/c0"
     rc=0
-    ( load_script; remove_setup_section "$d/c" ) || rc=$?
+    (
+      load_script
+      remove_setup_section "$d/c"
+    ) || rc=$?
     [ "$rc" -eq 1 ] || die "no section [$t]: returned $rc, want 1"
     cmp -s "$d/c0" "$d/c" || die "no section [$t]: the file changed"
   done
@@ -8464,9 +10761,15 @@ test_a_copy_that_does_not_fit_the_setup_stops_with_the_continue_command() {
   export STUB_GH_TEMPLATE="$d/template"
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
-  sed -n 1p "$d/err" | grep -F "What happened: The copy of the project on this computer already has requirements.txt, which the python pack would add. The project octo-user/my-app exists on GitHub, with only the bootstrapper's files in it, and a copy of it is on this computer in ./my-app." >/dev/null \
-    || { cat "$d/err" >&2; die "the stop does not name the file and what exists"; }
-  sed -n 2p "$d/err" | grep -E '^What to do next: .{10,}' >/dev/null || { cat "$d/err" >&2; die "no next action"; }
+  sed -n 1p "$d/err" | grep -F "What happened: The copy of the project on this computer already has requirements.txt, which the python pack would add. The project octo-user/my-app exists on GitHub, with only the bootstrapper's files in it, and a copy of it is on this computer in ./my-app." >/dev/null ||
+    {
+      cat "$d/err" >&2
+      die "the stop does not name the file and what exists"
+    }
+  sed -n 2p "$d/err" | grep -E '^What to do next: .{10,}' >/dev/null || {
+    cat "$d/err" >&2
+    die "no next action"
+  }
   expect_continue_command "$d" " --resume"
   ! grep -qxF "$FINISHED" "$d/out" || die "it went on after the error"
   c="$(copy_of "$d")"
@@ -8483,16 +10786,25 @@ test_a_copy_that_does_not_fit_the_setup_stops_with_the_continue_command() {
   export STUB_GH_TEMPLATE="$d/template"
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
-  sed -n 1p "$d/err" | grep -F "What happened: The file README.md in the copy of the project has no section \"## Finishing the setup\", which the setup removes." >/dev/null \
-    || { cat "$d/err" >&2; die "the missing section is not explained"; }
+  sed -n 1p "$d/err" | grep -F "What happened: The file README.md in the copy of the project has no section \"## Finishing the setup\", which the setup removes." >/dev/null ||
+    {
+      cat "$d/err" >&2
+      die "the missing section is not explained"
+    }
   expect_continue_command "$d" " --resume"
   ! grep -qxF "$FINISHED" "$d/out" || die "it went on after the error"
   expect_copy_untouched "$d"
   # #152 review, finding 2: these files come from the project GitHub made
   # from the current bootstrapper, so downloading the script again cannot
   # help: the next action is to report it.
-  sed -n 2p "$d/err" | grep -F "Report it to the bootstrapper's maintainers" >/dev/null || { cat "$d/err" >&2; die "README: the next action is not to report it"; }
-  ! grep -qF 'Download it again' "$d/err" || { cat "$d/err" >&2; die "README: told to download again"; }
+  sed -n 2p "$d/err" | grep -F "Report it to the bootstrapper's maintainers" >/dev/null || {
+    cat "$d/err" >&2
+    die "README: the next action is not to report it"
+  }
+  ! grep -qF 'Download it again' "$d/err" || {
+    cat "$d/err" >&2
+    die "README: told to download again"
+  }
   # A pack file missing from the project's languages/: the same.
   d="$(tmpdir)"
   cp -R "$BUILT" "$d/template"
@@ -8500,9 +10812,18 @@ test_a_copy_that_does_not_fit_the_setup_stops_with_the_continue_command() {
   export STUB_GH_TEMPLATE="$d/template"
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
-  sed -n 1p "$d/err" | grep -F "What happened: missing from the pack: pyproject.toml" >/dev/null || { cat "$d/err" >&2; die "the missing pack file is not named"; }
-  sed -n 2p "$d/err" | grep -F "Report it to the bootstrapper's maintainers" >/dev/null || { cat "$d/err" >&2; die "pack file: the next action is not to report it"; }
-  ! grep -qF 'Download it again' "$d/err" || { cat "$d/err" >&2; die "pack file: told to download again"; }
+  sed -n 1p "$d/err" | grep -F "What happened: missing from the pack: pyproject.toml" >/dev/null || {
+    cat "$d/err" >&2
+    die "the missing pack file is not named"
+  }
+  sed -n 2p "$d/err" | grep -F "Report it to the bootstrapper's maintainers" >/dev/null || {
+    cat "$d/err" >&2
+    die "pack file: the next action is not to report it"
+  }
+  ! grep -qF 'Download it again' "$d/err" || {
+    cat "$d/err" >&2
+    die "pack file: told to download again"
+  }
   expect_continue_command "$d" " --resume"
   expect_copy_untouched "$d"
   # S15: the other files the setup changes are checked before the first
@@ -8525,7 +10846,10 @@ test_a_copy_that_does_not_fit_the_setup_stops_with_the_continue_command() {
       setup_run "$d" --non-interactive --yes
     fi
     expect_rc 1 "$d"
-    sed -n 2p "$d/err" | grep -F "Report it to the bootstrapper's maintainers" >/dev/null || { cat "$d/err" >&2; die "$t: the next action is not to report it"; }
+    sed -n 2p "$d/err" | grep -F "Report it to the bootstrapper's maintainers" >/dev/null || {
+      cat "$d/err" >&2
+      die "$t: the next action is not to report it"
+    }
     expect_continue_command "$d" " --resume"
     ! grep -qxF "$FINISHED" "$d/out" || die "$t: it went on after the error"
     expect_copy_untouched "$d"
@@ -8540,7 +10864,11 @@ expect_copy_untouched() {
   local c
   c="$(copy_of "$1")"
   [ -d "$c" ] || die "there is no copy"
-  [ -z "$(in_git -C "$c" status --porcelain --untracked-files=all)" ] || { in_git -C "$c" status >&2; cat "$1/out" >&2; die "the copy was changed before the stop"; }
+  [ -z "$(in_git -C "$c" status --porcelain --untracked-files=all)" ] || {
+    in_git -C "$c" status >&2
+    cat "$1/out" >&2
+    die "the copy was changed before the stop"
+  }
   [ "$(in_git -C "$c" rev-list --count HEAD)" -eq 1 ] || die "a change was saved in the copy"
 }
 
@@ -8556,10 +10884,16 @@ test_the_awk_helpers_take_a_path_named_like_a_setting() {
   printf '%s\n' 'dist/' >"$d/a=b/gitignore"
   printf '%s\n' 'node_modules/' >"$d/a=b/.gitignore"
   printf '%s\n' 'FROM-STDIN' >"$d/in"
-  ( load_script; cd "$d"
+  (
+    load_script
+    cd "$d"
     remove_setup_section a=b/README.md
     remove_pack_section a=b/README.md node
-    add_missing_lines a=b/gitignore a=b/.gitignore ) <"$d/in" >"$d/out" 2>"$d/err" || { cat "$d/err" >&2; die "a helper failed"; }
+    add_missing_lines a=b/gitignore a=b/.gitignore
+  ) <"$d/in" >"$d/out" 2>"$d/err" || {
+    cat "$d/err" >&2
+    die "a helper failed"
+  }
   printf '%s\n' '# App' '## Setup' 'see x' >"$d/want"
   expect_same "README" "$d/want" "$d/a=b/README.md"
   printf '%s\n' node_modules/ dist/ >"$d/want"
@@ -8584,7 +10918,8 @@ test_a_folder_named_like_a_setting_or_an_option_gets_the_whole_tree_and_stdin_is
     prepare "$d"
     use_built "$d"
     printf '%s\n' first-line second-line >"$d/in"
-    ( in_env "$d"
+    (
+      in_env "$d"
       rc=0
       "$BASH" "$RUN_SCRIPT" "${REQUIRED_OPTS[@]}" --pack python "${ALL_OPTS[@]}" --public \
         --non-interactive --yes "--dir=$dir" || rc=$?
@@ -8592,11 +10927,23 @@ test_a_folder_named_like_a_setting_or_an_option_gets_the_whole_tree_and_stdin_is
       IFS= read -r line || line="(nothing: stdin was read to its end)"
       printf '%s\n' "$line" >"$d/first"
     ) <"$d/in" >"$d/out" 2>"$d/err"
-    [ "$(cat "$d/rc")" -eq 0 ] || { cat "$d/out" "$d/err" >&2; die "$dir: exit $(cat "$d/rc"), want 0"; }
-    grep -qxF "$FINISHED" "$d/out" || { cat "$d/err" >&2; die "$dir: did not reach the end"; }
+    [ "$(cat "$d/rc")" -eq 0 ] || {
+      cat "$d/out" "$d/err" >&2
+      die "$dir: exit $(cat "$d/rc"), want 0"
+    }
+    grep -qxF "$FINISHED" "$d/out" || {
+      cat "$d/err" >&2
+      die "$dir: did not reach the end"
+    }
     [ "$(cat "$d/first")" = first-line ] || die "$dir: stdin was read; the next line is: $(cat "$d/first")"
-    [ "$(calls_from_create "$d" | grep '^repo clone ')" = "repo clone octo-user/my-app ./$dir" ] || { cat "$d/gh.log" >&2; die "$dir: not copied into ./$dir"; }
-    [ "$(ls -A "$d/cwd")" = "$dir" ] || { ls -A "$d/cwd" >&2; die "$dir: the copy is not in the folder named"; }
+    [ "$(calls_from_create "$d" | grep '^repo clone ')" = "repo clone octo-user/my-app ./$dir" ] || {
+      cat "$d/gh.log" >&2
+      die "$dir: not copied into ./$dir"
+    }
+    [ "$(ls -A "$d/cwd")" = "$dir" ] || {
+      ls -A "$d/cwd" >&2
+      die "$dir: the copy is not in the folder named"
+    }
     expect_setup_tree "$d" "$d/cwd/$dir" python ""
   done
 }
@@ -8610,12 +10957,24 @@ test_a_failed_copy_is_explained_with_the_continue_command() {
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
   expect_err_shape "$d" "The script could not make a copy of the project on this computer, in \./my-app\. The project octo-user/my-app exists on GitHub, with only the bootstrapper's files in it\.\$"
-  grep -qxF "    fatal: unable to access 'https://github.com/octo-user/my-app.git/': Could not resolve host: github.com" "$d/err" \
-    || { cat "$d/err" >&2; die "git's text is not below"; }
-  sed -n 2p "$d/err" | grep -F 'continue the setup with the command shown above' >/dev/null || { cat "$d/err" >&2; die "next action is not to continue"; }
+  grep -qxF "    fatal: unable to access 'https://github.com/octo-user/my-app.git/': Could not resolve host: github.com" "$d/err" ||
+    {
+      cat "$d/err" >&2
+      die "git's text is not below"
+    }
+  sed -n 2p "$d/err" | grep -F 'continue the setup with the command shown above' >/dev/null || {
+    cat "$d/err" >&2
+    die "next action is not to continue"
+  }
   expect_continue_command "$d" " --resume"
-  [ "$(calls_from_create "$d" | tail -1)" = "$CLONE_CALL" ] || { cat "$d/gh.log" >&2; die "gh was used after the failed copy"; }
-  [ -z "$(ls -A "$d/cwd")" ] || { ls -A "$d/cwd" >&2; die "something was left on this computer"; }
+  [ "$(calls_from_create "$d" | tail -1)" = "$CLONE_CALL" ] || {
+    cat "$d/gh.log" >&2
+    die "gh was used after the failed copy"
+  }
+  [ -z "$(ls -A "$d/cwd")" ] || {
+    ls -A "$d/cwd" >&2
+    die "something was left on this computer"
+  }
   ! grep -qxF "$FINISHED" "$d/out" || die "it went on after the error"
   # gh signed out in between: the sign-in next action, to continue.
   d="$(tmpdir)"
@@ -8623,7 +10982,10 @@ test_a_failed_copy_is_explained_with_the_continue_command() {
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
   expect_err_shape "$d" ".*is not signed in"
-  sed -n 2p "$d/err" | grep -F 'continue the setup with the command shown above' >/dev/null || { cat "$d/err" >&2; die "signed out: next action is not to continue"; }
+  sed -n 2p "$d/err" | grep -F 'continue the setup with the command shown above' >/dev/null || {
+    cat "$d/err" >&2
+    die "signed out: next action is not to continue"
+  }
   expect_continue_command "$d" " --resume"
   unset STUB_GH_CLONE_FAIL
 }
@@ -8642,7 +11004,10 @@ test_a_copy_from_another_version_or_without_its_stamp_is_refused() {
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
   expect_err_shape "$d" "The copy of the project on this computer is from version v9\.8\.7 of the bootstrapper, but this script is version v9\.8\.8\. "
-  grep -qF "$BUILT_VERSION, built from" "$d/err" || { cat "$d/err" >&2; die "the stamp is not shown below"; }
+  grep -qF "$BUILT_VERSION, built from" "$d/err" || {
+    cat "$d/err" >&2
+    die "the stamp is not shown below"
+  }
   expect_continue_command "$d" " --resume"
   c="$(copy_of "$d")"
   [ "$(in_git -C "$c" symbolic-ref --short HEAD)" = main ] || die "the line of work was started"
@@ -8694,7 +11059,10 @@ test_values_with_special_characters_are_copied_literally() {
   setup_run "$d" --non-interactive --yes --pack react-native --name Tool.Shed \
     --project-name "$W_DISPLAY" --po-name "$W_PO" --description "$W_DESCRIPTION"
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "did not reach the end"
+  }
   expect_setup_tree "$d" "$(copy_of "$d")" react-native
   # The values as typed, where a reader looks for them.
   grep -qxF "# $W_DISPLAY" "$(copy_of "$d")/README.md" || die "README.md: the display name is not the heading"
@@ -8716,11 +11084,21 @@ test_the_fill_keeps_cr_lf_with_an_awk_that_drops_the_cr_as_it_reads() {
   printf '%s' "# [PROJECT NAME]$cr$nl**Owner:** [PO NAME]$cr${nl}last [PROJECT NAME]$cr$nl" >"$d/crlf.md"
   # The fake does drop the CR, so the test would see the bug.
   [ "$(printf 'a\r\n' | PATH="$d/bin:$PATH" awk '{ print length($0) }')" = 1 ] || die "the fake awk keeps the CR"
-  ( load_script; cd "$d"; PATH="$d/bin:$PATH"
+  (
+    load_script
+    cd "$d"
+    PATH="$d/bin:$PATH"
     IN_PROJECT_NAME='My App' IN_PO_NAME='Ada'
-    fill_file crlf.md name po ) >"$d/out" 2>"$d/err" || { cat "$d/err" >&2; die "fill_file failed"; }
+    fill_file crlf.md name po
+  ) >"$d/out" 2>"$d/err" || {
+    cat "$d/err" >&2
+    die "fill_file failed"
+  }
   printf '%s' "# My App$cr$nl**Owner:** Ada$cr${nl}last My App$cr$nl" >"$d/want"
-  cmp -s "$d/want" "$d/crlf.md" || { od -c "$d/crlf.md" >&2; die "the CR LF line endings were not kept"; }
+  cmp -s "$d/want" "$d/crlf.md" || {
+    od -c "$d/crlf.md" >&2
+    die "the CR LF line endings were not kept"
+  }
 }
 
 test_the_fill_refuses_a_file_holding_the_byte_it_uses_for_cr() {
@@ -8731,8 +11109,13 @@ test_the_fill_refuses_a_file_holding_the_byte_it_uses_for_cr() {
   d="$(tmpdir)"
   printf '# [PROJECT NAME] \036 x\n' >"$d/odd.md"
   before="$(od -c "$d/odd.md")"
-  ! ( load_script; cd "$d"; IN_PROJECT_NAME='My App'; fill_file odd.md name ) >"$d/out" 2>"$d/err" \
-    || die "a file with the byte 036 was filled"
+  ! (
+    load_script
+    cd "$d"
+    IN_PROJECT_NAME='My App'
+    fill_file odd.md name
+  ) >"$d/out" 2>"$d/err" ||
+    die "a file with the byte 036 was filled"
   [ "$(od -c "$d/odd.md")" = "$before" ] || die "the refused file was changed"
 }
 
@@ -8758,19 +11141,29 @@ test_the_fill_is_literal_in_one_pass_and_keeps_line_endings_and_the_mode() {
   v='[PO NAME] & \1 $0 .* a/b %s Zoë'
   p='[PROJECT NAME] \\& ^$'
   s='Lends .* to $HOME/x & y \n'
-  ( load_script; cd "$d"
+  (
+    load_script
+    cd "$d"
     IN_PROJECT_NAME="$v" IN_PO_NAME="$p" IN_DESCRIPTION="$s"
     fill_file a=b/lf.md name po project-description
     fill_file a=b/crlf.sh name po
-    fill_file a=b/empty.md name ) <"$d/in" >"$d/out" 2>"$d/err" || { cat "$d/err" >&2; die "fill_file failed"; }
+    fill_file a=b/empty.md name
+  ) <"$d/in" >"$d/out" 2>"$d/err" || {
+    cat "$d/err" >&2
+    die "fill_file failed"
+  }
   printf '%s\n' "# $v" "**Owner:** $p and $p" "**Description:** $s" '[DATE] stays' >"$d/want"
   expect_same "the LF file" "$d/want" "$d/a=b/lf.md"
   printf '%s' "# $v$cr$nl**Owner:** $p$cr${nl}last $v" >"$d/want"
-  cmp -s "$d/want" "$d/a=b/crlf.sh" || { od -c "$d/a=b/crlf.sh" >&2; die "the CR LF file without a newline at the end changed otherwise"; }
+  cmp -s "$d/want" "$d/a=b/crlf.sh" || {
+    od -c "$d/a=b/crlf.sh" >&2
+    die "the CR LF file without a newline at the end changed otherwise"
+  }
   # Where chmod cannot make a file without #! runnable (Git for Windows,
   # whose bash decides that from the file's start, not a mode bit), the
   # mode cannot be seen, and this part is skipped.
-  printf 'x\n' >"$d/probe"; chmod 755 "$d/probe"
+  printf 'x\n' >"$d/probe"
+  chmod 755 "$d/probe"
   if [ -x "$d/probe" ]; then
     [ -x "$d/a=b/crlf.sh" ] || die "the executable bit was lost"
   else
@@ -8792,9 +11185,15 @@ test_a_file_to_fill_that_is_missing_stops_before_any_file_is_filled() {
   export STUB_GH_TEMPLATE="$d/template"
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
-  sed -n 1p "$d/err" | grep -F "What happened: The copy of the project on this computer has no docs/NEXT_SESSION.md, in which the setup fills in the project's name and other details. The project octo-user/my-app exists on GitHub, with only the bootstrapper's files in it, and a copy of it is on this computer in ./my-app." >/dev/null \
-    || { cat "$d/err" >&2; die "the missing file is not named with what exists"; }
-  sed -n 2p "$d/err" | grep -F "Report it to the bootstrapper's maintainers" >/dev/null || { cat "$d/err" >&2; die "the next action is not to report it"; }
+  sed -n 1p "$d/err" | grep -F "What happened: The copy of the project on this computer has no docs/NEXT_SESSION.md, in which the setup fills in the project's name and other details. The project octo-user/my-app exists on GitHub, with only the bootstrapper's files in it, and a copy of it is on this computer in ./my-app." >/dev/null ||
+    {
+      cat "$d/err" >&2
+      die "the missing file is not named with what exists"
+    }
+  sed -n 2p "$d/err" | grep -F "Report it to the bootstrapper's maintainers" >/dev/null || {
+    cat "$d/err" >&2
+    die "the next action is not to report it"
+  }
   expect_continue_command "$d" " --resume"
   ! grep -qxF "$FINISHED" "$d/out" || die "it went on after the error"
   c="$(copy_of "$d")"
@@ -8811,13 +11210,28 @@ test_the_placeholders_left_for_clead_are_listed_in_plain_words() {
   # in expect_setup_tree.
   local d t
   d="$(tmpdir)"
-  ( load_script; say_left_for_clead ) >"$d/out" 2>"$d/err" || { cat "$d/err" >&2; die "say_left_for_clead failed"; }
+  (
+    load_script
+    say_left_for_clead
+  ) >"$d/out" 2>"$d/err" || {
+    cat "$d/err" >&2
+    die "say_left_for_clead failed"
+  }
   for t in 'left for your first session with Clead' '[PHASE NAME]' docs/BACKLOG.md '[Goal]' \
     memory/project.md docs/SPEC.md memory/context.md STATUS.md; do
-    grep -qF -- "$t" "$d/out" || { cat "$d/out" >&2; die "the list does not name $t"; }
+    grep -qF -- "$t" "$d/out" || {
+      cat "$d/out" >&2
+      die "the list does not name $t"
+    }
   done
-  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "it wrote to stderr"; }
-  [ -z "$(banned_hits <"$d/out")" ] || { cat "$d/out" >&2; die "a banned word in the list"; }
+  [ ! -s "$d/err" ] || {
+    cat "$d/err" >&2
+    die "it wrote to stderr"
+  }
+  [ -z "$(banned_hits <"$d/out")" ] || {
+    cat "$d/out" >&2
+    die "a banned word in the list"
+  }
 }
 
 # ---------- lockfile, licence and CHANGELOG (spec steps 7, 10, 11) ----------
@@ -8842,8 +11256,14 @@ test_the_npm_packs_get_a_lockfile_made_by_npm_after_the_fill() {
     printf '%s\n' 'an-answer-for-the-script' >"$d/in"
     setup_run "$d" --non-interactive --yes --pack "$p"
     expect_rc 0 "$d"
-    grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "$p: did not reach the end"; }
-    [ ! -e "$d/npm-stdin" ] || { cat "$d/npm-stdin" >&2; die "$p: npm read the script's stdin"; }
+    grep -qxF "$FINISHED" "$d/out" || {
+      cat "$d/out" "$d/err" >&2
+      die "$p: did not reach the end"
+    }
+    [ ! -e "$d/npm-stdin" ] || {
+      cat "$d/npm-stdin" >&2
+      die "$p: npm read the script's stdin"
+    }
     c="$(copy_of "$d")"
     # One call, in the copy, with the spec's command (the same as packs.yml).
     printf '%s\tinstall\t--package-lock-only\t--no-audit\t--no-fund\n' "$(cd "$c" && pwd)" >"$d/want-npm"
@@ -8853,9 +11273,15 @@ test_the_npm_packs_get_a_lockfile_made_by_npm_after_the_fill() {
     ! grep -qF '[project-name]' "$c/package-lock.json" || die "$p: the lockfile was made before the fill"
     # Its own step, between the fill and the licence, with a done line.
     grep '^==> ' "$d/out" | sed -n '/^==> Filling in/,$p' >"$d/steps"
-    [ "$(sed -n 2p "$d/steps")" = "==> Recording the exact versions of the $p pack's tools in package-lock.json" ] \
-      || { cat "$d/out" >&2; die "$p: the lockfile step does not come right after the fill"; }
-    [ "$(sed -n 3p "$d/steps")" = "==> Adding the project's licence" ] || { cat "$d/out" >&2; die "$p: the licence does not follow the lockfile"; }
+    [ "$(sed -n 2p "$d/steps")" = "==> Recording the exact versions of the $p pack's tools in package-lock.json" ] ||
+      {
+        cat "$d/out" >&2
+        die "$p: the lockfile step does not come right after the fill"
+      }
+    [ "$(sed -n 3p "$d/steps")" = "==> Adding the project's licence" ] || {
+      cat "$d/out" >&2
+      die "$p: the licence does not follow the lockfile"
+    }
     expect_out "$d" "    Done. package-lock.json lists the exact version of every tool the project uses, so its checks on GitHub install the same ones."
     # npm's own text is not shown when it works.
     expect_no_out "$d" "up to date"
@@ -8866,7 +11292,10 @@ test_the_npm_packs_get_a_lockfile_made_by_npm_after_the_fill() {
   fake_tool "$d" npm 10.0.0
   setup_run "$d" --non-interactive --yes --pack node --dir=-app
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "-app: did not reach the end"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "-app: did not reach the end"
+  }
   printf '%s\tinstall\t--package-lock-only\t--no-audit\t--no-fund\n' "$(cd "$d/cwd/-app" && pwd)" >"$d/want-npm"
   expect_same "-app: the npm calls" "$d/want-npm" "$d/npm.log"
   [ -f "$d/cwd/-app/package-lock.json" ] || die "-app: no lockfile"
@@ -8874,7 +11303,10 @@ test_the_npm_packs_get_a_lockfile_made_by_npm_after_the_fill() {
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
-  [ ! -s "$d/npm.log" ] || { cat "$d/npm.log" >&2; die "python: npm ran"; }
+  [ ! -s "$d/npm.log" ] || {
+    cat "$d/npm.log" >&2
+    die "python: npm ran"
+  }
   [ ! -e "$(copy_of "$d")/package-lock.json" ] || die "python: a lockfile was made"
 }
 
@@ -8893,17 +11325,32 @@ test_a_failed_npm_is_explained_with_its_text_for_support() {
     setup_run "$d" --non-interactive --yes --pack node
     unset STUB_NPM_FAIL
     expect_rc 1 "$d"
-    sed -n 1p "$d/err" | grep -F "What happened: npm could not record the exact versions of the node pack's tools in package-lock.json. The project octo-user/my-app exists on GitHub, with only the bootstrapper's files in it" >/dev/null \
-      || { cat "$d/err" >&2; die "$mode: the first line does not say what happened"; }
+    sed -n 1p "$d/err" | grep -F "What happened: npm could not record the exact versions of the node pack's tools in package-lock.json. The project octo-user/my-app exists on GitHub, with only the bootstrapper's files in it" >/dev/null ||
+      {
+        cat "$d/err" >&2
+        die "$mode: the first line does not say what happened"
+      }
     case "$mode" in
-      offline) sed -n 2p "$d/err" | grep -F "What to do next: Check that this computer is connected to the internet, then continue the setup with the command shown above." >/dev/null \
-        || { cat "$d/err" >&2; die "offline: the next action is not to check the connection"; } ;;
-      notarget) sed -n 2p "$d/err" | grep -F "What to do next: Continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." >/dev/null \
-        || { cat "$d/err" >&2; die "notarget: the next action is not the plain fallback"; } ;;
+      offline) sed -n 2p "$d/err" | grep -F "What to do next: Check that this computer is connected to the internet, then continue the setup with the command shown above." >/dev/null ||
+        {
+          cat "$d/err" >&2
+          die "offline: the next action is not to check the connection"
+        } ;;
+      notarget) sed -n 2p "$d/err" | grep -F "What to do next: Continue the setup with the command shown above. If the same thing happens, ask for help and show the details below." >/dev/null ||
+        {
+          cat "$d/err" >&2
+          die "notarget: the next action is not the plain fallback"
+        } ;;
     esac
-    sed -n 3p "$d/err" | grep -xF 'Details for support (you can ignore these):' >/dev/null || { cat "$d/err" >&2; die "$mode: no support block"; }
-    grep -qxF "    npm error code $( [ "$mode" = offline ] && echo ENOTFOUND || echo ETARGET)" "$d/err" \
-      || { cat "$d/err" >&2; die "$mode: npm's own text is not below for support"; }
+    sed -n 3p "$d/err" | grep -xF 'Details for support (you can ignore these):' >/dev/null || {
+      cat "$d/err" >&2
+      die "$mode: no support block"
+    }
+    grep -qxF "    npm error code $([ "$mode" = offline ] && echo ENOTFOUND || echo ETARGET)" "$d/err" ||
+      {
+        cat "$d/err" >&2
+        die "$mode: npm's own text is not below for support"
+      }
     expect_continue_command "$d" " --resume"
     ! grep -qxF "$FINISHED" "$d/out" || die "$mode: it went on after npm failed"
     c="$(copy_of "$d")"
@@ -8925,11 +11372,17 @@ test_a_github_licence_gets_the_year_and_the_holder_filled_in() {
   setup_run "$d" --non-interactive --yes --copyright-holder "$W_HOLDER"
   unset STUB_GH_CR
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "did not reach the end"
+  }
   # The preflight's check of the name, then the text read once at step
   # 10, both with gh's prompts off.
-  [ "$(grep -F "$(printf '\tlicenses/')" "$d/gh.log")" = "$(printf 'GH_PROMPT_DISABLED=1\tapi\t-i\tlicenses/mit\t--jq\t.key\nGH_PROMPT_DISABLED=1\tapi\t-i\tlicenses/mit\t--jq\t.body')" ] \
-    || { cat "$d/gh.log" >&2; die "the licence was not checked, then read once, with gh's prompts off"; }
+  [ "$(grep -F "$(printf '\tlicenses/')" "$d/gh.log")" = "$(printf 'GH_PROMPT_DISABLED=1\tapi\t-i\tlicenses/mit\t--jq\t.key\nGH_PROMPT_DISABLED=1\tapi\t-i\tlicenses/mit\t--jq\t.body')" ] ||
+    {
+      cat "$d/gh.log" >&2
+      die "the licence was not checked, then read once, with gh's prompts off"
+    }
   c="$(copy_of "$d")"
   expect_setup_tree "$d" "$c" python
   [ ! -e "$c/NOTICE" ] || die "a NOTICE was made for mit"
@@ -8951,8 +11404,14 @@ test_polyform_noncommercial_is_copied_from_licenses_with_a_notice() {
   W_LICENSE=polyform-noncommercial-1.0.0
   setup_run "$d" --non-interactive --yes --license polyform-noncommercial-1.0.0
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
-  ! grep -qF 'licenses/' "$d/gh.log" || { cat "$d/gh.log" >&2; die "GitHub was asked for the PolyForm text"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "did not reach the end"
+  }
+  ! grep -qF 'licenses/' "$d/gh.log" || {
+    cat "$d/gh.log" >&2
+    die "GitHub was asked for the PolyForm text"
+  }
   c="$(copy_of "$d")"
   expect_setup_tree "$d" "$c" python
   cmp -s "$BUILT/licenses/NOTICE" "$c/licenses/NOTICE" || die "the template's own licenses/NOTICE changed"
@@ -8968,12 +11427,18 @@ test_no_licence_adds_no_file_and_warns_only_for_a_public_project() {
     d="$(tmpdir)"
     setup_run "$d" --non-interactive --yes --license none $vis
     expect_rc 0 "$d"
-    grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "$vis: did not reach the end"; }
+    grep -qxF "$FINISHED" "$d/out" || {
+      cat "$d/out" "$d/err" >&2
+      die "$vis: did not reach the end"
+    }
     expect_setup_tree "$d" "$(copy_of "$d")" python
     ! grep -qF 'licenses/' "$d/gh.log" || die "$vis: GitHub was asked for a licence"
     expect_out "$d" "    Done. No licence file was added, because you chose none."
     if [ "$vis" = --public ]; then
-      grep -qxF "$warning" "$d/out" || { cat "$d/out" >&2; die "public: no warning"; }
+      grep -qxF "$warning" "$d/out" || {
+        cat "$d/out" >&2
+        die "public: no warning"
+      }
     else
       expect_no_out "$d" "Warning: the project is public"
     fi
@@ -8996,10 +11461,19 @@ test_a_licence_github_does_not_know_is_explained_with_the_next_action() {
   setup_run "$d" --non-interactive --yes --license made-up-2.0
   unset STUB_GH_LICENSE_KNOWN
   expect_rc 1 "$d"
-  sed -n 1p "$d/err" | grep -F "What happened: GitHub has no licence with the short name made-up-2.0, so the script could not add it. The project octo-user/my-app exists on GitHub" >/dev/null \
-    || { cat "$d/err" >&2; die "the unknown licence is not named"; }
-  sed -n 2p "$d/err" | grep -F "https://choosealicense.com/licenses/" >/dev/null || { cat "$d/err" >&2; die "the next action does not say where to find the name"; }
-  grep -qxF '    HTTP 404: Not Found' "$d/err" || { cat "$d/err" >&2; die "GitHub's answer is not below for support"; }
+  sed -n 1p "$d/err" | grep -F "What happened: GitHub has no licence with the short name made-up-2.0, so the script could not add it. The project octo-user/my-app exists on GitHub" >/dev/null ||
+    {
+      cat "$d/err" >&2
+      die "the unknown licence is not named"
+    }
+  sed -n 2p "$d/err" | grep -F "https://choosealicense.com/licenses/" >/dev/null || {
+    cat "$d/err" >&2
+    die "the next action does not say where to find the name"
+  }
+  grep -qxF '    HTTP 404: Not Found' "$d/err" || {
+    cat "$d/err" >&2
+    die "GitHub's answer is not below for support"
+  }
   expect_continue_command "$d" " --resume"
   ! grep -qxF "$FINISHED" "$d/out" || die "it went on after the 404"
   c="$(copy_of "$d")"
@@ -9013,8 +11487,11 @@ test_a_licence_github_does_not_know_is_explained_with_the_next_action() {
   setup_run "$d" --non-interactive --yes
   unset STUB_GH_LICENSE_FAIL
   expect_rc 1 "$d"
-  sed -n 1p "$d/err" | grep -F "What happened: GitHub had a problem of its own, so the script could not read the text of the licence mit." >/dev/null \
-    || { cat "$d/err" >&2; die "a server error is not explained"; }
+  sed -n 1p "$d/err" | grep -F "What happened: GitHub had a problem of its own, so the script could not read the text of the licence mit." >/dev/null ||
+    {
+      cat "$d/err" >&2
+      die "a server error is not explained"
+    }
   expect_continue_command "$d" " --resume"
   [ ! -e "$(copy_of "$d")/LICENSE" ] || die "a LICENSE was written after a server error"
 }
@@ -9026,21 +11503,33 @@ test_the_plan_says_whether_a_licence_is_added() {
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --dry-run
   expect_rc 0 "$d"
-  grep -qxF "  4. Add the language pack's files, fill in the project's names and description, and add the licence mit." "$d/out" \
-    || { cat "$d/out" >&2; die "mit: step 4 does not name the licence"; }
+  grep -qxF "  4. Add the language pack's files, fill in the project's names and description, and add the licence mit." "$d/out" ||
+    {
+      cat "$d/out" >&2
+      die "mit: step 4 does not name the licence"
+    }
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --dry-run --license none
   expect_rc 0 "$d"
-  grep -qxF "  4. Add the language pack's files and fill in the project's names and description; no licence file is added, because you chose none." "$d/out" \
-    || { cat "$d/out" >&2; die "none: step 4 does not say that no licence is added"; }
+  grep -qxF "  4. Add the language pack's files and fill in the project's names and description; no licence file is added, because you chose none." "$d/out" ||
+    {
+      cat "$d/out" >&2
+      die "none: step 4 does not say that no licence is added"
+    }
   expect_no_out "$d" "add the licence"
   # S18b: a public project with no licence gets step 10's warning in the
   # plan too, word for word; a private one does not.
-  grep -qxF "$NO_LICENCE_WARNING" "$d/out" || { cat "$d/out" >&2; die "public, none: the plan does not warn"; }
+  grep -qxF "$NO_LICENCE_WARNING" "$d/out" || {
+    cat "$d/out" >&2
+    die "public, none: the plan does not warn"
+  }
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --dry-run --license none --private
   expect_rc 0 "$d"
-  grep -qF "no licence file is added, because you chose none." "$d/out" || { cat "$d/out" >&2; die "private, none: no plan shown"; }
+  grep -qF "no licence file is added, because you chose none." "$d/out" || {
+    cat "$d/out" >&2
+    die "private, none: no plan shown"
+  }
   expect_no_out "$d" "Warning: the project is public"
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --dry-run
@@ -9056,8 +11545,14 @@ test_the_changelog_lines_go_at_the_end_of_project_created() {
   d="$(tmpdir)"
   mkdir -p "$d/copy"
   printf '%s\n' '# Changelog' '' '## Project created' '' '- Bootstrapped from' '  v1, built.' '' '' '## Later' '' '- other' >"$d/copy/CHANGELOG.md"
-  ( load_script; IN_DIR="$d/copy" IN_PACK=web IN_WITH_DEPLOY=yes IN_LICENSE=gpl-3.0
-    note_setup_in_changelog ) >"$d/out" 2>"$d/err" || { cat "$d/err" >&2; die "note_setup_in_changelog failed"; }
+  (
+    load_script
+    IN_DIR="$d/copy" IN_PACK=web IN_WITH_DEPLOY=yes IN_LICENSE=gpl-3.0
+    note_setup_in_changelog
+  ) >"$d/out" 2>"$d/err" || {
+    cat "$d/err" >&2
+    die "note_setup_in_changelog failed"
+  }
   printf '%s\n' '# Changelog' '' '## Project created' '' '- Bootstrapped from' '  v1, built.' \
     '- Language pack: web, with the files that publish the website.' '- Licence: gpl-3.0.' '- Set up by bootstrap-project.sh.' \
     '' '' '## Later' '' '- other' >"$d/want"
@@ -9065,13 +11560,25 @@ test_the_changelog_lines_go_at_the_end_of_project_created() {
   printf '%s\n' '# Changelog' '' '## Unreleased' >"$d/copy/CHANGELOG.md"
   cp "$d/copy/CHANGELOG.md" "$d/before"
   set +e
-  ( load_script; IN_DIR="$d/copy" IN_PACK=node IN_WITH_DEPLOY="" IN_LICENSE=mit CREATED_NOTE=x RESTART_CMD=x
-    note_setup_in_changelog ) >"$d/out" 2>"$d/err"
+  (
+    load_script
+    IN_DIR="$d/copy" IN_PACK=node IN_WITH_DEPLOY="" IN_LICENSE=mit CREATED_NOTE=x RESTART_CMD=x
+    note_setup_in_changelog
+  ) >"$d/out" 2>"$d/err"
   RC=$?
   set -e
-  [ "$RC" -eq 1 ] || { cat "$d/out" "$d/err" >&2; die "no heading: exit $RC, want 1"; }
-  sed -n 1p "$d/err" | grep -F 'has no section "## Project created"' >/dev/null || { cat "$d/err" >&2; die "no heading: not explained"; }
-  sed -n 2p "$d/err" | grep -F "Report it to the bootstrapper's maintainers" >/dev/null || { cat "$d/err" >&2; die "no heading: the next action is not to report it"; }
+  [ "$RC" -eq 1 ] || {
+    cat "$d/out" "$d/err" >&2
+    die "no heading: exit $RC, want 1"
+  }
+  sed -n 1p "$d/err" | grep -F 'has no section "## Project created"' >/dev/null || {
+    cat "$d/err" >&2
+    die "no heading: not explained"
+  }
+  sed -n 2p "$d/err" | grep -F "Report it to the bootstrapper's maintainers" >/dev/null || {
+    cat "$d/err" >&2
+    die "no heading: the next action is not to report it"
+  }
   expect_same "CHANGELOG.md without the heading" "$d/before" "$d/copy/CHANGELOG.md"
 }
 
@@ -9103,7 +11610,10 @@ test_an_empty_licence_text_or_a_missing_polyform_text_stops_with_the_continue_co
   unset STUB_GH_LICENSE_FAIL
   expect_rc 1 "$d"
   expect_err_shape "$d" "GitHub sent an empty text for the licence mit, so the script could not add it\. The project octo-user/my-app exists on GitHub"
-  grep -qxF '    HTTP 200 with an empty body for licenses/mit' "$d/err" || { cat "$d/err" >&2; die "empty: what GitHub sent is not below"; }
+  grep -qxF '    HTTP 200 with an empty body for licenses/mit' "$d/err" || {
+    cat "$d/err" >&2
+    die "empty: what GitHub sent is not below"
+  }
   expect_continue_command "$d" " --resume"
   ! grep -qxF "$FINISHED" "$d/out" || die "empty: it went on"
   c="$(copy_of "$d")"
@@ -9118,7 +11628,10 @@ test_an_empty_licence_text_or_a_missing_polyform_text_stops_with_the_continue_co
   unset STUB_GH_TEMPLATE
   expect_rc 1 "$d"
   expect_err_shape "$d" "The copy of the project on this computer has no licenses/PolyForm-Noncommercial-1\.0\.0\.md, the text of the PolyForm Noncommercial licence\."
-  sed -n 2p "$d/err" | grep -F "Report it to the bootstrapper's maintainers" >/dev/null || { cat "$d/err" >&2; die "PolyForm: the next action is not to report it"; }
+  sed -n 2p "$d/err" | grep -F "Report it to the bootstrapper's maintainers" >/dev/null || {
+    cat "$d/err" >&2
+    die "PolyForm: the next action is not to report it"
+  }
   expect_continue_command "$d" " --resume"
   c="$(copy_of "$d")"
   [ ! -e "$c/LICENSE" ] && [ ! -e "$c/NOTICE" ] || die "PolyForm: a LICENSE or NOTICE was written"
@@ -9153,26 +11666,57 @@ test_git_borrows_the_gh_sign_in_for_one_command_and_no_settings_change() {
   cp "$d/home/.gitconfig" "$d/global-before"
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/err" >&2; die "did not reach the end"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/err" >&2
+    die "did not reach the end"
+  }
   c="$(copy_of "$d")"
   want="git -c credential.https://github.com.helper= -c credential.https://github.com.helper=!'$d/gh' auth git-credential -C ./my-app push origin bootstrap-setup"
-  [ "$(grep -F ' push ' "$d/tools.log")" = "$want" ] || { grep -F ' push ' "$d/tools.log" >&2 || true; die "the push is not: $want"; }
-  [ "$(cat "$d/clone-prompt")" = 0 ] || { cat "$d/clone-prompt" >&2 || true; die "the copy was made with git allowed to ask at the terminal"; }
-  cmp -s "$d/global-before" "$d/home/.gitconfig" || { cat "$d/home/.gitconfig" >&2; die "the global git settings changed"; }
-  ! grep -qi credential "$c/.git/config" || { cat "$c/.git/config" >&2; die "a sign-in helper was written into the copy's settings"; }
-  ! grep -E ' config ' "$d/tools.log" | grep -v -- ' --get' | grep -E 'credential|--global|--system' >/dev/null \
-    || { cat "$d/tools.log" >&2; die "git settings were written"; }
+  [ "$(grep -F ' push ' "$d/tools.log")" = "$want" ] || {
+    grep -F ' push ' "$d/tools.log" >&2 || true
+    die "the push is not: $want"
+  }
+  [ "$(cat "$d/clone-prompt")" = 0 ] || {
+    cat "$d/clone-prompt" >&2 || true
+    die "the copy was made with git allowed to ask at the terminal"
+  }
+  cmp -s "$d/global-before" "$d/home/.gitconfig" || {
+    cat "$d/home/.gitconfig" >&2
+    die "the global git settings changed"
+  }
+  ! grep -qi credential "$c/.git/config" || {
+    cat "$c/.git/config" >&2
+    die "a sign-in helper was written into the copy's settings"
+  }
+  ! grep -E ' config ' "$d/tools.log" | grep -v -- ' --get' | grep -E 'credential|--global|--system' >/dev/null ||
+    {
+      cat "$d/tools.log" >&2
+      die "git settings were written"
+    }
   # The helper string works: git asks the stub gh through it (path with
   # spaces and all), and a helper from the global settings is never asked.
   d="$(tmpdir)"
   prepare "$d"
   "$REAL_GIT" config --file "$d/home/.gitconfig" credential.helper "!f() { touch '$d/global-helper-ran'; }; f"
   printf '%s\n' protocol=https host=github.com path=octo-user/my-app.git '' >"$d/ask"
-  ( load_script; in_env "$d"; with_gh_sign_in "$d/out" "$d/err" credential fill ) <"$d/ask" \
-    || { cat "$d/err" >&2; die "git credential fill failed"; }
+  (
+    load_script
+    in_env "$d"
+    with_gh_sign_in "$d/out" "$d/err" credential fill
+  ) <"$d/ask" ||
+    {
+      cat "$d/err" >&2
+      die "git credential fill failed"
+    }
   # shellcheck disable=SC2015 # die is meant to run when either check fails
-  grep -qxF username=stub-user "$d/out" && grep -qxF password=stub-password "$d/out" || { cat "$d/out" "$d/err" >&2; die "git did not get the sign-in from gh"; }
-  [ "$(cut -f2- "$d/gh.log")" = "$(printf 'auth\tgit-credential\tget')" ] || { cat "$d/gh.log" >&2; die "gh was not asked as git's helper"; }
+  grep -qxF username=stub-user "$d/out" && grep -qxF password=stub-password "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "git did not get the sign-in from gh"
+  }
+  [ "$(cut -f2- "$d/gh.log")" = "$(printf 'auth\tgit-credential\tget')" ] || {
+    cat "$d/gh.log" >&2
+    die "gh was not asked as git's helper"
+  }
   [ ! -e "$d/global-helper-ran" ] || die "the helper from the global settings was asked too"
 }
 
@@ -9190,13 +11734,25 @@ test_a_push_git_cannot_sign_in_for_offers_gh_auth_setup_git_after_saying_what_it
   expect_rc 3 "$d"
   expect_out "$d" "git could not sign in to GitHub to send the setup's changes."
   expect_out "$d" "Why this is needed: "
-  grep -qxF '    gh auth setup-git' "$d/out" || { cat "$d/out" >&2; die "the command is not shown to copy"; }
-  grep -qF 'changes your global git settings' "$d/out" || { cat "$d/out" >&2; die "the guide does not say that it changes the global git settings"; }
+  grep -qxF '    gh auth setup-git' "$d/out" || {
+    cat "$d/out" >&2
+    die "the command is not shown to copy"
+  }
+  grep -qF 'changes your global git settings' "$d/out" || {
+    cat "$d/out" >&2
+    die "the guide does not say that it changes the global git settings"
+  }
   expect_out "$d" "How the script checks it: "
-  grep -qxF "    fatal: could not read Username for 'https://github.com': terminal prompts disabled" "$d/out" \
-    || { cat "$d/out" >&2; die "git's text is not below the guide"; }
+  grep -qxF "    fatal: could not read Username for 'https://github.com': terminal prompts disabled" "$d/out" ||
+    {
+      cat "$d/out" >&2
+      die "git's text is not below the guide"
+    }
   expect_continue_command "$d" " --resume"
-  grep -qF 'the setup'"'"'s changes are saved in its copy on this computer' "$d/err" || { cat "$d/err" >&2; die "the stop does not say the changes are saved"; }
+  grep -qF 'the setup'"'"'s changes are saved in its copy on this computer' "$d/err" || {
+    cat "$d/err" >&2
+    die "the stop does not say the changes are saved"
+  }
   expect_nothing_ran "$d"
   [ "$(cat "$d/push-prompt")" = 0 ] || die "git was allowed to ask at the terminal"
   c="$(copy_of "$d")"
@@ -9212,13 +11768,28 @@ test_a_push_git_cannot_sign_in_for_offers_gh_auth_setup_git_after_saying_what_it
   printf 'yes\n' >"$d/tty"
   setup_run "$d" --yes
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "yes: did not reach the end"; }
-  [ "$(cat "$d/run.log")" = "gh auth setup-git" ] || { cat "$d/run.log" >&2; die "yes: gh auth setup-git did not run"; }
-  [ "$(grep -F ' push ' "$d/tools.log" | sed -n 2p)" = "git -C ./my-app push origin bootstrap-setup" ] \
-    || { grep -F ' push ' "$d/tools.log" >&2 || true; die "yes: the second push is not a plain one"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "yes: did not reach the end"
+  }
+  [ "$(cat "$d/run.log")" = "gh auth setup-git" ] || {
+    cat "$d/run.log" >&2
+    die "yes: gh auth setup-git did not run"
+  }
+  [ "$(grep -F ' push ' "$d/tools.log" | sed -n 2p)" = "git -C ./my-app push origin bootstrap-setup" ] ||
+    {
+      grep -F ' push ' "$d/tools.log" >&2 || true
+      die "yes: the second push is not a plain one"
+    }
   grep -qF 'changes your global git settings' "$d/out" || die "yes: the guide does not say what the command changes"
-  [ "$(cat "$d/push-prompt")" = "$(printf '0\n0')" ] || { cat "$d/push-prompt" >&2; die "yes: a push was allowed to ask at the terminal"; }
-  calls_from_create "$d" | grep -xF "$PR_CALL" >/dev/null || { cat "$d/gh.log" >&2; die "yes: no proposed change"; }
+  [ "$(cat "$d/push-prompt")" = "$(printf '0\n0')" ] || {
+    cat "$d/push-prompt" >&2
+    die "yes: a push was allowed to ask at the terminal"
+  }
+  calls_from_create "$d" | grep -xF "$PR_CALL" >/dev/null || {
+    cat "$d/gh.log" >&2
+    die "yes: no proposed change"
+  }
   # --yes and no answer at the terminal: nothing runs; Enter on stdin
   # checks again, and the user's own fix works.
   d="$(tmpdir)"
@@ -9227,7 +11798,10 @@ test_a_push_git_cannot_sign_in_for_offers_gh_auth_setup_git_after_saying_what_it
   printf '\n' >"$d/in"
   setup_run "$d" --yes
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "Enter: did not reach the end"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "Enter: did not reach the end"
+  }
   expect_nothing_ran "$d"
   expect_out "$d" "Not run. To run it yourself, open another "
 }
@@ -9247,22 +11821,37 @@ test_other_push_failures_are_explained_with_the_continue_command() {
     case "$mode" in
       offline)
         expect_err_shape "$d" "git could not send the setup's changes to GitHub\. "
-        sed -n 2p "$d/err" | grep -F 'Check that this computer is connected to the internet, then continue the setup with the command shown above.' >/dev/null \
-          || { cat "$d/err" >&2; die "offline: the next action is not to check the connection"; }
+        sed -n 2p "$d/err" | grep -F 'Check that this computer is connected to the internet, then continue the setup with the command shown above.' >/dev/null ||
+          {
+            cat "$d/err" >&2
+            die "offline: the next action is not to check the connection"
+          }
         ;;
       workflow)
         expect_err_shape "$d" "GitHub refused the setup's changes, because the sign-in that gh lends to git may not change the project's workflow files"
-        sed -n 2p "$d/err" | grep -F 'gh auth refresh -h github.com -s workflow' >/dev/null || { cat "$d/err" >&2; die "workflow: the refresh command is not given"; }
+        sed -n 2p "$d/err" | grep -F 'gh auth refresh -h github.com -s workflow' >/dev/null || {
+          cat "$d/err" >&2
+          die "workflow: the refresh command is not given"
+        }
         # r1b: the refresh asks gh's question; the answer comes with it.
-        sed -n 2p "$d/err" | grep -F 'gh auth refresh -h github.com -s workflow (if gh asks "Authenticate Git with your GitHub credentials?", answer Yes), then continue the setup' >/dev/null \
-          || { cat "$d/err" >&2; die "workflow: the next action does not say what to answer when gh asks to authenticate Git"; }
+        sed -n 2p "$d/err" | grep -F 'gh auth refresh -h github.com -s workflow (if gh asks "Authenticate Git with your GitHub credentials?", answer Yes), then continue the setup' >/dev/null ||
+          {
+            cat "$d/err" >&2
+            die "workflow: the next action does not say what to answer when gh asks to authenticate Git"
+          }
         ;;
       other)
         expect_err_shape "$d" "git could not send the setup's changes to GitHub\. "
-        sed -n 2p "$d/err" | grep -F 'If the same thing happens, ask for help and show the details below.' >/dev/null || { cat "$d/err" >&2; die "other: not the plain fallback"; }
+        sed -n 2p "$d/err" | grep -F 'If the same thing happens, ask for help and show the details below.' >/dev/null || {
+          cat "$d/err" >&2
+          die "other: not the plain fallback"
+        }
         ;;
     esac
-    ! grep -qF 'Why this is needed: ' "$d/out" || { cat "$d/out" >&2; die "$mode: a guide was shown"; }
+    ! grep -qF 'Why this is needed: ' "$d/out" || {
+      cat "$d/out" >&2
+      die "$mode: a guide was shown"
+    }
     expect_continue_command "$d" " --resume"
     ! calls_from_create "$d" | grep '^pr ' >/dev/null || die "$mode: a change was proposed"
     [ "$(in_git -C "$(copy_of "$d")" rev-list --count HEAD)" -eq 2 ] || die "$mode: the change is not saved"
@@ -9281,20 +11870,38 @@ test_a_copy_git_cannot_sign_in_for_gets_the_same_guide() {
   setup_run "$d" --non-interactive --yes
   expect_rc 3 "$d"
   expect_out "$d" "git could not sign in to GitHub to make the copy of the project on this computer."
-  grep -qxF '    gh auth setup-git' "$d/out" || { cat "$d/out" >&2; die "the command is not shown to copy"; }
-  grep -qF 'changes your global git settings' "$d/out" || { cat "$d/out" >&2; die "the guide does not say what the command changes"; }
+  grep -qxF '    gh auth setup-git' "$d/out" || {
+    cat "$d/out" >&2
+    die "the command is not shown to copy"
+  }
+  grep -qF 'changes your global git settings' "$d/out" || {
+    cat "$d/out" >&2
+    die "the guide does not say what the command changes"
+  }
   expect_continue_command "$d" " --resume"
   expect_nothing_ran "$d"
-  [ -z "$(ls -A "$d/cwd")" ] || { ls -A "$d/cwd" >&2; die "something was left on this computer"; }
+  [ -z "$(ls -A "$d/cwd")" ] || {
+    ls -A "$d/cwd" >&2
+    die "something was left on this computer"
+  }
   d="$(tmpdir)"
   echo 1 >"$d/clone-fails"
   printf 'yes\n' >"$d/tty"
   setup_run "$d" --yes
   unset STUB_GH_CLONE_FAIL
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "yes: did not reach the end"; }
-  [ "$(cat "$d/run.log")" = "gh auth setup-git" ] || { cat "$d/run.log" >&2; die "yes: gh auth setup-git did not run"; }
-  [ "$(calls_from_create "$d" | grep -c '^repo clone ')" -eq 2 ] || { cat "$d/gh.log" >&2; die "yes: the copy was not made again"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "yes: did not reach the end"
+  }
+  [ "$(cat "$d/run.log")" = "gh auth setup-git" ] || {
+    cat "$d/run.log" >&2
+    die "yes: gh auth setup-git did not run"
+  }
+  [ "$(calls_from_create "$d" | grep -c '^repo clone ')" -eq 2 ] || {
+    cat "$d/gh.log" >&2
+    die "yes: the copy was not made again"
+  }
 }
 
 test_the_git_name_and_email_are_checked_before_the_change_is_saved() {
@@ -9308,7 +11915,10 @@ test_the_git_name_and_email_are_checked_before_the_change_is_saved() {
   unset GIT_AUTHOR_EMAIL
   expect_rc 1 "$d"
   expect_err_shape "$d" "git would save the setup's changes under Test Person <other@example\.com>, not under the name and email you gave, Test Person <test@example\.com>\."
-  grep -qF 'GIT_AUTHOR_EMAIL' "$d/err" || { cat "$d/err" >&2; die "the next action does not name the settings that override"; }
+  grep -qF 'GIT_AUTHOR_EMAIL' "$d/err" || {
+    cat "$d/err" >&2
+    die "the next action does not name the settings that override"
+  }
   expect_continue_command "$d" " --resume"
   c="$(copy_of "$d")"
   [ "$(in_git -C "$c" rev-list --count HEAD)" -eq 1 ] || die "a change was saved"
@@ -9322,9 +11932,15 @@ test_the_git_name_and_email_are_checked_before_the_change_is_saved() {
     setup_run "$d" --non-interactive --yes
     expect_rc 1 "$d"
     expect_err_shape "$d" "git would save the setup's changes under .*, not under the name and email you gave"
-    sed -n 2p "$d/err" | grep -F 'author.name, author.email, committer.name or committer.email' >/dev/null \
-      || { cat "$d/err" >&2; die "$k: the next action does not name the global settings that override"; }
-    sed -n 2p "$d/err" | grep -F 'GIT_AUTHOR_EMAIL' >/dev/null || { cat "$d/err" >&2; die "$k: the next action no longer names the terminal's settings"; }
+    sed -n 2p "$d/err" | grep -F 'author.name, author.email, committer.name or committer.email' >/dev/null ||
+      {
+        cat "$d/err" >&2
+        die "$k: the next action does not name the global settings that override"
+      }
+    sed -n 2p "$d/err" | grep -F 'GIT_AUTHOR_EMAIL' >/dev/null || {
+      cat "$d/err" >&2
+      die "$k: the next action no longer names the terminal's settings"
+    }
     [ "$(in_git -C "$(copy_of "$d")" rev-list --count HEAD)" -eq 1 ] || die "$k: a change was saved"
   done
   # git drops , : ; ' and spaces at the ends of a name or email; the
@@ -9332,7 +11948,10 @@ test_the_git_name_and_email_are_checked_before_the_change_is_saved() {
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes --git-name "O'Neil, Ada:"
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "a name ending in : did not pass"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "a name ending in : did not pass"
+  }
   [ "$(in_git -C "$(copy_of "$d")" log -1 --format=%an)" = "O'Neil, Ada" ] || die "the name was not saved as git has it"
 }
 
@@ -9343,13 +11962,17 @@ test_a_text_left_to_fill_in_stops_the_self_check_but_a_value_holding_one_does_no
   local d f k
   d="$(tmpdir)"
   mkdir -p "$d/copy/docs" "$d/copy/memory"
-  ( load_script
+  (
+    load_script
     IN_DIR="$d/copy" IN_PACK=python IN_WITH_DEPLOY="" IN_OWNER=octo-user IN_NAME=my-app IN_SLUG=my-app
     IN_PROJECT_NAME="[PO NAME] App" IN_PO_NAME="[PROJECT NAME] Ltd" IN_DESCRIPTION="Tracks [DATE] and [OWNER/REPO] tags."
     FILL_DATE=2031-02-03 CREATED_NOTE="The project exists." RESTART_CMD=x
     fill_rows python ""
     # Each file of the table holds every text of its rows, then is filled.
-    while read -r f k; do fill_text "$k"; printf '%s\n' "$FILL_TEXT" >>"$d/copy/$f"; done <<<"$FILL_ROWS"
+    while read -r f k; do
+      fill_text "$k"
+      printf '%s\n' "$FILL_TEXT" >>"$d/copy/$f"
+    done <<<"$FILL_ROWS"
     for f in $(printf '%s\n' "$FILL_ROWS" | cut -d' ' -f1 | LC_ALL=C sort -u); do
       # shellcheck disable=SC2046 # the keys are single words, one argument each
       fill_file "$d/copy/$f" $(printf '%s\n' "$FILL_ROWS" | awk -v f="$f" '$1 == f { print $2 }')
@@ -9359,13 +11982,20 @@ test_a_text_left_to_fill_in_stops_the_self_check_but_a_value_holding_one_does_no
     # A text left outside the values: README.md and the two-line text.
     printf '%s\n' 'Owner: [PO NAME]' >>"$d/copy/README.md"
     printf '%s\n' '[What the project is, who it is for, and what problem' 'it solves.]' >>"$d/copy/memory/project.md"
-    check_texts_left ) >"$d/out" 2>"$d/err" && die "a text left did not stop the self-check"
-  [ -e "$d/passed" ] || { cat "$d/out" "$d/err" >&2; die "values holding a text of the table were taken for texts left"; }
+    check_texts_left
+  ) >"$d/out" 2>"$d/err" && die "a text left did not stop the self-check"
+  [ -e "$d/passed" ] || {
+    cat "$d/out" "$d/err" >&2
+    die "values holding a text of the table were taken for texts left"
+  }
   # shellcheck disable=SC2015 # die is meant to run when either check fails
-  grep -qF '[PO NAME] App' "$d/copy/README.md" && grep -qF 'Tracks [DATE] and [OWNER/REPO] tags.' "$d/copy/memory/project.md" \
-    || die "test setup: the values are not in the files"
+  grep -qF '[PO NAME] App' "$d/copy/README.md" && grep -qF 'Tracks [DATE] and [OWNER/REPO] tags.' "$d/copy/memory/project.md" ||
+    die "test setup: the values are not in the files"
   expect_err_shape "$d" "Some texts that the setup fills in are still in the copy of the project, so the script saved and sent nothing: \[PO NAME\] in README\.md; \[What the project is, who it is for, and what problem it solves\.\] in memory/project\.md\. The project exists\.\$"
-  sed -n 2p "$d/err" | grep -F "Report it to the bootstrapper's maintainers" >/dev/null || { cat "$d/err" >&2; die "the next action is not to report it"; }
+  sed -n 2p "$d/err" | grep -F "Report it to the bootstrapper's maintainers" >/dev/null || {
+    cat "$d/err" >&2
+    die "the next action is not to report it"
+  }
 }
 
 test_values_holding_texts_of_the_fill_table_get_through_the_whole_setup() {
@@ -9377,7 +12007,10 @@ test_values_holding_texts_of_the_fill_table_get_through_the_whole_setup() {
   setup_run "$d" --non-interactive --yes --pack node --project-name "[PO NAME] App" --po-name "[PROJECT NAME] Ltd" \
     --description "Shows [project-name] and [OWNER/REPO] tags."
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "did not reach the end"
+  }
   c="$(copy_of "$d")"
   grep -qxF '# [PO NAME] App' "$c/README.md" || die "README.md: the display name is not the heading"
   grep -qF '"description": "Shows [project-name] and [OWNER/REPO] tags."' "$c/package.json" || die "package.json: the description is not there"
@@ -9390,12 +12023,14 @@ test_values_holding_texts_of_the_fill_table_get_through_the_whole_setup() {
 # fill_rows, as in a setup run.
 expected_case() {
   local got=no
-  ( load_script
+  (
+    load_script
     IN_PACK="$1" IN_WITH_DEPLOY="$2" IN_LICENSE="$3"
     layout_into "$1" "$REPO/languages" "$(mktemp -d "$WORK/expected.XXXXXX")/out" strict "$2" >/dev/null
     fill_rows "$1" "$2"
     FILL_FILES="$(while read -r f _; do printf '%s ' "$f"; done <<<"$FILL_ROWS")"
-    expected_change "$4" "$5" ) && got=yes
+    expected_change "$4" "$5"
+  ) && got=yes
   [ "$got" = "$6" ] || die "expected_change $1${2:+ with deploy}, licence $3, '$4' $5: got $got, want $6"
 }
 
@@ -9496,7 +12131,10 @@ test_a_file_changed_or_deleted_that_the_setup_does_not_change_stops_before_anyth
     epat="$(printf '%s' "$path" | sed 's/[.]/[.]/g')"
     expect_err_shape "$d" "The copy of the project on this computer has changes that the setup did not make, so the script saved and sent nothing: ${epat}[.] "
     if [ "${var%%:*}" = TOUCH ]; then line="    M  $path"; else line="    D  $path"; fi
-    grep -qxF "$line" "$d/err" || { cat "$d/err" >&2; die "$path: git's line is not below"; }
+    grep -qxF "$line" "$d/err" || {
+      cat "$d/err" >&2
+      die "$path: git's line is not below"
+    }
     expect_continue_command "$d" " --resume"
     c="$(copy_of "$d")"
     [ "$(in_git -C "$c" rev-list --count HEAD)" -eq 1 ] || die "$path: a change was saved"
@@ -9516,7 +12154,10 @@ test_changes_the_setup_did_not_make_stop_before_anything_is_saved() {
   unset STUB_NPM_STRAY
   expect_rc 1 "$d"
   expect_err_shape "$d" "The copy of the project on this computer has changes that the setup did not make, so the script saved and sent nothing: stray\.txt\. "
-  grep -qxF '    A  stray.txt' "$d/err" || { cat "$d/err" >&2; die "git's line for the file is not below"; }
+  grep -qxF '    A  stray.txt' "$d/err" || {
+    cat "$d/err" >&2
+    die "git's line for the file is not below"
+  }
   expect_continue_command "$d" " --resume"
   c="$(copy_of "$d")"
   [ "$(in_git -C "$c" rev-list --count HEAD)" -eq 1 ] || die "a change was saved"
@@ -9538,7 +12179,10 @@ test_a_setup_file_that_git_is_told_to_ignore_stops_before_anything_is_saved() {
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
   expect_err_shape "$d" "Some files that the setup adds are ignored by git, so they would be left out of the saved change, and the script saved and sent nothing: \\.vscode/extensions\\.json, \\.vscode/settings\\.json\\. "
-  grep -qF 'core.excludesFile' "$d/err" || { cat "$d/err" >&2; die "the next action does not name the setting"; }
+  grep -qF 'core.excludesFile' "$d/err" || {
+    cat "$d/err" >&2
+    die "the next action does not name the setting"
+  }
   expect_continue_command "$d" " --resume"
   c="$(copy_of "$d")"
   [ "$(in_git -C "$c" rev-list --count HEAD)" -eq 1 ] || die "a change was saved"
@@ -9583,7 +12227,10 @@ test_a_file_with_windows_line_endings_stops_before_anything_is_saved() {
   setup_run "$d" --non-interactive --yes --pack node
   unset STUB_NPM_CRLF
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "a CR LF lockfile did not go through"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "a CR LF lockfile did not go through"
+  }
   in_git --git-dir="$(bare_of "$d")" show main:package-lock.json >"$d/saved-lockfile"
   ! has_cr "$d/saved-lockfile" || die "the lockfile was saved with carriage returns"
   d="$(tmpdir)"
@@ -9614,13 +12261,21 @@ test_a_key_in_the_environment_never_appears_in_output_or_files() {
   setup_run "$d" --non-interactive --yes
   unset GH_TOKEN GITHUB_TOKEN
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" && [ "$(calls_from_create "$d" | tail -1)" = "$MERGED_CALL" ] || { cat "$d/out" "$d/err" >&2; die "did not go through to the report"; }
-  ! grep -rlF -e "$t1" -e "$t2" "$d" >"$d/hits" 2>/dev/null || { cat "$d/hits" >&2; die "a key from the environment was written"; }
+  grep -qxF "$FINISHED" "$d/out" && [ "$(calls_from_create "$d" | tail -1)" = "$MERGED_CALL" ] || {
+    cat "$d/out" "$d/err" >&2
+    die "did not go through to the report"
+  }
+  ! grep -rlF -e "$t1" -e "$t2" "$d" >"$d/hits" 2>/dev/null || {
+    cat "$d/hits" >&2
+    die "a key from the environment was written"
+  }
   # git keeps the saved change compressed, where grep -r cannot see it
   # (#155 review, finding 8): every change, with its message and full
   # content, of the copy and of the project on "GitHub", read through git.
-  { in_git -C "$(copy_of "$d")" log --all -p --format=fuller
-    in_git --git-dir="$(bare_of "$d")" log --all -p --format=fuller; } >"$d/history"
+  {
+    in_git -C "$(copy_of "$d")" log --all -p --format=fuller
+    in_git --git-dir="$(bare_of "$d")" log --all -p --format=fuller
+  } >"$d/history"
   grep -qF 'Set up my-app' "$d/history" || die "test setup: the saved change is not in the history read"
   ! grep -qF -e "$t1" -e "$t2" "$d/history" || die "a key from the environment is in the saved change"
 }
@@ -9638,21 +12293,33 @@ test_failures_to_propose_the_change_are_explained_with_the_continue_command() {
     case "$mode" in
       signed-out)
         expect_err_shape "$d" "gh \(the GitHub command-line tool\) is not signed in to your GitHub account, so the script could not propose the setup's changes on GitHub\. "
-        sed -n 2p "$d/err" | grep -F 'gh auth login' >/dev/null || { cat "$d/err" >&2; die "signed out: the sign-in command is not given"; }
+        sed -n 2p "$d/err" | grep -F 'gh auth login' >/dev/null || {
+          cat "$d/err" >&2
+          die "signed out: the sign-in command is not given"
+        }
         ;;
       exists)
         expect_err_shape "$d" "GitHub already has a proposed change for the line of work bootstrap-setup\. "
-        grep -qxF '    https://github.com/octo-user/my-app/pull/1' "$d/err" || { cat "$d/err" >&2; die "exists: its link is not below"; }
+        grep -qxF '    https://github.com/octo-user/my-app/pull/1' "$d/err" || {
+          cat "$d/err" >&2
+          die "exists: its link is not below"
+        }
         ;;
       broken)
         expect_err_shape "$d" "gh \(the GitHub command-line tool\) could not propose the setup's changes on GitHub\. "
-        sed -n 2p "$d/err" | grep -F 'https://github.com/octo-user/my-app/pulls' >/dev/null || { cat "$d/err" >&2; die "broken: the page to look at is not given"; }
+        sed -n 2p "$d/err" | grep -F 'https://github.com/octo-user/my-app/pulls' >/dev/null || {
+          cat "$d/err" >&2
+          die "broken: the page to look at is not given"
+        }
         ;;
       no-link)
         expect_err_shape "$d" "gh \(the GitHub command-line tool\) did not say where the proposed change is\. "
         ;;
     esac
-    grep -qF "sent to GitHub on the line of work bootstrap-setup" "$d/err" || { cat "$d/err" >&2; die "$mode: the stop does not say the changes were sent"; }
+    grep -qF "sent to GitHub on the line of work bootstrap-setup" "$d/err" || {
+      cat "$d/err" >&2
+      die "$mode: the stop does not say the changes were sent"
+    }
     expect_continue_command "$d" " --resume"
     ! grep -qxF "$FINISHED" "$d/out" || die "$mode: it went on"
   done
@@ -9678,7 +12345,10 @@ expect_after_proposing() {
   shift
   got="$(calls_after_proposing "$d")"
   want="$(printf '%s\n' "$PR_CALL" "$@")"
-  [ "$got" = "$want" ] || { printf 'want:\n%s\ngot:\n%s\n' "$want" "$got" >&2; die "gh calls after the proposed change differ"; }
+  [ "$got" = "$want" ] || {
+    printf 'want:\n%s\ngot:\n%s\n' "$want" "$got" >&2
+    die "gh calls after the proposed change differ"
+  }
 }
 
 # expect_left_open <dir>: the run stopped before the change was added:
@@ -9691,7 +12361,10 @@ expect_left_open() {
   [ "$(in_git --git-dir="$bare" rev-list --count main)" -eq 1 ] || die "the change was added to main"
   in_git --git-dir="$bare" rev-parse -q --verify refs/heads/bootstrap-setup >/dev/null || die "bootstrap-setup is gone on GitHub"
   [ ! -e "$d/merge-sha" ] || die "the stub merged"
-  grep -qF 'https://github.com/octo-user/my-app/pull/1' "$d/err" || { cat "$d/err" >&2; die "the link of the proposed change is not in the stop"; }
+  grep -qF 'https://github.com/octo-user/my-app/pull/1' "$d/err" || {
+    cat "$d/err" >&2
+    die "the link of the proposed change is not in the stop"
+  }
   expect_continue_command "$d" " --resume"
   ! grep -qxF "$FINISHED" "$d/out" || die "it went on to the report"
 }
@@ -9705,12 +12378,24 @@ test_build_still_running_is_looked_at_again_every_15_seconds_until_it_passes() {
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
   expect_after_proposing "$d" "$CHECKS_CALL" "$CHECKS_CALL" "$CHECKS_CALL" "${END_CALLS[@]}"
-  [ "$(cat "$d/sleep.log")" = "$(printf '15\n15\n15')" ] || { cat "$d/sleep.log" >&2; die "not 3 waits of 15 seconds"; }
-  [ "$(grep -cxF 'The check build has not finished yet; the script looks again every 15 seconds.' "$d/out")" -eq 1 ] \
-    || { cat "$d/out" >&2; die "the note that build is still running is not shown once"; }
+  [ "$(cat "$d/sleep.log")" = "$(printf '15\n15\n15')" ] || {
+    cat "$d/sleep.log" >&2
+    die "not 3 waits of 15 seconds"
+  }
+  [ "$(grep -cxF 'The check build has not finished yet; the script looks again every 15 seconds.' "$d/out")" -eq 1 ] ||
+    {
+      cat "$d/out" >&2
+      die "the note that build is still running is not shown once"
+    }
   grep -A1 -xF "Checking the build status (45 seconds of at most 20 minutes)" "$d/out" | tail -1 >"$d/done"
-  [ "$(cat "$d/done")" = "    Done. The check build passed on the proposed change." ] || { cat "$d/out" >&2; die "no done line for the wait"; }
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not go through"; }
+  [ "$(cat "$d/done")" = "    Done. The check build passed on the proposed change." ] || {
+    cat "$d/out" >&2
+    die "no done line for the wait"
+  }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "did not go through"
+  }
   # No check reported yet (gh's "no checks reported", exit 1) is waited
   # for too, then the pending runs, then build passes.
   d="$(tmpdir)"
@@ -9719,15 +12404,24 @@ test_build_still_running_is_looked_at_again_every_15_seconds_until_it_passes() {
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
   expect_after_proposing "$d" "$CHECKS_CALL" "$CHECKS_CALL" "$CHECKS_CALL" "${END_CALLS[@]}"
-  [ "$(grep -c . "$d/sleep.log")" -eq 3 ] || { cat "$d/sleep.log" >&2; die "not 3 waits"; }
+  [ "$(grep -c . "$d/sleep.log")" -eq 3 ] || {
+    cat "$d/sleep.log" >&2
+    die "not 3 waits"
+  }
   # Only other checks reported, no build yet: waited for as well.
   d="$(tmpdir)"
   export STUB_GH_BUILD=""
   setup_run "$d" --non-interactive --yes --ci-timeout 1
   unset STUB_GH_BUILD
   expect_rc 1 "$d"
-  [ "$(grep -c . "$d/sleep.log")" -eq 4 ] || { cat "$d/sleep.log" >&2; die "no build: not waited for"; }
-  grep -qxF '    build: not reported yet' "$d/err" || { cat "$d/err" >&2; die "no build: not said below"; }
+  [ "$(grep -c . "$d/sleep.log")" -eq 4 ] || {
+    cat "$d/sleep.log" >&2
+    die "no build: not waited for"
+  }
+  grep -qxF '    build: not reported yet' "$d/err" || {
+    cat "$d/err" >&2
+    die "no build: not said below"
+  }
 }
 
 # wait_lines <dir>: the lines of the wait for build, from its step line
@@ -9759,8 +12453,14 @@ test_the_wait_says_its_limit_where_to_follow_the_check_and_each_check() {
     'Checking the build status (15 seconds of at most 20 minutes)' \
     'Checking the build status (30 seconds of at most 20 minutes)' \
     '    Done. The check build passed on the proposed change.')"
-  [ "$(wait_lines "$d")" = "$want" ] || { printf 'want:\n%s\ngot:\n%s\n' "$want" "$(wait_lines "$d")" >&2; die "the lines of the wait differ"; }
-  [ "$(cat "$d/sleep.log")" = "$(printf '15\n15')" ] || { cat "$d/sleep.log" >&2; die "not 2 waits of 15 seconds"; }
+  [ "$(wait_lines "$d")" = "$want" ] || {
+    printf 'want:\n%s\ngot:\n%s\n' "$want" "$(wait_lines "$d")" >&2
+    die "the lines of the wait differ"
+  }
+  [ "$(cat "$d/sleep.log")" = "$(printf '15\n15')" ] || {
+    cat "$d/sleep.log" >&2
+    die "not 2 waits of 15 seconds"
+  }
   expect_no_out "$d" '*'
   # build passed at the first look: the limit and the link, no wait.
   d="$(tmpdir)"
@@ -9770,8 +12470,14 @@ test_the_wait_says_its_limit_where_to_follow_the_check_and_each_check() {
     "==> Waiting for the project's check build to pass on the proposed change, for at most 20 minutes" \
     "$WAIT_LIMIT_LINE" "$WAIT_LINK_LINE" \
     '    Done. The check build passed on the proposed change.')"
-  [ "$(wait_lines "$d")" = "$want" ] || { printf 'want:\n%s\ngot:\n%s\n' "$want" "$(wait_lines "$d")" >&2; die "a wait with no look again differs"; }
-  [ ! -s "$d/sleep.log" ] || { cat "$d/sleep.log" >&2; die "it waited although build had passed"; }
+  [ "$(wait_lines "$d")" = "$want" ] || {
+    printf 'want:\n%s\ngot:\n%s\n' "$want" "$(wait_lines "$d")" >&2
+    die "a wait with no look again differs"
+  }
+  [ ! -s "$d/sleep.log" ] || {
+    cat "$d/sleep.log" >&2
+    die "it waited although build had passed"
+  }
 }
 
 test_on_a_terminal_the_wait_shows_a_star_a_second_and_each_check_on_a_new_line() {
@@ -9799,9 +12505,18 @@ test_on_a_terminal_the_wait_shows_a_star_a_second_and_each_check_on_a_new_line()
     'Checking the build status (1 minute of at most 20 minutes)' "$STARS_15" \
     'Checking the build status (1 minute 15 seconds of at most 20 minutes)' \
     '    Done. The check build passed on the proposed change.')"
-  [ "$(wait_lines "$d")" = "$want" ] || { printf 'want:\n%s\ngot:\n%s\n' "$want" "$(wait_lines "$d")" >&2; die "the lines of the wait on a terminal differ"; }
-  [ "$(grep -c . "$d/sleep.log")" -eq 75 ] && [ "$(sort -u "$d/sleep.log")" = 1 ] || { cat "$d/sleep.log" >&2; die "not 75 waits of 1 second"; }
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not go through"; }
+  [ "$(wait_lines "$d")" = "$want" ] || {
+    printf 'want:\n%s\ngot:\n%s\n' "$want" "$(wait_lines "$d")" >&2
+    die "the lines of the wait on a terminal differ"
+  }
+  [ "$(grep -c . "$d/sleep.log")" -eq 75 ] && [ "$(sort -u "$d/sleep.log")" = 1 ] || {
+    cat "$d/sleep.log" >&2
+    die "not 75 waits of 1 second"
+  }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "did not go through"
+  }
   [ "$(tail -c 1 "$d/out" | od -A n -c | tr -d ' ')" = '\n' ] || die "the output does not end with a line break"
   # The limit reached on a terminal: the same number of seconds as
   # without one (60 for 1 minute), and the stop starts on a line of its own.
@@ -9811,9 +12526,18 @@ test_on_a_terminal_the_wait_shows_a_star_a_second_and_each_check_on_a_new_line()
   setup_run "$d" --non-interactive --yes --ci-timeout 1
   unset BOOTSTRAP_STDOUT_TERMINAL
   expect_rc 1 "$d"
-  [ "$(grep -c . "$d/sleep.log")" -eq 60 ] && [ "$(sort -u "$d/sleep.log")" = 1 ] || { cat "$d/sleep.log" >&2; die "timeout: not 60 waits of 1 second"; }
-  [ "$(calls_after_proposing "$d" | grep -cxF "$CHECKS_CALL")" -eq 5 ] || { cat "$d/gh.log" >&2; die "timeout: not 5 looks"; }
-  grep -qxF 'Checking the build status (1 minute of at most 1 minute)' "$d/out" || { cat "$d/out" >&2; die "timeout: the last look is not on a line of its own"; }
+  [ "$(grep -c . "$d/sleep.log")" -eq 60 ] && [ "$(sort -u "$d/sleep.log")" = 1 ] || {
+    cat "$d/sleep.log" >&2
+    die "timeout: not 60 waits of 1 second"
+  }
+  [ "$(calls_after_proposing "$d" | grep -cxF "$CHECKS_CALL")" -eq 5 ] || {
+    cat "$d/gh.log" >&2
+    die "timeout: not 5 looks"
+  }
+  grep -qxF 'Checking the build status (1 minute of at most 1 minute)' "$d/out" || {
+    cat "$d/out" >&2
+    die "timeout: the last look is not on a line of its own"
+  }
   expect_continue_command "$d" " --resume"
   expect_err_shape "$d" "The project's check build had not passed on the proposed change after 1 minute, "
   # build failing after a wait on a terminal: the stop on a line of its own.
@@ -9823,7 +12547,10 @@ test_on_a_terminal_the_wait_shows_a_star_a_second_and_each_check_on_a_new_line()
   setup_run "$d" --non-interactive --yes
   unset BOOTSTRAP_STDOUT_TERMINAL STUB_GH_BUILD
   expect_rc 1 "$d"
-  grep -qxF 'Checking the build status (15 seconds of at most 20 minutes)' "$d/out" || { cat "$d/out" >&2; die "failed: the last look is not on a line of its own"; }
+  grep -qxF 'Checking the build status (15 seconds of at most 20 minutes)' "$d/out" || {
+    cat "$d/out" >&2
+    die "failed: the last look is not on a line of its own"
+  }
   expect_continue_command "$d" " --resume"
   expect_err_shape "$d" "The project's check build failed on the proposed change"
   # BOOTSTRAP_STDOUT_TERMINAL=no: no stars, 15-second waits.
@@ -9834,7 +12561,10 @@ test_on_a_terminal_the_wait_shows_a_star_a_second_and_each_check_on_a_new_line()
   unset BOOTSTRAP_STDOUT_TERMINAL
   expect_rc 0 "$d"
   expect_no_out "$d" '*'
-  [ "$(cat "$d/sleep.log")" = 15 ] || { cat "$d/sleep.log" >&2; die "no: not one wait of 15 seconds"; }
+  [ "$(cat "$d/sleep.log")" = 15 ] || {
+    cat "$d/sleep.log" >&2
+    die "no: not one wait of 15 seconds"
+  }
 }
 
 test_with_colour_a_whole_run_starts_with_the_colour_key_and_the_stars_end_their_line() {
@@ -9861,18 +12591,33 @@ test_with_colour_a_whole_run_starts_with_the_colour_key_and_the_stars_end_their_
   } >"$d/want-key"
   head -n 5 "$d/out" >"$d/got-key"
   expect_same "the start of a run with colour" "$d/want-key" "$d/got-key"
-  [ "$(grep -c 'Colour key: ' "$d/out")" -eq 4 ] || { cat "$d/out" >&2; die "the colour key is not shown exactly once"; }
-  [ "$(sed -n '6p' "$d/out")" = "${LOG_ON}==> Checking that bash (the program that runs this script) is new enough${COLOUR_OFF}" ] \
-    || { sed -n '1,8p' "$d/out" | od -c | head -20 >&2; die "the first check does not come right after the colour key, dim"; }
-  ! grep -qE '^==> |^    Done\. ' "$d/out" || { grep -E '^==> |^    Done\. ' "$d/out" >&2; die "a step line is not dim"; }
-  ! grep -F '*' "$d/out" | grep -E "$esc\\[1;3[236]m" >/dev/null || { cat "$d/out" >&2; die "a line of stars goes on with a coloured line"; }
+  [ "$(grep -c 'Colour key: ' "$d/out")" -eq 4 ] || {
+    cat "$d/out" >&2
+    die "the colour key is not shown exactly once"
+  }
+  [ "$(sed -n '6p' "$d/out")" = "${LOG_ON}==> Checking that bash (the program that runs this script) is new enough${COLOUR_OFF}" ] ||
+    {
+      sed -n '1,8p' "$d/out" | od -c | head -20 >&2
+      die "the first check does not come right after the colour key, dim"
+    }
+  ! grep -qE '^==> |^    Done\. ' "$d/out" || {
+    grep -E '^==> |^    Done\. ' "$d/out" >&2
+    die "a step line is not dim"
+  }
+  ! grep -F '*' "$d/out" | grep -E "$esc\\[1;3[236]m" >/dev/null || {
+    cat "$d/out" >&2
+    die "a line of stars goes on with a coloured line"
+  }
   # r1g: in a whole run the read colour marks only the plan's heading, the
   # lines above and below the command to continue, the wait's notes and the closing
   # "What to do next"; no line of the report or of the plan's list.
   grep -F "$READ_ON" "$d/out" | sed "s/$esc\\[[0-9;]*m//g" | sed '/^Colour key: /d' >"$d/read-lines"
   {
     printf '%s\n' 'Here is the plan. Nothing has been created yet.'
-    ( load_script; printf '%s\n' "$ADVANCE_INTRO" )
+    (
+      load_script
+      printf '%s\n' "$ADVANCE_INTRO"
+    )
     printf '%s\n' 'If the project was not created yet, that command says so and shows the command to start again.'
     printf '%s\n' "$WAIT_LIMIT_LINE" "$WAIT_LINK_LINE"
   } >"$d/want-read"
@@ -9885,16 +12630,28 @@ test_with_colour_a_whole_run_starts_with_the_colour_key_and_the_stars_end_their_
     'The check build has not finished yet; the script looks again every 15 seconds.' "$STARS_15" \
     'Checking the build status (15 seconds of at most 20 minutes)' \
     '    Done. The check build passed on the proposed change.')"
-  [ "$(sed -n "/^==> Waiting for the project's check build/,/^    Done\. The check build/p" "$d/plain")" = "$want" ] \
-    || { cat "$d/plain" >&2; die "with the codes taken out, the wait's lines differ"; }
-  grep -qxF "$FINISHED" "$d/plain" || { cat "$d/out" "$d/err" >&2; die "did not go through"; }
+  [ "$(sed -n "/^==> Waiting for the project's check build/,/^    Done\. The check build/p" "$d/plain")" = "$want" ] ||
+    {
+      cat "$d/plain" >&2
+      die "with the codes taken out, the wait's lines differ"
+    }
+  grep -qxF "$FINISHED" "$d/plain" || {
+    cat "$d/out" "$d/err" >&2
+    die "did not go through"
+  }
   d="$(tmpdir)"
   echo 9999 >"$d/build-pending"
   setup_run "$d" --non-interactive --yes --ci-timeout 1
   expect_rc 1 "$d"
   n="$(grep -nxF "${READ_ON}To continue the setup, run this command:${COLOUR_OFF}" "$d/out" | cut -d: -f1)"
-  [ -n "$n" ] || { od -c "$d/out" | tail -20 >&2; die "timeout: the command to continue is not on a line of its own, in colour"; }
-  [ -z "$(sed -n "$((n - 1))p" "$d/out")" ] || { od -c "$d/out" | tail -20 >&2; die "timeout: no blank line between the stars and the command to continue"; }
+  [ -n "$n" ] || {
+    od -c "$d/out" | tail -20 >&2
+    die "timeout: the command to continue is not on a line of its own, in colour"
+  }
+  [ -z "$(sed -n "$((n - 1))p" "$d/out")" ] || {
+    od -c "$d/out" | tail -20 >&2
+    die "timeout: no blank line between the stars and the command to continue"
+  }
   # Colour off: no key anywhere in a whole run.
   export NO_COLOR=1
   d="$(tmpdir)"
@@ -9922,28 +12679,49 @@ test_with_colour_the_lines_of_a_run_after_the_advance_command_each_have_their_co
   echo 1 >"$d/main-missing"
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
-  grep -qxF "${READ_ON}If the project was not created yet, that command says so and shows the command to start again.${COLOUR_OFF}" "$d/out" \
-    || { grep -F 'If the project was not created yet' "$d/out" | od -c >&2; die "the line below the command to continue is not in the read colour"; }
-  grep -qxF "${LOG_ON}GitHub is still copying the files; the script checks again every 2 seconds, for up to a minute.${COLOUR_OFF}" "$d/out" \
-    || { grep -F 'still copying' "$d/out" | od -c >&2; die "the line while GitHub copies the files is not dim"; }
+  grep -qxF "${READ_ON}If the project was not created yet, that command says so and shows the command to start again.${COLOUR_OFF}" "$d/out" ||
+    {
+      grep -F 'If the project was not created yet' "$d/out" | od -c >&2
+      die "the line below the command to continue is not in the read colour"
+    }
+  grep -qxF "${LOG_ON}GitHub is still copying the files; the script checks again every 2 seconds, for up to a minute.${COLOUR_OFF}" "$d/out" ||
+    {
+      grep -F 'still copying' "$d/out" | od -c >&2
+      die "the line while GitHub copies the files is not dim"
+    }
   # r1h: no dim code on a line with the stars or on a check of the status;
   # the wait's step line still dim.
-  ! grep -F '*' "$d/out" | grep -F "$LOG_ON" >/dev/null || { grep -F '*' "$d/out" | od -c | head -20 >&2; die "the stars of the wait are dim"; }
+  ! grep -F '*' "$d/out" | grep -F "$LOG_ON" >/dev/null || {
+    grep -F '*' "$d/out" | od -c | head -20 >&2
+    die "the stars of the wait are dim"
+  }
   grep -F 'Checking the build status' "$d/out" >"$d/checks" || die "no check of the build status"
-  ! grep -F "$esc" "$d/checks" >/dev/null || { od -c "$d/checks" >&2; die "a check of the build status is in colour"; }
-  grep -qxF "${LOG_ON}==> Waiting for the project's check build to pass on the proposed change, for at most 20 minutes${COLOUR_OFF}" "$d/out" \
-    || die "the wait's step line is not dim"
+  ! grep -F "$esc" "$d/checks" >/dev/null || {
+    od -c "$d/checks" >&2
+    die "a check of the build status is in colour"
+  }
+  grep -qxF "${LOG_ON}==> Waiting for the project's check build to pass on the proposed change, for at most 20 minutes${COLOUR_OFF}" "$d/out" ||
+    die "the wait's step line is not dim"
   # The sweep: from the command to continue to the end, a plain line is
   # one of the signs of life, a warning, or a line of the report (from
   # "The setup is finished." on, but its last two lines).
-  n="$(grep -nF "$(load_script; printf '%s' "$ADVANCE_INTRO")" "$d/out" | cut -d: -f1)"
+  n="$(grep -nF "$(
+    load_script
+    printf '%s' "$ADVANCE_INTRO"
+  )" "$d/out" | cut -d: -f1)"
   [ -n "$n" ] || die "no command to continue"
-  sed -n "$n,\$p" "$d/out" | sed "/^The setup is finished\\.\$/,\$d" | grep -v "^$esc" | grep -v "^    $esc" \
-    | grep -v '^$' | grep -v '^Warning: ' | grep -v '^Checking the build status (' | grep -v '^The check build has not finished yet' \
-    | grep -v '^\**$' >"$d/plain-lines" || true
+  sed -n "$n,\$p" "$d/out" | sed "/^The setup is finished\\.\$/,\$d" | grep -v "^$esc" | grep -v "^    $esc" |
+    grep -v '^$' | grep -v '^Warning: ' | grep -v '^Checking the build status (' | grep -v '^The check build has not finished yet' |
+    grep -v '^\**$' >"$d/plain-lines" || true
   # r1h: the stars on lines of their own, nothing else on them.
-  [ "$(grep -c '^\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*$' "$d/out")" -eq 1 ] || { grep -F '*' "$d/out" | od -c | head >&2; die "the stars are not on a line of their own"; }
-  [ ! -s "$d/plain-lines" ] || { cat "$d/plain-lines" >&2; die "lines after the command to continue that are plain"; }
+  [ "$(grep -c '^\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*$' "$d/out")" -eq 1 ] || {
+    grep -F '*' "$d/out" | od -c | head >&2
+    die "the stars are not on a line of their own"
+  }
+  [ ! -s "$d/plain-lines" ] || {
+    cat "$d/plain-lines" >&2
+    die "lines after the command to continue that are plain"
+  }
   # shellcheck disable=SC2041 # a list of one, kept as a list
   for l in 'If you ever feel stuck'; do
     grep -F -- "$l" "$d/out" | grep -F "$esc" >/dev/null && die "in colour: $l"
@@ -9976,7 +12754,10 @@ test_the_pull_request_run_of_build_counts_and_else_any_run_of_it() {
     unset STUB_GH_BUILD
     expect_rc "$want" "$d"
     if [ "$want" = 0 ]; then
-      grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "[${build%|*}] did not go through"; }
+      grep -qxF "$FINISHED" "$d/out" || {
+        cat "$d/out" "$d/err" >&2
+        die "[${build%|*}] did not go through"
+      }
     else
       expect_err_shape "$d" "The project's check build failed on the proposed change"
     fi
@@ -9992,9 +12773,15 @@ test_a_failed_build_stops_and_leaves_the_proposed_change_open_with_its_link() {
     unset STUB_GH_BUILD
     expect_rc 1 "$d"
     expect_err_shape "$d" "The project's check build failed on the proposed change, so the script did not add the change to the main version\. The proposed change stays open on GitHub\. The project octo-user/my-app exists on GitHub, and the setup's changes are proposed there: https://github.com/octo-user/my-app/pull/1\$"
-    sed -n 2p "$d/err" | grep -F 'Open https://github.com/octo-user/my-app/pull/1 in your browser, click Checks, then build' >/dev/null \
-      || { cat "$d/err" >&2; die "$bucket: the next action does not say where to look"; }
-    grep -qxF "    build: pull_request $bucket" "$d/err" || { cat "$d/err" >&2; die "$bucket: what gh said is not below"; }
+    sed -n 2p "$d/err" | grep -F 'Open https://github.com/octo-user/my-app/pull/1 in your browser, click Checks, then build' >/dev/null ||
+      {
+        cat "$d/err" >&2
+        die "$bucket: the next action does not say where to look"
+      }
+    grep -qxF "    build: pull_request $bucket" "$d/err" || {
+      cat "$d/err" >&2
+      die "$bucket: what gh said is not below"
+    }
     # Only the actions allowed are asked for: no second protection, no merge.
     expect_after_proposing "$d" "$CHECKS_CALL" "$ALLOWED_CALL"
     [ "$(grep -c . "$d/protection-bodies")" -eq 1 ] || die "$bucket: the protection was changed again"
@@ -10031,16 +12818,28 @@ test_a_build_failed_with_only_the_projects_own_actions_allowed_gets_the_actions_
   expect_out "$d" "  3. If those choices cannot be changed, the organisation (or enterprise) that owns the project has turned off or limited GitHub Actions for its projects"
   expect_out "$d" "  4. Then run the check again: open https://github.com/octo-user/my-app/pull/1 in your browser, click Checks, then \"Re-run all jobs\""
   expect_out "$d" "How the script checks it: "
-  grep -qxF '    allowed_actions: local_only' "$d/out" || { cat "$d/out" >&2; die "GitHub's answer is not below the guide"; }
+  grep -qxF '    allowed_actions: local_only' "$d/out" || {
+    cat "$d/out" >&2
+    die "GitHub's answer is not below the guide"
+  }
   # The guide ends with its own steps (#158 review): its last step is to
   # continue, with one result block, and none of the Actions-off ending.
-  [ "$(grep -E '^  [0-9]+\. ' "$d/out" | tail -1)" = "  5. Then continue the setup with the command shown below." ] \
-    || { cat "$d/out" >&2; die "the guide does not end with its step 5"; }
-  [ "$(grep -c '^When it has worked: ' "$d/out")" -eq 1 ] && [ "$(grep -c '^How the script checks it: ' "$d/out")" -eq 1 ] \
-    || { cat "$d/out" >&2; die "the guide has more than one result block"; }
+  [ "$(grep -E '^  [0-9]+\. ' "$d/out" | tail -1)" = "  5. Then continue the setup with the command shown below." ] ||
+    {
+      cat "$d/out" >&2
+      die "the guide does not end with its step 5"
+    }
+  [ "$(grep -c '^When it has worked: ' "$d/out")" -eq 1 ] && [ "$(grep -c '^How the script checks it: ' "$d/out")" -eq 1 ] ||
+    {
+      cat "$d/out" >&2
+      die "the guide has more than one result block"
+    }
   expect_no_out "$d" "if the script is waiting, come back to this window"
-  sed -n 1p "$d/err" | grep -F "What happened: GitHub Actions, the GitHub service that runs your project's checks, allows only actions from inside the project octo-user/my-app, so the check build failed: it uses actions made by GitHub. The script stopped here. The project octo-user/my-app exists on GitHub, and the setup's changes are proposed there: https://github.com/octo-user/my-app/pull/1" >/dev/null \
-    || { cat "$d/err" >&2; die "the stop does not say what is limited and where the proposed change is"; }
+  sed -n 1p "$d/err" | grep -F "What happened: GitHub Actions, the GitHub service that runs your project's checks, allows only actions from inside the project octo-user/my-app, so the check build failed: it uses actions made by GitHub. The script stopped here. The project octo-user/my-app exists on GitHub, and the setup's changes are proposed there: https://github.com/octo-user/my-app/pull/1" >/dev/null ||
+    {
+      cat "$d/err" >&2
+      die "the stop does not say what is limited and where the proposed change is"
+    }
   expect_after_proposing "$d" "$CHECKS_CALL" "$ALLOWED_CALL"
   expect_left_open "$d"
   # Interactive too: it stops (the check has to run again on GitHub
@@ -10070,16 +12869,28 @@ test_the_wait_for_build_ends_after_the_ci_timeout_with_the_proposed_change_open(
     setup_run "$d" --non-interactive --yes --ci-timeout "$m"
     expect_rc 1 "$d"
     # 60 / 15 = 4 waits a minute, and a look before each and after the last.
-    [ "$(grep -c . "$d/sleep.log")" -eq $((m * 4)) ] && [ "$(sort -u "$d/sleep.log")" = 15 ] || { cat "$d/sleep.log" >&2; die "$m: not $((m * 4)) waits of 15 seconds"; }
-    [ "$(calls_after_proposing "$d" | grep -cxF "$CHECKS_CALL")" -eq $((m * 4 + 1)) ] || { cat "$d/gh.log" >&2; die "$m: not $((m * 4 + 1)) looks"; }
+    [ "$(grep -c . "$d/sleep.log")" -eq $((m * 4)) ] && [ "$(sort -u "$d/sleep.log")" = 15 ] || {
+      cat "$d/sleep.log" >&2
+      die "$m: not $((m * 4)) waits of 15 seconds"
+    }
+    [ "$(calls_after_proposing "$d" | grep -cxF "$CHECKS_CALL")" -eq $((m * 4 + 1)) ] || {
+      cat "$d/gh.log" >&2
+      die "$m: not $((m * 4 + 1)) looks"
+    }
     if [ "$m" = 1 ]; then
       expect_err_shape "$d" "The project's check build had not passed on the proposed change after 1 minute, so the script did not add the change to the main version\. The proposed change stays open on GitHub\. "
       expect_out "$d" "for at most 1 minute"
     else
       expect_err_shape "$d" "The project's check build had not passed on the proposed change after 2 minutes, "
     fi
-    sed -n 2p "$d/err" | grep -F -- '--ci-timeout' >/dev/null || { cat "$d/err" >&2; die "$m: the next action does not say how to wait longer"; }
-    grep -qxF '    build: pull_request pending' "$d/err" || { cat "$d/err" >&2; die "$m: what gh said is not below"; }
+    sed -n 2p "$d/err" | grep -F -- '--ci-timeout' >/dev/null || {
+      cat "$d/err" >&2
+      die "$m: the next action does not say how to wait longer"
+    }
+    grep -qxF '    build: pull_request pending' "$d/err" || {
+      cat "$d/err" >&2
+      die "$m: what gh said is not below"
+    }
     [ "$(grep -c . "$d/protection-bodies")" -eq 1 ] || die "$m: the protection was changed again"
     expect_left_open "$d"
   done
@@ -10092,7 +12903,10 @@ test_gh_failing_to_show_the_checks_is_explained_with_the_proposed_change_open() 
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
   expect_err_shape "$d" "gh \(the GitHub command-line tool\) is not signed in to your GitHub account, so the script could not look at the project's checks on the proposed change\. "
-  sed -n 2p "$d/err" | grep -F 'gh auth login' >/dev/null || { cat "$d/err" >&2; die "signed out: the sign-in command is not given"; }
+  sed -n 2p "$d/err" | grep -F 'gh auth login' >/dev/null || {
+    cat "$d/err" >&2
+    die "signed out: the sign-in command is not given"
+  }
   expect_left_open "$d"
   d="$(tmpdir)"
   export STUB_GH_CHECKS_FAIL=broken
@@ -10100,7 +12914,10 @@ test_gh_failing_to_show_the_checks_is_explained_with_the_proposed_change_open() 
   unset STUB_GH_CHECKS_FAIL
   expect_rc 1 "$d"
   expect_err_shape "$d" "gh \(the GitHub command-line tool\) could not look at the project's checks on the proposed change\. "
-  grep -qxF '    stub gh: the connection broke off' "$d/err" || { cat "$d/err" >&2; die "broken: gh's text not below"; }
+  grep -qxF '    stub gh: the connection broke off' "$d/err" || {
+    cat "$d/err" >&2
+    die "broken: gh's text not below"
+  }
   expect_after_proposing "$d" "$CHECKS_CALL"
   expect_left_open "$d"
 }
@@ -10115,14 +12932,23 @@ test_build_is_required_after_it_passed_with_the_exact_body_and_read_back() {
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
   printf '%s\n\n%s\n\n' "$PROTECT_BODY" "$REQUIRE_BODY" >"$d/want-bodies"
-  cmp -s "$d/want-bodies" "$d/protection-bodies" || { od -c "$d/protection-bodies" | tail -5 >&2; die "the protection bodies are not the spec's"; }
+  cmp -s "$d/want-bodies" "$d/protection-bodies" || {
+    od -c "$d/protection-bodies" | tail -5 >&2
+    die "the protection bodies are not the spec's"
+  }
   # In order: build looked at until it passed, the PUT, the read-back,
   # then the change added (expect_after_proposing is exact).
   expect_after_proposing "$d" "$CHECKS_CALL" "$CHECKS_CALL" "$PROTECT_CALL" "$READBACK_CALL" "$MERGE_CALL" "$MERGED_CALL"
   grep -A1 -xF '==> Making the check build required, so that from now on a change is added to the main version only after build passes' "$d/out" | sed -n 2p >"$d/done"
-  [ "$(cat "$d/done")" = "    Done. GitHub reports the protection of the main version as the script set it, with build required." ] \
-    || { cat "$d/out" >&2; die "no step lines for the required check"; }
-  [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] || { cat "$d/gh.log" >&2; die "a gh call ran with prompts on"; }
+  [ "$(cat "$d/done")" = "    Done. GitHub reports the protection of the main version as the script set it, with build required." ] ||
+    {
+      cat "$d/out" >&2
+      die "no step lines for the required check"
+    }
+  [ "$(cut -f1 "$d/gh.log" | LC_ALL=C sort -u)" = GH_PROMPT_DISABLED=1 ] || {
+    cat "$d/gh.log" >&2
+    die "a gh call ran with prompts on"
+  }
 }
 
 test_a_protection_read_back_that_differs_stops_before_the_change_is_added() {
@@ -10134,9 +12960,15 @@ test_a_protection_read_back_that_differs_stops_before_the_change_is_added() {
   unset STUB_GH_READBACK
   expect_rc 1 "$d"
   expect_err_shape "$d" "GitHub does not report the protection of the main version as the script set it, so the script did not add the setup's change to the main version\. The proposed change stays open on GitHub\. "
-  sed -n 2p "$d/err" | grep -F 'https://github.com/octo-user/my-app/settings' >/dev/null || { cat "$d/err" >&2; die "the next action does not say where to look"; }
-  [ "$(sed -n '4,$p' "$d/err")" = "$(printf '%s\n' '    enforce_admins: the script set true, GitHub reports false' '    allow_deletions: the script set false, GitHub reports nothing')" ] \
-    || { cat "$d/err" >&2; die "the differences are not listed field by field"; }
+  sed -n 2p "$d/err" | grep -F 'https://github.com/octo-user/my-app/settings' >/dev/null || {
+    cat "$d/err" >&2
+    die "the next action does not say where to look"
+  }
+  [ "$(sed -n '4,$p' "$d/err")" = "$(printf '%s\n' '    enforce_admins: the script set true, GitHub reports false' '    allow_deletions: the script set false, GitHub reports nothing')" ] ||
+    {
+      cat "$d/err" >&2
+      die "the differences are not listed field by field"
+    }
   expect_after_proposing "$d" "$CHECKS_CALL" "$PROTECT_CALL" "$READBACK_CALL"
   expect_left_open "$d"
   # A wrong required check (as when GitHub kept only the old one).
@@ -10146,8 +12978,11 @@ test_a_protection_read_back_that_differs_stops_before_the_change_is_added() {
   unset STUB_GH_READBACK
   expect_rc 1 "$d"
   # shellcheck disable=SC2015 # die is meant to run when either check fails
-  grep -qxF '    contexts: the script set build, GitHub reports ' "$d/err" && grep -qxF '    strict: the script set false, GitHub reports null' "$d/err" \
-    || { cat "$d/err" >&2; die "the required check difference is not listed"; }
+  grep -qxF '    contexts: the script set build, GitHub reports ' "$d/err" && grep -qxF '    strict: the script set false, GitHub reports null' "$d/err" ||
+    {
+      cat "$d/err" >&2
+      die "the required check difference is not listed"
+    }
   expect_left_open "$d"
   # GitHub does not answer the read-back or refuses the PUT: the plain
   # message of that call, the command to continue, nothing added.
@@ -10164,7 +12999,10 @@ test_a_protection_read_back_that_differs_stops_before_the_change_is_added() {
   unset STUB_GH_REQUIRE_FAIL
   expect_rc 1 "$d"
   expect_err_shape "$d" "GitHub did not find what the script needed to make the check build required for the main version\. "
-  sed -n 2p "$d/err" | grep -F 'admins' >/dev/null || { cat "$d/err" >&2; die "the 404 next action is not its own"; }
+  sed -n 2p "$d/err" | grep -F 'admins' >/dev/null || {
+    cat "$d/err" >&2
+    die "the 404 next action is not its own"
+  }
   expect_after_proposing "$d" "$CHECKS_CALL" "$PROTECT_CALL"
   expect_left_open "$d"
 }
@@ -10180,17 +13018,29 @@ test_the_change_is_added_with_the_head_that_was_sent_from_inside_the_copy() {
   c="$(copy_of "$d")"
   bare="$(bare_of "$d")"
   sent="$(awk -F'\t' '$2 == "pr" && $3 == "merge" && $4 != "--help" { print $NF }' "$d/gh.log")"
-  [ -n "$sent" ] && [ "$sent" = "$(cat "$d/merged-head")" ] || { cat "$d/gh.log" >&2; die "the id given is not the head of bootstrap-setup on GitHub"; }
+  [ -n "$sent" ] && [ "$sent" = "$(cat "$d/merged-head")" ] || {
+    cat "$d/gh.log" >&2
+    die "the id given is not the head of bootstrap-setup on GitHub"
+  }
   [ "$(in_git -C "$c" log -1 --format=%s "$sent")" = "Set up my-app" ] || die "the id given is not the setup's change"
-  [ "$(awk -F'\t' '$2 == "pr" && $3 == "merge" && $4 != "--help" { print $4, $5, $6, $7 }' "$d/gh.log")" = "1 --squash --delete-branch --match-head-commit" ] \
-    || { cat "$d/gh.log" >&2; die "not merged with --squash --delete-branch --match-head-commit"; }
+  [ "$(awk -F'\t' '$2 == "pr" && $3 == "merge" && $4 != "--help" { print $4, $5, $6, $7 }' "$d/gh.log")" = "1 --squash --delete-branch --match-head-commit" ] ||
+    {
+      cat "$d/gh.log" >&2
+      die "not merged with --squash --delete-branch --match-head-commit"
+    }
   # Compared as folders, not as text: on macOS $TMPDIR ends in /, so $d
   # holds a // that the shell's $PWD does not.
-  [ "$(cd "$(cat "$d/merge-cwd")" && pwd -P)" = "$(cd "$c" && pwd -P)" ] || { cat "$d/merge-cwd" >&2; die "gh pr merge did not run in the copy"; }
+  [ "$(cd "$(cat "$d/merge-cwd")" && pwd -P)" = "$(cd "$c" && pwd -P)" ] || {
+    cat "$d/merge-cwd" >&2
+    die "gh pr merge did not run in the copy"
+  }
   [ "$(in_git --git-dir="$bare" rev-parse main)" = "$(cat "$d/merge-sha")" ] || die "main on GitHub is not the added change"
   [ "$(in_git --git-dir="$bare" rev-parse 'main^{tree}')" = "$(in_git --git-dir="$bare" rev-parse "$sent^{tree}")" ] || die "main does not hold the files sent"
   grep -A1 -xF '==> Adding the proposed change to the main version of the project' "$d/out" | sed -n 2p >"$d/done"
-  [ "$(cat "$d/done")" = "    Done. The setup's changes are in the main version of the project on GitHub." ] || { cat "$d/out" >&2; die "no step lines for adding the change"; }
+  [ "$(cat "$d/done")" = "    Done. The setup's changes are in the main version of the project on GitHub." ] || {
+    cat "$d/out" >&2
+    die "no step lines for adding the change"
+  }
 }
 
 test_a_change_github_did_not_add_stops_with_the_proposed_change_open() {
@@ -10202,8 +13052,14 @@ test_a_change_github_did_not_add_stops_with_the_proposed_change_open() {
   unset STUB_GH_MERGE_FAIL
   expect_rc 1 "$d"
   expect_err_shape "$d" "GitHub did not add the proposed change to the main version\. The proposed change stays open on GitHub\. "
-  sed -n 2p "$d/err" | grep -F 'Open https://github.com/octo-user/my-app/pull/1 in your browser' >/dev/null || { cat "$d/err" >&2; die "refused: the next action does not give the link"; }
-  grep -qF '    GraphQL: Required status check "build" is expected.' "$d/err" || { cat "$d/err" >&2; die "refused: gh's text not below"; }
+  sed -n 2p "$d/err" | grep -F 'Open https://github.com/octo-user/my-app/pull/1 in your browser' >/dev/null || {
+    cat "$d/err" >&2
+    die "refused: the next action does not give the link"
+  }
+  grep -qF '    GraphQL: Required status check "build" is expected.' "$d/err" || {
+    cat "$d/err" >&2
+    die "refused: gh's text not below"
+  }
   expect_after_proposing "$d" "$CHECKS_CALL" "$PROTECT_CALL" "$READBACK_CALL" "$MERGE_CALL" "$MERGED_CALL"
   expect_left_open "$d"
   # Not signed in any more.
@@ -10221,7 +13077,10 @@ test_a_change_github_did_not_add_stops_with_the_proposed_change_open() {
   setup_run "$d" --non-interactive --yes
   unset STUB_GH_MERGE_FAIL
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "broken but added: did not go on"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "broken but added: did not go on"
+  }
   # GitHub does not say whether it was added: its plain message.
   d="$(tmpdir)"
   export STUB_GH_PULL_FAIL=server
@@ -10250,20 +13109,38 @@ test_the_finish_works_whether_or_not_gh_already_switched_the_copy_to_main() {
     c="$(copy_of "$d")"
     [ "$(in_git -C "$c" symbolic-ref --short HEAD)" = main ] || die "$local_done: the copy is not on main"
     [ "$(in_git -C "$c" rev-parse HEAD)" = "$(cat "$d/merge-sha")" ] || die "$local_done: the copy is not at the added change"
-    [ "$(in_git -C "$c" for-each-ref --format='%(refname)' refs/heads refs/remotes | grep -v '/HEAD$' | LC_ALL=C sort)" = "$(printf '%s\n' refs/heads/main refs/remotes/origin/main)" ] \
-      || { in_git -C "$c" for-each-ref >&2; die "$local_done: a line of work other than main is left in the copy"; }
-    [ -z "$(in_git -C "$c" status --porcelain --untracked-files=all)" ] || { in_git -C "$c" status >&2; die "$local_done: something is left unsaved"; }
+    [ "$(in_git -C "$c" for-each-ref --format='%(refname)' refs/heads refs/remotes | grep -v '/HEAD$' | LC_ALL=C sort)" = "$(printf '%s\n' refs/heads/main refs/remotes/origin/main)" ] ||
+      {
+        in_git -C "$c" for-each-ref >&2
+        die "$local_done: a line of work other than main is left in the copy"
+      }
+    [ -z "$(in_git -C "$c" status --porcelain --untracked-files=all)" ] || {
+      in_git -C "$c" status >&2
+      die "$local_done: something is left unsaved"
+    }
     if [ "$local_done" = yes ]; then
-      ! grep -qE ' checkout -q main$| branch -q -D bootstrap-setup$' "$d/tools.log" || { cat "$d/tools.log" >&2; die "yes: the script did again what gh had done"; }
+      ! grep -qE ' checkout -q main$| branch -q -D bootstrap-setup$' "$d/tools.log" || {
+        cat "$d/tools.log" >&2
+        die "yes: the script did again what gh had done"
+      }
     else
       # shellcheck disable=SC2015 # die is meant to run when either check fails
-      grep -qE ' checkout -q main$' "$d/tools.log" && grep -qE ' branch -q -D bootstrap-setup$' "$d/tools.log" \
-        || { cat "$d/tools.log" >&2; die "no: the script did not switch to main and delete bootstrap-setup"; }
+      grep -qE ' checkout -q main$' "$d/tools.log" && grep -qE ' branch -q -D bootstrap-setup$' "$d/tools.log" ||
+        {
+          cat "$d/tools.log" >&2
+          die "no: the script did not switch to main and delete bootstrap-setup"
+        }
     fi
-    grep -qE " -C \./my-app pull -q --ff-only --prune$" "$d/tools.log" || { cat "$d/tools.log" >&2; die "$local_done: main was not brought up to date"; }
+    grep -qE " -C \./my-app pull -q --ff-only --prune$" "$d/tools.log" || {
+      cat "$d/tools.log" >&2
+      die "$local_done: main was not brought up to date"
+    }
     grep -A1 -xF '==> Updating the copy on this computer to the new main version' "$d/out" | sed -n 2p >"$d/done"
-    [ "$(cat "$d/done")" = "    Done. The copy in ./my-app is on the main version, with the setup's changes, and nothing is left unsaved." ] \
-      || { cat "$d/out" >&2; die "$local_done: no step lines for the finish"; }
+    [ "$(cat "$d/done")" = "    Done. The copy in ./my-app is on the main version, with the setup's changes, and nothing is left unsaved." ] ||
+      {
+        cat "$d/out" >&2
+        die "$local_done: no step lines for the finish"
+      }
   done
 }
 
@@ -10276,8 +13153,11 @@ test_a_copy_not_at_the_new_main_version_stops_with_both_versions_below() {
   expect_rc 1 "$d"
   expect_err_shape "$d" "The copy of the project on this computer, in \./my-app, is not at the main version that GitHub has now\. The project octo-user/my-app exists on GitHub, and the setup's changes are in its main version there: https://github.com/octo-user/my-app/pull/1\$"
   # shellcheck disable=SC2015 # die is meant to run when either check fails
-  grep -qxF "    the copy: $(cat "$d/merge-sha")" "$d/err" && grep -qxF '    main on GitHub: 2222222222222222222222222222222222222222' "$d/err" \
-    || { cat "$d/err" >&2; die "both versions are not below"; }
+  grep -qxF "    the copy: $(cat "$d/merge-sha")" "$d/err" && grep -qxF '    main on GitHub: 2222222222222222222222222222222222222222' "$d/err" ||
+    {
+      cat "$d/err" >&2
+      die "both versions are not below"
+    }
   expect_continue_command "$d" " --resume"
   ! grep -qxF "$FINISHED" "$d/out" || die "it went on to the report"
 }
@@ -10310,9 +13190,15 @@ test_a_failed_update_of_the_copy_stops_with_gits_text_below() {
   unset STUB_GH_MERGE_LOCAL
   expect_rc 1 "$d"
   expect_err_shape "$d" "git could not bring the copy of the project on this computer, in \./my-app, up to date with the main version on GitHub\. The project octo-user/my-app exists on GitHub, and the setup's changes are in its main version there: https://github.com/octo-user/my-app/pull/1\$"
-  sed -n 2p "$d/err" | grep -F 'connected to the internet' >/dev/null || { cat "$d/err" >&2; die "the next action is not to check the connection"; }
-  grep -qxF "    fatal: unable to access 'https://github.com/octo-user/my-app.git/': Could not resolve host: github.com" "$d/err" \
-    || { cat "$d/err" >&2; die "git's text is not below"; }
+  sed -n 2p "$d/err" | grep -F 'connected to the internet' >/dev/null || {
+    cat "$d/err" >&2
+    die "the next action is not to check the connection"
+  }
+  grep -qxF "    fatal: unable to access 'https://github.com/octo-user/my-app.git/': Could not resolve host: github.com" "$d/err" ||
+    {
+      cat "$d/err" >&2
+      die "git's text is not below"
+    }
   expect_continue_command "$d" " --resume"
   ! grep -qxF "$FINISHED" "$d/out" || die "it went on to the report"
 }
@@ -10327,7 +13213,10 @@ test_a_copy_with_changes_not_saved_after_the_update_stops() {
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
   expect_err_shape "$d" "The copy of the project on this computer, in \./my-app, has changes that are not saved after the update\. The project octo-user/my-app exists on GitHub"
-  grep -qxF '    ?? stray.txt' "$d/err" || { cat "$d/err" >&2; die "the file is not named below"; }
+  grep -qxF '    ?? stray.txt' "$d/err" || {
+    cat "$d/err" >&2
+    die "the file is not named below"
+  }
   expect_continue_command "$d" " --resume"
   ! grep -qxF "$FINISHED" "$d/out" || die "it went on to the report"
 }
@@ -10339,7 +13228,10 @@ test_gh_pr_merge_may_not_ask_at_the_terminal() {
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
-  [ "$(cat "$d/merge-prompt")" = 0 ] || { cat "$d/merge-prompt" >&2; die "gh pr merge ran with GIT_TERMINAL_PROMPT not 0"; }
+  [ "$(cat "$d/merge-prompt")" = 0 ] || {
+    cat "$d/merge-prompt" >&2
+    die "gh pr merge ran with GIT_TERMINAL_PROMPT not 0"
+  }
 }
 
 test_an_id_of_the_new_main_that_is_not_one_stops_before_the_finish() {
@@ -10355,9 +13247,18 @@ test_an_id_of_the_new_main_that_is_not_one_stops_before_the_finish() {
   expect_err_shape "$d" "GitHub says the proposed change was added to the main version, but it did not give the id of the new main version, so the script cannot check the copy on this computer against it\. "
   # #158 review, round 2, note 1 (wording): the note on what exists says
   # the change is in main, not still proposed.
-  sed -n 1p "$d/err" | grep -F "the setup's changes are in its main version there" >/dev/null || { cat "$d/err" >&2; die "the note on what exists is stale"; }
-  ! sed -n 1p "$d/err" | grep -F "are proposed there" >/dev/null || { cat "$d/err" >&2; die "the stop says the change is both added and proposed"; }
-  grep -qxF '    GitHub reports for the proposed change: true not-an-id' "$d/err" || { cat "$d/err" >&2; die "GitHub's answer is not below"; }
+  sed -n 1p "$d/err" | grep -F "the setup's changes are in its main version there" >/dev/null || {
+    cat "$d/err" >&2
+    die "the note on what exists is stale"
+  }
+  ! sed -n 1p "$d/err" | grep -F "are proposed there" >/dev/null || {
+    cat "$d/err" >&2
+    die "the stop says the change is both added and proposed"
+  }
+  grep -qxF '    GitHub reports for the proposed change: true not-an-id' "$d/err" || {
+    cat "$d/err" >&2
+    die "GitHub's answer is not below"
+  }
   expect_continue_command "$d" " --resume"
   expect_no_out "$d" "==> Updating the copy on this computer"
 }
@@ -10371,7 +13272,10 @@ test_a_pending_run_of_build_is_waited_for_even_next_to_a_failed_one() {
   echo 1 >"$d/build-mixed"
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
-  [ "$(cat "$d/sleep.log")" = 15 ] || { cat "$d/sleep.log" >&2; die "not one wait of 15 seconds"; }
+  [ "$(cat "$d/sleep.log")" = 15 ] || {
+    cat "$d/sleep.log" >&2
+    die "not one wait of 15 seconds"
+  }
   expect_after_proposing "$d" "$CHECKS_CALL" "${END_CALLS[@]}"
 }
 
@@ -10408,15 +13312,27 @@ TEXT
   # follows straight on.
   printf '%s\n' "" "$WHAT_NEXT" "$ASK_CLEAD" >>"$d/want"
   expect_same "the report" "$d/want" "$d/report"
-  [ -z "$(awk '{print NR ": " $0}' "$d/report" | banned_hits)" ] || { cat "$d/report" >&2; die "banned word in the report"; }
-  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "a run that went through wrote to stderr"; }
+  [ -z "$(awk '{print NR ": " $0}' "$d/report" | banned_hits)" ] || {
+    cat "$d/report" >&2
+    die "banned word in the report"
+  }
+  [ ! -s "$d/err" ] || {
+    cat "$d/err" >&2
+    die "a run that went through wrote to stderr"
+  }
   # No licence, and the web pack with its deploy files.
   d="$(tmpdir)"
   fake_tool "$d" npm 10.0.0
   setup_run "$d" --non-interactive --yes --license none --pack web --with-deploy
   expect_rc 0 "$d"
-  grep -qxF '    Licence: none, so no licence file' "$d/out" || { cat "$d/out" >&2; die "none: the licence line"; }
-  grep -qxF '    Language pack: web, with the files that publish the website' "$d/out" || { cat "$d/out" >&2; die "web: the pack line"; }
+  grep -qxF '    Licence: none, so no licence file' "$d/out" || {
+    cat "$d/out" >&2
+    die "none: the licence line"
+  }
+  grep -qxF '    Language pack: web, with the files that publish the website' "$d/out" || {
+    cat "$d/out" >&2
+    die "web: the pack line"
+  }
 }
 
 # last_two <dir>: the last two lines of its out, as "<line>|<line>".
@@ -10433,20 +13349,38 @@ test_every_report_ends_with_the_next_step_and_then_the_line_on_asking_clead() {
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
-  [ "$(last_two "$d")" = "$want" ] || { cat "$d/out" >&2; die "new setup: the report does not end with the next step and the line on asking Clead"; }
-  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "new setup: stderr after the report"; }
+  [ "$(last_two "$d")" = "$want" ] || {
+    cat "$d/out" >&2
+    die "new setup: the report does not end with the next step and the line on asking Clead"
+  }
+  [ ! -s "$d/err" ] || {
+    cat "$d/err" >&2
+    die "new setup: stderr after the report"
+  }
   setup_run "$d" --non-interactive --yes --resume
   expect_rc 0 "$d"
-  [ "$(last_two "$d")" = "$want" ] || { cat "$d/out" >&2; die "resumed, set up already: the report does not end with the two lines"; }
-  [ ! -s "$d/err" ] || { cat "$d/err" >&2; die "resumed: stderr after the report"; }
+  [ "$(last_two "$d")" = "$want" ] || {
+    cat "$d/out" >&2
+    die "resumed, set up already: the report does not end with the two lines"
+  }
+  [ ! -s "$d/err" ] || {
+    cat "$d/err" >&2
+    die "resumed: stderr after the report"
+  }
   d="$(tmpdir)"
   hand_made_project "$d"
   export STUB_GH_EXISTING=octo-user/my-app
   setup_run "$d" --non-interactive --yes --resume
   unset STUB_GH_EXISTING
   expect_rc 0 "$d"
-  [ "$(last_two "$d")" = "$want" ] || { cat "$d/out" >&2; die "hand-made, set up already: the report does not end with the two lines"; }
-  [ "$(grep -cxF "$ASK_CLEAD" "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "the line on asking Clead is not printed once"; }
+  [ "$(last_two "$d")" = "$want" ] || {
+    cat "$d/out" >&2
+    die "hand-made, set up already: the report does not end with the two lines"
+  }
+  [ "$(grep -cxF "$ASK_CLEAD" "$d/out")" -eq 1 ] || {
+    cat "$d/out" >&2
+    die "the line on asking Clead is not printed once"
+  }
   [ -z "$(printf '%s\n' "$WHAT_NEXT" "$ASK_CLEAD" | banned_hits)" ] || die "a banned word in the last two lines"
 }
 
@@ -10461,16 +13395,30 @@ test_a_run_that_stops_does_not_print_the_next_step_or_the_line_on_asking_clead()
   expect_rc 3 "$d"
   expect_no_out "$d" "$ASK_CLEAD"
   expect_no_out "$d" "create a Claude Project"
-  ! grep -qF "$ASK_CLEAD" "$d/err" || { cat "$d/err" >&2; die "the stop printed the line on asking Clead"; }
+  ! grep -qF "$ASK_CLEAD" "$d/err" || {
+    cat "$d/err" >&2
+    die "the stop printed the line on asking Clead"
+  }
 }
 
 test_the_next_step_is_one_text_for_both_endings() {
   # The new-setup and the set-up-already endings print the next step from
   # one function, so the two cannot drift apart again.
   local a b n
-  a="$( load_script; IN_OWNER=octo-user IN_NAME=my-app CHANGE_ADDED=""; say_what_next )"
-  b="$( load_script; IN_OWNER=octo-user IN_NAME=my-app CHANGE_ADDED=1; say_what_next )"
-  [ "$a" = "$(printf '%s\n%s' "$WHAT_NEXT" "$ASK_CLEAD")" ] || { printf '%s\n' "$a" >&2; die "say_what_next does not print the next step and then the line on asking Clead"; }
+  a="$(
+    load_script
+    IN_OWNER=octo-user IN_NAME=my-app CHANGE_ADDED=""
+    say_what_next
+  )"
+  b="$(
+    load_script
+    IN_OWNER=octo-user IN_NAME=my-app CHANGE_ADDED=1
+    say_what_next
+  )"
+  [ "$a" = "$(printf '%s\n%s' "$WHAT_NEXT" "$ASK_CLEAD")" ] || {
+    printf '%s\n' "$a" >&2
+    die "say_what_next does not print the next step and then the line on asking Clead"
+  }
   [ "$a" = "$b" ] || die "the next step differs between the two endings"
   n="$(grep -c 'What to do next: in the Claude app' "$SCRIPT" || true)"
   [ "$n" -eq 1 ] || die "the next step is written $n times in the script, want 1"
@@ -10488,11 +13436,13 @@ test_the_jq_expressions_read_githubs_documented_answers() {
   local d
   # This file defines the same names, so they are unset first: only the
   # script's own values can make the comparison pass.
-  ( t1="$BUILD_JQ" t2="$READBACK_JQ" t3="$MERGED_JQ" t4="$REQUIRE_BODY"
+  (
+    t1="$BUILD_JQ" t2="$READBACK_JQ" t3="$MERGED_JQ" t4="$REQUIRE_BODY"
     unset BUILD_JQ READBACK_JQ MERGED_JQ REQUIRE_BODY
     load_script
-    [ "${BUILD_JQ-}" = "$t1" ] && [ "${READBACK_JQ-}" = "$t2" ] && [ "${MERGED_JQ-}" = "$t3" ] && [ "${REQUIRE_BODY-}" = "$t4" ] ) \
-    || die "the script's expressions or step 16 body are not the ones the tests name"
+    [ "${BUILD_JQ-}" = "$t1" ] && [ "${READBACK_JQ-}" = "$t2" ] && [ "${MERGED_JQ-}" = "$t3" ] && [ "${REQUIRE_BODY-}" = "$t4" ]
+  ) ||
+    die "the script's expressions or step 16 body are not the ones the tests name"
   if ! command -v jq >/dev/null 2>&1; then
     echo "jq is not installed: the expressions were not run"
     return 0
@@ -10505,7 +13455,10 @@ test_the_jq_expressions_read_githubs_documented_answers() {
   # gh pr checks --json name,bucket,event: an array of checks; another
   # workflow's check (review) is left out.
   printf '%s\n' '[{"name":"build","bucket":"pass","event":"push"},{"name":"review","bucket":"fail","event":"pull_request"},{"name":"build","bucket":"pending","event":"pull_request"}]' >"$d/checks.json"
-  [ "$(jq_r "$BUILD_JQ" "$d/checks.json")" = "$(printf '%s\n' 'push pass' 'pull_request pending')" ] || { jq_r "$BUILD_JQ" "$d/checks.json" >&2; die "the checks expression"; }
+  [ "$(jq_r "$BUILD_JQ" "$d/checks.json")" = "$(printf '%s\n' 'push pass' 'pull_request pending')" ] || {
+    jq_r "$BUILD_JQ" "$d/checks.json" >&2
+    die "the checks expression"
+  }
   # GET .../branches/main/protection, as the REST doc's example has it
   # (restrictions left out, as for a project of a personal account).
   cat >"$d/protection.json" <<'JSON'
@@ -10517,11 +13470,17 @@ test_the_jq_expressions_read_githubs_documented_answers() {
  "required_linear_history":{"enabled":false},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false},
  "block_creations":{"enabled":false},"required_conversation_resolution":{"enabled":false},"lock_branch":{"enabled":false},"allow_fork_syncing":{"enabled":false}}
 JSON
-  [ "$(jq_r "$READBACK_JQ" "$d/protection.json")" = "$(printf '%s\n' contexts=build strict=false enforce_admins=true approvals=0 restrictions=null allow_force_pushes=false allow_deletions=false)" ] \
-    || { jq_r "$READBACK_JQ" "$d/protection.json" >&2; die "the read-back expression on the documented answer"; }
+  [ "$(jq_r "$READBACK_JQ" "$d/protection.json")" = "$(printf '%s\n' contexts=build strict=false enforce_admins=true approvals=0 restrictions=null allow_force_pushes=false allow_deletions=false)" ] ||
+    {
+      jq_r "$READBACK_JQ" "$d/protection.json" >&2
+      die "the read-back expression on the documented answer"
+    }
   # Step 3's protection, before build is required: no check, and no error.
   printf '%s\n' '{"enforce_admins":{"enabled":true},"required_pull_request_reviews":{"required_approving_review_count":0},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false}}' >"$d/step3.json"
-  [ "$(jq_r "$READBACK_JQ" "$d/step3.json" | sed -n 1,2p)" = "$(printf '%s\n' contexts= strict=null)" ] || { jq_r "$READBACK_JQ" "$d/step3.json" >&2; die "the read-back expression with no required check"; }
+  [ "$(jq_r "$READBACK_JQ" "$d/step3.json" | sed -n 1,2p)" = "$(printf '%s\n' contexts= strict=null)" ] || {
+    jq_r "$READBACK_JQ" "$d/step3.json" >&2
+    die "the read-back expression with no required check"
+  }
   # GET .../pulls/N after the merge.
   printf '%s\n' '{"number":1,"state":"closed","merged":true,"merge_commit_sha":"6dcb09b5b57875f334f61aebed695e2e4193db5e"}' >"$d/pull.json"
   [ "$(jq_r "$MERGED_JQ" "$d/pull.json")" = 'true 6dcb09b5b57875f334f61aebed695e2e4193db5e' ] || die "the merged expression"
@@ -10565,7 +13524,10 @@ again() {
   line="$(strip_any_cd "$line")"
   case "$line" in
     "    bash "*) ;;
-    *) cat "$d/out" "$d/err" >&2; die "the last run showed no command to run again" ;;
+    *)
+      cat "$d/out" "$d/err" >&2
+      die "the last run showed no command to run again"
+      ;;
   esac
   eval "CMD_ARGS=(${line#    bash })"
   CMD_ARGS=("${CMD_ARGS[@]:1}")
@@ -10590,7 +13552,7 @@ seed_existing() {
   cp -R "$src/." "$w/"
   in_git -c init.defaultBranch=main init -q "$w"
   # "for p do": no "$@" that bash 3.2 with set -u could call unbound.
-  for p do
+  for p; do
     mkdir -p "$w/.git/info"
     printf '%s -text\n' "$p" >>"$w/.git/info/attributes"
   done
@@ -10607,7 +13569,10 @@ expect_one_of_each() {
   local d="$1" bare c
   bare="$(bare_of "$d")"
   c="$(copy_of "$d")"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "it did not go through to the report"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "it did not go through to the report"
+  }
   [ "$(grep -c '	repo	create	octo-user' "$d/gh.log" || true)" -le 1 ] || die "the project was created twice"
   [ "$(grep -cx -- ----- "$d/pr-bodies")" -eq 1 ] || die "not exactly one proposed change"
   [ "$(in_git --git-dir="$bare" rev-list --count main)" -eq 2 ] || die "main does not have exactly one change after the template's"
@@ -10647,7 +13612,10 @@ test_resume_continues_a_project_with_only_the_template_from_step_3() {
     "api -i -H Accept: application/vnd.github.raw+json repos/octo-user/my-app/contents/CHANGELOG.md" \
     "api -i repos/octo-user/my-app/pulls?state=all&head=octo-user:bootstrap-setup --jq .[] | \"\\(.state) \\(.merged_at // \"-\") \\(.html_url)\"" \
     "api -i repos/octo-user/my-app/branches/bootstrap-setup --jq .commit.sha"; do
-    calls_since "$d" "$n" | grep -xF "$c" >/dev/null || { calls_since "$d" "$n" >&2; die "not asked: $c"; }
+    calls_since "$d" "$n" | grep -xF "$c" >/dev/null || {
+      calls_since "$d" "$n" >&2
+      die "not asked: $c"
+    }
   done
   # Stopped while GitHub was still copying the files: the same.
   d="$(tmpdir)"
@@ -10738,7 +13706,10 @@ test_resume_waits_for_build_on_the_proposed_change_that_is_there() {
     n="$(calls_count "$d")"
     case "$how" in
       copy) again "$d" ;;
-      moved) mv "$(copy_of "$d")" "$d/elsewhere"; again "$d" ;;
+      moved)
+        mv "$(copy_of "$d")" "$d/elsewhere"
+        again "$d"
+        ;;
       inside) RUN_CWD="$(copy_of "$d")" again "$d" --dir . ;;
     esac
     expect_rc 0 "$d"
@@ -10761,8 +13732,11 @@ test_resume_waits_for_build_on_the_proposed_change_that_is_there() {
 # expect_nothing_changed_since <dir> <n>: no gh call after the first <n>
 # makes or changes anything.
 expect_nothing_changed_since() {
-  ! calls_since "$1" "$2" | grep -E '^(repo create|repo clone|repo edit|pr create|pr merge) |-X PUT' >/dev/null \
-    || { calls_since "$1" "$2" >&2; die "something was changed"; }
+  ! calls_since "$1" "$2" | grep -E '^(repo create|repo clone|repo edit|pr create|pr merge) |-X PUT' >/dev/null ||
+    {
+      calls_since "$1" "$2" >&2
+      die "something was changed"
+    }
 }
 
 test_resume_past_the_pack_step_takes_the_publishing_choice_from_the_project() {
@@ -10789,18 +13763,30 @@ test_resume_past_the_pack_step_takes_the_publishing_choice_from_the_project() {
     n="$(calls_count "$d")"
     setup_run "$d" --yes --resume --pack web --without-deploy
     expect_rc 2 "$d"
-    grep -qE -- '^    - --without-deploy: .{10,}' "$d/err" || { cat "$d/err" >&2; die "$how: a no that contradicts the change is not refused with its option"; }
+    grep -qE -- '^    - --without-deploy: .{10,}' "$d/err" || {
+      cat "$d/err" >&2
+      die "$how: a no that contradicts the change is not refused with its option"
+    }
     expect_nothing_changed_since "$d" "$n"
     # With no copy, the change on GitHub is read.
     if [ "$how" = moved ]; then
-      calls_since "$d" "$n" | grep -xF 'api -i -H Accept: application/vnd.github.raw+json repos/octo-user/my-app/contents/.github/workflows/deploy.yml?ref=bootstrap-setup' >/dev/null \
-        || { calls_since "$d" "$n" >&2; die "moved: the setup's change on GitHub was not read"; }
+      calls_since "$d" "$n" | grep -xF 'api -i -H Accept: application/vnd.github.raw+json repos/octo-user/my-app/contents/.github/workflows/deploy.yml?ref=bootstrap-setup' >/dev/null ||
+        {
+          calls_since "$d" "$n" >&2
+          die "moved: the setup's change on GitHub was not read"
+        }
     fi
     # No option, and no answers on stdin: nothing is asked.
     setup_run "$d" --yes --resume --pack web
     expect_rc 0 "$d"
-    ! grep -qF 'Add the publishing files' "$d/out" || { cat "$d/out" >&2; die "$how: the publishing question was asked"; }
-    grep -qxF '    Language pack: web, with the files that publish the website' "$d/out" || { cat "$d/out" >&2; die "$how: the report does not name the publishing files"; }
+    ! grep -qF 'Add the publishing files' "$d/out" || {
+      cat "$d/out" >&2
+      die "$how: the publishing question was asked"
+    }
+    grep -qxF '    Language pack: web, with the files that publish the website' "$d/out" || {
+      cat "$d/out" >&2
+      die "$how: the report does not name the publishing files"
+    }
     expect_one_of_each "$d"
   done
   # Without the publishing files: a yes is refused, no option takes the no.
@@ -10817,12 +13803,21 @@ test_resume_past_the_pack_step_takes_the_publishing_choice_from_the_project() {
   n="$(calls_count "$d")"
   setup_run "$d" --yes --resume --pack web --with-deploy
   expect_rc 2 "$d"
-  grep -qE -- '^    - --with-deploy: .{10,}' "$d/err" || { cat "$d/err" >&2; die "a yes that contradicts the change is not refused with its option"; }
+  grep -qE -- '^    - --with-deploy: .{10,}' "$d/err" || {
+    cat "$d/err" >&2
+    die "a yes that contradicts the change is not refused with its option"
+  }
   expect_nothing_changed_since "$d" "$n"
   setup_run "$d" --yes --resume --pack web
   expect_rc 0 "$d"
-  ! grep -qF 'Add the publishing files' "$d/out" || { cat "$d/out" >&2; die "the publishing question was asked"; }
-  grep -qxF '    Language pack: web' "$d/out" || { cat "$d/out" >&2; die "the report does not name the pack without the publishing files"; }
+  ! grep -qF 'Add the publishing files' "$d/out" || {
+    cat "$d/out" >&2
+    die "the publishing question was asked"
+  }
+  grep -qxF '    Language pack: web' "$d/out" || {
+    cat "$d/out" >&2
+    die "the report does not name the pack without the publishing files"
+  }
   [ ! -e "$(copy_of "$d")/.github/workflows/deploy.yml" ] || die "the publishing files were added"
   expect_one_of_each "$d"
 }
@@ -10842,9 +13837,15 @@ test_resume_before_the_pack_step_asks_the_publishing_question_once_the_state_is_
   printf 'yes\n' >"$d/in"
   setup_run "$d" --yes --private --resume --pack web
   expect_rc 0 "$d"
-  [ "$(grep -c '^Add the publishing files? (yes or no) \[no\]: ' "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "the publishing question was not asked once"; }
-  [ "$(grep -n '^Add the publishing files' "$d/out" | head -1 | cut -d: -f1)" -gt "$(line_of "$d" "==> Working out where the setup stopped, from GitHub and from the copy on this computer")" ] \
-    || { cat "$d/out" >&2; die "the publishing question came before the state was worked out"; }
+  [ "$(grep -c '^Add the publishing files? (yes or no) \[no\]: ' "$d/out")" -eq 1 ] || {
+    cat "$d/out" >&2
+    die "the publishing question was not asked once"
+  }
+  [ "$(grep -n '^Add the publishing files' "$d/out" | head -1 | cut -d: -f1)" -gt "$(line_of "$d" "==> Working out where the setup stopped, from GitHub and from the copy on this computer")" ] ||
+    {
+      cat "$d/out" >&2
+      die "the publishing question came before the state was worked out"
+    }
   [ -e "$(copy_of "$d")/.github/workflows/deploy.yml" ] || die "the publishing files were not added after a yes"
   expect_one_of_each "$d"
 }
@@ -10858,8 +13859,11 @@ test_ctrl_c_says_what_exists_and_the_resume_finishes_without_duplicates() {
   # take it: the case is skipped there.
   # (Asked of a shell started here, as bash 3.2 does not list an ignored
   # signal in trap -p.)
-  [ "$("$BASH" -c 'trap "echo caught" INT; kill -INT $$; sleep 1' 2>/dev/null)" = caught ] \
-    || { echo "note: Ctrl-C is ignored in this shell; the Ctrl-C case was not run"; return 0; }
+  [ "$("$BASH" -c 'trap "echo caught" INT; kill -INT $$; sleep 1' 2>/dev/null)" = caught ] ||
+    {
+      echo "note: Ctrl-C is ignored in this shell; the Ctrl-C case was not run"
+      return 0
+    }
   d="$(tmpdir)"
   printf '%s\n' "$STAND_IN_SHEBANG" 'kill -INT "$PPID"' >"$d/interrupt"
   chmod +x "$d/interrupt"
@@ -10890,7 +13894,10 @@ advance_again() {
   line="${line#    }"
   case "$line" in
     "bash "*) ;;
-    *) cat "$d/out" "$d/err" >&2; die "no command to continue was shown before the first change" ;;
+    *)
+      cat "$d/out" "$d/err" >&2
+      die "no command to continue was shown before the first change"
+      ;;
   esac
   eval "CMD_ARGS=(${line#bash })"
   CMD_ARGS=("${CMD_ARGS[@]:1}")
@@ -10916,7 +13923,10 @@ test_a_stop_that_runs_no_trap_still_leaves_the_command_to_continue() {
   whole "$d"
   unset STUB_GH_CREATE_FAIL
   [ "$RC" -ne 0 ] || die "the stub did not stop the script"
-  ! grep -q 'run this command:$' "$d/out" || { cat "$d/out" >&2; die "a stop message was shown (the stop is meant to run no trap)"; }
+  ! grep -q 'run this command:$' "$d/out" || {
+    cat "$d/out" >&2
+    die "a stop message was shown (the stop is meant to run no trap)"
+  }
   cmd="$(advance_command "$d")"
   case "$cmd" in
     "bash "*" --resume$CARRIED") ;;
@@ -10931,8 +13941,14 @@ test_a_stop_that_runs_no_trap_still_leaves_the_command_to_continue() {
   advance_again "$d"
   expect_rc 0 "$d"
   expect_out "$d" "    Done. The project has only the bootstrapper's files, and there is no copy of it on this computer yet: the setup continues by protecting its main version."
-  [ "$(grep -c 'Proceed? (yes or no) \[no\]: ' "$d/out")" -eq 1 ] || { cat "$d/out" >&2; die "Proceed? not asked once"; }
-  ! grep -qE '^(Project name|Description|Language pack|Licence|Folder|Your name for git)' "$d/out" || { cat "$d/out" >&2; die "a question was asked again"; }
+  [ "$(grep -c 'Proceed? (yes or no) \[no\]: ' "$d/out")" -eq 1 ] || {
+    cat "$d/out" >&2
+    die "Proceed? not asked once"
+  }
+  ! grep -qE '^(Project name|Description|Language pack|Licence|Folder|Your name for git)' "$d/out" || {
+    cat "$d/out" >&2
+    die "a question was asked again"
+  }
   expect_one_of_each "$d"
   # The stop came before GitHub made the project: the command says there
   # is no project to continue and shows the command to start again,
@@ -10948,13 +13964,19 @@ test_a_stop_that_runs_no_trap_still_leaves_the_command_to_continue() {
   expect_out "$d" "If the setup stopped before it created the project, or to set up a new project with this name, start the script again with the command shown below, which has no --resume."
   shown_after "$d" 'To start again, run this command:' >"$d/cmd"
   # shellcheck disable=SC2015 # die is meant to run when either check fails
-  grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "killed: no command to start again without --resume"; }
+  grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || {
+    cat "$d/out" >&2
+    die "killed: no command to start again without --resume"
+  }
   again "$d"
   expect_rc 0 "$d"
   # The stopped run's create call is in gh.log but made nothing (the file
   # "created" lists what the stub made), so the project is made once.
   [ "$(grep -cxF octo-user/my-app "$d/created")" -eq 1 ] || die "killed: the project was not made exactly once"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "killed: the new run did not go through"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "killed: the new run did not go through"
+  }
 }
 
 test_a_resume_shows_the_command_to_continue_before_its_first_change() {
@@ -10975,9 +13997,12 @@ test_a_resume_shows_the_command_to_continue_before_its_first_change() {
   [ "$cmd" = "$(start_cd_of "$d")bash $(shown_script_of "$d") --again" ] || die "not the short command: $cmd"
   [ ! -e "$(again_file_of "$d")" ] || die "the saved answers were not removed at the end"
   # Shown after the step that works out the state, before proposing.
-  [ "$(line_of "$d" "$ADVANCE_INTRO")" -gt "$(line_of "$d" "==> Working out where the setup stopped, from GitHub and from the copy on this computer")" ] \
-    && [ "$(line_of "$d" "$ADVANCE_INTRO")" -lt "$(line_of "$d" "==> Proposing the setup's changes on GitHub, where the project's checks run on them")" ] \
-    || { cat "$d/out" >&2; die "the command is not between the state step and the first change"; }
+  [ "$(line_of "$d" "$ADVANCE_INTRO")" -gt "$(line_of "$d" "==> Working out where the setup stopped, from GitHub and from the copy on this computer")" ] &&
+    [ "$(line_of "$d" "$ADVANCE_INTRO")" -lt "$(line_of "$d" "==> Proposing the setup's changes on GitHub, where the project's checks run on them")" ] ||
+    {
+      cat "$d/out" >&2
+      die "the command is not between the state step and the first change"
+    }
   expect_no_out "$d" "If the project was not created yet"
   # A --resume dry run changes nothing, so it shows no command.
   d="$(tmpdir)"
@@ -11005,9 +14030,15 @@ test_resume_of_a_finished_setup_only_checks_the_protection_and_reports() {
   expect_rc 0 "$d"
   expect_out "$d" "    Done. The project is set up already: the script only checks its protection, brings the copy on this computer up to date if there is one, and shows the report."
   expect_resume_steps "$d" "done done done done done next"
-  ! calls_since "$d" "$n" | grep -E '^(repo create|repo clone|repo edit|pr create|pr merge) |-X PUT' >/dev/null || { calls_since "$d" "$n" >&2; die "something was changed"; }
+  ! calls_since "$d" "$n" | grep -E '^(repo create|repo clone|repo edit|pr create|pr merge) |-X PUT' >/dev/null || {
+    calls_since "$d" "$n" >&2
+    die "something was changed"
+  }
   calls_since "$d" "$n" | grep -xF "$READBACK_CALL" >/dev/null || die "the protection was not read back"
-  grep -qxF '    The proposed change with the setup: https://github.com/octo-user/my-app/pull/1' "$d/out" || { cat "$d/out" >&2; die "the report lacks the proposed change"; }
+  grep -qxF '    The proposed change with the setup: https://github.com/octo-user/my-app/pull/1' "$d/out" || {
+    cat "$d/out" >&2
+    die "the report lacks the proposed change"
+  }
   expect_one_of_each "$d"
   # Protection that differs: the plain stop with the differences below,
   # and it does not speak of a change still to add.
@@ -11016,8 +14047,14 @@ test_resume_of_a_finished_setup_only_checks_the_protection_and_reports() {
   unset STUB_GH_READBACK
   expect_rc 1 "$d"
   expect_err_shape "$d" "GitHub does not report the protection of the main version with the rules the setup gives it\."
-  grep -qxF '    contexts: expected build, GitHub reports ' "$d/err" || { cat "$d/err" >&2; die "the difference is not below"; }
-  ! grep -qF 'did not add' "$d/err" || { cat "$d/err" >&2; die "the stop speaks of a change not added"; }
+  grep -qxF '    contexts: expected build, GitHub reports ' "$d/err" || {
+    cat "$d/err" >&2
+    die "the difference is not below"
+  }
+  ! grep -qF 'did not add' "$d/err" || {
+    cat "$d/err" >&2
+    die "the stop speaks of a change not added"
+  }
 }
 
 test_resume_after_the_change_was_added_brings_the_copy_up_to_date() {
@@ -11063,11 +14100,20 @@ test_resume_refuses_a_project_from_another_version_or_not_from_the_bootstrapper(
         ;;
       *) expect_out "$d" "The project octo-user/my-app on GitHub was not made from the bootstrapper:" ;;
     esac
-    grep -qF 'a new project' "$d/out" || { cat "$d/out" >&2; die "$t: the next action is not a new project"; }
+    grep -qF 'a new project' "$d/out" || {
+      cat "$d/out" >&2
+      die "$t: the next action is not a new project"
+    }
     shown_after "$d" 'To start again, run this command:' >"$d/cmd"
     # shellcheck disable=SC2015 # die is meant to run when either check fails
-    grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "$t: no command to start again without --resume"; }
-    ! grep -vF -- '--help' "$d/gh.log" | grep -E '	(-X	PUT|clone|edit|create)	' >/dev/null || { cat "$d/gh.log" >&2; die "$t: something was changed"; }
+    grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || {
+      cat "$d/out" >&2
+      die "$t: no command to start again without --resume"
+    }
+    ! grep -vF -- '--help' "$d/gh.log" | grep -E '	(-X	PUT|clone|edit|create)	' >/dev/null || {
+      cat "$d/gh.log" >&2
+      die "$t: something was changed"
+    }
     [ -z "$(ls -A "$d/cwd")" ] || die "$t: something was made on this computer"
   done
 }
@@ -11121,7 +14167,10 @@ test_resume_with_no_project_on_github_creates_nothing() {
   expect_out "$d" "There is no project named octo-user/my-app on GitHub to continue."
   shown_after "$d" 'To start again, run this command:' >"$d/cmd"
   # shellcheck disable=SC2015 # die is meant to run when either check fails
-  grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "no command to start again without --resume"; }
+  grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || {
+    cat "$d/out" >&2
+    die "no command to start again without --resume"
+  }
   expect_nothing_created "$d"
 }
 
@@ -11166,7 +14215,10 @@ test_resume_keeps_resume_when_the_check_after_the_project_missing_guide_fails() 
   line="$(long_of "$d" "$(grep -A1 -xE 'To continue the setup, run this command:|To start again, run this command:' "$d/out" | tail -1)")"
   case "$line " in
     "    bash "*" --resume "*) ;;
-    *) cat "$d/out" "$d/err" >&2; die "the command shown after the failed check has no --resume (got: $line)" ;;
+    *)
+      cat "$d/out" "$d/err" >&2
+      die "the command shown after the failed check has no --resume (got: $line)"
+      ;;
   esac
   expect_nothing_created "$d"
 }
@@ -11204,7 +14256,10 @@ test_resume_dry_run_says_where_it_continues_and_changes_nothing() {
   expect_out "$d" "    Done. The setup's changes are proposed on GitHub, at https://github.com/octo-user/my-app/pull/1: the setup continues by waiting for the check build."
   expect_out "$d" "This was a dry run (--dry-run): the checks passed, and nothing was changed."
   expect_resume_steps "$d" "done done done done next -"
-  ! calls_since "$d" "$n" | grep -E '^(repo|pr) |-X PUT' >/dev/null || { calls_since "$d" "$n" >&2; die "something was changed or looked at past the plan"; }
+  ! calls_since "$d" "$n" | grep -E '^(repo|pr) |-X PUT' >/dev/null || {
+    calls_since "$d" "$n" >&2
+    die "something was changed or looked at past the plan"
+  }
 }
 
 test_resume_keeps_a_folder_only_when_it_is_this_projects_own_copy() {
@@ -11214,7 +14269,8 @@ test_resume_keeps_a_folder_only_when_it_is_this_projects_own_copy() {
   # and still not inside another git project.
   local d url
   d="$(tmpdir)"
-  mkdir -p "$d/plain"; touch "$d/plain/x"
+  mkdir -p "$d/plain"
+  touch "$d/plain/x"
   pre "$d" ni resume with_project octo-user my-app with_dir "$d/plain" preflight_target_dir
   expect_rc 3 "$d"
   expect_out "$d" "The folder $d/plain has files in it, but it is not a copy of the project octo-user/my-app."
@@ -11229,7 +14285,8 @@ test_resume_keeps_a_folder_only_when_it_is_this_projects_own_copy() {
     expect_rc 0 "$d"
     expect_out "$d" "Done. The folder is a copy of the project octo-user/my-app, which --resume continues."
   done
-  mkdir -p "$d/own/sub"; touch "$d/own/sub/y"
+  mkdir -p "$d/own/sub"
+  touch "$d/own/sub/y"
   pre "$d" ni resume with_project octo-user my-app with_dir "$d/own/sub" preflight_target_dir
   expect_rc 3 "$d"
   expect_out "$d" "but it is not a copy of the project octo-user/my-app."
@@ -11266,12 +14323,23 @@ test_the_failing_fill_awk_reads_its_input_so_the_writer_never_sees_a_broken_pipe
   d="$(tmpdir)"
   failing_fill_awk "$d"
   rc=0
-  ( trap '' PIPE
+  (
+    trap '' PIPE
     awk 'BEGIN { for (i = 0; i < 20000; i++) print "0123456789 line of fill text" }' >"$d/big"
-    FILL_N=1 bash -c 'cat "$1" | "$2" "{ print }"; exit "${PIPESTATUS[0]}"' _ "$d/big" "$d/bin/awk" ) 2>"$d/err" || rc=$?
-  [ "$rc" -eq 0 ] || { cat "$d/err" >&2; die "the writer before the fake awk failed (exit $rc)"; }
-  ! grep -qi 'broken pipe' "$d/err" || { cat "$d/err" >&2; die "Broken pipe"; }
-  grep -qxF 'awk: out of memory' "$d/err" || { cat "$d/err" >&2; die "the fake awk did not fail as awk"; }
+    FILL_N=1 bash -c 'cat "$1" | "$2" "{ print }"; exit "${PIPESTATUS[0]}"' _ "$d/big" "$d/bin/awk"
+  ) 2>"$d/err" || rc=$?
+  [ "$rc" -eq 0 ] || {
+    cat "$d/err" >&2
+    die "the writer before the fake awk failed (exit $rc)"
+  }
+  ! grep -qi 'broken pipe' "$d/err" || {
+    cat "$d/err" >&2
+    die "Broken pipe"
+  }
+  grep -qxF 'awk: out of memory' "$d/err" || {
+    cat "$d/err" >&2
+    die "the fake awk did not fail as awk"
+  }
   # Outside the fill it is the real awk.
   [ "$(printf 'a b\n' | "$d/bin/awk" '{ print $2 }')" = b ] || die "outside the fill the fake is not the real awk"
 }
@@ -11288,13 +14356,25 @@ test_an_unexpected_failure_says_what_exists_and_leaves_no_temporary_files() {
   setup_run "$d" --non-interactive --yes
   expect_rc 1 "$d"
   expect_err_shape "$d" "Something unexpected happened, so the script stopped while: Filling in the project's name, description and product owner in its files\. The project octo-user/my-app exists on GitHub"
-  sed -n 2p "$d/err" | grep -F 'Continue the setup with the command shown above' >/dev/null || { cat "$d/err" >&2; die "the next action is not to continue"; }
+  sed -n 2p "$d/err" | grep -F 'Continue the setup with the command shown above' >/dev/null || {
+    cat "$d/err" >&2
+    die "the next action is not to continue"
+  }
   expect_continue_command "$d" " --resume"
   # Round 2, N1: the details name the command that failed and show its
   # own message.
-  grep -qE '^    The command that failed: awk, .* \(exit code [0-9]+, line [0-9]+ of the script\)$' "$d/err" || { cat "$d/err" >&2; die "the details lack the command that failed"; }
-  grep -qxF '    awk: out of memory' "$d/err" || { cat "$d/err" >&2; die "the details lack the command's own message"; }
-  [ -z "$(ls -A "$d/tmp")" ] || { ls -A "$d/tmp" >&2; die "temporary files were left"; }
+  grep -qE '^    The command that failed: awk, .* \(exit code [0-9]+, line [0-9]+ of the script\)$' "$d/err" || {
+    cat "$d/err" >&2
+    die "the details lack the command that failed"
+  }
+  grep -qxF '    awk: out of memory' "$d/err" || {
+    cat "$d/err" >&2
+    die "the details lack the command's own message"
+  }
+  [ -z "$(ls -A "$d/tmp")" ] || {
+    ls -A "$d/tmp" >&2
+    die "temporary files were left"
+  }
   # Before anything exists: the command to start again.
   d="$(tmpdir)"
   pre "$d" ni unexpected_before_create
@@ -11305,9 +14385,16 @@ test_an_unexpected_failure_says_what_exists_and_leaves_no_temporary_files() {
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
-  [ -z "$(ls -A "$d/tmp")" ] || { ls -A "$d/tmp" >&2; die "a run that went through left temporary files"; }
+  [ -z "$(ls -A "$d/tmp")" ] || {
+    ls -A "$d/tmp" >&2
+    die "a run that went through left temporary files"
+  }
 }
-unexpected_before_create() { catch_stops; step_start "Checking something"; false; }
+unexpected_before_create() {
+  catch_stops
+  step_start "Checking something"
+  false
+}
 
 test_a_folder_the_script_made_for_the_copy_is_removed_when_the_copy_fails() {
   # Spec, "Failure midway": a local folder the script created is removed
@@ -11338,10 +14425,16 @@ test_a_rate_limit_at_create_is_not_read_as_not_allowed() {
   unset STUB_GH_CREATE_FAIL
   expect_rc 1 "$d"
   expect_err_shape "$d" "GitHub has paused answering your account for a while, because it was asked too often, so the script could not create the project\. Nothing was created\.\$"
-  sed -n 2p "$d/err" | grep -F 'Wait an hour' >/dev/null || { cat "$d/err" >&2; die "the next action is not to wait"; }
+  sed -n 2p "$d/err" | grep -F 'Wait an hour' >/dev/null || {
+    cat "$d/err" >&2
+    die "the next action is not to wait"
+  }
   expect_no_out "$d" "did not let your account create"
   expect_out "$d" "To start again, run this command:"
-  [ "$(calls_from_create "$d")" = "$CREATE_CALL" ] || { cat "$d/gh.log" >&2; die "more than the create call"; }
+  [ "$(calls_from_create "$d")" = "$CREATE_CALL" ] || {
+    cat "$d/gh.log" >&2
+    die "more than the create call"
+  }
 }
 
 test_new_files_in_src_must_be_the_packs_and_ignored_ones_are_left_alone() {
@@ -11366,7 +14459,10 @@ test_new_files_in_src_must_be_the_packs_and_ignored_ones_are_left_alone() {
   setup_run "$d" --non-interactive --yes --pack web
   unset STUB_NPM_STRAY
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "an ignored .DS_Store stopped the setup"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "an ignored .DS_Store stopped the setup"
+  }
 }
 
 test_allow_unprotected_goes_on_without_protection_and_writes_the_decision() {
@@ -11385,8 +14481,11 @@ test_allow_unprotected_goes_on_without_protection_and_writes_the_decision() {
   expect_rc 0 "$d"
   expect_one_of_each "$d"
   ! grep -qF '"contexts":["build"]' "$d/protection-bodies" || die "build was made required on a project that cannot be protected"
-  row="$(in_git --git-dir="$(bare_of "$d")" show main:memory/decisions.md | grep -F "| $FAKE_TODAY | The main version (main) is not protected |")" \
-    || { in_git --git-dir="$(bare_of "$d")" show main:memory/decisions.md >&2; die "no decision row"; }
+  row="$(in_git --git-dir="$(bare_of "$d")" show main:memory/decisions.md | grep -F "| $FAKE_TODAY | The main version (main) is not protected |")" ||
+    {
+      in_git --git-dir="$(bare_of "$d")" show main:memory/decisions.md >&2
+      die "no decision row"
+    }
   case "$row" in *"--allow-unprotected"*"paid GitHub plan"*) ;; *) die "the row does not say why: $row" ;; esac
   expect_out "$d" "    - the main version is not protected: you chose to go on without protection (--allow-unprotected), and memory/decisions.md in the project says so"
   [ -z "$(banned_hits <<<"$row")" ] || die "a banned word in the decision row"
@@ -11394,7 +14493,10 @@ test_allow_unprotected_goes_on_without_protection_and_writes_the_decision() {
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes --allow-unprotected
   expect_rc 2 "$d"
-  grep -qE -- '^    - --allow-unprotected: ' "$d/err" || { cat "$d/err" >&2; die "not refused as an option"; }
+  grep -qE -- '^    - --allow-unprotected: ' "$d/err" || {
+    cat "$d/err" >&2
+    die "not refused as an option"
+  }
   expect_nothing_created "$d"
   # A key without the permission is not a plan without protection: it
   # still stops.
@@ -11467,10 +14569,16 @@ UNPROTECTED_MISSING='    - the main version is not protected: you chose to go on
 # nothing_changed_on_github <dir>: after a run that only looked, no call
 # that changes GitHub or this computer was made.
 nothing_changed_on_github() {
-  ! grep -v -- '--help' "$1/gh.log" | grep -E '	(-X	(PUT|PATCH|POST|DELETE)|clone|edit|create|merge)	' >/dev/null || { cat "$1/gh.log" >&2; die "something was changed"; }
+  ! grep -v -- '--help' "$1/gh.log" | grep -E '	(-X	(PUT|PATCH|POST|DELETE)|clone|edit|create|merge)	' >/dev/null || {
+    cat "$1/gh.log" >&2
+    die "something was changed"
+  }
   [ ! -s "$1/protection-bodies" ] || die "the protection was set"
   [ ! -s "$1/pr-bodies" ] || die "a change was proposed"
-  [ -z "$(ls -A "$1/cwd")" ] || { ls -A "$1/cwd" >&2; die "something was made on this computer"; }
+  [ -z "$(ls -A "$1/cwd")" ] || {
+    ls -A "$1/cwd" >&2
+    die "something was made on this computer"
+  }
 }
 
 # hand_made_project <dir>: octo-user/my-app as a person set it up by
@@ -11544,13 +14652,19 @@ hand_made_project() {
   if [ -n "$stored" ]; then
     blob="$(mktemp "$WORK/blob.XXXXXX")"
     printf 'a\r\n' >"$blob"
-    has_cr "$blob" || { od -A n -c "$blob" >&2; die "has_cr does not see the carriage return of a known a CR LF (od output above): the check, not the fixture, is wrong here"; }
+    has_cr "$blob" || {
+      od -A n -c "$blob" >&2
+      die "has_cr does not see the carriage return of a known a CR LF (od output above): the check, not the fixture, is wrong here"
+    }
     rm -f "$blob"
   fi
   for f in $stored; do
     blob="$(mktemp "$WORK/blob.XXXXXX")"
     in_git --git-dir="$bare" cat-file -p "main:$f" >"$blob"
-    has_cr "$blob" || { od -c "$blob" | tail -4 >&2; die "$f on GitHub has no carriage return (test is stale); its last bytes are above"; }
+    has_cr "$blob" || {
+      od -c "$blob" | tail -4 >&2
+      die "$f on GitHub has no carriage return (test is stale); its last bytes are above"
+    }
     rm -f "$blob"
   done
   case "$changelog" in
@@ -11576,15 +14690,33 @@ test_allow_unprotected_is_offered_and_accepted_only_for_a_plan_limit_on_a_privat
       if [ "$vis" = private ]; then setup_run "$d" --non-interactive --yes --private; else setup_run "$d" --non-interactive --yes; fi
       expect_rc 3 "$d"
       sed -n '/^==> Protecting/,$p' "$d/out" >"$d/guide"
-      ! grep -qF -- '--allow-unprotected' "$d/guide" || { cat "$d/guide" >&2; die "$vis $mode: --allow-unprotected is offered"; }
-      grep -qF 'Administration' "$d/guide" || { cat "$d/guide" >&2; die "$vis $mode: the token steps are not given"; }
+      ! grep -qF -- '--allow-unprotected' "$d/guide" || {
+        cat "$d/guide" >&2
+        die "$vis $mode: --allow-unprotected is offered"
+      }
+      grep -qF 'Administration' "$d/guide" || {
+        cat "$d/guide" >&2
+        die "$vis $mode: the token steps are not given"
+      }
       if [ "$vis" = public ]; then
         # Round 3, N2: a public project gets the token steps only.
-        ! grep -qF 'gh repo edit' "$d/guide" || { cat "$d/guide" >&2; die "$vis $mode: making it public is offered"; }
-        ! grep -qF 'https://github.com/settings/billing' "$d/guide" || { cat "$d/guide" >&2; die "$vis $mode: the plan steps are shown"; }
-        grep -qF 'most likely' "$d/guide" || { cat "$d/guide" >&2; die "$vis $mode: the key is not named as the likely cause"; }
+        ! grep -qF 'gh repo edit' "$d/guide" || {
+          cat "$d/guide" >&2
+          die "$vis $mode: making it public is offered"
+        }
+        ! grep -qF 'https://github.com/settings/billing' "$d/guide" || {
+          cat "$d/guide" >&2
+          die "$vis $mode: the plan steps are shown"
+        }
+        grep -qF 'most likely' "$d/guide" || {
+          cat "$d/guide" >&2
+          die "$vis $mode: the key is not named as the likely cause"
+        }
       else
-        grep -qF 'https://github.com/settings/billing' "$d/guide" || { cat "$d/guide" >&2; die "$vis $mode: the plan steps are not shown"; }
+        grep -qF 'https://github.com/settings/billing' "$d/guide" || {
+          cat "$d/guide" >&2
+          die "$vis $mode: the plan steps are not shown"
+        }
       fi
       # Given anyway, at the resume: still a stop, nothing set, proposed or added.
       again "$d" --allow-unprotected
@@ -11623,8 +14755,15 @@ test_an_unprotected_merge_without_the_decision_in_the_change_is_refused() {
     working_git "$d"
     export STUB_GH_REQUIRE_FAIL=plan
     case "$how" in
-      saved) failing_push "$d" other; setup_run "$d" --non-interactive --yes --private ;;
-      sent) export STUB_GH_PR_FAIL=broken; setup_run "$d" --non-interactive --yes --private; unset STUB_GH_PR_FAIL ;;
+      saved)
+        failing_push "$d" other
+        setup_run "$d" --non-interactive --yes --private
+        ;;
+      sent)
+        export STUB_GH_PR_FAIL=broken
+        setup_run "$d" --non-interactive --yes --private
+        unset STUB_GH_PR_FAIL
+        ;;
       proposed) setup_run "$d" --non-interactive --yes --private ;;
     esac
     expect_rc 1 "$d"
@@ -11637,8 +14776,14 @@ test_an_unprotected_merge_without_the_decision_in_the_change_is_refused() {
     ! calls_since "$d" "$n" | grep '^pr merge ' >/dev/null || die "$how: the change was added"
     [ "$(in_git --git-dir="$(bare_of "$d")" rev-list --count main)" -eq 1 ] || die "$how: main has a new change"
     shown_after "$d" 'To continue the setup, run this command:' >"$d/cmd"
-    grep -q '^    bash ' "$d/cmd" || { cat "$d/out" >&2; die "$how: no command to continue"; }
-    ! grep -qF -- '--allow-unprotected' "$d/cmd" || { cat "$d/cmd" >&2; die "$how: the command to continue repeats the option"; }
+    grep -q '^    bash ' "$d/cmd" || {
+      cat "$d/out" >&2
+      die "$how: no command to continue"
+    }
+    ! grep -qF -- '--allow-unprotected' "$d/cmd" || {
+      cat "$d/cmd" >&2
+      die "$how: the command to continue repeats the option"
+    }
     # With protection possible again, the command shown goes through.
     unset STUB_GH_REQUIRE_FAIL
     again "$d"
@@ -11660,7 +14805,10 @@ test_an_unprotected_merge_with_the_decision_in_the_change_goes_on_and_says_so() 
   again "$d" --allow-unprotected
   unset STUB_GH_BUILD
   expect_rc 1 "$d"
-  shown_after "$d" 'To continue the setup, run this command:' | grep -F -- '--allow-unprotected' >/dev/null || { cat "$d/out" >&2; die "the command to continue lacks the option"; }
+  shown_after "$d" 'To continue the setup, run this command:' | grep -F -- '--allow-unprotected' >/dev/null || {
+    cat "$d/out" >&2
+    die "the command to continue lacks the option"
+  }
   again "$d"
   unset STUB_GH_PROTECT_FAIL
   expect_rc 0 "$d"
@@ -11680,7 +14828,10 @@ test_the_report_of_a_finished_unprotected_setup_claims_the_decision_only_when_ma
   : >"$d/protected"
   setup_run "$d" --non-interactive --yes --private --resume --allow-unprotected
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "no report"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "no report"
+  }
   expect_out "$d" "$UNPROTECTED_MISSING"
   expect_no_out "$d" "$UNPROTECTED_SAYS"
   ! in_git --git-dir="$(bare_of "$d")" show main:memory/decisions.md | grep -F "$DECISION_ROW_KEY" >/dev/null || die "a row was written into a main that was added already"
@@ -11717,7 +14868,10 @@ test_a_hand_made_project_that_is_set_up_already_is_only_checked_and_changes_noth
   unset STUB_GH_EXISTING
   expect_rc 0 "$d"
   expect_out "$d" "    Done. The project is set up already:"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "no report"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "no report"
+  }
   expect_resume_steps "$d" "done done skipped done done next"
   cmp -s "$d/protected" "$d/protected.before" || die "the protection changed"
   nothing_changed_on_github "$d"
@@ -11731,7 +14885,10 @@ test_a_hand_made_project_that_is_set_up_already_is_only_checked_and_changes_noth
   unset STUB_GH_EXISTING STUB_GH_READBACK
   expect_rc 1 "$d"
   expect_err_shape "$d" "GitHub does not report the protection of the main version with the rules the setup gives it\."
-  grep -qxF '    contexts: expected build, GitHub reports ' "$d/err" || { cat "$d/err" >&2; die "the difference is not below"; }
+  grep -qxF '    contexts: expected build, GitHub reports ' "$d/err" || {
+    cat "$d/err" >&2
+    die "the difference is not below"
+  }
   nothing_changed_on_github "$d"
   cmp -s "$d/protected" "$d/protected.before" || die "the protection changed"
   # No protection at all: said plainly, with where to turn it on, nothing set.
@@ -11743,7 +14900,10 @@ test_a_hand_made_project_that_is_set_up_already_is_only_checked_and_changes_noth
   unset STUB_GH_EXISTING
   expect_rc 1 "$d"
   expect_err_shape "$d" "GitHub says the main version of the project has no protection"
-  sed -n 2p "$d/err" | grep -F 'https://github.com/octo-user/my-app/settings' >/dev/null || { cat "$d/err" >&2; die "the next action does not say where to turn it on"; }
+  sed -n 2p "$d/err" | grep -F 'https://github.com/octo-user/my-app/settings' >/dev/null || {
+    cat "$d/err" >&2
+    die "the next action does not say where to turn it on"
+  }
   nothing_changed_on_github "$d"
   [ ! -s "$d/protected" ] || die "protection was set"
 }
@@ -11811,8 +14971,16 @@ test_resume_refuses_a_copy_that_is_not_at_githubs_main() {
     d="$(tmpdir)"
     working_git "$d"
     case "$how" in
-      fresh) export STUB_GH_LICENSE_KNOWN=made-up-2.0; setup_run "$d" --non-interactive --yes --license made-up-2.0; unset STUB_GH_LICENSE_KNOWN ;;
-      saved) failing_push "$d" other; setup_run "$d" --non-interactive --yes; failing_push "$d" ok 0 ;;
+      fresh)
+        export STUB_GH_LICENSE_KNOWN=made-up-2.0
+        setup_run "$d" --non-interactive --yes --license made-up-2.0
+        unset STUB_GH_LICENSE_KNOWN
+        ;;
+      saved)
+        failing_push "$d" other
+        setup_run "$d" --non-interactive --yes
+        failing_push "$d" ok 0
+        ;;
     esac
     expect_rc 1 "$d"
     # GitHub's main moves on.
@@ -11839,7 +15007,10 @@ test_a_copy_broken_off_before_a_retry_is_removed_first() {
   setup_run "$d" --yes
   unset STUB_GH_CLONE_FAIL
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "did not reach the end"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "did not reach the end"
+  }
   [ ! -e "$(copy_of "$d")/partial-file" ] || die "the half-made folder was kept"
 }
 
@@ -11849,7 +15020,10 @@ test_only_the_whole_setup_heading_starts_the_section_the_readme_loses() {
   local d
   d="$(tmpdir)"
   printf '%s\n' '# App' '## Finishing the setup: lends tools' 'keep me' '## Finishing the setup' 'gone' '## Setup' 'x' >"$d/a"
-  ( load_script; remove_setup_section "$d/a" ) || die "the section was not found"
+  (
+    load_script
+    remove_setup_section "$d/a"
+  ) || die "the section was not found"
   printf '%s\n' '# App' '## Finishing the setup: lends tools' 'keep me' '## Setup' 'x' >"$d/want"
   expect_same "README" "$d/want" "$d/a"
 }
@@ -11951,14 +15125,23 @@ test_a_project_with_its_setup_heading_gone_but_its_script_kept_is_refused_before
   # bootstrap-project.sh, not from CHANGELOG.md as the version refusals do.
   grep '^How the script checks it: ' "$d/out" | tail -1 >"$d/how"
   # shellcheck disable=SC2015 # die is meant to run when either check fails
-  grep -qF 'README.md' "$d/how" && grep -qF 'bootstrap-project.sh' "$d/how" || { cat "$d/out" >&2; die "how it checks does not name README.md and bootstrap-project.sh"; }
-  ! grep -qF 'CHANGELOG.md' "$d/how" || { cat "$d/how" >&2; die "how it checks names CHANGELOG.md"; }
+  grep -qF 'README.md' "$d/how" && grep -qF 'bootstrap-project.sh' "$d/how" || {
+    cat "$d/out" >&2
+    die "how it checks does not name README.md and bootstrap-project.sh"
+  }
+  ! grep -qF 'CHANGELOG.md' "$d/how" || {
+    cat "$d/how" >&2
+    die "how it checks names CHANGELOG.md"
+  }
   expect_no_out "$d" "$FINISHED"
   nothing_changed_on_github "$d"
   cmp -s "$d/protected" "$d/protected.before" || die "the protection changed"
   shown_after "$d" 'To start again, run this command:' >"$d/cmd"
   # shellcheck disable=SC2015 # die is meant to run when either check fails
-  grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "no command to start again without --resume"; }
+  grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || {
+    cat "$d/out" >&2
+    die "no command to start again without --resume"
+  }
   # With the heading kept and the script gone, the setup goes through and
   # the protection ends with build required.
   d="$(tmpdir)"
@@ -11967,7 +15150,10 @@ test_a_project_with_its_setup_heading_gone_but_its_script_kept_is_refused_before
   setup_run "$d" --non-interactive --yes --resume
   unset STUB_GH_EXISTING
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "no report"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "no report"
+  }
   [ "$(grep . "$d/protection-bodies" | tail -1)" = "$REQUIRED_PROTECTION" ] || die "build is not required at the end"
 }
 
@@ -11994,21 +15180,36 @@ test_a_readme_with_only_a_lookalike_heading_and_no_script_is_set_up_already() {
 expect_line_endings_stop() {
   local d="$1" label="$2" file="$3"
   # First, as the reason the old script failed: it set the protection.
-  cmp -s "$d/protected" "$d/protected.before" || { cat "$d/out" "$d/err" >&2; die "$label: the protection changed"; }
+  cmp -s "$d/protected" "$d/protected.before" || {
+    cat "$d/out" "$d/err" >&2
+    die "$label: the protection changed"
+  }
   nothing_changed_on_github "$d"
   expect_rc 3 "$d"
   # Round 1 of the #169 review, N2: exact for a carriage return anywhere
   # in the file, not only at the end of each line.
-  grep -F 'has a carriage return' "$d/out" | grep -F "$file" >/dev/null || { cat "$d/out" "$d/err" >&2; die "$label: no line-endings message for $file"; }
-  grep '^How the script checks it: ' "$d/out" | tail -1 | grep -F 'carriage return anywhere' >/dev/null || { cat "$d/out" >&2; die "$label: how it checks is not exact for a carriage return anywhere"; }
-  ! grep -qF 'must end without a carriage return' "$d/out" || { cat "$d/out" >&2; die "$label: how it checks still speaks of line ends only"; }
+  grep -F 'has a carriage return' "$d/out" | grep -F "$file" >/dev/null || {
+    cat "$d/out" "$d/err" >&2
+    die "$label: no line-endings message for $file"
+  }
+  grep '^How the script checks it: ' "$d/out" | tail -1 | grep -F 'carriage return anywhere' >/dev/null || {
+    cat "$d/out" >&2
+    die "$label: how it checks is not exact for a carriage return anywhere"
+  }
+  ! grep -qF 'must end without a carriage return' "$d/out" || {
+    cat "$d/out" >&2
+    die "$label: how it checks still speaks of line ends only"
+  }
   expect_out "$d" "LF line endings"
   # N3: main may be protected by an earlier run: then a proposed change.
   expect_out "$d" "If GitHub refuses"
   expect_no_out "$d" "$FINISHED"
   shown_after "$d" 'To continue the setup, run this command:' >"$d/cmd"
   # shellcheck disable=SC2015 # die is meant to run when either check fails
-  grep -q '^    bash ' "$d/cmd" && grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "$label: no command to continue with --resume"; }
+  grep -q '^    bash ' "$d/cmd" && grep -qF -- '--resume' "$d/cmd" || {
+    cat "$d/out" >&2
+    die "$label: no command to continue with --resume"
+  }
 }
 
 # fix_line_endings_on_github <dir> <file>: the user saves <file> with LF
@@ -12046,7 +15247,10 @@ test_a_readme_stored_with_crlf_on_github_is_refused_before_anything_is_written()
     again "$d"
     unset STUB_GH_EXISTING
     expect_rc 0 "$d"
-    grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "script $script: no report after the fix"; }
+    grep -qxF "$FINISHED" "$d/out" || {
+      cat "$d/out" "$d/err" >&2
+      die "script $script: no report after the fix"
+    }
     [ "$(grep . "$d/protection-bodies" | tail -1)" = "$REQUIRED_PROTECTION" ] || die "script $script: build is not required at the end"
   done
 }
@@ -12067,7 +15271,10 @@ test_a_changelog_stored_with_crlf_on_github_is_refused_before_anything_is_writte
     again "$d"
     unset STUB_GH_EXISTING
     expect_rc 0 "$d"
-    grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "script $script: no report after the fix"; }
+    grep -qxF "$FINISHED" "$d/out" || {
+      cat "$d/out" "$d/err" >&2
+      die "script $script: no report after the fix"
+    }
   done
 }
 
@@ -12104,7 +15311,10 @@ test_a_readme_with_one_crlf_line_besides_the_heading_is_refused_before_anything_
   again "$d"
   unset STUB_GH_EXISTING
   expect_rc 0 "$d"
-  grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "no report after the fix"; }
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "no report after the fix"
+  }
 }
 
 test_a_set_up_project_with_a_crlf_changelog_is_still_only_read() {
@@ -12143,9 +15353,15 @@ test_the_tests_carriage_return_check_sees_one_wherever_it_is() {
     # shellcheck disable=SC2059
     printf "${want#*:}" >"$d/f$n"
     if has_cr "$d/f$n"; then
-      [ "${want%%:*}" = yes ] || { od -c "$d/f$n" >&2; die "has_cr sees a carriage return in ${want#*:}"; }
+      [ "${want%%:*}" = yes ] || {
+        od -c "$d/f$n" >&2
+        die "has_cr sees a carriage return in ${want#*:}"
+      }
     else
-      [ "${want%%:*}" = no ] || { od -c "$d/f$n" >&2; die "has_cr does not see the carriage return in ${want#*:}"; }
+      [ "${want%%:*}" = no ] || {
+        od -c "$d/f$n" >&2
+        die "has_cr does not see the carriage return in ${want#*:}"
+      }
     fi
   done
 }
@@ -12158,7 +15374,8 @@ test_api_call_keeps_a_carriage_return_on_a_last_line_without_a_line_end() {
   printf 'HTTP/2.0 200 OK\r\n\r\nfirst\nlast\r' >"$d/answer"
   printf '#!/bin/sh\ncat "%s"\n' "$d/answer" >"$d/gh"
   chmod +x "$d/gh"
-  ( load_script
+  (
+    load_script
     BOOTSTRAP_GH="$d/gh"
     API_KEEP_CR=1 api_call repos/o/n/contents/README.md
     [ "$API_STATUS" = 200 ] || die "the answer was not read (status $API_STATUS)"
@@ -12177,7 +15394,8 @@ test_api_call_keeps_carriage_returns_only_when_asked() {
   printf 'HTTP/2.0 200 OK\r\nContent-Type: text/plain\r\n\r\nA note\r\nlast\r\n' >"$d/answer"
   printf '#!/bin/sh\ncat "%s"\n' "$d/answer" >"$d/gh"
   chmod +x "$d/gh"
-  ( load_script
+  (
+    load_script
     BOOTSTRAP_GH="$d/gh"
     api_call repos/o/n/contents/README.md
     [ "$API_STATUS" = 200 ] || die "the answer was not read (status $API_STATUS)"
@@ -12209,7 +15427,10 @@ test_the_step_16_refusal_holds_with_the_decision_row_in_the_change() {
     in_git --git-dir="$(bare_of "$d")" show bootstrap-setup:memory/decisions.md | grep -F "$DECISION_ROW_KEY" >/dev/null || die "$how: the row is not in the change (test is stale)"
     case "$how" in
       unknown) export STUB_GH_PROTECT_FAIL=mystery ;;
-      made-public) grep -vxF octo-user/my-app "$d/private" >"$d/private.new" || true; mv "$d/private.new" "$d/private" ;;
+      made-public)
+        grep -vxF octo-user/my-app "$d/private" >"$d/private.new" || true
+        mv "$d/private.new" "$d/private"
+        ;;
     esac
     n="$(calls_count "$d")"
     again "$d"
@@ -12231,8 +15452,14 @@ test_a_failed_visibility_read_does_not_count_as_private() {
   unset STUB_GH_PROTECT_FAIL STUB_GH_PRIVATE_FAIL
   expect_rc 3 "$d"
   sed -n '/^==> Protecting/,$p' "$d/out" >"$d/guide"
-  ! grep -qF -- '--allow-unprotected' "$d/guide" || { cat "$d/guide" >&2; die "the option is offered"; }
-  ! grep -qF 'gh repo edit' "$d/guide" || { cat "$d/guide" >&2; die "making it public is offered"; }
+  ! grep -qF -- '--allow-unprotected' "$d/guide" || {
+    cat "$d/guide" >&2
+    die "the option is offered"
+  }
+  ! grep -qF 'gh repo edit' "$d/guide" || {
+    cat "$d/guide" >&2
+    die "making it public is offered"
+  }
 }
 
 test_the_words_for_a_project_set_up_already_are_not_those_for_one_the_script_just_set_up() {
@@ -12267,7 +15494,10 @@ test_the_words_for_a_project_set_up_already_are_not_those_for_one_the_script_jus
   unset STUB_GH_EXISTING STUB_GH_READBACK
   expect_rc 1 "$d"
   for p in 'as the script set' 'the script set ' "the setup's changes"; do
-    ! grep -qF "$p" "$d/err" || { cat "$d/err" >&2; die "the stop says: $p"; }
+    ! grep -qF "$p" "$d/err" || {
+      cat "$d/err" >&2
+      die "the stop says: $p"
+    }
   done
 }
 
@@ -12314,10 +15544,13 @@ test_stub_readme_keeps_the_setup_heading_and_its_setup_boundary() {
   # and e2e-check.sh match this whole heading line, and the section ends
   # at "## Setup".
   local next
-  grep -qxF -- '## Finishing the setup' "$STUB_README" \
-    || die "the stub README lost the setup heading line"
-  ( load_script; [ "$SETUP_HEADING" = '## Finishing the setup' ] ) \
-    || die "the script's SETUP_HEADING is not the stub's heading"
+  grep -qxF -- '## Finishing the setup' "$STUB_README" ||
+    die "the stub README lost the setup heading line"
+  (
+    load_script
+    [ "$SETUP_HEADING" = '## Finishing the setup' ]
+  ) ||
+    die "the script's SETUP_HEADING is not the stub's heading"
   next="$(awk '$0 == "## Finishing the setup" { on = 1; next } on && /^## / { print; exit }' "$STUB_README")"
   [ "$next" = '## Setup' ] || die "the next heading after the setup section is [$next], want [## Setup]"
 }
@@ -12327,12 +15560,18 @@ test_stub_readme_setup_section_is_three_lines_with_the_resume_command() {
   body="$(section_of "$STUB_README" '## Finishing the setup' '^## ')"
   # Lines of text: not empty and not a ``` fence line around the command.
   n="$(grep -v '^ *```' <<<"$body" | grep -c . || true)"
-  [ "$n" -eq 3 ] || { printf '%s\n' "$body" >&2; die "the setup section has $n lines of text, want 3"; }
-  grep -qF -- "$ONE_COMMAND --resume --owner " <<<"$body" \
-    || { printf '%s\n' "$body" >&2; die "the setup section lacks the one command with --resume --owner"; }
+  [ "$n" -eq 3 ] || {
+    printf '%s\n' "$body" >&2
+    die "the setup section has $n lines of text, want 3"
+  }
+  grep -qF -- "$ONE_COMMAND --resume --owner " <<<"$body" ||
+    {
+      printf '%s\n' "$body" >&2
+      die "the setup section lacks the one command with --resume --owner"
+    }
   grep -qF -- ' --name ' <<<"$body" || die "the setup section lacks --name"
-  grep -qF 'If you see this, the setup of this project has not finished' <<<"$body" \
-    || die "the setup section does not say that the setup has not finished"
+  grep -qF 'If you see this, the setup of this project has not finished' <<<"$body" ||
+    die "the setup section does not say that the setup has not finished"
   # PBI-1.29: step 0 is in the copy itself, in the bootstrapper's README
   # that the project's page shows until the setup has run; nothing points
   # to the template.
@@ -12346,7 +15585,10 @@ test_stub_readme_setup_section_has_no_pack_table_and_no_numbered_steps() {
   body="$(section_of "$STUB_README" '## Finishing the setup' '^## ')"
   ! grep -qE '^ *\|' <<<"$body" || die "the setup section still has a table"
   ! grep -qE '^ *[1-9]\. ' <<<"$body" || die "the setup section still has numbered steps"
-  [ -z "$(placement_rows "$STUB_README")" ] || { placement_rows "$STUB_README" >&2; die "the stub README still has a placement table row"; }
+  [ -z "$(placement_rows "$STUB_README")" ] || {
+    placement_rows "$STUB_README" >&2
+    die "the stub README still has a placement table row"
+  }
 }
 
 test_placement_row_check_catches_a_table_under_another_header() {
@@ -12355,15 +15597,18 @@ test_placement_row_check_catches_a_table_under_another_header() {
   d="$(tmpdir)"
   cp "$STUB_README" "$d/r"
   printf '%s\n' '' '| File | Place |' '|---|---|' '| `ci.yml` | `.github/workflows/ci.yml` |' >>"$d/r"
-  [ "$(placement_rows "$d/r" | grep -c . || true)" -eq 1 ] || { placement_rows "$d/r" >&2; die "the planted row was not caught exactly once"; }
+  [ "$(placement_rows "$d/r" | grep -c . || true)" -eq 1 ] || {
+    placement_rows "$d/r" >&2
+    die "the planted row was not caught exactly once"
+  }
 }
 
 test_stub_readme_branch_protection_points_to_the_runbook() {
   local body
   ! grep -qF 'step 2 above' "$STUB_README" || die "the stub README still says (step 2 above)"
   body="$(section_of "$STUB_README" '## Branch protection' '^## ')"
-  grep -qF '`docs/DEV_INFRASTRUCTURE.md`' <<<"$body" \
-    || die "the stub README's Branch protection section does not point to docs/DEV_INFRASTRUCTURE.md"
+  grep -qF '`docs/DEV_INFRASTRUCTURE.md`' <<<"$body" ||
+    die "the stub README's Branch protection section does not point to docs/DEV_INFRASTRUCTURE.md"
 }
 
 test_template_readme_has_step_0_and_the_one_command() {
@@ -12377,16 +15622,22 @@ test_template_readme_has_step_0_and_the_one_command() {
   local ask code
   ask="$(grep -nF 'Authenticate Git' <<<"$body" | head -1 | cut -d: -f1)"
   code="$(grep -nF 'one-time code' <<<"$body" | head -1 | cut -d: -f1)"
-  [ -n "$code" ] && [ "$ask" -lt "$code" ] || { printf '%s\n' "$body" >&2; die "step 0 does not put the Authenticate Git answer before the one-time code"; }
+  [ -n "$code" ] && [ "$ask" -lt "$code" ] || {
+    printf '%s\n' "$body" >&2
+    die "step 0 does not put the Authenticate Git answer before the one-time code"
+  }
   grep -qF 'Git for Windows' <<<"$body" || die "step 0 lacks Git for Windows"
   grep -qF 'https://cli.github.com' <<<"$body" || die "step 0 does not say where gh comes from"
   # Here-strings, not printf | grep -q: under pipefail, grep -q leaving
   # early on a match can end printf with SIGPIPE and fail the pipe.
   # shellcheck disable=SC2001 # the spaces are stripped from the start of every line
-  [ "$(sed 's/^ *//' <<<"$body" | grep -cxF -- "$ONE_COMMAND" || true)" -ge 1 ] \
-    || die "the one command is not on a line of its own"
+  [ "$(sed 's/^ *//' <<<"$body" | grep -cxF -- "$ONE_COMMAND" || true)" -ge 1 ] ||
+    die "the one command is not on a line of its own"
   ! grep -qF 'does not exist until' "$TEMPLATE_README" || die "the stale 'does not exist until' text is still there"
-  [ -z "$(placement_rows "$TEMPLATE_README")" ] || { placement_rows "$TEMPLATE_README" >&2; die "the by-hand pack table is still there"; }
+  [ -z "$(placement_rows "$TEMPLATE_README")" ] || {
+    placement_rows "$TEMPLATE_README" >&2
+    die "the by-hand pack table is still there"
+  }
   ! grep -qF 'Turn on branch protection for `main`' "$TEMPLATE_README" || die "the by-hand protection step is still there"
 }
 
@@ -12454,10 +15705,16 @@ test_gh_auth_part_check_catches_a_part_without_the_text() {
     '- List:' '  - nested: run `gh auth login -h github.com` and see' '    the browser does not open https://github.com/login/device' \
     '  - the script offers to run' '    `gh auth refresh -h github.com -s workflow`' >"$d/r"
   out="$(gh_auth_parts_without 'browser does not open' "$d/r")"
-  [ "$(sed -n 1p <<<"$out")" = 2 ] || { printf '%s\n' "$out" >&2; die "counted $(sed -n 1p <<<"$out") parts, want 2"; }
+  [ "$(sed -n 1p <<<"$out")" = 2 ] || {
+    printf '%s\n' "$out" >&2
+    die "counted $(sed -n 1p <<<"$out") parts, want 2"
+  }
   # shellcheck disable=SC2015 # die is meant to run when either check fails
-  [ "$(sed 1d <<<"$out" | grep -c . || true)" = 1 ] && grep -F 'Top item: run' <<<"$out" >/dev/null \
-    || { printf '%s\n' "$out" >&2; die "the part without the text was not the one found"; }
+  [ "$(sed 1d <<<"$out" | grep -c . || true)" = 1 ] && grep -F 'Top item: run' <<<"$out" >/dev/null ||
+    {
+      printf '%s\n' "$out" >&2
+      die "the part without the text was not the one found"
+    }
 }
 
 # README_GUIDES: each guide of the script as "<function>|<group>|<phrase>":
@@ -12521,8 +15778,8 @@ test_template_readme_lists_every_guide_in_its_group() {
   local fn group phrase n g
   while IFS='|' read -r fn group phrase; do
     grep -qE "^${fn}\(\) \{" "$SCRIPT" || die "README_GUIDES names $fn, which the script does not have"
-    guide_group "$group" | tr '\n' ' ' | sed 's/  */ /g' | grep -F -- "$phrase" >/dev/null \
-      || die "the README group $group lacks the guide $fn: $phrase"
+    guide_group "$group" | tr '\n' ' ' | sed 's/  */ /g' | grep -F -- "$phrase" >/dev/null ||
+      die "the README group $group lacks the guide $fn: $phrase"
     n="$(sed -n '/^### Creating a project from the template$/,/^##[^#]/p' "$TEMPLATE_README" | tr '\n' ' ' | sed 's/  */ /g' | grep -oF -- "$phrase" | grep -c . || true)"
     [ "$n" -eq 1 ] || die "the phrase for $fn is in the README $n times, want 1: $phrase"
   done <<<"$README_GUIDES"
@@ -12530,7 +15787,7 @@ test_template_readme_lists_every_guide_in_its_group() {
   # shellcheck disable=SC2013 # the guide names are single words
   for g in $(grep -oE '^(guide|refuse)_[a-z_]+\(\)' "$SCRIPT" | sed 's/()//'); do
     case "$g" in
-      guide_begin | guide_step | guide_end | guide_details) continue ;; # helpers
+      guide_begin | guide_step | guide_end | guide_details) continue ;;                       # helpers
       guide_gh | guide_npm | guide_dir | guide_project | guide_published_version) continue ;; # pick one of the guides above
     esac
     grep -q "^$g|" <<<"$README_GUIDES" || die "the script's guide $g is not in README_GUIDES (add it to the README and here)"
@@ -12560,8 +15817,11 @@ test_guide_list_check_fails_when_a_bullet_is_deleted() {
   d="$(tmpdir)"
   grep -vF 'a bash that is too old' "$TEMPLATE_README" >"$d/README.md"
   ! cmp -s "$TEMPLATE_README" "$d/README.md" || die "nothing was deleted (test is stale)"
-  ! ( TEMPLATE_README="$d/README.md"; test_template_readme_lists_every_guide_in_its_group ) 2>/dev/null \
-    || die "the check passed with the old-bash bullet deleted"
+  ! (
+    TEMPLATE_README="$d/README.md"
+    test_template_readme_lists_every_guide_in_its_group
+  ) 2>/dev/null ||
+    die "the check passed with the old-bash bullet deleted"
 }
 
 test_template_readme_names_every_question() {
@@ -12572,8 +15832,8 @@ test_template_readme_names_every_question() {
   while IFS= read -r q; do
     n=$((n + 1))
     grep -qiF -- "$q" <<<"$body" || die "the README does not name the question: $q"
-  done < <(awk '/^ *answer --/ { want = 3 } want { want--; if (want == 0) print }' "$SCRIPT" \
-    | sed -E 's/^ *"//; s/".*//; s/ \(type the number or the name\)//; s/\? \(yes or no\)//')
+  done < <(awk '/^ *answer --/ { want = 3 } want { want--; if (want == 0) print }' "$SCRIPT" |
+    sed -E 's/^ *"//; s/".*//; s/ \(type the number or the name\)//; s/\? \(yes or no\)//')
   [ "$n" -ge 13 ] || die "read $n questions from the script, want at least 13 (test is stale)"
 }
 
@@ -12607,8 +15867,8 @@ test_readmes_say_to_chat_inside_a_claude_project_as_the_script_does() {
     done
     ! grep -qF 'Claude project' <<<"$body" || die "$f: Working setup writes Claude project in lower case"
     body="$(section_of "$f" '### Starting later sessions' '^##' | tr '\n' ' ' | sed 's/  */ /g')"
-    grep -qF "start a new chat inside the project's Claude Project" <<<"$body" \
-      || die "$f: Starting later sessions does not start the chat inside the project's Claude Project"
+    grep -qF "start a new chat inside the project's Claude Project" <<<"$body" ||
+      die "$f: Starting later sessions does not start the chat inside the project's Claude Project"
   done
 }
 
@@ -12642,8 +15902,8 @@ test_template_readme_branch_protection_has_no_step_reference() {
   local body
   ! grep -qF 'step 3 above' "$TEMPLATE_README" || die "the template README still says (step 3 above)"
   body="$(section_of "$TEMPLATE_README" '## Branch protection' '^## ')"
-  grep -qF '`docs/DEV_INFRASTRUCTURE.md`' <<<"$body" \
-    || die "the template README's Branch protection section does not point to docs/DEV_INFRASTRUCTURE.md"
+  grep -qF '`docs/DEV_INFRASTRUCTURE.md`' <<<"$body" ||
+    die "the template README's Branch protection section does not point to docs/DEV_INFRASTRUCTURE.md"
   # PBI-1.29: the template's own checks moved here from the shipped doc.
   for t in bootstrapper-test bootstrapper.yml check-shards.sh packs.yml; do
     grep -qF -- "$t" <<<"$body" || die "the template README's Branch protection section does not describe the template's own checks: $t"
@@ -12656,19 +15916,36 @@ test_readme_resume_sentence_matches_what_the_script_prints() {
   # --resume once it exists, with earlier answers after it. The README
   # says that, and not that the command ends with --resume.
   local out
-  out="$( load_script
+  out="$(
+    load_script
     RESTART_CMD=bootstrap-project.sh RESTART_ARGS=" --name foo"
     IN_OWNER=me ANSWERED=" --owner " OPT_RESUME="" OPT_ALLOW_UNPROTECTED=""
-    CREATED_NOTE="" FRESH_START=""; shown_command; echo "before:$SHOWN_CMD"
-    CREATED_NOTE=x; shown_command; echo "after:$SHOWN_CMD"
-    FRESH_START=1; shown_command; echo "refused:$SHOWN_CMD" )"
-  grep -qxF 'before:bootstrap-project.sh --owner me' <<<"$out" || { echo "$out" >&2; die "before: unexpected command"; }
-  grep -qxF 'after:bootstrap-project.sh --resume --owner me' <<<"$out" || { echo "$out" >&2; die "after: --resume is not followed by the answers"; }
-  grep -qxF 'refused:bootstrap-project.sh --owner me' <<<"$out" || { echo "$out" >&2; die "refused: unexpected command"; }
+    CREATED_NOTE="" FRESH_START=""
+    shown_command
+    echo "before:$SHOWN_CMD"
+    CREATED_NOTE=x
+    shown_command
+    echo "after:$SHOWN_CMD"
+    FRESH_START=1
+    shown_command
+    echo "refused:$SHOWN_CMD"
+  )"
+  grep -qxF 'before:bootstrap-project.sh --owner me' <<<"$out" || {
+    echo "$out" >&2
+    die "before: unexpected command"
+  }
+  grep -qxF 'after:bootstrap-project.sh --resume --owner me' <<<"$out" || {
+    echo "$out" >&2
+    die "after: --resume is not followed by the answers"
+  }
+  grep -qxF 'refused:bootstrap-project.sh --owner me' <<<"$out" || {
+    echo "$out" >&2
+    die "refused: unexpected command"
+  }
   ! grep -qiE 'ends? with `--resume`|always ends with' "$TEMPLATE_README" || die "the README says the command ends with --resume"
-  sed -n '/^### Creating a project from the template$/,/^##[^#]/p' "$TEMPLATE_README" | tr '\n' ' ' | sed 's/  */ /g' \
-    | grep -ciF 'once the project exists on GitHub, that command includes `--resume`' >/dev/null \
-    || die "the README does not say when the command includes --resume"
+  sed -n '/^### Creating a project from the template$/,/^##[^#]/p' "$TEMPLATE_README" | tr '\n' ' ' | sed 's/  */ /g' |
+    grep -ciF 'once the project exists on GitHub, that command includes `--resume`' >/dev/null ||
+    die "the README does not say when the command includes --resume"
 }
 
 test_readme_says_the_command_to_continue_comes_before_the_first_change() {
@@ -12678,22 +15955,25 @@ test_readme_says_the_command_to_continue_comes_before_the_first_change() {
   # comes before the first change, and at a stop only when the script can.
   local body
   body="$(sed -n '/^### Creating a project from the template$/,/^##[^#]/p' "$TEMPLATE_README" | tr '\n' ' ' | sed 's/  */ /g')"
-  ! grep -qF 'If it stops, it says why and prints the exact command to run next:' <<<"$body" \
-    || die "the README still promises the command at every stop"
-  grep -qF 'Right after your yes, before it changes anything on GitHub, it prints the command to continue the setup if it stops before it finishes, for any reason (also Ctrl-C or a closed window).' <<<"$body" \
-    || die "the README does not say the command to continue comes before the first change"
-  grep -qF 'When it stops by itself, it also says why and prints the exact command to run next' <<<"$body" \
-    || die "the README does not say what a stop prints when the script can"
-  grep -qF 'Copy that command and keep it until the setup has finished.' <<<"$body" \
-    || die "the README does not say to copy the command and keep it"
+  ! grep -qF 'If it stops, it says why and prints the exact command to run next:' <<<"$body" ||
+    die "the README still promises the command at every stop"
+  grep -qF 'Right after your yes, before it changes anything on GitHub, it prints the command to continue the setup if it stops before it finishes, for any reason (also Ctrl-C or a closed window).' <<<"$body" ||
+    die "the README does not say the command to continue comes before the first change"
+  grep -qF 'When it stops by itself, it also says why and prints the exact command to run next' <<<"$body" ||
+    die "the README does not say what a stop prints when the script can"
+  grep -qF 'Copy that command and keep it until the setup has finished.' <<<"$body" ||
+    die "the README does not say to copy the command and keep it"
   # #203 review, N4: the commands the script offers to run (such as gh auth
   # refresh) carry no answers, so the README says which commands do.
-  ! grep -qF 'Every command it prints carries your answers' <<<"$body" \
-    || die "the README says every command carries the answers"
-  grep -qF 'The command to continue and the command to start again carry your answers along' <<<"$body" \
-    || die "the README does not say which commands carry the answers"
-  ( load_script; [ "$ADVANCE_INTRO" = 'If the setup stops before it finishes, for any reason, also with Ctrl-C or a closed window, continue it with the command below. Copy it now and keep it until the setup has finished:' ] ) \
-    || die "the script's ADVANCE_INTRO is not the line the tests look for"
+  ! grep -qF 'Every command it prints carries your answers' <<<"$body" ||
+    die "the README says every command carries the answers"
+  grep -qF 'The command to continue and the command to start again carry your answers along' <<<"$body" ||
+    die "the README does not say which commands carry the answers"
+  (
+    load_script
+    [ "$ADVANCE_INTRO" = 'If the setup stops before it finishes, for any reason, also with Ctrl-C or a closed window, continue it with the command below. Copy it now and keep it until the setup has finished:' ]
+  ) ||
+    die "the script's ADVANCE_INTRO is not the line the tests look for"
 }
 
 test_template_readme_step_1_folder_example_works_on_every_system() {
@@ -12706,14 +15986,23 @@ test_template_readme_step_1_folder_example_works_on_every_system() {
   step="$(awk '/^\*\*Step 1: / { on = 1; print; next } on && /^(\*\*|#)/ { exit } on { print }' "$TEMPLATE_README")"
   [ -n "$step" ] || die "the README has no step 1 (test is stale)"
   grep -F -- "$ONE_COMMAND" <<<"$step" >/dev/null || die "step 1 as the test reads it lacks the one command (test is stale)"
-  ! grep -F 'Documents' <<<"$step" >/dev/null || { printf '%s\n' "$step" >&2; die "step 1 still names a Documents folder"; }
+  ! grep -F 'Documents' <<<"$step" >/dev/null || {
+    printf '%s\n' "$step" >&2
+    die "step 1 still names a Documents folder"
+  }
   dirs="$(grep -oE '(^|[`&;] *)cd [^ `&;]+' <<<"$step" | sed -E 's/^.*cd //' || true)"
   for dir in $dirs; do
     n=$((n + 1))
-    grep -F -- "mkdir -p $dir && cd $dir" <<<"$step" >/dev/null \
-      || { printf '%s\n' "$step" >&2; die "step 1 has you go to $dir without making it first (mkdir -p $dir && cd $dir)"; }
+    grep -F -- "mkdir -p $dir && cd $dir" <<<"$step" >/dev/null ||
+      {
+        printf '%s\n' "$step" >&2
+        die "step 1 has you go to $dir without making it first (mkdir -p $dir && cd $dir)"
+      }
   done
-  [ "$n" -ge 1 ] || { printf '%s\n' "$step" >&2; die "step 1 gives no example of going to a folder"; }
+  [ "$n" -ge 1 ] || {
+    printf '%s\n' "$step" >&2
+    die "step 1 gives no example of going to a folder"
+  }
 }
 
 test_step_1_folder_check_catches_a_folder_it_does_not_make() {
@@ -12723,8 +16012,11 @@ test_step_1_folder_check_catches_a_folder_it_does_not_make() {
   d="$(tmpdir)"
   awk '/^\*\*Step 1: / { print; print "(for example `cd ~/work`)"; next } { print }' "$TEMPLATE_README" >"$d/README.md"
   ! cmp -s "$TEMPLATE_README" "$d/README.md" || die "nothing was planted (test is stale)"
-  ! ( TEMPLATE_README="$d/README.md"; test_template_readme_step_1_folder_example_works_on_every_system ) 2>/dev/null \
-    || die "the check passed a step 1 that goes to a folder it does not make"
+  ! (
+    TEMPLATE_README="$d/README.md"
+    test_template_readme_step_1_folder_example_works_on_every_system
+  ) 2>/dev/null ||
+    die "the check passed a step 1 that goes to a folder it does not make"
 }
 
 test_readme_commands_are_the_ones_the_script_prints() {
@@ -12739,21 +16031,38 @@ test_readme_commands_are_the_ones_the_script_prints() {
 
 test_the_setup_pr_says_it_removed_the_bootstrappers_own_readme() {
   local body
-  body="$( load_script
+  body="$(
+    load_script
     IN_WITH_DEPLOY="" IN_LICENSE=mit IN_COPYRIGHT_HOLDER=Me IN_PROJECT_NAME=app IN_PACK=python
-    pr_body; printf '%s\n' "$PR_BODY" )"
-  [ "$(grep -F -- '- Removed:' <<<"$body" | grep -cF '.github/README.md' || true)" -eq 1 ] \
-    || { printf '%s\n' "$body" >&2; die "the setup PR's Removed: line does not name .github/README.md"; }
+    pr_body
+    printf '%s\n' "$PR_BODY"
+  )"
+  [ "$(grep -F -- '- Removed:' <<<"$body" | grep -cF '.github/README.md' || true)" -eq 1 ] ||
+    {
+      printf '%s\n' "$body" >&2
+      die "the setup PR's Removed: line does not name .github/README.md"
+    }
 }
 
 test_a_refused_project_is_pointed_to_the_runbook_not_to_a_readme() {
   # No README lists the steps still open; the runbook in the project's
   # docs/DEV_INFRASTRUCTURE.md is what is written down for finishing by hand.
   local out
-  out="$( load_script; IN_OWNER=me; IN_NAME=app; RESTART_CMD=bootstrap-project.sh RESTART_ARGS=" --name app"
-    refuse_project "Title." "Why." 2>&1 )" || true
-  grep -qF 'docs/DEV_INFRASTRUCTURE.md' <<<"$out" || { printf '%s\n' "$out" >&2; die "the guide does not point to docs/DEV_INFRASTRUCTURE.md"; }
-  grep -qF 'how to protect its main version by hand' <<<"$out" || { printf '%s\n' "$out" >&2; die "the guide does not say what the runbook is for"; }
+  out="$(
+    load_script
+    IN_OWNER=me
+    IN_NAME=app
+    RESTART_CMD=bootstrap-project.sh RESTART_ARGS=" --name app"
+    refuse_project "Title." "Why." 2>&1
+  )" || true
+  grep -qF 'docs/DEV_INFRASTRUCTURE.md' <<<"$out" || {
+    printf '%s\n' "$out" >&2
+    die "the guide does not point to docs/DEV_INFRASTRUCTURE.md"
+  }
+  grep -qF 'how to protect its main version by hand' <<<"$out" || {
+    printf '%s\n' "$out" >&2
+    die "the guide does not say what the runbook is for"
+  }
   ! grep -qF 'the README of the bootstrapper lists them' <<<"$out" || die "the guide still sends the reader to the bootstrapper's README for open steps"
 }
 
@@ -12767,20 +16076,29 @@ test_no_readme_asks_the_reader_to_edit_it() {
   local f hits
   for f in "$STUB_README" "$TEMPLATE_README" "$REPO/bootstrap/bootstrapper-README.md"; do
     hits="$(readme_asks_to_be_edited <"$f")"
-    [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "$f asks the reader to edit it"; }
+    [ -z "$hits" ] || {
+      printf '%s\n' "$hits" >&2
+      die "$f asks the reader to edit it"
+    }
   done
 }
 
 test_the_edit_request_check_catches_the_old_heading() {
   local hits
   hits="$(printf '%s\n' '## After bootstrapping (delete this section when done)' 'Delete this section once done.' 'Edit the file.' | readme_asks_to_be_edited)"
-  [ "$(grep -c . <<<"$hits" || true)" -eq 2 ] || { printf '%s\n' "$hits" >&2; die "want the 2 planted lines"; }
+  [ "$(grep -c . <<<"$hits" || true)" -eq 2 ] || {
+    printf '%s\n' "$hits" >&2
+    die "want the 2 planted lines"
+  }
 }
 
 test_bootstrapper_readme_draft_has_no_banned_words_and_the_stubs_resume_command() {
   local f="$REPO/bootstrap/bootstrapper-README.md" hits want
   hits="$(prose_of <"$f" | awk '{ print NR ": " $0 }' | banned_hits)"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "banned word without its explanation in the bootstrapper's README"; }
+  [ -z "$hits" ] || {
+    printf '%s\n' "$hits" >&2
+    die "banned word without its explanation in the bootstrapper's README"
+  }
   want="$ONE_COMMAND --resume --owner OWNER --name NAME"
   [ "$(grep -cxF -- "$want" "$f" || true)" -eq 1 ] || die "the bootstrapper's README lacks the line: $want"
   [ "$(sed 's/^ *//' "$STUB_README" | grep -cxF -- "$want" || true)" -eq 1 ] || die "the stub README lacks the line: $want"
@@ -12798,23 +16116,29 @@ test_stub_readme_working_from_another_computer() {
   grep -qxF '   gh repo clone OWNER/NAME' <<<"$body" || die "the section lacks gh repo clone OWNER/NAME on a line of its own"
   grep -qF 'git config user.name' <<<"$body" || die "the section does not set git's name"
   grep -qF 'git config user.email' <<<"$body" || die "the section does not set git's email"
-  [ "$(tr '\n' ' ' <<<"$body" | sed 's/  */ /g' | grep -cF 'not add capacity or let work run in parallel' || true)" -eq 1 ] \
-    || die "the section does not say what another computer is not for"
+  [ "$(tr '\n' ' ' <<<"$body" | sed 's/  */ /g' | grep -cF 'not add capacity or let work run in parallel' || true)" -eq 1 ] ||
+    die "the section does not say what another computer is not for"
   ! grep -qF -- "$ONE_COMMAND" <<<"$body" || die "the section has the command that creates a new project"
   ! grep -qF 'ai-project-template-v2' <<<"$body" || die "the section points to the template"
   hits="$(prose_of <<<"$body" | awk '{ print NR ": " $0 }' | banned_hits)"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "banned word without its explanation in Working from another computer"; }
+  [ -z "$hits" ] || {
+    printf '%s\n' "$hits" >&2
+    die "banned word without its explanation in Working from another computer"
+  }
 }
 
 test_readme_setup_text_has_no_banned_words() {
   # The same banned-word rule as the script's messages, over the prose of
   # the new README text (commands and file names left out).
   local hits
-  hits="$( {
+  hits="$({
     section_of "$STUB_README" '## Finishing the setup' '^## '
     section_of "$TEMPLATE_README" '### Creating a project from the template' '^##'
   } | prose_of | awk '{ print NR ": " $0 }' | banned_hits)"
-  [ -z "$hits" ] || { printf '%s\n' "$hits" >&2; die "banned word without its explanation in the README setup text"; }
+  [ -z "$hits" ] || {
+    printf '%s\n' "$hits" >&2
+    die "banned word without its explanation in the README setup text"
+  }
 }
 
 test_readme_banned_word_check_catches_a_planted_word() {
@@ -12823,9 +16147,12 @@ test_readme_banned_word_check_catches_a_planted_word() {
   # out fenced blocks and inline code.
   local hits
   hits="$(printf '%s\n' 'Open the repo page.' '  - a folder that is inside' '    another repo that git keeps' \
-    '     clone the project' 'Run `gh api user`.' '```' 'git clone x' '```' '   ```' '   gh repo view' '   ```' \
-    | prose_of | awk '{ print NR ": " $0 }' | banned_hits)"
-  [ "$(grep -c . <<<"$hits" || true)" -eq 3 ] || { printf '%s\n' "$hits" >&2; die "want exactly the 3 planted prose lines"; }
+    '     clone the project' 'Run `gh api user`.' '```' 'git clone x' '```' '   ```' '   gh repo view' '   ```' |
+    prose_of | awk '{ print NR ": " $0 }' | banned_hits)"
+  [ "$(grep -c . <<<"$hits" || true)" -eq 3 ] || {
+    printf '%s\n' "$hits" >&2
+    die "want exactly the 3 planted prose lines"
+  }
   grep -qF 'Open the repo page.' <<<"$hits" || die "the planted top-level word was not caught"
   grep -qF 'another repo that git keeps' <<<"$hits" || die "the planted word on a wrapped list line was not caught"
   grep -qF 'clone the project' <<<"$hits" || die "the planted word on a 5-space list line was not caught"
@@ -12851,17 +16178,27 @@ test_remove_pack_section_cuts_to_the_next_heading_outside_a_code_block() {
   d="$(tmpdir)"
   printf '%s\n' '# Doc' '## Part 2' '### Python (`python` pack)' 'Py text.' '```bash' '# macOS / Linux' '## not a heading' '```' 'More py.' \
     '### Node (`node` pack)' 'Node text.' '### Mobile (`react-native` pack)' 'RN text.' >"$d/a"
-  ( load_script; remove_pack_section "$d/a" python ) || die "python: returned $?"
+  (
+    load_script
+    remove_pack_section "$d/a" python
+  ) || die "python: returned $?"
   printf '%s\n' '# Doc' '## Part 2' '### Node (`node` pack)' 'Node text.' '### Mobile (`react-native` pack)' 'RN text.' >"$d/want"
   expect_same "the python section" "$d/want" "$d/a"
-  ( load_script; remove_pack_section "$d/a" react-native ) || die "react-native: returned $?"
+  (
+    load_script
+    remove_pack_section "$d/a" react-native
+  ) || die "react-native: returned $?"
   printf '%s\n' '# Doc' '## Part 2' '### Node (`node` pack)' 'Node text.' >"$d/want"
   expect_same "the last section" "$d/want" "$d/a"
   # No such section: nothing changes, and it says so. A line that only
   # mentions the pack is not its heading.
   printf '%s\n' '# Doc' 'See the (`web` pack) notes.' '### Web notes (`web` pack) and more' >"$d/b"
   cp "$d/b" "$d/b0"
-  rc=0; ( load_script; remove_pack_section "$d/b" web ) || rc=$?
+  rc=0
+  (
+    load_script
+    remove_pack_section "$d/b" web
+  ) || rc=$?
   [ "$rc" -eq 1 ] || die "no web section: returned $rc, want 1"
   cmp -s "$d/b0" "$d/b" || die "no web section: the file changed"
   # A "## " heading ends a section too; an indented code block hides its
@@ -12869,9 +16206,18 @@ test_remove_pack_section_cuts_to_the_next_heading_outside_a_code_block() {
   # heading; no blank line is left at the end.
   printf '%s\n' '# Doc' '### Web (`web` pack)' 'Web text.' '  ```' '### x' '## y' '  ```' 'More web.' '## Next' 'Next text.' \
     '### Node (`node` pack)' 'Node text.' '```' '### Py (`python` pack)' '```' '' '### Mobile (`react-native` pack)' 'RN text.' >"$d/c"
-  ( load_script; remove_pack_section "$d/c" web ) || die "web: returned $?"
-  ( load_script; remove_pack_section "$d/c" python ) && die "python: a heading inside a code block was taken for the section"
-  ( load_script; remove_pack_section "$d/c" react-native ) || die "react-native: returned $?"
+  (
+    load_script
+    remove_pack_section "$d/c" web
+  ) || die "web: returned $?"
+  (
+    load_script
+    remove_pack_section "$d/c" python
+  ) && die "python: a heading inside a code block was taken for the section"
+  (
+    load_script
+    remove_pack_section "$d/c" react-native
+  ) || die "react-native: returned $?"
   printf '%s\n' '# Doc' '## Next' 'Next text.' '### Node (`node` pack)' 'Node text.' '```' '### Py (`python` pack)' '```' >"$d/want"
   expect_same "the ## end, the code blocks and the last blank line" "$d/want" "$d/c"
 }
@@ -12889,9 +16235,18 @@ test_the_tidy_up_goes_on_when_another_packs_section_is_missing() {
   # Not on the left of ||: there bash would ignore errexit in the
   # subshell, and a failing step would not stop the tidy-up.
   rc=0
-  ( load_script; IN_DIR="$d/c"; IN_PACK=node; LP_KEPT="code-standards.md"; tidy_up ) >"$d/out" 2>&1 &
+  (
+    load_script
+    IN_DIR="$d/c"
+    IN_PACK=node
+    LP_KEPT="code-standards.md"
+    tidy_up
+  ) >"$d/out" 2>&1 &
   wait "$!" || rc=$?
-  [ "$rc" -eq 0 ] || { cat "$d/out" >&2; die "the tidy-up stopped on a doc without the web and python sections"; }
+  [ "$rc" -eq 0 ] || {
+    cat "$d/out" >&2
+    die "the tidy-up stopped on a doc without the web and python sections"
+  }
   printf '%s\n' '# Doc' '## Part 2' '### Node (`node` pack)' 'Node text.' >"$d/want"
   expect_same "DEV_INFRASTRUCTURE.md" "$d/want" "$d/c/docs/DEV_INFRASTRUCTURE.md"
   [ ! -e "$d/c/languages/web" ] || die "the other pack's folder is left"
@@ -12921,7 +16276,10 @@ in_one_stream() {
   local d="$1" answers="$2" stream="$3"
   shift 3
   set +e
-  ( in_env "$d"; "$@" ) <"$answers" >"$stream" 2>&1
+  (
+    in_env "$d"
+    "$@"
+  ) <"$answers" >"$stream" 2>&1
   RC=$?
   set -e
 }
@@ -12931,7 +16289,10 @@ in_one_stream() {
 first_line_of() {
   local n
   n="$(grep -nF -- "$2" "$1" | head -1 | cut -d: -f1 || true)"
-  [ -n "$n" ] || { cat "$1" >&2; die "no line with: $2"; }
+  [ -n "$n" ] || {
+    cat "$1" >&2
+    die "no line with: $2"
+  }
   printf '%s\n' "$n"
 }
 
@@ -12985,32 +16346,54 @@ test_the_screen_of_the_setup_a_newcomer_meets_is_written_for_the_precheck() {
   # The capture keeps the order of stdout and stderr: a line printed to
   # stderr between two printed to stdout stays between them.
   # shellcheck disable=SC2329 # in_one_stream calls it
-  three_lines() { echo one; echo two >&2; echo three; }
+  three_lines() {
+    echo one
+    echo two >&2
+    echo three
+  }
   in_one_stream "$d" "$d/in" "$d/order" three_lines
-  [ "$(tr '\n' ' ' <"$d/order")" = "one two three " ] \
-    || { cat "$d/order" >&2; die "stdout and stderr are not one stream in the order printed"; }
+  [ "$(tr '\n' ' ' <"$d/order")" = "one two three " ] ||
+    {
+      cat "$d/order" >&2
+      die "stdout and stderr are not one stream in the order printed"
+    }
 
   # The first run: every question answered, then the guide, and q.
   printf '%s\n' "${NEWCOMER_FIRST_RUN[@]}" >"$d/in"
   in_one_stream "$d" "$d/in" "$d/stream1" "$BASH" bootstrap-project.sh
-  [ "$RC" -eq 3 ] || { cat "$d/stream1" >&2; die "the first run ended with $RC, want 3"; }
-  grep -qxF 'npm (part of Node.js) is not installed.' "$d/stream1" || { cat "$d/stream1" >&2; die "the first run shows no Node.js guide"; }
+  [ "$RC" -eq 3 ] || {
+    cat "$d/stream1" >&2
+    die "the first run ended with $RC, want 3"
+  }
+  grep -qxF 'npm (part of Node.js) is not installed.' "$d/stream1" || {
+    cat "$d/stream1" >&2
+    die "the first run shows no Node.js guide"
+  }
   # The lines printed to stderr come after the ones printed to stdout
   # before them: the command to start again, then what happened.
   a="$(first_line_of "$d/stream1" 'To start again, run this command:')"
   b="$(first_line_of "$d/stream1" 'What happened: npm (part of Node.js) is not installed.')"
   c="$(first_line_of "$d/stream1" 'What to do next: ')"
-  [ "$((a + 1))" -lt "$b" ] && [ "$b" -lt "$c" ] \
-    || { cat "$d/stream1" >&2; die "the stop is not in the order printed"; }
-  [ -z "$(calls_from_create "$d")" ] || { cat "$d/gh.log" >&2; die "the project was created in the first run"; }
+  [ "$((a + 1))" -lt "$b" ] && [ "$b" -lt "$c" ] ||
+    {
+      cat "$d/stream1" >&2
+      die "the stop is not in the order printed"
+    }
+  [ -z "$(calls_from_create "$d")" ] || {
+    cat "$d/gh.log" >&2
+    die "the project was created in the first run"
+  }
   cmd="$(sed -n "$((a + 1))p" "$d/stream1")"
   # The form the README shows (step 1 saves the script in the folder
   # the newcomer is in, and runs it there): the folder after cd is the
   # only part that comes from the test.
   # The folder is the one the script was started in, as pwd writes it
   # (not as $d is written: macOS's TMPDIR ends in a /, so $d has a //).
-  [ "$cmd" = "    cd '$(cd "$d/cwd" && pwd)' && bash bootstrap-project.sh --again" ] \
-    || { cat "$d/stream1" >&2; die "the command to start again is not the one the README shows: $cmd"; }
+  [ "$cmd" = "    cd '$(cd "$d/cwd" && pwd)' && bash bootstrap-project.sh --again" ] ||
+    {
+      cat "$d/stream1" >&2
+      die "the command to start again is not the one the README shows: $cmd"
+    }
 
   # The second run: a new window (npm is there now), the command shown.
   rm "$d/npm-fails"
@@ -13019,20 +16402,35 @@ test_the_screen_of_the_setup_a_newcomer_meets_is_written_for_the_precheck() {
   # shellcheck disable=SC2329 # the command in $cmd calls it
   bash() { "$BASH" "$@"; }
   in_one_stream "$d" "$d/in2" "$d/stream2" eval "$cmd"
-  [ "$RC" -eq 0 ] || { cat "$d/stream2" >&2; die "the second run ended with $RC, want 0"; }
-  grep -qxF 'The setup is finished.' "$d/stream2" || { cat "$d/stream2" >&2; die "the second run did not finish the setup"; }
-  [ "$(calls_from_create "$d" | sed -n 1p)" = 'repo create octo-user/tool-share --template factoincognito/ai-project-bootstrap --public --description Lets neighbours lend each other tools.' ] \
-    || { cat "$d/gh.log" >&2; die "the project was not created from the answers"; }
+  [ "$RC" -eq 0 ] || {
+    cat "$d/stream2" >&2
+    die "the second run ended with $RC, want 0"
+  }
+  grep -qxF 'The setup is finished.' "$d/stream2" || {
+    cat "$d/stream2" >&2
+    die "the second run did not finish the setup"
+  }
+  [ "$(calls_from_create "$d" | sed -n 1p)" = 'repo create octo-user/tool-share --template factoincognito/ai-project-bootstrap --public --description Lets neighbours lend each other tools.' ] ||
+    {
+      cat "$d/gh.log" >&2
+      die "the project was not created from the answers"
+    }
 
   # The two texts the persona is given: the screen of both runs, each
   # answer after its question, and the README the build wrote.
   printf '%s\n' "${NEWCOMER_FIRST_RUN[@]}" >"$d/answers1"
   with_answers "$d/stream1" "$d/answers1" "$d/counts1" >"$d/shown1"
   with_answers "$d/stream2" "$d/in2" "$d/counts2" >"$d/shown2"
-  [ "$(cat "$d/counts1")" = "${#NEWCOMER_FIRST_RUN[@]} ${#NEWCOMER_FIRST_RUN[@]}" ] \
-    || { cat "$d/stream1" >&2; die "the first run asked $(cut -d' ' -f1 <"$d/counts1") questions, with ${#NEWCOMER_FIRST_RUN[@]} answers given (a question at the terminal needs its answer in the test too)"; }
-  [ "$(cat "$d/counts2")" = "${#NEWCOMER_SECOND_RUN[@]} ${#NEWCOMER_SECOND_RUN[@]}" ] \
-    || { cat "$d/stream2" >&2; die "the second run asked $(cut -d' ' -f1 <"$d/counts2") questions, with ${#NEWCOMER_SECOND_RUN[@]} answers given"; }
+  [ "$(cat "$d/counts1")" = "${#NEWCOMER_FIRST_RUN[@]} ${#NEWCOMER_FIRST_RUN[@]}" ] ||
+    {
+      cat "$d/stream1" >&2
+      die "the first run asked $(cut -d' ' -f1 <"$d/counts1") questions, with ${#NEWCOMER_FIRST_RUN[@]} answers given (a question at the terminal needs its answer in the test too)"
+    }
+  [ "$(cat "$d/counts2")" = "${#NEWCOMER_SECOND_RUN[@]} ${#NEWCOMER_SECOND_RUN[@]}" ] ||
+    {
+      cat "$d/stream2" >&2
+      die "the second run asked $(cut -d' ' -f1 <"$d/counts2") questions, with ${#NEWCOMER_SECOND_RUN[@]} answers given"
+    }
   {
     cat "$d/shown1"
     printf '\n%s\n\n' '----- The first window is closed. In a new Git Bash window, opened from the Start menu, the command above is run: -----'
@@ -13055,12 +16453,21 @@ test_the_screen_of_the_setup_a_newcomer_meets_is_written_for_the_precheck() {
     'Folder [./tool-share]: ' \
     'Press Enter to check again, or type q to stop: q' \
     'Proceed? (yes or no) [no]: yes'; do
-    [ "$(grep -cxF -- "$line" "$dest/screen.txt")" -eq 1 ] \
-      || { cat "$dest/screen.txt" >&2; die "the screen lacks, once, the line: $line"; }
+    [ "$(grep -cxF -- "$line" "$dest/screen.txt")" -eq 1 ] ||
+      {
+        cat "$dest/screen.txt" >&2
+        die "the screen lacks, once, the line: $line"
+      }
   done
   # Both runs are in the file, from their own streams.
-  grep -qxF 'npm (part of Node.js) is not installed.' "$dest/screen.txt" || { cat "$dest/screen.txt" >&2; die "the screen lacks the Node.js guide"; }
-  grep -qxF 'The setup is finished.' "$dest/screen.txt" || { cat "$dest/screen.txt" >&2; die "the screen lacks the end of the second run"; }
+  grep -qxF 'npm (part of Node.js) is not installed.' "$dest/screen.txt" || {
+    cat "$dest/screen.txt" >&2
+    die "the screen lacks the Node.js guide"
+  }
+  grep -qxF 'The setup is finished.' "$dest/screen.txt" || {
+    cat "$dest/screen.txt" >&2
+    die "the screen lacks the end of the second run"
+  }
 }
 
 # ---------- run ----------
@@ -13120,8 +16527,8 @@ ALL_COUNT=0
 for t in $TESTS; do ALL_COUNT=$((ALL_COUNT + 1)); done
 if [ -n "$WEIGHTS_FILE" ]; then
   # shellcheck disable=SC2086 # one test name per word
-  TESTS="$(printf '%s\n' $TESTS | by_duration "$WEIGHTS_FILE" "$WEIGHTS_COL" "$SHARD_I" "$SHARD_N")" \
-    || weights_refused "the split failed"
+  TESTS="$(printf '%s\n' $TESTS | by_duration "$WEIGHTS_FILE" "$WEIGHTS_COL" "$SHARD_I" "$SHARD_N")" ||
+    weights_refused "the split failed"
   case "$TESTS" in "refused: "*) weights_refused "${TESTS#refused: }" ;; esac
 fi
 if [ -n "$MANIFEST" ]; then

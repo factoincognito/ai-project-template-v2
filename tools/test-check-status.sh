@@ -24,7 +24,10 @@ run_test() {
   local name="$1"
   local log="$WORK/$name.log" rc
   set +e
-  ( set -euo pipefail; "$name" ) >"$log" 2>&1
+  (
+    set -euo pipefail
+    "$name"
+  ) >"$log" 2>&1
   rc=$?
   set -e
   if [ "$rc" -eq 0 ]; then
@@ -38,7 +41,10 @@ run_test() {
   fi
 }
 
-die() { echo "assertion failed: $*" >&2; exit 1; }
+die() {
+  echo "assertion failed: $*" >&2
+  exit 1
+}
 
 # A well-formed file, written to a fresh path that is echoed.
 good() {
@@ -70,16 +76,26 @@ EOF
 
 expect_pass() {
   local err="$WORK/err.$RANDOM"
-  bash "$CHECK" "$@" 2>"$err" >/dev/null || { cat "$err" >&2; die "check failed: $*"; }
+  bash "$CHECK" "$@" 2>"$err" >/dev/null || {
+    cat "$err" >&2
+    die "check failed: $*"
+  }
 }
 
 # expect_fail <expected-stderr-substring> <files...>
 expect_fail() {
-  local msg="$1"; shift
+  local msg="$1"
+  shift
   local err="$WORK/err.$RANDOM" rc=0
   bash "$CHECK" "$@" 2>"$err" >/dev/null || rc=$?
-  [ "$rc" -eq 1 ] || { cat "$err" >&2; die "exit $rc, want 1"; }
-  grep -qF -- "$msg" "$err" || { cat "$err" >&2; die "stderr lacks: $msg"; }
+  [ "$rc" -eq 1 ] || {
+    cat "$err" >&2
+    die "exit $rc, want 1"
+  }
+  grep -qF -- "$msg" "$err" || {
+    cat "$err" >&2
+    die "stderr lacks: $msg"
+  }
 }
 
 # edit <file> <sed expression>: portable in-place edit (BSD and GNU sed).
@@ -101,7 +117,8 @@ test_stub_placeholder_date_passes() {
 
 test_placeholder_date_outside_the_stub_fails() {
   # A filled file whose date was never set gives the overview no date.
-  local f; f="$(good)"
+  local f
+  f="$(good)"
   edit "$f" 's/^Last update: .*/Last update: YYYY-MM-DD/'
   expect_fail 'placeholder date "YYYY-MM-DD" outside the stub: set the date' "$f"
 }
@@ -111,7 +128,8 @@ test_shipped_stub_passes() {
 }
 
 test_extra_heading_after_blockers_passes() {
-  local f; f="$(good)"
+  local f
+  f="$(good)"
   printf '\n## Notes\nMore.\n' >>"$f"
   expect_pass "$f"
 }
@@ -122,9 +140,15 @@ test_defaults_are_the_root_file_and_the_stub() {
   cp "$(good)" "$root/STATUS.md"
   cp "$(good)" "$root/bootstrap/stubs/STATUS.md"
   local err="$WORK/err.$RANDOM"
-  STATUS_ROOT="$root" bash "$CHECK" 2>"$err" >/dev/null || { cat "$err" >&2; die "defaults failed"; }
+  STATUS_ROOT="$root" bash "$CHECK" 2>"$err" >/dev/null || {
+    cat "$err" >&2
+    die "defaults failed"
+  }
   edit "$root/bootstrap/stubs/STATUS.md" 's/^Last update: .*/Last update: YYYY-MM-DD/'
-  STATUS_ROOT="$root" bash "$CHECK" 2>"$err" >/dev/null || { cat "$err" >&2; die "the stub's placeholder failed by default"; }
+  STATUS_ROOT="$root" bash "$CHECK" 2>"$err" >/dev/null || {
+    cat "$err" >&2
+    die "the stub's placeholder failed by default"
+  }
   edit "$root/bootstrap/stubs/STATUS.md" '/^## Blockers$/d'
   local rc=0
   STATUS_ROOT="$root" bash "$CHECK" 2>"$err" >/dev/null || rc=$?
@@ -135,49 +159,57 @@ test_defaults_are_the_root_file_and_the_stub() {
 # ---------- error paths ----------
 
 test_missing_heading_fails_and_names_it() {
-  local f; f="$(good)"
+  local f
+  f="$(good)"
   edit "$f" '/^## Next step$/d'
   expect_fail 'missing heading "## Next step"' "$f"
 }
 
 test_renamed_heading_fails() {
-  local f; f="$(good)"
+  local f
+  f="$(good)"
   edit "$f" 's/^## Next step$/## Next steps/'
   expect_fail 'missing heading "## Next step"' "$f"
 }
 
 test_heading_with_trailing_space_fails() {
-  local f; f="$(good)"
+  local f
+  f="$(good)"
   edit "$f" 's/^## Phase$/## Phase /'
   expect_fail 'missing heading "## Phase"' "$f"
 }
 
 test_duplicate_heading_fails() {
-  local f; f="$(good)"
+  local f
+  f="$(good)"
   printf '\n## Phase\nAgain.\n' >>"$f"
   expect_fail 'heading "## Phase" appears 2 times' "$f"
 }
 
 test_wrong_order_fails() {
-  local f; f="$(good)"
+  local f
+  f="$(good)"
   edit "$f" 's/^## Phase$/## TMP/; s/^## Blockers$/## Phase/; s/^## TMP$/## Blockers/'
   expect_fail 'headings out of order' "$f"
 }
 
 test_missing_title_fails() {
-  local f; f="$(good)"
+  local f
+  f="$(good)"
   edit "$f" '/^# Status$/d'
   expect_fail 'missing title "# Status"' "$f"
 }
 
 test_missing_last_update_fails() {
-  local f; f="$(good)"
+  local f
+  f="$(good)"
   edit "$f" '/^Last update:/d'
   expect_fail 'missing "Last update: YYYY-MM-DD" line' "$f"
 }
 
 test_last_update_not_a_date_fails() {
-  local f; f="$(good)"
+  local f
+  f="$(good)"
   edit "$f" 's/^Last update: .*/Last update: today/'
   expect_fail 'missing "Last update: YYYY-MM-DD" line' "$f"
 }
@@ -187,7 +219,9 @@ test_missing_file_fails() {
 }
 
 test_every_problem_is_reported_not_only_the_first() {
-  local f g; f="$(good)"; g="$(good)"
+  local f g
+  f="$(good)"
+  g="$(good)"
   edit "$f" '/^## Phase$/d'
   edit "$g" '/^## Blockers$/d'
   local err="$WORK/err.$RANDOM"
@@ -197,7 +231,8 @@ test_every_problem_is_reported_not_only_the_first() {
 }
 
 test_crlf_file_passes() {
-  local f; f="$(good)"
+  local f
+  f="$(good)"
   awk '{ printf "%s\r\n", $0 }' "$f" >"$f.crlf"
   expect_pass "$f.crlf"
 }
@@ -206,13 +241,13 @@ test_crlf_file_passes() {
 
 # The exact step line, so a commented-out or reworded step does not pass.
 test_ci_build_runs_the_check() {
-  grep -qxF '        run: bash tools/check-status.sh' "$REPO/.github/workflows/ci.yml" \
-    || die "ci.yml does not run the check as a step"
+  grep -qxF '        run: bash tools/check-status.sh' "$REPO/.github/workflows/ci.yml" ||
+    die "ci.yml does not run the check as a step"
 }
 
 test_scripts_test_runs_these_tests() {
-  grep -qxF '        run: bash tools/test-check-status.sh' "$REPO/.github/workflows/bootstrapper.yml" \
-    || die "bootstrapper.yml does not run these tests as a step"
+  grep -qxF '        run: bash tools/test-check-status.sh' "$REPO/.github/workflows/bootstrapper.yml" ||
+    die "bootstrapper.yml does not run these tests as a step"
 }
 
 # That the template's own ci.yml never ships is pinned in bootstrap/test.sh.

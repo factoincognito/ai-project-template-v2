@@ -16,7 +16,10 @@ export LC_ALL=C
 SOURCE_REPO="factoincognito/ai-project-template-v2"
 
 err() { echo "publish.sh: error: $*" >&2; }
-fail() { err "$@"; exit 1; }
+fail() {
+  err "$@"
+  exit 1
+}
 
 [ "$#" -eq 4 ] || fail "usage: publish.sh <out-dir> <version> <commit> <remote-url>"
 OUT="$1"
@@ -24,12 +27,12 @@ VERSION="$2"
 COMMIT="$3"
 REMOTE="$4"
 
-[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-  || fail "version '$VERSION' is not vMAJOR.MINOR.PATCH"
-[[ "$COMMIT" =~ ^[0-9a-fA-F]{40}$ ]] \
-  || fail "commit '$COMMIT' is not a 40-character hex SHA"
-[ -d "$OUT" ] && [ -n "$(ls -A "$OUT")" ] \
-  || fail "out-dir '$OUT' is missing or empty; run build.sh first"
+[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+  fail "version '$VERSION' is not vMAJOR.MINOR.PATCH"
+[[ "$COMMIT" =~ ^[0-9a-fA-F]{40}$ ]] ||
+  fail "commit '$COMMIT' is not a 40-character hex SHA"
+[ -d "$OUT" ] && [ -n "$(ls -A "$OUT")" ] ||
+  fail "out-dir '$OUT' is missing or empty; run build.sh first"
 [ -n "$REMOTE" ] || fail "remote url is empty"
 OUT="$(cd "$OUT" && pwd)"
 
@@ -73,8 +76,8 @@ g add -A -f .
 tree="$(g write-tree)"
 
 diff <(g ls-tree -r --name-only "$tree" | sort) \
-     <(cd "$OUT" && find . \( -type f -o -type l \) | sed 's|^\./||' | sort) >&2 \
-  || fail "staged tree differs from the build output (diff above)"
+  <(cd "$OUT" && find . \( -type f -o -type l \) | sed 's|^\./||' | sort) >&2 ||
+  fail "staged tree differs from the build output (diff above)"
 
 msg="Bootstrapper $VERSION from $SOURCE_REPO@$COMMIT"
 if [ -n "$parent" ]; then
@@ -85,7 +88,7 @@ fi
 
 # 4. Branch and tag together, or neither. No force: a moved branch or an
 #    existing tag rejects the whole push.
-g push -q --atomic "$REMOTE" "$new:refs/heads/$BRANCH" "$new:refs/tags/$VERSION" \
-  || fail "push to the bootstrap repo was rejected; nothing was published"
+g push -q --atomic "$REMOTE" "$new:refs/heads/$BRANCH" "$new:refs/tags/$VERSION" ||
+  fail "push to the bootstrap repo was rejected; nothing was published"
 
 echo "Published $VERSION as $new on $BRANCH"
