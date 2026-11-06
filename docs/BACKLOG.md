@@ -1182,7 +1182,9 @@ get a working project in any supported language.
 
   **Rules that apply.** Script, test and workflow changes: test first (red, then green), reviewed by a Crog agent on Opus, one PR per scope point.
 
-- **[NEXT] PBI-1.38** (Clead, 2026-11-06, from the design of the public Rules edition, whose intent the product owner approved on 2026-11-05; this spec waits for the product owner's approval before it is built; the HOW is Clead's) — New projects get the Rules edition in `rules/` as their rule set, with a slim entry point and a `RULES.md` of local rules, and the old rule files stop shipping.
+- **[NEXT] PBI-1.38** (Clead, 2026-11-06, from the design of the public Rules edition, whose intent the product owner approved on 2026-11-05; the HOW is Clead's) — New projects get the Rules edition in `rules/` as their rule set, with a slim entry point and a `RULES.md` of local rules, and the old rule files stop shipping.
+
+  **Status: Adam approved 2026-11-06** (in chat, 09:31: "I approve the intent of the template PBI-1.38 spec as written in #360.").
 
   **Why.** The edition (`bootstrap/stubs/rules/`, taken by its own PR) holds the rules that today are spread over `CLAUDE.md`, `memory/roles.md`, `memory/standards.md`, `docs/CROG_ONBOARDING.md` and `docs/ROUTINES.md`. Shipping both would give a new project two rule sets that differ. Each new project signs off to the edition by its setup PR (edition Process P-7 § 5).
 
