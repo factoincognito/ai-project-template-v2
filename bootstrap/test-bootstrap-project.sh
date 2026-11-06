@@ -14318,7 +14318,11 @@ EOF
 test_the_failing_fill_awk_reads_its_input_so_the_writer_never_sees_a_broken_pipe() {
   # More than a pipe holds (64 KB) goes into the fake awk, with SIGPIPE
   # ignored: the writer must finish without an error, every time. A fake
-  # that exits without reading makes it fail with "Broken pipe".
+  # that exits without reading makes it fail with "Broken pipe". The
+  # inner bash turns errexit off first: only the writer's status is read,
+  # and under coverage tracing bashcov exports SHELLOPTS, which hands this
+  # harness's set -e and pipefail to the inner bash, so the fake awk's
+  # failure would stop it before the writer's status is read (PBI-1.41 c).
   local d rc
   d="$(tmpdir)"
   failing_fill_awk "$d"
@@ -14326,7 +14330,7 @@ test_the_failing_fill_awk_reads_its_input_so_the_writer_never_sees_a_broken_pipe
   (
     trap '' PIPE
     awk 'BEGIN { for (i = 0; i < 20000; i++) print "0123456789 line of fill text" }' >"$d/big"
-    FILL_N=1 bash -c 'cat "$1" | "$2" "{ print }"; exit "${PIPESTATUS[0]}"' _ "$d/big" "$d/bin/awk"
+    FILL_N=1 bash -c 'set +e; cat "$1" | "$2" "{ print }"; exit "${PIPESTATUS[0]}"' _ "$d/big" "$d/bin/awk"
   ) 2>"$d/err" || rc=$?
   [ "$rc" -eq 0 ] || {
     cat "$d/err" >&2

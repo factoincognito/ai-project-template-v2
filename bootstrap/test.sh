@@ -2533,6 +2533,17 @@ STUB
   done
 }
 
+# run_gate <checkout> <results> <script>: runs the aggregate step's script
+# in the checkout with the env GitHub gives it in a run whose test jobs
+# were needed: RESULTS as given, and the changes job's result and output
+# and the test jobs' results set, as GitHub always sets them. Left unset,
+# they stop the step at its first line whenever nounset reaches it: under
+# coverage tracing, bashcov exports SHELLOPTS, which hands this harness's
+# set -u to every bash it starts (PBI-1.41 c).
+run_gate() {
+  (cd "$1" && RESULTS="$2" CHANGES_RESULT=success TESTS_NEEDED=true TEST_RESULTS="success success" bash "$3")
+}
+
 test_workflow_bootstrapper_test_fails_unless_every_need_succeeded() {
   # Runs the aggregate job's script, in a checkout with every shard's
   # manifest, with the results GitHub would pass.
@@ -2549,14 +2560,14 @@ test_workflow_bootstrapper_test_fails_unless_every_need_succeeded() {
   d="$WORK/gate"
   gate_fixture "$d"
   for r in "success" "success success" "success success success"; do
-    (cd "$d" && RESULTS="$r" bash "$script") >"$WORK/out" 2>&1 || {
+    run_gate "$d" "$r" "$script" >"$WORK/out" 2>&1 || {
       cat "$WORK/out" >&2
       die "failed on results: $r"
     }
   done
   for r in "" "failure" "success failure" "failure success" "skipped success" \
     "success skipped" "success cancelled" "cancelled" "success  success failure"; do
-    ! (cd "$d" && RESULTS="$r" bash "$script") >/dev/null 2>&1 || die "passed on results: '$r'"
+    ! run_gate "$d" "$r" "$script" >/dev/null 2>&1 || die "passed on results: '$r'"
   done
 }
 
@@ -2572,7 +2583,7 @@ test_workflow_bootstrapper_test_fails_when_a_shard_or_leg_did_not_report() {
     d="$WORK/gate.$f"
     gate_fixture "$d"
     rm "$d/shard-list/$f"
-    if (cd "$d" && RESULTS="success success" bash "$script") >"$WORK/out" 2>&1; then
+    if run_gate "$d" "success success" "$script" >"$WORK/out" 2>&1; then
       die "passed with $f missing"
     fi
     grep -qF 'did not report' "$WORK/out" || {
@@ -2583,7 +2594,7 @@ test_workflow_bootstrapper_test_fails_when_a_shard_or_leg_did_not_report() {
   d="$WORK/gate.leg"
   gate_fixture "$d"
   rm "$d/shard-list/windows-latest-"*
-  if (cd "$d" && RESULTS="success success" bash "$script") >"$WORK/out" 2>&1; then
+  if run_gate "$d" "success success" "$script" >"$WORK/out" 2>&1; then
     die "passed with the Windows leg missing"
   fi
   grep -qF 'windows-latest: no shard reported' "$WORK/out" || {
@@ -2593,7 +2604,7 @@ test_workflow_bootstrapper_test_fails_when_a_shard_or_leg_did_not_report() {
   d="$WORK/gate.bash32"
   gate_fixture "$d"
   rm "$d/shard-list/ubuntu-bash32-"*
-  if (cd "$d" && RESULTS="success success" bash "$script") >"$WORK/out" 2>&1; then
+  if run_gate "$d" "success success" "$script" >"$WORK/out" 2>&1; then
     die "passed with the bash 3.2 leg missing"
   fi
   grep -qF 'ubuntu-bash32: no shard reported' "$WORK/out" || {
