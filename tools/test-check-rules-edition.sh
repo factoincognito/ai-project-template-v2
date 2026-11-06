@@ -361,6 +361,40 @@ test_template_mode_deleting_the_folder_with_another_file_fails() {
   expect 1 "together with other files"
 }
 
+test_template_mode_deleting_the_folder_alone_fails() {
+  # Once an edition is taken the folder is always there (it is replaced
+  # whole, never removed), so a change that only deletes it fails.
+  local r; r="$(tpl_repo)"
+  good "$r/bootstrap/stubs/rules" && commit_all "$r" "edition on main"
+  ( cd "$r" && git checkout -q -b feat && git rm -rq bootstrap/stubs/rules )
+  commit_all "$r" "delete the edition"
+  trun "$r"
+  expect 1 "deletes bootstrap/stubs/rules/"
+}
+
+test_template_mode_deleting_the_folder_on_a_pull_request_fails() {
+  local r; r="$(tpl_repo)"
+  good "$r/bootstrap/stubs/rules" && commit_all "$r" "edition on main"
+  ( cd "$r" && git update-ref refs/remotes/origin/main main \
+    && git checkout -q -b feat && git rm -rq bootstrap/stubs/rules )
+  commit_all "$r" "delete the edition"
+  RC=0
+  OUT="$(cd "$r" && env -u EDITION_BASE GITHUB_EVENT_NAME=pull_request GITHUB_BASE_REF=main \
+    bash "$CHECK" --template bootstrap/stubs/rules 2>&1)" || RC=$?
+  expect 1 "deletes bootstrap/stubs/rules/"
+}
+
+test_template_mode_folder_added_after_the_base_and_absent_passes() {
+  # Absent at HEAD and at the merge base (main moved on, the branch did
+  # not take it): nothing was deleted by this change.
+  local r; r="$(tpl_repo)"
+  ( cd "$r" && git checkout -q -b feat && printf 'x\n' >>docs/a.md ) && commit_all "$r" other
+  ( cd "$r" && git checkout -q main ) && good "$r/bootstrap/stubs/rules" && commit_all "$r" "edition on main"
+  ( cd "$r" && git checkout -q feat )
+  trun "$r"
+  expect 0 "nothing to check"
+}
+
 test_template_mode_renaming_out_of_the_folder_fails() {
   # A rename counts as a delete in the folder and an add outside it.
   local r; r="$(tpl_repo)"
