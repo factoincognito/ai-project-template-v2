@@ -389,7 +389,7 @@ expect_only_fail() {
 reason_of() { grep -E "^[A-Z]+ $2: " "$1/out" | sed -E "s/^[A-Z]+ $2: //"; }
 
 GITHUB_CHECKS="project template merge-settings setup-change build history setup-branch protection decision-row"
-LOCAL_CHECKS="copy changelog pack lockfile placeholders readme-section own-readme languages pack-links licence no-script line-endings no-keys"
+LOCAL_CHECKS="copy changelog pack lockfile placeholders readme-section own-readme languages pack-links licence no-script line-endings no-keys rules-edition"
 SKIP_CHECKS="resume docs guides unaided ci-gate exempt-pr bot-comments"
 
 # expect_all_pass <d>
@@ -446,7 +446,7 @@ test_finished_node_run_passes_every_check() {
   d="$(tmpdir)"; finished "$d" node mit
   run_check "$d"
   expect_all_pass "$d"
-  grep -qE '^Result: 22 passed, 0 failed, 7 skipped\.$' "$d/out" || { cat "$d/out" >&2; die "summary line"; }
+  grep -qE '^Result: 23 passed, 0 failed, 7 skipped\.$' "$d/out" || { cat "$d/out" >&2; die "summary line"; }
   # The checker did look at GitHub and at the copy.
   [ -s "$d/gh.log" ] && [ -s "$d/git.log" ] || die "no gh or git calls logged"
 }
@@ -476,7 +476,7 @@ test_every_line_of_a_check_has_one_status_and_a_plain_reason() {
   d="$(tmpdir)"; finished "$d" web mit
   run_check "$d"
   n="$(grep -cE '^(PASS|FAIL|SKIP) [a-z-]+: [^ ].*[.)]$' "$d/out")"
-  [ "$n" = 29 ] || { cat "$d/out" >&2; die "$n check lines in the form '<STATUS> <id>: <reason>.', want 29"; }
+  [ "$n" = 30 ] || { cat "$d/out" >&2; die "$n check lines in the form '<STATUS> <id>: <reason>.', want 30"; }
   # No raw tool text: no HTTP status lines, JSON or gh's own words.
   ! grep -nE 'HTTP/|\{"|^gh: |fatal:' "$d/out" >&2 || die "raw tool text in the output"
 }
@@ -1124,6 +1124,44 @@ test_script_left_fails() {
   d="$(tmpdir)"; finished "$d" node mit
   change_setup "$d" 'mkdir -p tools && printf "#!/bin/sh\n" >tools/bootstrap-project.sh'
   run_check "$d"; expect_only_fail "$d" no-script
+}
+
+test_rules_edition_unchanged_passes_and_names_the_edition() {
+  # The made project's rules/ passes the project's own check, the one its
+  # CI runs; the reason names the edition.
+  local d id
+  d="$(tmpdir)"; finished "$d" node mit
+  id="$(sed -n 1p "$BUILT/rules/EDITION")"
+  [ -n "$id" ] || die "the built bootstrapper has no rules/EDITION (test is stale)"
+  run_check "$d"; expect_all_pass "$d"
+  reason_of "$d" rules-edition | grep -F "$id" >/dev/null || { cat "$d/out" >&2; die "the reason does not name the edition $id"; }
+}
+
+test_rules_edition_changed_or_removed_fails() {
+  # A changed file, an extra file or a removed rules/ fails the check,
+  # and the reason names what is wrong.
+  local d
+  d="$(tmpdir)"; finished "$d" node mit
+  change_setup "$d" 'printf "edited here\n" >>rules/RULES.md'
+  run_check "$d"; expect_only_fail "$d" rules-edition
+  reason_of "$d" rules-edition | grep -F RULES.md >/dev/null || { cat "$d/out" >&2; die "the reason does not name the changed file"; }
+  d="$(tmpdir)"; finished "$d" node mit
+  change_setup "$d" 'printf "x\n" >rules/extra.md'
+  run_check "$d"; expect_only_fail "$d" rules-edition
+  reason_of "$d" rules-edition | grep -F extra.md >/dev/null || { cat "$d/out" >&2; die "the reason does not name the extra file"; }
+  d="$(tmpdir)"; finished "$d" node mit
+  change_setup "$d" 'rm -r rules'
+  run_check "$d"; expect_only_fail "$d" rules-edition
+}
+
+test_rules_edition_without_the_projects_check_script_fails() {
+  # The check is the project's own script; without it nothing is checked,
+  # which is a failure, not a pass.
+  local d
+  d="$(tmpdir)"; finished "$d" node mit
+  change_setup "$d" 'rm .github/scripts/check-rules-edition.sh'
+  run_check "$d"; expect_only_fail "$d" rules-edition
+  reason_of "$d" rules-edition | grep -F check-rules-edition.sh >/dev/null || { cat "$d/out" >&2; die "the reason does not name the script"; }
 }
 
 test_cr_lf_file_fails() {
