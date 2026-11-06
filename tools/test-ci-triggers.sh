@@ -10,6 +10,7 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAILED=0
+RED_RUN_UNUSED=1
 
 fail() {
   echo "FAIL $*" >&2
