@@ -8312,9 +8312,11 @@ expect_setup_tree() {
   grep -qF '[PHASE NAME]' "$c/docs/BACKLOG.md" || die "$p$deploy: [PHASE NAME] was filled in"
   grep -qxF -- '- [Goal]' "$c/memory/project.md" || die "$p$deploy: [Goal] was filled in"
   grep -qF '[What the system does' "$c/docs/SPEC.md" || die "$p$deploy: the SPEC section prompts were filled in"
-  # The format token [DATE] stays where the spec says it does.
-  grep -qF 'Adam approved [DATE]' "$c/memory/roles.md" || die "$p$deploy: [DATE] in memory/roles.md was filled in"
-  grep -qF '[DATE]**' "$c/docs/CROG_ONBOARDING.md" || die "$p$deploy: [DATE] in docs/CROG_ONBOARDING.md was filled in"
+  # The Rules edition and the local rules are the bootstrapper's, byte for
+  # byte: the setup never edits them (the project signs off with them).
+  [ -f "$BUILT/rules/EDITION" ] || die "the built bootstrapper has no rules/EDITION (test is stale)"
+  diff -r "$BUILT/rules" "$c/rules" >&2 || die "$p$deploy: rules/ is not the bootstrapper's, unchanged"
+  cmp -s "$BUILT/RULES.md" "$c/RULES.md" || die "$p$deploy: RULES.md is not the bootstrapper's stub, unchanged"
 }
 
 test_every_pack_leaves_exactly_the_expected_tree() {
@@ -9384,8 +9386,8 @@ python||mit|M |docs/DEV_INFRASTRUCTURE.md|yes
 python||mit|M |CLAUDE.md|yes
 python||mit|M |docs/SPEC.md|yes
 python||mit|M |memory/project.md|yes
-python||mit|M |memory/roles.md|no
-python||mit|M |docs/CROG_ONBOARDING.md|no
+python||mit|M |RULES.md|no
+python||mit|M |rules/RULES.md|no
 python||mit|M |licenses/NOTICE|no
 python||mit|M |pyproject.toml|no
 node||mit|M |package.json|no
@@ -9449,10 +9451,11 @@ ROWS
 
 test_a_file_changed_or_deleted_that_the_setup_does_not_change_stops_before_anything_is_saved() {
   # #155 review, finding 1: the "M " and "D " branches through a whole run
-  # (node): something else (here npm) changes memory/roles.md, or deletes
-  # docs/ROUTINES.md, which the setup never touches.
+  # (node): something else (here npm) changes rules/RULES.md, or deletes
+  # rules/EDITION, which the setup never touches: it leaves the Rules
+  # edition alone.
   local d c var path line epat
-  for var in TOUCH:memory/roles.md DELETE:docs/ROUTINES.md; do
+  for var in TOUCH:rules/RULES.md DELETE:rules/EDITION; do
     path="${var#*:}"
     d="$(tmpdir)"
     fake_tool "$d" npm 10.0.0
