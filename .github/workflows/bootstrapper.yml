@@ -18,8 +18,9 @@
 #
 # - Every pull request to main: run the build.sh / publish.sh tests and
 #   the tests of the shared test-first check
-#   (tools/test-require-test-change.sh) and of the STATUS.md format check
-#   (tools/test-check-status.sh) on ubuntu, and the tests of the
+#   (tools/test-require-test-change.sh), of the STATUS.md format check
+#   (tools/test-check-status.sh) and of the Rules edition check
+#   (tools/test-check-rules-edition.sh) on ubuntu, and the tests of the
 #   bootstrap script (bootstrap/test-bootstrap-project.sh) on ubuntu,
 #   ubuntu with GNU bash 3.2.57 built from source (PBI-1.26; the cache of
 #   that build is saved by bash32-cache.yml) and Windows (Git for Windows
@@ -121,6 +122,8 @@ jobs:
         run: bash tools/test-require-test-change.sh
       - name: Test the STATUS.md format check
         run: bash tools/test-check-status.sh
+      - name: Test the Rules edition check
+        run: bash tools/test-check-rules-edition.sh
       - name: Test e2e-check.sh
         run: bash bootstrap/test-e2e-check.sh
 

@@ -1334,7 +1334,7 @@ test_not_read_list_holds_only_tracked_files_and_every_test_job_deletes_them() {
   # listed file it read would only show there. It reads none (measured).
   for j in $(wf_jobs_running bootstrap/test.sh) $(wf_jobs_running tools/test-require-test-change.sh) \
     $(wf_jobs_running bootstrap/test-e2e-check.sh) $(wf_jobs_running tools/test-check-status.sh) \
-    "$(matrix_job)"; do
+    $(wf_jobs_running tools/test-check-rules-edition.sh) "$(matrix_job)"; do
     job="$(wf_job "$j")"
     grep -qxF '        run: bash bootstrap/changed-inputs.sh remove' <<<"$job" \
       || die "job $j runs tests without deleting the files no test reads first"
@@ -2191,6 +2191,13 @@ test_workflow_bootstrapper_test_gates_the_check_status_tests() {
   assert_gated tools/test-check-status.sh
 }
 
+test_workflow_bootstrapper_test_gates_the_rules_edition_check_tests() {
+  # The Rules edition check runs in ci.yml's build job; its own tests run
+  # in a job the required bootstrapper-test check needs.
+  [ -f "$REPO/tools/test-check-rules-edition.sh" ] || die "no tools/test-check-rules-edition.sh"
+  assert_gated tools/test-check-rules-edition.sh
+}
+
 test_workflow_bootstrapper_test_gates_the_bootstrap_project_tests() {
   [ -f "$HERE/test-bootstrap-project.sh" ] || die "no bootstrap/test-bootstrap-project.sh"
   assert_gated bootstrap/test-bootstrap-project.sh
@@ -2795,13 +2802,23 @@ test_shipped_project_script_ignores_the_users_cdpath() {
 }
 
 test_project_script_avoids_listed_bash4_constructs() {
+  assert_no_listed_bash4_constructs "$PROJECT_SCRIPT"
+}
+
+# The Rules edition check ships too, and may run on a Mac's bash 3.2.
+test_rules_edition_check_avoids_listed_bash4_constructs() {
+  assert_no_listed_bash4_constructs "$REPO/.github/scripts/check-rules-edition.sh"
+}
+
+# assert_no_listed_bash4_constructs <file>
+assert_no_listed_bash4_constructs() {
   # A partial static scan, not a proof of bash 3.2 compatibility (macOS
   # /bin/bash is 3.2). It refuses the bash 4+ constructs listed below in
   # every line that is not a full-line comment, plus `bash -n`. Anything
   # not listed passes; a real run on bash 3.2 comes with the OS matrix.
   # Each pattern comes with a sample it must match, so a broken pattern
   # fails the test instead of passing.
-  local f="$PROJECT_SCRIPT" code="$WORK/code.$RANDOM" i
+  local f="$1" code="$WORK/code.$RANDOM" i
   local pats=() samples=()
   [ -f "$f" ] || die "no $f"
   bash -n "$f" || die "syntax error in $f"
@@ -2859,7 +2876,8 @@ test_no_grep_q_at_the_end_of_a_pipe() {
     || die "with its output to /dev/null, grep stopped reading at the first match: the /dev/null form is not safe"
   for f in bootstrap/test.sh bootstrap/test-bootstrap-project.sh bootstrap/test-e2e-check.sh \
            tools/test-layout-pack.sh bootstrap/check-shards.sh bootstrap/e2e-check.sh \
-           tools/test-require-test-change.sh tools/check-status.sh tools/test-check-status.sh; do
+           tools/test-require-test-change.sh tools/check-status.sh tools/test-check-status.sh \
+           .github/scripts/check-rules-edition.sh tools/test-check-rules-edition.sh; do
     [ -f "$REPO/$f" ] || die "no $f"
     grep -q 'pipefail' "$REPO/$f" || die "$f no longer sets pipefail; update this test"
     grep -nvE '^[[:space:]]*#' "$REPO/$f" >"$code" || true

@@ -16,6 +16,12 @@
 # that this file and packs.yml run on pull requests and on pushes to main
 # only (tools/test-ci-triggers.sh, PBI-1.25 part 2): a push trigger on every
 # branch runs them twice for each push to a pull request branch.
+# Its fourth step checks the Rules edition the template ships in
+# bootstrap/stubs/rules (.github/scripts/check-rules-edition.sh, template
+# mode): every file is the one its EDITION lists, and a pull request that
+# changes the folder changes nothing else. While no edition is taken the
+# folder is absent and there is nothing to check. The folder is ignored by
+# the test-first check: it is a build output, tested where it is built.
 name: CI
 
 on:
@@ -33,8 +39,10 @@ jobs:
           # Full history, so the base branch is there to compare with.
           fetch-depth: 0
       - name: Require a test change with a code change
-        run: bash .github/scripts/require-test-change.sh --code '*.sh' 'bootstrap/*' 'tools/*' '.github/workflows/*' '.github/scripts/*' 'languages/*' '.gitattributes' '.gitignore' --test 'bootstrap/test.sh' 'bootstrap/test-*.sh' 'tools/test-*.sh' 'languages/*.test.ts' 'languages/*.test.tsx' 'languages/*.spec.ts' 'languages/*.spec.tsx' 'languages/*__tests__/*' 'languages/*/src/tests/*' 'languages/*/starter/tests/*' 'languages/*/test_*.py' 'languages/*.e2e.ts' --ignore '*.md' 'bootstrap/stubs/licenses/*'
+        run: bash .github/scripts/require-test-change.sh --code '*.sh' 'bootstrap/*' 'tools/*' '.github/workflows/*' '.github/scripts/*' 'languages/*' '.gitattributes' '.gitignore' --test 'bootstrap/test.sh' 'bootstrap/test-*.sh' 'tools/test-*.sh' 'languages/*.test.ts' 'languages/*.test.tsx' 'languages/*.spec.ts' 'languages/*.spec.tsx' 'languages/*__tests__/*' 'languages/*/src/tests/*' 'languages/*/starter/tests/*' 'languages/*/test_*.py' 'languages/*.e2e.ts' --ignore '*.md' 'bootstrap/stubs/licenses/*' 'bootstrap/stubs/rules/*'
       - name: Check the STATUS.md format
         run: bash tools/check-status.sh
       - name: Check the triggers of ci.yml and packs.yml
         run: bash tools/test-ci-triggers.sh
+      - name: Check the Rules edition
+        run: bash .github/scripts/check-rules-edition.sh --template bootstrap/stubs/rules
