@@ -10,6 +10,7 @@ P-3 § 2 Independence of the reviewer
 (2) The reviewer is given only the diff, the documents it reviews against (the specification, the review standard of this process and the project's own standards), and, for a PR that changes code, the test coverage narrative table and the red run from the PR description.
 (3) The reviewer is never given the author's reasoning: the rest of the PR description, the implementation conversation or design-time memory.
 (4) The reviewer reads the PR's diff and files through git and the GitHub API itself; no dump of the PR is posted for it.
+(5) In addition to (2), where the reviewer is an agent a session starts or resumes, the prompt that starts or resumes it names the head to review and the session the verdict signs for, named as P-2 § 4 (5) sets out, and asks for a verdict that names both and holds P-3 § 3 (1) and (6).
 
 P-3 § 3 Review standard
 Every review contains, without being asked:
