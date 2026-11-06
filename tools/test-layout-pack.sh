@@ -685,6 +685,114 @@ test_packs_workflow_simulates_the_setup_change_and_a_refused_change() {
   [ "$n" -eq 5 ] || die "the refused-change step is not the last step of all 5 pack jobs (found $n)"
 }
 
+# ---------- the Rules edition check in a project's CI ----------
+# Every made project checks its copy of the Rules (rules/, as the edition
+# names it in rules/EDITION) with the shipped check script, in project
+# mode, where an absent rules/ fails. The step is the same everywhere:
+# one name, one run: line, nothing else (no if:, no continue-on-error:,
+# no working-directory:), so it cannot be turned off quietly.
+
+EDITION_STEP_NAME='      - name: Check the Rules edition'
+EDITION_STEP_RUN='        run: bash .github/scripts/check-rules-edition.sh rules'
+
+# edition_step_block: from stdin (a workflow, or one job of it), prints the
+# lines of the edition step without blank lines: its name line up to the
+# next step or job.
+edition_step_block() {
+  awk -v name="$EDITION_STEP_NAME" '
+    $0 == name { inblock = 1; print; next }
+    inblock && (/^      - / || /^  [a-z][a-z-]*:$/) { inblock = 0 }
+    inblock && NF { print }
+  '
+}
+
+# step_heads: from stdin, the head line of each step (name or uses), in
+# order, without the indentation.
+step_heads() {
+  sed -nE 's/^      - ((name|uses): .*)$/\1/p'
+}
+
+# expect_edition_step <where> <text>: the text has the edition step once,
+# exactly as above, and no other line runs the check script.
+expect_edition_step() {
+  local where="$1" text="$2" n
+  n="$(grep -cxF -- "$EDITION_STEP_NAME" <<<"$text" || true)"
+  [ "$n" -eq 1 ] || die "$where: expected 1 step named \"Check the Rules edition\", found $n"
+  [ "$(edition_step_block <<<"$text")" = "$EDITION_STEP_NAME"$'\n'"$EDITION_STEP_RUN" ] \
+    || die "$where: the edition step is not exactly these two lines: $EDITION_STEP_NAME / $EDITION_STEP_RUN (got: $(edition_step_block <<<"$text" | tr '\n' '/'))"
+  n="$(grep -vE '^[[:space:]]*#' <<<"$text" | grep -cF 'check-rules-edition.sh' || true)"
+  [ "$n" -eq 1 ] || die "$where: expected the check script on 1 line, found $n"
+}
+
+test_every_pack_ci_checks_the_rules_edition_after_the_test_change_check() {
+  # Right after the checkout, next to the test-change step: the
+  # test-change check stays the first step after the checkout
+  # (languages/README.md), and the edition check is the next one.
+  local p ci heads n=0
+  for p in $PACKS; do
+    n=$((n + 1))
+    ci="$REPO/languages/$p/ci.yml"
+    expect_edition_step "languages/$p/ci.yml" "$(cat "$ci")"
+    heads="$(step_heads <"$ci" | sed -n 1,3p)"
+    [ "$heads" = "uses: actions/checkout@v7"$'\n'"name: Require a test change with a code change"$'\n'"name: Check the Rules edition" ] \
+      || die "languages/$p/ci.yml: the first steps are not the checkout, the test-change check and the edition check (got: $(tr '\n' '/' <<<"$heads"))"
+  done
+  [ "$n" -eq 5 ] || die "checked $n packs, expected 5"
+}
+
+test_the_stub_ci_checks_the_rules_edition_right_after_the_checkout() {
+  # The CI of a copy before its pack is laid out (and of the
+  # bootstrapper itself) checks the edition too.
+  local stub="$REPO/bootstrap/stubs/.github/workflows/ci.yml" heads
+  [ -f "$stub" ] || die "no $stub"
+  expect_edition_step "the stub ci.yml" "$(cat "$stub")"
+  heads="$(step_heads <"$stub" | sed -n 1,2p)"
+  [ "$heads" = "uses: actions/checkout@v7"$'\n'"name: Check the Rules edition" ] \
+    || die "the stub ci.yml: the edition check is not the first step after the checkout (got: $(tr '\n' '/' <<<"$heads"))"
+}
+
+test_the_ci_yml_laid_out_in_overlay_mode_checks_the_rules_edition() {
+  # The setup lays the pack out over the copy (overlay): the pack's
+  # ci.yml replaces the stub, so the project's CI is the pack's and must
+  # still have the step.
+  local p out n=0
+  for p in $PACKS; do
+    n=$((n + 1))
+    out="$WORK/overlay.$p.$RANDOM"
+    mkdir -p "$out/.github/workflows"
+    cp "$REPO/bootstrap/stubs/.github/workflows/ci.yml" "$out/.github/workflows/ci.yml"
+    printf 'x\n' >"$out/.gitignore"
+    ( set --; . "$SCRIPT"; layout_into "$p" "$REPO/languages" "$out" overlay ) >"$WORK/overlay.out" 2>&1 \
+      || { cat "$WORK/overlay.out" >&2; die "$p: overlay failed"; }
+    grep -qF 'require-test-change.sh' "$out/.github/workflows/ci.yml" \
+      || die "$p: the overlay left the stub ci.yml in place (test is stale)"
+    expect_edition_step "$p: the ci.yml laid out in overlay mode" "$(cat "$out/.github/workflows/ci.yml")"
+  done
+  [ "$n" -eq 5 ] || die "checked $n packs, expected 5"
+}
+
+test_packs_workflow_runs_each_packs_rules_edition_step_in_the_project() {
+  # packs.yml copies each pack's CI commands into its pack-<name> job, so
+  # each job runs the pack's edition step word for word, in the made
+  # project (the job's default working directory), right after the
+  # pack's own test-change check on the setup change.
+  local wf="$REPO/.github/workflows/packs.yml" p job want got after n=0
+  for p in $PACKS; do
+    n=$((n + 1))
+    job="$(awk -v job="  pack-$p:" '$0 == job { injob = 1; next } /^  [a-z][a-z-]*:$/ { injob = 0 } injob' "$wf")"
+    [ -n "$job" ] || die "no pack-$p job"
+    grep -qxF '        working-directory: project' <<<"$job" || die "pack-$p: the default working directory is not the project (test is stale)"
+    expect_edition_step "pack-$p" "$job"
+    want="$(edition_step_block <"$REPO/languages/$p/ci.yml")"
+    got="$(edition_step_block <<<"$job")"
+    [ "$got" = "$want" ] || die "pack-$p does not run the $p pack's edition step word for word (want: $(tr '\n' '/' <<<"$want"); got: $(tr '\n' '/' <<<"$got"))"
+    after="$(step_heads <<<"$job" | grep -xF -A1 "name: Check the setup change with the pack's own check" | sed -n 2p)"
+    [ "$after" = "name: Check the Rules edition" ] \
+      || die "pack-$p: the edition step does not come right after the pack's own test-change check (next step: $after)"
+  done
+  [ "$n" -eq 5 ] || die "checked $n pack jobs, expected 5"
+}
+
 test_packs_workflow_node_version_matches_pack_ci() {
   local wf="$REPO/.github/workflows/packs.yml" v
   for p in node web react-native; do
