@@ -19,7 +19,9 @@
 # folder does not pass. No git is needed.
 #
 # Template mode (the template's own CI, on bootstrap/stubs/rules):
-#   - an absent <dir> means there is no edition yet: nothing to check;
+#   - an absent <dir> means there is no edition yet: nothing to check,
+#     unless <dir> exists at the merge base, so the change deletes it,
+#     which fails (once taken, an edition is only replaced by a newer one);
 #   - a change that touches <dir> and any file outside it fails, so a
 #     change of the edition is purely a build output. Deleted and renamed
 #     files count on both sides.
@@ -121,6 +123,8 @@ check_change() {
     cat "$WORK/err"
     die2 "git diff against '$base' failed (no common history? checkout needs fetch-depth: 0)"
   fi
+  MERGE_BASE="$(git merge-base "$base" HEAD)" \
+    || die2 "no merge base of '$base' and HEAD (checkout needs fetch-depth: 0)"
   : >"$outside"
   while IFS= read -r -d '' f; do
     case "$f" in
@@ -144,8 +148,13 @@ if [ "$TEMPLATE" = true ]; then
   git rev-parse --git-dir >/dev/null 2>&1 || die2 "not inside a git repository"
   TOP="$(git rev-parse --show-toplevel)" || die2 "not inside a work tree"
   cd "$TOP"
+  MERGE_BASE=""
   check_change "$DIR"
   if [ ! -e "$DIR" ]; then
+    # Once an edition is taken, the folder is replaced whole, never removed.
+    if [ -n "$MERGE_BASE" ] && git cat-file -e "$MERGE_BASE:$DIR" 2>/dev/null; then
+      problem "this change deletes $DIR/: once an edition is taken, the folder is replaced by a newer edition, never removed"
+    fi
     if [ "$PROBLEMS" -gt 0 ]; then exit 1; fi
     echo "$NAME: no $DIR/: no edition taken yet, nothing to check"
     exit 0
