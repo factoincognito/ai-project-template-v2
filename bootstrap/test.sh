@@ -2733,6 +2733,27 @@ test_real_build_ships_the_require_test_change_script() {
   [ ! -e "$out/tools" ] || die "tools/ shipped"
 }
 
+test_real_build_ships_every_script_a_project_ci_runs() {
+  # A project's CI (the stub ci.yml, then its pack's) runs scripts from
+  # .github/scripts/; each one ships byte for byte and executable, through
+  # the manifest. The Rules edition check is named on its own as well, so
+  # this does not pass because no ci.yml names it.
+  local out="$WORK/real.$RANDOM" f n=0
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  while IFS= read -r f; do
+    n=$((n + 1))
+    [ -f "$out/$f" ] || die "$f is run by a project's CI but not shipped (bootstrap/manifest.txt)"
+    [ -x "$out/$f" ] || die "$f shipped without its executable bit"
+    cmp -s "$REPO/$f" "$out/$f" || die "$f shipped altered"
+  done < <( {
+    echo .github/scripts/check-rules-edition.sh
+    grep -ohE '\.github/scripts/[A-Za-z0-9._-]+' "$REPO/bootstrap/stubs/.github/workflows/ci.yml" "$REPO"/languages/*/ci.yml
+  } | LC_ALL=C sort -u)
+  [ "$n" -ge 2 ] || die "found only $n scripts; the parser is broken"
+  grep -qxF .github/scripts/check-rules-edition.sh "$REPO/bootstrap/manifest.txt" \
+    || die "bootstrap/manifest.txt does not list .github/scripts/check-rules-edition.sh by name"
+}
+
 # ---------- bootstrap-project.sh (shipped as a stub) ----------
 # The source is bootstrap/stubs/bootstrap-project.sh; stubs mirror the
 # output, so it ships at the bootstrapper root, where packs are under
