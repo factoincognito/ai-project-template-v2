@@ -53,7 +53,6 @@ BODY_JQ='.body'
 NL='
 '
 CR="$(printf '\r')"
-TAB="$(printf '\t')"
 
 # placeholder_rows <pack> <with deploy: yes or empty>: the fill table of
 # step 8, one "<file>|<text>" per line (a line break inside a text is
@@ -203,7 +202,6 @@ api_problem() {
 
 # ---------- reading the copy ----------
 
-DIR_ABS=""
 COPY_READABLE=""
 # COPY_PASSED: the copy check passed (DIR is the top folder of a clean
 # copy of OWNER/NAME on main); only then is the folder removal shown.
@@ -249,10 +247,9 @@ join_list() { local sep="$1" out="" w; shift; for w in "$@"; do out="${out:+$out
 
 REPO_OK="" REPO_PROBLEM="" R_PRIVATE="" R_TEMPLATE="" R_DELETE="" R_SQUASH=""
 read_repo() {
-  local full
   api_get "repos/$OWNER/$NAME" "$REPO_JQ"
   if [ "$API_STATUS" != 200 ]; then api_problem; REPO_PROBLEM="$PROBLEM"; return 0; fi
-  IFS='|' read -r full R_PRIVATE R_TEMPLATE R_DELETE R_SQUASH <<<"$API_BODY"
+  IFS='|' read -r _ R_PRIVATE R_TEMPLATE R_DELETE R_SQUASH <<<"$API_BODY"
   REPO_OK=1
 }
 
@@ -286,7 +283,7 @@ check_merge_settings() {
 
 # The setup change: the proposed change from bootstrap-setup that the run
 # merged (when exactly one is merged; else the only one, if there is one).
-PULLS_OK="" PULLS_PROBLEM="" PULL_LINES="" PR_NUM="" PR_MERGE_SHA="" PR_HEAD_SHA="" PR_STATE="" PR_MERGED_AT=""
+PULLS_OK="" PULLS_PROBLEM="" PULL_LINES="" PR_NUM="" PR_MERGE_SHA="" PR_HEAD_SHA="" PR_STATE=""
 read_pulls() {
   local n=0 merged=0 line num state at msha hsha
   api_get "repos/$OWNER/$NAME/pulls?state=all&head=$OWNER:$SETUP_BRANCH&per_page=100" "$PULLS_JQ"
@@ -298,12 +295,12 @@ read_pulls() {
     n=$((n + 1))
     if [ "$at" != - ]; then
       merged=$((merged + 1))
-      [ "$merged" -ne 1 ] || { PR_NUM="$num" PR_STATE="$state" PR_MERGED_AT="$at" PR_MERGE_SHA="$msha" PR_HEAD_SHA="$hsha"; }
+      [ "$merged" -ne 1 ] || { PR_NUM="$num" PR_STATE="$state" PR_MERGE_SHA="$msha" PR_HEAD_SHA="$hsha"; }
     fi
   done <<<"$PULL_LINES"
   if [ "$merged" -gt 1 ]; then PR_NUM="" PR_MERGE_SHA="" PR_HEAD_SHA=""; fi
   if [ "$merged" -eq 0 ] && [ "$n" -eq 1 ]; then
-    read -r PR_NUM PR_STATE PR_MERGED_AT PR_MERGE_SHA PR_HEAD_SHA <<<"$PULL_LINES"
+    read -r PR_NUM PR_STATE _ PR_MERGE_SHA PR_HEAD_SHA <<<"$PULL_LINES"
   fi
   PULL_COUNT="$n"
   MERGED_COUNT="$merged"
@@ -339,7 +336,7 @@ check_build() {
   elif [ -n "$bad" ]; then
     result FAIL build "The check build on the last commit of #$PR_NUM did not pass every time it ran (other results: $bad)."
   else
-    n=time; [ "$runs" -eq 1 ] || n=times
+    n="time"; [ "$runs" -eq 1 ] || n="times"
     result PASS build "The check build passed on the last commit of #$PR_NUM ($runs $n)."
   fi
 }
@@ -353,14 +350,14 @@ read_main() {
 short() { printf '%s' "$1" | cut -c1-7; }
 
 check_history() {
-  local lines n first fp second sp
+  local lines n first fp sp
   if [ -z "$MAIN_SHA" ]; then result FAIL history "main could not be read: $MAIN_PROBLEM."; return 0; fi
   api_get "repos/$OWNER/$NAME/commits?sha=main&per_page=3" "$COMMITS_JQ"
   if [ "$API_STATUS" != 200 ]; then api_problem; result FAIL history "The history of main could not be read: $PROBLEM."; return 0; fi
   lines="$API_BODY"
   n="$(printf '%s\n' "$lines" | grep -c . || true)"
   read -r first fp <<<"$(printf '%s\n' "$lines" | sed -n 1p)"
-  read -r second sp <<<"$(printf '%s\n' "$lines" | sed -n 2p)"
+  read -r _ sp <<<"$(printf '%s\n' "$lines" | sed -n 2p)"
   if [ "$n" -ne 2 ]; then
     result FAIL history "main has $( [ "$n" -ge 3 ] && echo "3 or more changes" || echo "$n change(s)" ), not two (GitHub's template change and the setup merged as one); a run, resumed or not, adds exactly one. The usual cause is a change merged after the run, such as the red-then-Test-exempt one: run this check before merging anything else."
   elif [ "$sp" != 0 ] || [ "$fp" != 1 ]; then

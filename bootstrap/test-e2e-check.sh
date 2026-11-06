@@ -410,6 +410,7 @@ test_help_prints_usage_and_exits_0() {
   grep -qF 'e2e-check.sh OWNER/NAME DIR' "$d/out" || { cat "$d/out" >&2; die "no usage line"; }
   grep -qi 'read' "$d/out" || die "help does not say it only reads"
   # Review round 2, items 3 and 8.
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -qF 'Test-exempt' "$d/out" && grep -qF 'exactly two commits' "$d/out" \
     || { cat "$d/out" >&2; die "help does not say to run it before the Test-exempt change is merged"; }
   grep -qF 'CHANGELOG' "$d/out" || die "help does not say the pack and licence are read from CHANGELOG.md"
@@ -454,6 +455,7 @@ test_finished_node_run_passes_every_check() {
 test_finished_runs_of_every_pack_and_licence_pass() {
   local d spec pack lic dep
   for spec in "web polyform-noncommercial-1.0.0 yes" "web none" "python none" "react-native mit" "node polyform-noncommercial-1.0.0"; do
+    # shellcheck disable=SC2086 # split the case into its words on purpose
     set -- $spec
     pack="$1" lic="$2" dep="${3:-}"
     echo "case: $spec"
@@ -1434,7 +1436,9 @@ test_skips_only_what_it_cannot_see_and_says_why() {
 # checkout). These tests keep the two in step.
 
 # load_check: sources the checker, defining its functions only.
+# shellcheck source=e2e-check.sh
 load_check() { set --; . "$CHECK"; }
+# shellcheck source=stubs/bootstrap-project.sh
 load_script() { set --; . "$SCRIPT"; }
 
 test_checker_can_be_sourced_without_running() {
@@ -1464,9 +1468,11 @@ test_layout_matches_the_script() {
       [ "$pack" = web ] || [ -z "$dep" ] || continue
       t="$(tmpdir)"
       read -r kept_s <<<"$(load_script; layout_into "$pack" "$REPO/languages" "$t/out" strict "$dep" >/dev/null; printf '%s\n' "$LP_KEPT")"
+      # shellcheck disable=SC2086 # one file name per word
       targets_s="$(load_script; layout_into "$pack" "$REPO/languages" "$t/out2" strict "$dep" >/dev/null; printf '%s\n' $LP_TARGETS)"
       kept_c="$(load_check; pack_kept "$pack" "$dep")"
       targets_c="$(load_check; pack_targets "$pack" "$dep")"
+      # shellcheck disable=SC2086 # one file name per word
       [ "$(printf '%s\n' $kept_s | LC_ALL=C sort)" = "$(printf '%s\n' $kept_c | LC_ALL=C sort)" ] || die "$pack $dep: kept files '$kept_c', script '$kept_s'"
       # Every file the script lays out is a target of the checker (a
       # folder target, ending in /, covers the files in it), and every

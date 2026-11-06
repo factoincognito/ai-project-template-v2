@@ -1042,7 +1042,7 @@ check_text() {
       PROBLEM="It must be one line, with no tabs or other invisible characters."
       return 1
       ;;
-    *'"'* | *'\'* | *'<'* | *'>'* | *'&'* | *'`'*)
+    *'"'* | *\\* | *'<'* | *'>'* | *'&'* | *'`'*)
       PROBLEM='It cannot contain any of these characters: " \ < > & or a backtick (`).'
       return 1
       ;;
@@ -1142,6 +1142,7 @@ check_ci_timeout() {
 # the shell). Another account's ~name is refused.
 check_dir() {
   trim_into "$1"
+  # shellcheck disable=SC2088 # a typed ~ is matched as text here and expanded below
   case "$TRIMMED" in
     "") PROBLEM="It cannot be empty."; return 1 ;;
     *[[:cntrl:]]*) PROBLEM="It must be one line, with no tabs or other invisible characters."; return 1 ;;
@@ -1703,6 +1704,7 @@ start_cd() {
     SHOWN_CD="~"
   elif [ -n "$home" ] && [ "${START_DIR#"$home"/}" != "$START_DIR" ]; then
     quote_word "${START_DIR#"$home"/}"
+    # shellcheck disable=SC2088 # shown for the person to type; their shell expands it
     SHOWN_CD="~/$QUOTED"
   else
     quote_word "$START_DIR"
@@ -2358,7 +2360,7 @@ check_target_dir() {
       DIR_DONE="The folder is a copy of the project $IN_OWNER/$IN_NAME, which --resume continues."
     fi
   elif [ -e "$IN_DIR" ] || [ -L "$IN_DIR" ]; then
-    DIR_PROBLEM=file
+    DIR_PROBLEM="file"
     return 1
   fi
   parent="$(dirname -- "$IN_DIR")"
@@ -2605,7 +2607,7 @@ api_call() {
   esac
   case "$API_BODY" in
     *"${DQ}message${DQ}"*)
-      API_MESSAGE="${API_BODY#*${DQ}message${DQ}}"
+      API_MESSAGE="${API_BODY#*"${DQ}"message"${DQ}"}"
       API_MESSAGE="${API_MESSAGE#*:}"
       trim_into "$API_MESSAGE"
       API_MESSAGE="${TRIMMED#"$DQ"}"
@@ -3147,7 +3149,7 @@ plan_steps() {
   step_mark "$2"; m2="$STEP_MARK"
   # Past the protection with --allow-unprotected, the run that stopped may
   # have gone on without it.
-  if [ "$2" = done ] && [ -n "$OPT_ALLOW_UNPROTECTED" ]; then m2=" (done, or skipped with --allow-unprotected)"; fi
+  if [ "$2" = "done" ] && [ -n "$OPT_ALLOW_UNPROTECTED" ]; then m2=" (done, or skipped with --allow-unprotected)"; fi
   step_mark "$3"; m3="$STEP_MARK"
   step_mark "$4"; m4="$STEP_MARK"
   step_mark "$5"; m5="$STEP_MARK"
@@ -3157,7 +3159,7 @@ plan_steps() {
   say "  1. Create the project on GitHub, with the bootstrapper's files in it.$m1"
   say "  2. Protect its main version, so that from then on every change comes as a proposed change, not straight into it.$m2"
   say "  3. Make a copy of the project on this computer, in $IN_DIR.$m3"
-  if [ "$4" = done ]; then
+  if [ "$4" = "done" ]; then
     # Done in the run that stopped, with the licence chosen then, which
     # this run's answer need not be.
     say "  4. Add the language pack's files, fill in the project's names and description, and add the licence that was chosen, if one was.$m4"
@@ -4540,6 +4542,7 @@ self_check() {
 git_ident_form() {
   local s="$1" crud=",:;$SQ"
   while :; do
+    # shellcheck disable=SC2101 # [[:space:]$crud] is one bracket expression: the class and crud's characters
     case "$s" in
       [[:space:]$crud]*) s="${s#?}" ;;
       *[[:space:]$crud]) s="${s%?}" ;;
@@ -5216,7 +5219,6 @@ unexpected_stop() {
 PULLS_JQ='.[] | "\(.state) \(.merged_at // "-") \(.html_url)"'
 SETUP_MARK="- Set up by bootstrap-project.sh."
 RESUME_STATE=""
-GH_STAMP_BODY=""
 GH_ADDED_MARK=""
 GH_OPEN_URL=""
 GH_MERGED_URL=""

@@ -1,0 +1,24 @@
+# shellcheck's settings for the template's own scripts (PBI-1.41): the
+# build job of .github/workflows/ci.yml runs shellcheck 0.11.0 on every
+# script in bootstrap/, tools/ and .github/scripts/ and fails on any
+# finding. Only checks the scripts break on purpose are turned off here;
+# any other finding is fixed, or turned off on the line it is on, with a
+# reason. Template-only: this file is not in bootstrap/manifest.txt.
+
+# Follow a `# shellcheck source=` directive to the file it names, found
+# from the folder of the script that sources it: the tests source the
+# setup script and e2e-check.sh to call their functions, and set the
+# variables those functions read.
+external-sources=true
+source-path=SCRIPTDIR
+
+# SC2016 ($ in single quotes does not expand): the scripts pass awk and
+# jq programs, `bash -c` scripts, GitHub expressions and Markdown with
+# backticks, and the tests keep script text as data, all in single quotes
+# so that the shell does not expand them.
+disable=SC2016
+
+# SC2030 and SC2031 (a variable changed in a subshell is lost after it):
+# each test sets the variables and stubs it needs inside ( ... ), so that
+# none of them leaks into the next test.
+disable=SC2030,SC2031
