@@ -9,7 +9,7 @@
 - **Exception chaining** — inside `except`, always `raise XxxError(...) from exc` (Ruff `B904` enforces it)
 - **Cross-platform paths** — `pathlib.Path` for all file paths, never string concatenation (Ruff `PTH` enforces it)
 - **pytest** for testing — the line coverage gate of Process P-11 § 5 (2) over `src/`, enforced in CI; `src/tests/` itself is not counted
-- **Test first** — write the failing test in `src/tests/` and run it red before the code; `build` fails a pull request that changes `src/` without changing a test (see `CLAUDE.md`, Both agents: test first).
+- **Test first** — write the failing test in `src/tests/` and run it red before the code; `build` fails a pull request that changes `src/` without changing a test (§ 30 of the Rules, `rules/RULES.md`).
 - **No hardcoded values**: Process P-11 § 5 (2).
 - **Run as a module, from the project root** — `python -m src.<module>.main`, never `python src/<module>/main.py`. Run as a script, `from src.<module> import ...` fails with `ModuleNotFoundError: No module named 'src'`, on every OS.
 

@@ -9,7 +9,7 @@ Everything in the Node/TypeScript standards applies, plus the web rules below.
 - **Global types are listed** — TypeScript 6 no longer loads every installed `@types` package, so `tsconfig.json` lists them in `types` (`jest` by default). Add any you install, e.g. `node` after `npm install -D @types/node`.
 - **Jest + ts-jest** for unit tests — the line coverage gate of Process P-11 § 5 (2), enforced in CI
 - **Playwright** for browser tests — they run against the built file, not the dev server
-- **Test first** — write the failing test (`src/*.test.ts`, or a browser test in `e2e/`) and run it red before the code; `build` fails a pull request that changes `src/` or `index.html` without changing a test (see `CLAUDE.md`, Both agents: test first).
+- **Test first** — write the failing test (`src/*.test.ts`, or a browser test in `e2e/`) and run it red before the code; `build` fails a pull request that changes `src/` or `index.html` without changing a test (§ 30 of the Rules, `rules/RULES.md`).
 - **No hardcoded values**: Process P-11 § 5 (2).
 - **Error handling** — always type-narrow errors; never `catch (e: any)`
 - **Imports** — relative imports within the project; no barrel files unless justified
