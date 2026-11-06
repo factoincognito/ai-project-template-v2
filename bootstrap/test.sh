@@ -387,6 +387,62 @@ TEXT
   diff "$want" "$body" >&2 || die "STATUS.md after its comment is not the fixed format (diff above)"
 }
 
+test_real_build_ships_the_rules_edition_and_its_entry_point_instead_of_the_old_rule_files() {
+  # A project's rule set is the Rules edition in rules/, which passes the
+  # check a project's CI runs on it; CLAUDE.md is the slim entry point
+  # and RULES.md the local rules, both stubs; the template's own rule
+  # files stay in the template and do not ship (two rule sets would
+  # differ).
+  local out="$WORK/real.$RANDOM" f p
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  [ -f "$out/rules/EDITION" ] || die "rules/EDITION not shipped"
+  [ -f "$out/rules/RULES.md" ] || die "rules/RULES.md not shipped"
+  # The check as a project's CI runs it, from the project's root. The
+  # template's copy of the script: that it ships unchanged is tested on
+  # its own.
+  ( cd "$out" && bash "$REPO/.github/scripts/check-rules-edition.sh" rules ) >&2 \
+    || die "the shipped rules/ fails check-rules-edition.sh rules"
+  for f in CLAUDE.md RULES.md; do
+    [ -f "$REPO/bootstrap/stubs/$f" ] || die "no stub bootstrap/stubs/$f"
+    cmp -s "$REPO/bootstrap/stubs/$f" "$out/$f" || die "$f in the output is not the stub"
+  done
+  ! grep -qxF CLAUDE.md "$REPO/bootstrap/manifest.txt" || die "bootstrap/manifest.txt still ships the template's own CLAUDE.md"
+  for f in memory/roles.md memory/standards.md docs/CROG_ONBOARDING.md docs/ROUTINES.md \
+           docs/decisions/0001-rebuild-workflow.md; do
+    [ -f "$REPO/$f" ] || die "the template no longer has $f (test is stale)"
+    [ ! -e "$out/$f" ] || die "$f shipped"
+  done
+  # The entry point: the title the setup fills in, then what to read, in
+  # the order of the session start line; no rule text.
+  [ "$(sed -n 1p "$out/CLAUDE.md")" = '# [PROJECT NAME] — Agent Entry Point' ] \
+    || die "CLAUDE.md does not start with the title the setup fills in"
+  for p in '`rules/RULES.md`, in full' '`rules/processes/P-1-session-startup.md`' '`RULES.md`' '`rules/RULES.md` § 4'; do
+    grep -qF -- "$p" "$out/CLAUDE.md" || die "CLAUDE.md does not say: $p"
+  done
+  [ "$(grep -c . "$out/CLAUDE.md")" -le 15 ] || die "CLAUDE.md is no longer a slim entry point ($(grep -c . "$out/CLAUDE.md") lines)"
+  # The local rules: the sign-off paragraph first, word for word, with
+  # the generic Adopted line (no PR number to fill in), then L § 2 and
+  # L § 3.
+  [ "$(sed -n 1p "$out/RULES.md")" = 'L § 1 (C) This project is bound by the Rules in `rules/`, in the edition `rules/EDITION` names.' ] \
+    || die "RULES.md does not open with the sign-off paragraph L § 1 (C)"
+  [ "$(sed -n 2p "$out/RULES.md")" = 'Adopted: the product owner, by the setup that created this project' ] \
+    || die "L § 1 (C) does not end with the generic Adopted line"
+  grep -qE '^L § 2 ' "$out/RULES.md" || die "RULES.md has no L § 2"
+  grep -qE '^L § 3 ' "$out/RULES.md" || die "RULES.md has no L § 3"
+  for p in '`§ n`' '`P-n § m`' '`memory/context.md`' '`docs/SPEC.md`'; do
+    grep -qF -- "$p" "$out/RULES.md" || die "RULES.md does not say: $p"
+  done
+  # Every file or folder the two stubs name is in the output, so neither
+  # points to a file that does not ship.
+  for f in CLAUDE.md RULES.md; do
+    grep -oE '`[A-Za-z0-9_./-]+(/|\.md|EDITION)`' "$out/$f" | tr -d '`' | LC_ALL=C sort -u >"$WORK/named"
+    [ -s "$WORK/named" ] || die "$f names no file (the parser is broken)"
+    while IFS= read -r p; do
+      [ -e "$out/${p%/}" ] || die "$f names $p, which does not ship"
+    done <"$WORK/named"
+  done
+}
+
 test_real_build_ships_the_template_licence() {
   # The template's own files are PolyForm Noncommercial 1.0.0. The text
   # must ship unaltered, with a Required Notice line, in licenses/ and
@@ -2719,6 +2775,27 @@ test_real_build_ships_the_require_test_change_script() {
   [ -f "$out/$f" ] || die "$f not shipped"
   cmp -s "$REPO/$f" "$out/$f" || die "$f shipped altered"
   [ ! -e "$out/tools" ] || die "tools/ shipped"
+}
+
+test_real_build_ships_every_script_a_project_ci_runs() {
+  # A project's CI (the stub ci.yml, then its pack's) runs scripts from
+  # .github/scripts/; each one ships byte for byte and executable, through
+  # the manifest. The Rules edition check is named on its own as well, so
+  # this does not pass because no ci.yml names it.
+  local out="$WORK/real.$RANDOM" f n=0
+  bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
+  while IFS= read -r f; do
+    n=$((n + 1))
+    [ -f "$out/$f" ] || die "$f is run by a project's CI but not shipped (bootstrap/manifest.txt)"
+    [ -x "$out/$f" ] || die "$f shipped without its executable bit"
+    cmp -s "$REPO/$f" "$out/$f" || die "$f shipped altered"
+  done < <( {
+    echo .github/scripts/check-rules-edition.sh
+    grep -ohE '\.github/scripts/[A-Za-z0-9._-]+' "$REPO/bootstrap/stubs/.github/workflows/ci.yml" "$REPO"/languages/*/ci.yml
+  } | LC_ALL=C sort -u)
+  [ "$n" -ge 2 ] || die "found only $n scripts; the parser is broken"
+  grep -qxF .github/scripts/check-rules-edition.sh "$REPO/bootstrap/manifest.txt" \
+    || die "bootstrap/manifest.txt does not list .github/scripts/check-rules-edition.sh by name"
 }
 
 # ---------- bootstrap-project.sh (shipped as a stub) ----------

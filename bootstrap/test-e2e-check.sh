@@ -1022,16 +1022,6 @@ test_placeholder_over_two_lines_left_fails() {
   run_check "$d"; expect_only_fail "$d" placeholders
 }
 
-test_placeholders_kept_where_the_spec_keeps_them_pass() {
-  # [DATE] is a format token in memory/roles.md and docs/CROG_ONBOARDING.md;
-  # kept pack files keep theirs (the finished runs above prove the
-  # react-native and web ones).
-  local d
-  d="$(tmpdir)"; finished "$d" node mit
-  grep -qF '[DATE]' "$(COPY "$d")/memory/roles.md" || die "fixture: roles.md has no [DATE]; the test checks nothing"
-  run_check "$d"; expect_all_pass "$d"
-}
-
 test_licence_placeholders_left_fail() {
   local d
   d="$(tmpdir)"; finished "$d" node mit
