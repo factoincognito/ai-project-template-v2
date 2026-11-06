@@ -3786,14 +3786,16 @@ test_ci_build_checks_the_script_format_with_shfmt_pinned_to_3_14_1() {
 }
 
 # format_fakes <dir> <reported version>: a fake curl that serves a fake
-# shfmt binary, which reports <reported version>, fails unless its first
-# arguments are the spec's flags, logs the files it is given to <dir>/args
-# and prints a difference and fails when FAKE_DIFF is set.
+# shfmt binary, which logs every call, --version included, to <dir>/ran,
+# reports <reported version>, fails unless its first arguments are the
+# spec's flags, logs the files it is given to <dir>/args and prints a
+# difference and fails when FAKE_DIFF is set.
 format_fakes() {
   local d="$1" v="$2"
   mkdir -p "$d/bin" "$d/tmp"
   cat >"$d/shfmt" <<FS
 #!/bin/sh
+printf '%s\n' "\$*" >>"$d/ran"
 if [ "\$1" = --version ]; then printf 'v%s\n' '$v'; exit 0; fi
 [ "\$1 \$2 \$3 \$4" = '$SHFMT_FLAGS' ] || { echo "fake shfmt: wrong flags: \$*"; exit 2; }
 shift 4
@@ -3861,7 +3863,7 @@ test_ci_format_step_passes_formatted_scripts_and_fails_on_a_difference_a_bad_dow
   d="$WORK/hash"
   format_fakes "$d" "$SHFMT_VERSION_PINNED"
   ! run_format_step "$d" "$SHFMT_SHA256_PINNED" || die "the step passed with a binary of another hash"
-  [ ! -e "$d/args" ] || die "shfmt ran from a binary of another hash"
+  [ ! -e "$d/ran" ] || die "shfmt ran from a binary of another hash: $(cat "$d/ran")"
   # A shfmt that reports another version fails before the check.
   d="$WORK/version"
   format_fakes "$d" 3.13.0
