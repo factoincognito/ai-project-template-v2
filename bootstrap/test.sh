@@ -385,7 +385,7 @@ test_real_build_ships_the_rules_edition_and_its_entry_point_instead_of_the_old_r
     || die "L § 1 (C) does not end with the generic Adopted line"
   grep -qE '^L § 2 ' "$out/RULES.md" || die "RULES.md has no L § 2"
   grep -qE '^L § 3 ' "$out/RULES.md" || die "RULES.md has no L § 3"
-  for p in '`§ n`' '`P-n § m`' '`memory/context.md`'; do
+  for p in '`§ n`' '`P-n § m`' '`memory/context.md`' '`docs/SPEC.md`'; do
     grep -qF -- "$p" "$out/RULES.md" || die "RULES.md does not say: $p"
   done
   # Every file or folder the two stubs name is in the output, so neither
