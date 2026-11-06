@@ -1554,6 +1554,23 @@ to fall out of a chat session.
 
 ---
 
+## Audit findings (2026-11-06)
+
+The findings of the product office's audit of this project (Process P-6 § 8 (2)). Adam's decision: conditional accept, 2026-11-06.
+
+- **[NEXT] PBI-1.42** (audit of 2026-11-06, finding F1, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 4): the template's own `STATUS.md` comment, lines 1 to 8, restates P-9 § 6 (2) to (4) without citing them.
+- **[NEXT] PBI-1.43** (audit of 2026-11-06, finding F2, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 4): `docs/NEXT_SESSION.md` lines 26, 35, 37, 192 and 396 restate P-4 § 4, P-3 § 5 (3), P-4 §§ 1 (3), 2 (3), 3 (1) and P-2 § 2 (2) as standing instructions.
+- **[NEXT] PBI-1.44** (audit of 2026-11-06, finding F3, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 4): `memory/context.md` lines 205 to 208 and 235 to 238 restate P-1 § 3 (1) and § 36 (1) and (2) as directives.
+- **[NEXT] PBI-1.45** (audit of 2026-11-06, finding F4, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 4): shipped files restate paragraphs: `docs/DEV_INFRASTRUCTURE.md` lines 57 to 62, 94, 96 to 98, 102 to 103; `bootstrap/stubs/docs/NEXT_SESSION.md` line 7; `.github/workflows/changelog.yml` line 34.
+- **[BLOCKED] PBI-1.46** (audit of 2026-11-06, finding F5, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; a question for the product office's Rules, not this project's to fix; waits for Adam's decision there) — (§ 4): the shipped edition `bootstrap/stubs/rules/`, which § 21 (5) requires, is not among P-6 § 4 (2)'s exceptions; not counted against the entity.
+- **[NEXT] PBI-1.47** (audit of 2026-11-06, finding F6, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 5): L § 8 (2) limits edition PR descriptions against P-2 § 3 (1) and P-2 § 4 (1) without citing them; #372 names no session.
+- **[BLOCKED] PBI-1.48** (audit of 2026-11-06, finding F7, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; a question for the product office's Rules, not this project's to fix; waits for Adam's decision there) — (§ 5): L § 9 (1)'s release pipeline commits directly to `ai-project-bootstrap`'s default branch (`bootstrap/publish.sh` line 88), and no paragraph settles this against § 26 (1) (C).
+- **[NEXT] PBI-1.49** (audit of 2026-11-06, finding F8, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 7): P-2 § 4 (5): #375 and #376 merge comments give the session ID without the link; #372 names no session; commits `ca2925b` and `bc2954d` lack a `Session-ID:` trailer.
+- **[NEXT] PBI-1.50** (audit of 2026-11-06, finding F9, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 7): P-4 § 5 (1): `CHANGELOG.md` is updated in batches at release prep (#375 for #351 to #374); #376 is not in it and no open PR updates it.
+- **[NEXT] PBI-1.51** (audit of 2026-11-06, finding F10, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 7): P-9 § 2 (2) and (3): `docs/BACKLOG.md` uses markers `IDEA`, `SUPERSEDED`, `MOVED` (legend lines 15, 18, 19; six entries) and names vizi's format spec.
+- **[NEXT] PBI-1.52** (audit of 2026-11-06, finding F11, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 7): `docs/BACKLOG.md` shows PBI-1.29 and PBI-1.30 as `[NEXT]` (lines 1008, 1078) while `docs/NEXT_SESSION.md` lines 215 and 216 record both done on 2026-10-30.
+- **[NEXT] PBI-1.53** (audit of 2026-11-06, finding F12, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 7): P-8 § 4 (1) and § 27 (4): `docs/NEXT_SESSION.md` items 5 and 14, named by #369 as needing a disposition, are unchanged at `9241dab`.
+
 ## Decision log (updated)
 
 | Date | Decision | Rationale |
