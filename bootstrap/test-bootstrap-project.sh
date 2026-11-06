@@ -170,7 +170,7 @@ write_stand_in() {
 # functions without running its main part.
 load_script() {
   set --
-  # shellcheck source=/dev/null
+  # shellcheck source=stubs/bootstrap-project.sh
   . "$SCRIPT"
 }
 
@@ -1718,6 +1718,7 @@ test_the_log_after_the_command_to_continue_comes_after_one_blank_line() {
   expect_rc 0 "$d"
   n="$(grep -nxF "$(load_script; printf '%s' "$ADVANCE_INTRO")" "$d/out" | cut -d: -f1)"
   [ -n "$n" ] || { cat "$d/out" >&2; die "resume: no command to continue"; }
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   [ -z "$(sed -n "$((n + 2))p" "$d/out")" ] && sed -n "$((n + 3))p" "$d/out" | grep '^==> ' >/dev/null \
     || { sed -n "$n,$((n + 4))p" "$d/out" >&2; die "resume: no blank line between the command to continue and the next step"; }
 }
@@ -1883,6 +1884,7 @@ test_colour_off_output_is_the_coloured_output_without_its_codes() {
   esc="$(printf '\033')"
   ( load_script; unset BOOTSTRAP_COLOR NO_COLOR BOOTSTRAP_STDOUT_TERMINAL; export TERM=xterm
     every_line_kind "$d/tty" ) <<<"$(printf 'node\nq')" >"$d/plain" 2>"$d/plain.err"
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   ! has_esc "$d/plain" && ! has_esc "$d/plain.err" || die "codes without a terminal"
   ( load_script; unset NO_COLOR; export TERM=xterm BOOTSTRAP_COLOR=1
     every_line_kind "$d/tty" ) <<<"$(printf 'node\nq')" >"$d/colour" 2>"$d/colour.err"
@@ -1894,9 +1896,11 @@ test_colour_off_output_is_the_coloured_output_without_its_codes() {
   expect_same "stderr with the codes taken out" "$d/plain.err" "$d/stripped.err"
   ( load_script; export TERM=xterm BOOTSTRAP_COLOR=1 NO_COLOR=1
     every_line_kind "$d/tty" ) <<<"$(printf 'node\nq')" >"$d/nc" 2>"$d/nc.err"
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   cmp -s "$d/plain" "$d/nc" && cmp -s "$d/plain.err" "$d/nc.err" || die "NO_COLOR output differs from the output without a terminal"
   ( load_script; unset NO_COLOR; export TERM=dumb BOOTSTRAP_COLOR=1
     every_line_kind "$d/tty" ) <<<"$(printf 'node\nq')" >"$d/dumb" 2>"$d/dumb.err"
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   cmp -s "$d/plain" "$d/dumb" && cmp -s "$d/plain.err" "$d/dumb.err" || die "TERM=dumb output differs from the output without a terminal"
 }
 
@@ -2381,6 +2385,7 @@ test_a_test_that_forgets_the_hooks_runs_nothing_real() {
   ( load_script; export REFUSE_LOG="$d/refused.log" PATH="$d/bin:$PATH"; run_gh --version ) 2>>"$d/err" || rc=$?
   [ ! -e "$d/real-gh-ran" ] || die "run_gh ran the gh on PATH in a test that set no hook"
   [ "$rc" -ne 0 ] || die "run_gh without a hook returned 0; a forgetful test would pass"
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -qF 'BOOTSTRAP_RUN' "$d/err" && grep -qF 'BOOTSTRAP_GH' "$d/err" \
     || { cat "$d/err" >&2; die "the refusals do not name the hook to set"; }
   # The lockfile step's npm (BOOTSTRAP_NPM), likewise.
@@ -2475,6 +2480,7 @@ The API said no'
     printf 'say "%s"\n' "$w" >>"$copy"
   done <<<"$planted"
   # A continuation line of a helper call is collected too.
+  # shellcheck disable=SC1003 # the line ends in a backslash, kept as script text
   printf '%s\n' 'fail 1 "It failed." \' '  "Open the branch page."' >>"$copy"
   hits="$(user_strings "$copy" | banned_hits | awk -F: -v last="$last" '$1 > last')"
   n="$(printf '%s\n' "$hits" | grep -c . || true)"
@@ -2541,6 +2547,7 @@ test_output_routes_without_echo_or_printf_are_caught() {
 
 test_captured_or_redirected_gh_output_is_allowed() {
   local copy hits from
+  # shellcheck disable=SC1003 # the line ends in a backslash, kept as script text
   copy="$(plant 'cmd_x() {' \
     '  out="$(run_gh api user)"' \
     '  run_gh api user >/dev/null' \
@@ -2565,6 +2572,7 @@ test_output_hidden_by_a_capture_elsewhere_on_the_line_is_caught() {
   # line used to exempt the whole line, so these reached the terminal
   # unseen. Each planted line must now be caught on its own.
   local copy n from
+  # shellcheck disable=SC1003 # the line ends in a backslash, kept as script text
   copy="$(plant 'cmd_y() {' \
     '  run_gh pr create --body-file <(say "x")' \
     '  run_gh pr checks $(current_pr)' \
@@ -3231,6 +3239,7 @@ test_name_values_refuse_characters_that_break_json_or_html() {
   # or a backtick. The description must be one line.
   local opt c
   for opt in --project-name --description --po-name --copyright-holder; do
+    # shellcheck disable=SC1003 # '\' is the backslash, one of the characters tried
     for c in '"' '\' '<' '>' '&' '`' "$(printf '\t')" "$(printf '\r')" "$(printf '\033')" "$(printf '\177')" '
 '; do
       refuses "$opt" "a${c}b"
@@ -3677,6 +3686,7 @@ test_the_git_folder_of_a_run_holds_only_git_and_its_helpers() {
     chmod +x "$src/$t"
   done
   make_git_only_dir "$src" "$d/only"
+  # shellcheck disable=SC2012 # the names are the test's own, plain ones
   [ "$(cd "$d/only" && ls | LC_ALL=C sort | tr '\n' ' ')" = "git git-receive-pack git-upload-pack " ] \
     || { ls -A "$d/only" >&2; die "the folder holds more than git and its helpers"; }
   for t in git git-upload-pack git-receive-pack; do
@@ -3916,6 +3926,7 @@ path_last() { PATH="$PATH:$1"; shift; "$@"; }
 tty_answers() {
   eval "real_ask_terminal() $(declare -f ask_terminal | sed 1d)"
   TTY_ASKED=0
+  # shellcheck disable=SC2329 # the setup script calls it, in place of its own
   ask_terminal() {
     TTY_ASKED=$((TTY_ASKED + 1))
     sed -n "${TTY_ASKED}p" "$BOOTSTRAP_TTY-answers" >"$BOOTSTRAP_TTY"
@@ -4294,6 +4305,7 @@ test_each_offered_command_is_the_one_shown_in_the_guide() {
     "macos gh-missing 1 brew install gh" "macos gh-old 1 brew upgrade gh" \
     "windows gh-missing 1 winget install --id GitHub.cli -e --source winget" \
     "windows gh-old 1 winget upgrade --id GitHub.cli -e --source winget"; do
+    # shellcheck disable=SC2086 # split the case into its words on purpose
     set -- $case_
     os="$1" tool="$2" times="$3"; shift 3; want="$*"
     d="$(tmpdir)"
@@ -4398,6 +4410,7 @@ test_no_offer_without_brew_or_winget_and_never_on_linux() {
   local distro line
   for distro in "debian sudo apt install git" "fedora sudo dnf install git" \
     "arch sudo pacman -S git" "suse sudo zypper install git"; do
+    # shellcheck disable=SC2086 # split the case into its words on purpose
     set -- $distro
     d="$(tmpdir)"
     on_os "$d" linux "$1"; shift; line="$*"
@@ -4629,8 +4642,9 @@ linux_npm_on_enter() {
   LATER_DIR="$1"
   shift
   eval "real_wait_for_enter() $(declare -f wait_for_enter | sed 1d)"
+  # shellcheck disable=SC2329 # the setup script calls it, in place of its own
   wait_for_enter() {
-    real_wait_for_enter "$@" || return 1
+    real_wait_for_enter || return 1
     [ ! -e "$LATER_DIR/later/npm" ] || { mkdir -p "$LATER_DIR/linux bin"; mv "$LATER_DIR/later/npm" "$LATER_DIR/linux bin/npm"; }
   }
   "$@"
@@ -4750,9 +4764,11 @@ test_outside_wsl_an_npm_under_mnt_is_not_refused() {
 test_bash_older_than_3_2_is_refused_with_steps() {
   local d v
   for v in "3 2" "3 10" "4 0" "5 2"; do
+    # shellcheck disable=SC2086 # the version is passed as two words
     ( load_script; check_bash_version $v ) || die "bash $v refused"
   done
   for v in "3 1" "3 0" "2 9"; do
+    # shellcheck disable=SC2086 # the version is passed as two words
     ! ( load_script; check_bash_version $v ) || die "bash $v accepted"
   done
   d="$(tmpdir)"
@@ -4947,6 +4963,7 @@ test_a_folder_starting_with_a_tilde_is_in_the_home_folder() {
   # Review note (#146): a typed ~/projects/app made a folder named ~.
   local d
   d="$(tmpdir)"
+  # shellcheck disable=SC2088 # the test types a ~ for the script to expand
   printf '%s\n' my-app "" "Lends tools." "" "" python "" none "~/projects/app" "" "" >"$d/in"
   inputs "$d"
   expect_inputs "$d" "DIR=$d/home/projects/app"
@@ -5002,6 +5019,7 @@ test_a_tilde_folder_is_refused_when_the_home_folder_is_not_known() {
   for h in empty unset; do
     ( load_script
       if [ "$h" = empty ]; then HOME=""; else unset HOME; fi
+      # shellcheck disable=SC2088 # the test passes a ~ for check_dir to expand
       ! check_dir "~/projects/app" || die "HOME $h: ~/projects/app was taken as $CHECKED"
       case "$PROBLEM" in
         *"home folder is not known"*"full path"*) ;;
@@ -5077,6 +5095,7 @@ test_git_questions_without_a_default_need_an_answer() {
 
 test_git_name_and_email_are_checked_like_the_other_names() {
   local c
+  # shellcheck disable=SC1003 # '\' is the backslash, one of the characters tried
   for c in '"' '\' '<' '>' '&' '`' "$(printf '\t')"; do
     refuses --git-name "a${c}b"
     refuses --git-email "a${c}b@example.com"
@@ -5344,6 +5363,7 @@ test_the_os_is_read_from_uname_and_the_linux_release_file() {
   local d want got
   for want in "Darwin macos" "Linux linux" "MINGW64_NT-10.0 windows" "MSYS_NT-10.0 windows" \
     "CYGWIN_NT-10.0 windows" "FreeBSD other"; do
+    # shellcheck disable=SC2086 # split the case into its words on purpose
     set -- $want
     d="$(tmpdir)"
     fake_tool "$d" uname "$1"
@@ -5352,6 +5372,7 @@ test_the_os_is_read_from_uname_and_the_linux_release_file() {
     [ "$got" = "$2" ] || die "uname $1 gave $got, want $2"
   done
   for want in "debian apt" "fedora dnf" "arch pacman" "suse zypper" "other none"; do
+    # shellcheck disable=SC2086 # split the case into its words on purpose
     set -- $want
     d="$(tmpdir)"
     on_os "$d" linux "$1"
@@ -5374,6 +5395,7 @@ test_wsl_is_read_from_the_kernel_release_on_linux_only() {
   local d want
   for want in "5.15.167.4-microsoft-standard-WSL2 yes" "4.4.0-19041-Microsoft yes" \
     "6.8.0-45-generic none" "6.6.87.2-MICROSOFT-standard-WSL2 yes"; do
+    # shellcheck disable=SC2086 # split the case into its words on purpose
     set -- $want
     d="$(tmpdir)"
     on_wsl "$d" "$1"
@@ -5571,6 +5593,7 @@ test_keys_are_discarded_only_at_a_terminal_never_from_a_file_or_pipe() {
     set -e
     grep -qx 'offer rc=1' "$d/out" || { cat "$d/out" >&2; die "[$hook] the offer did not read the first line of the file"; }
     grep -qx 'pause rc=0' "$d/out" || { cat "$d/out" >&2; die "[$hook] the pause did not read the first line of the pipe"; }
+    # shellcheck disable=SC2015 # die is meant to run when either check fails
     [ "$rc" -eq 1 ] && grep '^What happened: You answered no' "$d/err" >/dev/null \
       || { cat "$d/out" "$d/err" >&2; die "[$hook] Proceed? did not read the first line of the file"; }
     [ ! -e "$d/tty.log" ] || { cat "$d/tty.log" >&2; die "[$hook] stty or dd ran for answers from a file"; }
@@ -6078,6 +6101,7 @@ test_the_authenticate_git_step_is_one_shared_text_in_every_gh_sign_in_guide() {
     || die "the script's GH_GIT_QUESTION_TEXT is not gh's question"
   [ "$(grep -cF 'Authenticate Git with your GitHub credentials' "$SCRIPT")" -eq 1 ] \
     || { grep -nF 'Authenticate Git with your GitHub credentials' "$SCRIPT" >&2; die "gh's question is written more than once in the script"; }
+  # shellcheck disable=SC2013 # the guide names are single words
   for g in $(grep -oE '^guide_[a-z_]+\(\)' "$SCRIPT" | sed 's/()//'); do
     body="$(G="$g() {" awk '$0 == ENVIRON["G"] { on = 1; next } on && /^}/ { exit } on { print }' "$SCRIPT")"
     case "$body" in
@@ -6126,6 +6150,7 @@ test_the_gh_auth_words_check_catches_what_it_looks_for() {
   # are not.
   local d
   d="$(tmpdir)"
+  # shellcheck disable=SC1003 # the line ends in a backslash, kept as script text
   printf '%s\n' \
     '  guide_step "Sign in again with gh auth login -h github.com -p https -w, then come back."' \
     '    stop_with_error "gh lost its sign-in." "Run gh auth login -h github.com -p https -w -s workflow, then start the script again." "$raw"' \
@@ -6348,8 +6373,6 @@ EDIT_CALL='repo edit octo-user/my-app --delete-branch-on-merge --enable-squash-m
 PROBE_CALL='api -i repos/octo-user/my-app'
 # Right after step 3: is Actions turned on for the project?
 ACTIONS_CALL='api -i repos/octo-user/my-app/actions/permissions --jq .enabled'
-# The preflight's licence check, for --license mit (before create).
-LICENSE_CHECK_CALL='api -i licenses/mit --jq .key'
 CLONE_CALL='repo clone octo-user/my-app ./my-app'
 # Step 10, for setup_run's --license mit: the gh call after the copy.
 LICENSE_CALL='api -i licenses/mit --jq .body'
@@ -7358,6 +7381,7 @@ test_a_finished_setup_removes_its_saved_file_and_nothing_else() {
   expect_rc 0 "$d"
   grep -qxF "$FINISHED" "$d/out" || { cat "$d/out" "$d/err" >&2; die "the run did not go through"; }
   [ ! -e "$f" ] || die "the saved file is still there"
+  # shellcheck disable=SC2012 # the names are the test's own, plain ones
   [ "$(ls -A "${f%/*}" | LC_ALL=C sort | tr '\n' ' ')" = "bootstrap-project.sh other-file " ] \
     || { ls -A "${f%/*}" >&2; die "other files in the folder changed"; }
   # A run that goes through at once leaves no file either.
@@ -7372,6 +7396,7 @@ test_the_saved_file_is_readable_by_the_user_only() {
   probe="$(tmpdir)/probe"
   : >"$probe"
   chmod 600 "$probe" 2>/dev/null || true
+  # shellcheck disable=SC2012 # ls -l gives the mode the same way on Linux, macOS and Git Bash; stat does not
   case "$(ls -l "$probe" | cut -c1-10)" in
     -rw-------) ;;
     *) skip_test "chmod 600 is not honoured here (Git Bash on Windows shows every file as readable by all)"; return 0 ;;
@@ -7382,6 +7407,7 @@ test_the_saved_file_is_readable_by_the_user_only() {
   ( umask 022; printf 'q\n' >"$d/in"; whole "$d" --name my-app --git-email test@example.com ) || exit 1
   f="$(again_file_of "$d")"
   [ -f "$f" ] || die "no file saved"
+  # shellcheck disable=SC2012 # ls -l gives the mode the same way on Linux, macOS and Git Bash; stat does not
   [ "$(ls -l "$f" | cut -c1-10)" = "-rw-------" ] || { ls -l "$f" >&2; die "the file is not readable by the user only"; }
 }
 
@@ -7776,6 +7802,7 @@ test_an_actions_check_github_does_not_answer_carries_on_with_a_note() {
     grep -qF "The script could not check whether GitHub Actions is turned on for the project" "$d/step" || { cat "$d/out" >&2; die "$mode: no note"; }
     grep -qxF 'Details for support (you can ignore these):' "$d/step" || { cat "$d/out" >&2; die "$mode: the answer is not introduced"; }
     grep -qxF "$raw" "$d/step" || { cat "$d/out" >&2; die "$mode: GitHub's answer is not below"; }
+    # shellcheck disable=SC2015 # die is meant to run when either check fails
     [ "$(tail -1 "$d/step")" != "${raw}" ] && tail -1 "$d/step" | grep '^    Done\. Carrying on without this check' >/dev/null \
       || { cat "$d/out" >&2; die "$mode: the step does not end by carrying on"; }
     expect_no_out "$d" "turned off for the project"
@@ -7805,6 +7832,7 @@ test_create_failures_are_guided_or_explained_and_nothing_else_runs() {
   expect_out "$d" "already exists"
   expect_out "$d" "--name my-app-2"
   shown_after "$d" 'To start again, run this command:' >"$d/cmd"
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "taken: not a plain new run"; }
   sed -n 1p "$d/err" | grep 'nothing was created' >/dev/null || { cat "$d/err" >&2; die "taken: does not say nothing was created"; }
   grep -qxF '    GraphQL: Name already exists on this account (cloneTemplateRepository)' "$d/out" || { cat "$d/out" >&2; die "taken: gh's text not below"; }
@@ -8185,7 +8213,7 @@ expect_setup_tree() {
   fresh="$d/fresh"
   : >"$d/applied"
   PACKS_DIR="$BUILT/languages" bash "$BUILT/bootstrap-project.sh" layout-pack "$p" "$fresh" >/dev/null
-  kept=code-standards.md
+  kept="code-standards.md"
   [ "$p" != web ] || [ -n "$deploy" ] || kept="$kept deploy.yml wrangler.jsonc"
   { tree_of "$BUILT" | grep -v '^languages/' | grep -vx 'bootstrap-project.sh' | grep -vxF '.github/README.md'
     tree_of "$fresh"
@@ -8662,7 +8690,7 @@ test_values_with_special_characters_are_copied_literally() {
   W_PO="Zoë O'Brien \$HOME .* a/b [y]"
   W_DESCRIPTION="## Finishing the setup: lends tools (.*) \$0 a/b ^x\$ to Zoë's street, 100%."
   W_OWNER_AND_NAME=octo-user/Tool.Shed
-  W_SLUG=tool-shed
+  W_SLUG="tool-shed"
   setup_run "$d" --non-interactive --yes --pack react-native --name Tool.Shed \
     --project-name "$W_DISPLAY" --po-name "$W_PO" --description "$W_DESCRIPTION"
   expect_rc 0 "$d"
@@ -9142,6 +9170,7 @@ test_git_borrows_the_gh_sign_in_for_one_command_and_no_settings_change() {
   printf '%s\n' protocol=https host=github.com path=octo-user/my-app.git '' >"$d/ask"
   ( load_script; in_env "$d"; with_gh_sign_in "$d/out" "$d/err" credential fill ) <"$d/ask" \
     || { cat "$d/err" >&2; die "git credential fill failed"; }
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -qxF username=stub-user "$d/out" && grep -qxF password=stub-password "$d/out" || { cat "$d/out" "$d/err" >&2; die "git did not get the sign-in from gh"; }
   [ "$(cut -f2- "$d/gh.log")" = "$(printf 'auth\tgit-credential\tget')" ] || { cat "$d/gh.log" >&2; die "gh was not asked as git's helper"; }
   [ ! -e "$d/global-helper-ran" ] || die "the helper from the global settings was asked too"
@@ -9322,7 +9351,7 @@ test_a_text_left_to_fill_in_stops_the_self_check_but_a_value_holding_one_does_no
     # Each file of the table holds every text of its rows, then is filled.
     while read -r f k; do fill_text "$k"; printf '%s\n' "$FILL_TEXT" >>"$d/copy/$f"; done <<<"$FILL_ROWS"
     for f in $(printf '%s\n' "$FILL_ROWS" | cut -d' ' -f1 | LC_ALL=C sort -u); do
-      # shellcheck disable=SC2046
+      # shellcheck disable=SC2046 # the keys are single words, one argument each
       fill_file "$d/copy/$f" $(printf '%s\n' "$FILL_ROWS" | awk -v f="$f" '$1 == f { print $2 }')
     done
     check_texts_left
@@ -9332,6 +9361,7 @@ test_a_text_left_to_fill_in_stops_the_self_check_but_a_value_holding_one_does_no
     printf '%s\n' '[What the project is, who it is for, and what problem' 'it solves.]' >>"$d/copy/memory/project.md"
     check_texts_left ) >"$d/out" 2>"$d/err" && die "a text left did not stop the self-check"
   [ -e "$d/passed" ] || { cat "$d/out" "$d/err" >&2; die "values holding a text of the table were taken for texts left"; }
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -qF '[PO NAME] App' "$d/copy/README.md" && grep -qF 'Tracks [DATE] and [OWNER/REPO] tags.' "$d/copy/memory/project.md" \
     || die "test setup: the values are not in the files"
   expect_err_shape "$d" "Some texts that the setup fills in are still in the copy of the project, so the script saved and sent nothing: \[PO NAME\] in README\.md; \[What the project is, who it is for, and what problem it solves\.\] in memory/project\.md\. The project exists\.\$"
@@ -9464,7 +9494,7 @@ test_a_file_changed_or_deleted_that_the_setup_does_not_change_stops_before_anyth
     unset STUB_NPM_TOUCH STUB_NPM_DELETE
     expect_rc 1 "$d"
     epat="$(printf '%s' "$path" | sed 's/[.]/[.]/g')"
-    expect_err_shape "$d" "The copy of the project on this computer has changes that the setup did not make, so the script saved and sent nothing: $epat[.] "
+    expect_err_shape "$d" "The copy of the project on this computer has changes that the setup did not make, so the script saved and sent nothing: ${epat}[.] "
     if [ "${var%%:*}" = TOUCH ]; then line="    M  $path"; else line="    D  $path"; fi
     grep -qxF "$line" "$d/err" || { cat "$d/err" >&2; die "$path: git's line is not below"; }
     expect_continue_command "$d" " --resume"
@@ -9914,6 +9944,7 @@ test_with_colour_the_lines_of_a_run_after_the_advance_command_each_have_their_co
   # r1h: the stars on lines of their own, nothing else on them.
   [ "$(grep -c '^\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*$' "$d/out")" -eq 1 ] || { grep -F '*' "$d/out" | od -c | head >&2; die "the stars are not on a line of their own"; }
   [ ! -s "$d/plain-lines" ] || { cat "$d/plain-lines" >&2; die "lines after the command to continue that are plain"; }
+  # shellcheck disable=SC2041 # a list of one, kept as a list
   for l in 'If you ever feel stuck'; do
     grep -F -- "$l" "$d/out" | grep -F "$esc" >/dev/null && die "in colour: $l"
   done
@@ -10114,6 +10145,7 @@ test_a_protection_read_back_that_differs_stops_before_the_change_is_added() {
   setup_run "$d" --non-interactive --yes
   unset STUB_GH_READBACK
   expect_rc 1 "$d"
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -qxF '    contexts: the script set build, GitHub reports ' "$d/err" && grep -qxF '    strict: the script set false, GitHub reports null' "$d/err" \
     || { cat "$d/err" >&2; die "the required check difference is not listed"; }
   expect_left_open "$d"
@@ -10224,6 +10256,7 @@ test_the_finish_works_whether_or_not_gh_already_switched_the_copy_to_main() {
     if [ "$local_done" = yes ]; then
       ! grep -qE ' checkout -q main$| branch -q -D bootstrap-setup$' "$d/tools.log" || { cat "$d/tools.log" >&2; die "yes: the script did again what gh had done"; }
     else
+      # shellcheck disable=SC2015 # die is meant to run when either check fails
       grep -qE ' checkout -q main$' "$d/tools.log" && grep -qE ' branch -q -D bootstrap-setup$' "$d/tools.log" \
         || { cat "$d/tools.log" >&2; die "no: the script did not switch to main and delete bootstrap-setup"; }
     fi
@@ -10242,6 +10275,7 @@ test_a_copy_not_at_the_new_main_version_stops_with_both_versions_below() {
   unset STUB_GH_MERGED_SHA
   expect_rc 1 "$d"
   expect_err_shape "$d" "The copy of the project on this computer, in \./my-app, is not at the main version that GitHub has now\. The project octo-user/my-app exists on GitHub, and the setup's changes are in its main version there: https://github.com/octo-user/my-app/pull/1\$"
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -qxF "    the copy: $(cat "$d/merge-sha")" "$d/err" && grep -qxF '    main on GitHub: 2222222222222222222222222222222222222222' "$d/err" \
     || { cat "$d/err" >&2; die "both versions are not below"; }
   expect_continue_command "$d" " --resume"
@@ -10913,6 +10947,7 @@ test_a_stop_that_runs_no_trap_still_leaves_the_command_to_continue() {
   expect_out "$d" "There is no project named octo-user/my-app on GitHub to continue."
   expect_out "$d" "If the setup stopped before it created the project, or to set up a new project with this name, start the script again with the command shown below, which has no --resume."
   shown_after "$d" 'To start again, run this command:' >"$d/cmd"
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "killed: no command to start again without --resume"; }
   again "$d"
   expect_rc 0 "$d"
@@ -11030,6 +11065,7 @@ test_resume_refuses_a_project_from_another_version_or_not_from_the_bootstrapper(
     esac
     grep -qF 'a new project' "$d/out" || { cat "$d/out" >&2; die "$t: the next action is not a new project"; }
     shown_after "$d" 'To start again, run this command:' >"$d/cmd"
+    # shellcheck disable=SC2015 # die is meant to run when either check fails
     grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "$t: no command to start again without --resume"; }
     ! grep -vF -- '--help' "$d/gh.log" | grep -E '	(-X	PUT|clone|edit|create)	' >/dev/null || { cat "$d/gh.log" >&2; die "$t: something was changed"; }
     [ -z "$(ls -A "$d/cwd")" ] || die "$t: something was made on this computer"
@@ -11084,6 +11120,7 @@ test_resume_with_no_project_on_github_creates_nothing() {
   expect_rc 3 "$d"
   expect_out "$d" "There is no project named octo-user/my-app on GitHub to continue."
   shown_after "$d" 'To start again, run this command:' >"$d/cmd"
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "no command to start again without --resume"; }
   expect_nothing_created "$d"
 }
@@ -11913,12 +11950,14 @@ test_a_project_with_its_setup_heading_gone_but_its_script_kept_is_refused_before
   # S18a: it says how it checked this refusal: from README.md and
   # bootstrap-project.sh, not from CHANGELOG.md as the version refusals do.
   grep '^How the script checks it: ' "$d/out" | tail -1 >"$d/how"
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -qF 'README.md' "$d/how" && grep -qF 'bootstrap-project.sh' "$d/how" || { cat "$d/out" >&2; die "how it checks does not name README.md and bootstrap-project.sh"; }
   ! grep -qF 'CHANGELOG.md' "$d/how" || { cat "$d/how" >&2; die "how it checks names CHANGELOG.md"; }
   expect_no_out "$d" "$FINISHED"
   nothing_changed_on_github "$d"
   cmp -s "$d/protected" "$d/protected.before" || die "the protection changed"
   shown_after "$d" 'To start again, run this command:' >"$d/cmd"
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -q '^    bash ' "$d/cmd" && ! grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "no command to start again without --resume"; }
   # With the heading kept and the script gone, the setup goes through and
   # the protection ends with build required.
@@ -11968,6 +12007,7 @@ expect_line_endings_stop() {
   expect_out "$d" "If GitHub refuses"
   expect_no_out "$d" "$FINISHED"
   shown_after "$d" 'To continue the setup, run this command:' >"$d/cmd"
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -q '^    bash ' "$d/cmd" && grep -qF -- '--resume' "$d/cmd" || { cat "$d/out" >&2; die "$label: no command to continue with --resume"; }
 }
 
@@ -12342,6 +12382,7 @@ test_template_readme_has_step_0_and_the_one_command() {
   grep -qF 'https://cli.github.com' <<<"$body" || die "step 0 does not say where gh comes from"
   # Here-strings, not printf | grep -q: under pipefail, grep -q leaving
   # early on a match can end printf with SIGPIPE and fail the pipe.
+  # shellcheck disable=SC2001 # the spaces are stripped from the start of every line
   [ "$(sed 's/^ *//' <<<"$body" | grep -cxF -- "$ONE_COMMAND" || true)" -ge 1 ] \
     || die "the one command is not on a line of its own"
   ! grep -qF 'does not exist until' "$TEMPLATE_README" || die "the stale 'does not exist until' text is still there"
@@ -12414,6 +12455,7 @@ test_gh_auth_part_check_catches_a_part_without_the_text() {
     '  - the script offers to run' '    `gh auth refresh -h github.com -s workflow`' >"$d/r"
   out="$(gh_auth_parts_without 'browser does not open' "$d/r")"
   [ "$(sed -n 1p <<<"$out")" = 2 ] || { printf '%s\n' "$out" >&2; die "counted $(sed -n 1p <<<"$out") parts, want 2"; }
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   [ "$(sed 1d <<<"$out" | grep -c . || true)" = 1 ] && grep -F 'Top item: run' <<<"$out" >/dev/null \
     || { printf '%s\n' "$out" >&2; die "the part without the text was not the one found"; }
 }
@@ -12485,6 +12527,7 @@ test_template_readme_lists_every_guide_in_its_group() {
     [ "$n" -eq 1 ] || die "the phrase for $fn is in the README $n times, want 1: $phrase"
   done <<<"$README_GUIDES"
   # Every guide of the script has a row: a new guide must be listed.
+  # shellcheck disable=SC2013 # the guide names are single words
   for g in $(grep -oE '^(guide|refuse)_[a-z_]+\(\)' "$SCRIPT" | sed 's/()//'); do
     case "$g" in
       guide_begin | guide_step | guide_end | guide_details) continue ;; # helpers
@@ -12846,7 +12889,7 @@ test_the_tidy_up_goes_on_when_another_packs_section_is_missing() {
   # Not on the left of ||: there bash would ignore errexit in the
   # subshell, and a failing step would not stop the tidy-up.
   rc=0
-  ( load_script; IN_DIR="$d/c"; IN_PACK=node; LP_KEPT=code-standards.md; tidy_up ) >"$d/out" 2>&1 &
+  ( load_script; IN_DIR="$d/c"; IN_PACK=node; LP_KEPT="code-standards.md"; tidy_up ) >"$d/out" 2>&1 &
   wait "$!" || rc=$?
   [ "$rc" -eq 0 ] || { cat "$d/out" >&2; die "the tidy-up stopped on a doc without the web and python sections"; }
   printf '%s\n' '# Doc' '## Part 2' '### Node (`node` pack)' 'Node text.' >"$d/want"
@@ -12941,6 +12984,7 @@ test_the_screen_of_the_setup_a_newcomer_meets_is_written_for_the_precheck() {
 
   # The capture keeps the order of stdout and stderr: a line printed to
   # stderr between two printed to stdout stays between them.
+  # shellcheck disable=SC2329 # in_one_stream calls it
   three_lines() { echo one; echo two >&2; echo three; }
   in_one_stream "$d" "$d/in" "$d/order" three_lines
   [ "$(tr '\n' ' ' <"$d/order")" = "one two three " ] \
@@ -12972,6 +13016,7 @@ test_the_screen_of_the_setup_a_newcomer_meets_is_written_for_the_precheck() {
   rm "$d/npm-fails"
   fake_tool "$d" npm 10.9.2
   printf '%s\n' "${NEWCOMER_SECOND_RUN[@]}" >"$d/in2"
+  # shellcheck disable=SC2329 # the command in $cmd calls it
   bash() { "$BASH" "$@"; }
   in_one_stream "$d" "$d/in2" "$d/stream2" eval "$cmd"
   [ "$RC" -eq 0 ] || { cat "$d/stream2" >&2; die "the second run ended with $RC, want 0"; }
@@ -13074,6 +13119,7 @@ by_duration() {
 ALL_COUNT=0
 for t in $TESTS; do ALL_COUNT=$((ALL_COUNT + 1)); done
 if [ -n "$WEIGHTS_FILE" ]; then
+  # shellcheck disable=SC2086 # one test name per word
   TESTS="$(printf '%s\n' $TESTS | by_duration "$WEIGHTS_FILE" "$WEIGHTS_COL" "$SHARD_I" "$SHARD_N")" \
     || weights_refused "the split failed"
   case "$TESTS" in "refused: "*) weights_refused "${TESTS#refused: }" ;; esac

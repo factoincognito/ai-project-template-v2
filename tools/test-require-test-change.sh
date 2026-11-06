@@ -85,6 +85,7 @@ run_check() {
   local w="$1" envspec="$2"
   shift 2
   set +e
+  # shellcheck disable=SC2086 # one NAME=value per word
   CHECK_OUT="$(cd "$w" && env -u GITHUB_EVENT_NAME -u GITHUB_BASE_REF -u GITHUB_REF_NAME \
     -u GITHUB_REF -u TEST_FIRST_BASE -u GITHUB_STEP_SUMMARY $envspec \
     bash "$SCRIPT" "$@" 2>&1)"

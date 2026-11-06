@@ -762,6 +762,7 @@ test_the_ci_yml_laid_out_in_overlay_mode_checks_the_rules_edition() {
     mkdir -p "$out/.github/workflows"
     cp "$REPO/bootstrap/stubs/.github/workflows/ci.yml" "$out/.github/workflows/ci.yml"
     printf 'x\n' >"$out/.gitignore"
+    # shellcheck source=/dev/null # the setup script, for layout_into; nothing here needs shellcheck to follow it
     ( set --; . "$SCRIPT"; layout_into "$p" "$REPO/languages" "$out" overlay ) >"$WORK/overlay.out" 2>&1 \
       || { cat "$WORK/overlay.out" >&2; die "$p: overlay failed"; }
     grep -qF 'require-test-change.sh' "$out/.github/workflows/ci.yml" \
@@ -813,11 +814,11 @@ job_of() {
 job_switch_problems() {
   local id="$1" text="$2" key q="[\"']?"
   for key in if continue-on-error; do
-    if grep -qE "^    $q$key$q[[:space:]]*:" <<<"$text"; then
+    if grep -qE "^    $q$key${q}[[:space:]]*:" <<<"$text"; then
       echo "$id: job-level $key: (it can switch off the edition check)"
     fi
   done
-  if grep -qE "(^|[[:space:]])${q}shell$q[[:space:]]*:" <<<"$text"; then
+  if grep -qE "(^|[[:space:]])${q}shell${q}[[:space:]]*:" <<<"$text"; then
     echo "$id: shell: in the job (it changes how the edition check runs)"
   fi
 }

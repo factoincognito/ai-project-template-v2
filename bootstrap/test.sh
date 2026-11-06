@@ -48,6 +48,7 @@ test_harness_gives_each_test_an_empty_work_dir() {
   # WORK, two tests that draw the same number collide (seen once as
   # "out-dir ... real.4209 is not empty").
   [ -d "$WORK" ] || die "no WORK dir"
+  # shellcheck disable=SC2012 # only whether the folder is empty is read
   [ -z "$(ls -A "$WORK")" ] || die "WORK is not empty: $(ls -A "$WORK" | head -n 3 | tr '\n' ' ')"
 }
 
@@ -1225,7 +1226,7 @@ test_workflow_bootstrapper_cancels_superseded_pr_runs_but_never_a_tag_run() {
     || { printf '%s\n' "$top" >&2; die "concurrency group is not per pull request (or per ref for a tag)"; }
   grep -qxF "  cancel-in-progress: \${{ github.event_name == 'pull_request' }}" <<<"$top" \
     || { printf '%s\n' "$top" >&2; die "cancel-in-progress is not limited to pull_request runs"; }
-  [ "$(printf '%s\n' "$top" | grep -vE '^[[:space:]]*(#|$)' | wc -l | tr -d ' ')" = 3 ] \
+  [ "$(printf '%s\n' "$top" | grep -cvE '^[[:space:]]*(#|$)')" = 3 ] \
     || { printf '%s\n' "$top" >&2; die "unexpected keys in the workflow-level concurrency"; }
   # The publish job keeps its own group, which never cancels a publish.
   pub="$(wf_job publish | awk '/^    concurrency:/ { p = 1; next } /^    [A-Za-z]/ { p = 0 } p')"
@@ -1335,6 +1336,7 @@ inputs_repo() {
 # <dir>), commits them, and prints the tool's answer for base..HEAD.
 needed_in() {
   local d="$1"; shift
+  # shellcheck disable=SC2294 # each argument is a shell command; eval joins them with spaces
   ( cd "$d" && eval "$@" && git add -A && git -c user.name=T -c user.email=t@example.com commit -q --allow-empty -m change ) \
     || die "the change '$*' could not be made"
   ( cd "$d" && LIST="$d/list" bash "$CHANGED_INPUTS" needed HEAD~1 HEAD 2>/dev/null )
@@ -1563,6 +1565,7 @@ run_harness() {
   local out="$1" cap=""
   shift
   if command -v timeout >/dev/null 2>&1; then cap="timeout 60"; fi
+  # shellcheck disable=SC2086 # the cap is a command and its argument, or nothing
   env "$@" $cap bash "$HARNESS" >"$out" 2>&1
 }
 
@@ -1800,12 +1803,14 @@ test_harness_shards_by_duration_break_ties_by_fewer_tests_then_lower_shard() {
   grep -vxF -e "$a" -e "$b" -e "$c" "$WORK/names" >"$WORK/rest"
   rest4="$(sed -n 1p "$WORK/rest")"; rest5="$(sed -n 3p "$WORK/rest")"
   got="$(shard_of "$w" x 2 2)"
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -qxF "$b" <<<"$got" && grep -qxF "$c" <<<"$got" || die "the two 3-second tests are not in shard 2"
   grep -qxF "$rest4" <<<"$got" && die "the first 1-second test is in shard 2, want shard 1"
   grep -qxF "$rest5" <<<"$got" || die "on equal totals (6 and 6) the next test did not go to shard 2, the one with fewer tests"
   { printf 'test x\n'; awk '{ print $0, 1 }' "$WORK/names"; } >"$w"
   got="$(shard_of "$w" x 1 2)"
   first="$(sed -n 1p "$WORK/names")"; second="$(sed -n 2p "$WORK/names")"; third="$(sed -n 3p "$WORK/names")"
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -qxF "$first" <<<"$got" && ! grep -qxF "$second" <<<"$got" && grep -qxF "$third" <<<"$got" \
     || die "equal weights do not alternate from shard 1 in list order"
 }
@@ -2063,6 +2068,7 @@ test_check_shards_passes_with_a_shard_count_of_its_own_for_each_os() {
   shard_fixture "$WORK/fxm2" 5 os-b
   cp "$WORK/fxm2/shards/"os-b-* "$d/shards/"
   check_shards "$d" "success success" os-a os-b || { cat "$d/out" >&2; die "refused a complete run with 2 shards for one OS and 5 for the other"; }
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -qF 'os-a: 2 shards ran all' "$d/out" && grep -qF 'os-b: 5 shards ran all' "$d/out" || { cat "$d/out" >&2; die "each OS is not judged by its own count"; }
   rm "$d/shards/os-b-5-of-5.txt"
   expect_shards_refused "$d" "success success" "os-b: shard 5 of 5 did not report" os-a os-b
@@ -2403,6 +2409,7 @@ test_workflow_bash32_leg_gets_bash_3_2_before_it_runs_the_tests_with_it() {
   grep -qE '^ +bash bootstrap/test-bootstrap-project\.sh *$' <<<"$test_step" \
     || die "the bash 3.2 step does not run the tests with the bash on PATH"
   grep -qF 'PATH="$RUNNER_TEMP/bash32:$PATH"' <<<"$test_step" || die "the bash 3.2 step does not put RUNNER_TEMP/bash32 first on PATH"
+  # shellcheck disable=SC2015 # die is meant to run when either check fails
   grep -qF 'BASH_VERSINFO' <<<"$test_step" && grep -qF '3.2' <<<"$test_step" || die "the bash 3.2 step does not check that bash is 3.2"
   # Order: the image, the restore, the build, then the tests.
   a="$(step_line "$BWF" 'Identify the runner image')"
@@ -2483,6 +2490,7 @@ test_workflow_bash32_key_comes_from_an_image_step_not_the_env_context() {
   for f in "$BWF" "$CACHEWF"; do
     [ -f "$f" ] || die "no $f"
     ! grep -qF 'env.ImageOS' "$f" || die "$f uses env.ImageOS"
+    # shellcheck disable=SC2015 # die is meant to run when either check fails
     grep -qF 'steps.image.outputs.image' "$f" && grep -qF 'steps.image.outputs.gcc' "$f" || die "$f does not use the image step's outputs"
     a="$(step_line "$f" 'Identify the runner image')"
     b="$(grep -nE '^        uses: actions/cache/restore@' "$f" | head -n 1 | cut -d: -f1)"
@@ -2515,7 +2523,7 @@ test_workflow_image_step_fails_without_imageos_or_gcc_and_writes_both_outputs() 
     # gcc prints nothing.
     : >"$d/out2"
     set +e
-    out="$(cd "$d" && ImageOS=ubuntu24 PATH="$fake:$PATH" FAKE_GCC= GITHUB_OUTPUT="$d/out2" "$BASH" --noprofile --norc -eo pipefail "$script" 2>&1)"
+    out="$(cd "$d" && ImageOS=ubuntu24 PATH="$fake:$PATH" FAKE_GCC='' GITHUB_OUTPUT="$d/out2" "$BASH" --noprofile --norc -eo pipefail "$script" 2>&1)"
     rc=$?
     set -e
     [ "$rc" -ne 0 ] || die "$f: the image step passed with no gcc version"
@@ -3062,6 +3070,7 @@ test_real_build_cites_only_paragraphs_the_rules_edition_has() {
   [ -s "$WORK/cites" ] || die "no shipped file cites a Process paragraph (the parser is broken)"
   while IFS= read -r c; do
     n="${c%% *}"; m="${c##* }"
+    # shellcheck disable=SC2010 # the names are the edition's own, plain ones
     f="$(cd "$out/rules/processes" && ls | grep -E "^$n-[a-z0-9-]+\.md$" || true)"
     [ -n "$f" ] || die "cited $c: no Process $n in rules/processes"
     grep -qE "^$n § $m( \(C\))? " "$out/rules/processes/$f" || die "cited $c: no such paragraph in rules/processes/$f"
@@ -3105,6 +3114,140 @@ test_project_script_passes_the_forbidden_string_checks() {
   ! grep -nF '(PR #' "$f" >&2 || die "(PR # in $f"
   grep -qE 'https://github\.com/factoincognito/ai-project-template-v2/blob/main/docs/BACKLOG\.md' "$f" \
     || die "$f header does not link the spec by URL"
+}
+
+# ---------- ci.yml: the lint step (PBI-1.41 part (a)) ----------
+# The build job lints the template's own scripts with shellcheck, pinned
+# to one release (P-11 § 2 (5)): the official archive from GitHub, its
+# SHA-256 checked before it is unpacked. The hash is the one shellcheck-py
+# 0.11.0.1 records for the same archive.
+
+CIWF="$REPO/.github/workflows/ci.yml"
+SHELLCHECK_VERSION_PINNED="0.11.0"
+SHELLCHECK_SHA256_PINNED="8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
+LINT_STEP_NAME="Lint the scripts with shellcheck"
+LINT_SELECTION="git ls-files -z 'bootstrap/*.sh' 'tools/*.sh' '.github/scripts/*'"
+
+# ci_build_step <regex>: like wf_step, for the build job of ci.yml.
+ci_build_step() {
+  awk '/^[^ #]/ { injobs = ($0 ~ /^jobs:/); inj = 0; next }
+       injobs && /^  [A-Za-z0-9_-]+:/ { inj = ($0 ~ /^  build:[[:space:]]*$/) }
+       inj { print }' "$CIWF" | awk -v re="$1" '
+    /^      - / { if (hit) printf "%s", buf; buf = ""; hit = 0; instep = 1 }
+    /^    [A-Za-z]/ { if (hit) printf "%s", buf; buf = ""; hit = 0; instep = 0 }
+    instep { buf = buf $0 "\n"; if ($0 ~ re) hit = 1 }
+    END { if (hit) printf "%s", buf }'
+}
+
+lint_step() { ci_build_step "^      - name: $LINT_STEP_NAME\$"; }
+
+test_ci_build_lints_every_script_with_shellcheck_pinned_to_0_11_0() {
+  local step script
+  step="$(lint_step)"
+  [ -n "$step" ] || die "the build job of ci.yml has no step named '$LINT_STEP_NAME'"
+  grep -qxF "          SHELLCHECK_VERSION: $SHELLCHECK_VERSION_PINNED" <<<"$step" \
+    || die "the lint step does not pin shellcheck $SHELLCHECK_VERSION_PINNED exactly"
+  grep -qxF "          SHELLCHECK_SHA256: $SHELLCHECK_SHA256_PINNED" <<<"$step" \
+    || die "the lint step does not pin the archive's SHA-256 $SHELLCHECK_SHA256_PINNED"
+  # Nothing lets the step pass on a finding.
+  ! grep -nE '^        (if|continue-on-error):' <<<"$step" >&2 || die "the lint step can be skipped or let fail (line above)"
+  script="$(printf '%s\n' "$step" | wf_run_block)"
+  [ -n "$script" ] || die "the lint step has no run: | script"
+  grep -qxF 'url="https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION/shellcheck-v$SHELLCHECK_VERSION.linux.x86_64.tar.xz"' <<<"$script" \
+    || die "the lint step does not download the official release archive"
+  ! grep -nE '\|\| *(true|:)|--severity|(^| )-S|(^| )-e ' <<<"$script" >&2 || die "the lint step loosens shellcheck or ignores its result (line above)"
+  # Every script: the same selection, run with the downloaded shellcheck.
+  grep -qxF "$LINT_SELECTION | xargs -0 \"\$dir/shellcheck\"" <<<"$script" \
+    || die "the lint step does not run the downloaded shellcheck on: $LINT_SELECTION"
+}
+
+test_ci_lint_selection_holds_every_script_in_the_three_folders() {
+  # Every tracked file in bootstrap/, tools/ and .github/scripts/ that is a
+  # shell script (named *.sh, or starting with #!) is in the selection,
+  # and nothing else is: a new script cannot be missed.
+  local want got f
+  git -C "$REPO" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "needs a git checkout"
+  want="$(git -C "$REPO" ls-files -- bootstrap tools .github/scripts | while IFS= read -r f; do
+    case "$f" in
+      *.sh) echo "$f" ;;
+      *) [ "$(head -c 2 "$REPO/$f")" != '#!' ] || echo "$f" ;;
+    esac
+  done | LC_ALL=C sort)"
+  got="$(cd "$REPO" && eval "$LINT_SELECTION" | tr '\0' '\n' | LC_ALL=C sort)"
+  [ -n "$want" ] || die "found no scripts (test is stale)"
+  [ "$got" = "$want" ] || die "the selection differs from the scripts: $(diff <(printf '%s\n' "$want") <(printf '%s\n' "$got") | tr '\n' ' ')"
+}
+
+# lint_fakes <dir> <archive version>: a fake curl that serves an archive
+# holding a fake shellcheck, which reports <archive version>, logs the
+# files it is given to <dir>/args and fails when FAKE_FINDING is set.
+lint_fakes() {
+  local d="$1" v="$2"
+  mkdir -p "$d/bin" "$d/tmp" "$d/pkg/shellcheck-v$SHELLCHECK_VERSION_PINNED"
+  cat >"$d/pkg/shellcheck-v$SHELLCHECK_VERSION_PINNED/shellcheck" <<FS
+#!/bin/sh
+if [ "\$1" = --version ]; then printf 'ShellCheck - shell script analysis tool\nversion: $v\n'; exit 0; fi
+printf '%s\n' "\$@" >>"$d/args"
+if [ -n "\${FAKE_FINDING:-}" ]; then echo "x.sh:1:1: warning: a finding [SC2034]"; exit 1; fi
+exit 0
+FS
+  chmod +x "$d/pkg/shellcheck-v$SHELLCHECK_VERSION_PINNED/shellcheck"
+  tar -cJf "$d/archive.tar.xz" -C "$d/pkg" "shellcheck-v$SHELLCHECK_VERSION_PINNED"
+  cat >"$d/bin/curl" <<FC
+#!/bin/sh
+while [ "\$#" -gt 1 ]; do
+  case "\$1" in -o) out="\$2"; shift ;; esac
+  shift
+done
+printf '%s\n' "\$1" >"$d/url"
+cp "$d/archive.tar.xz" "\$out"
+FC
+  chmod +x "$d/bin/curl"
+}
+
+# run_lint_step <dir> <sha256>: runs the lint step's script in the
+# repository, as GitHub runs it, with the fakes and the given pinned hash.
+run_lint_step() {
+  local d="$1" sha="$2" script="$1/step.sh" rc
+  lint_step | wf_run_block >"$script"
+  [ -s "$script" ] || die "empty lint script"
+  set +e
+  LINT_OUT="$(cd "$REPO" && PATH="$d/bin:$PATH" RUNNER_TEMP="$d/tmp" \
+    SHELLCHECK_VERSION="$SHELLCHECK_VERSION_PINNED" SHELLCHECK_SHA256="$sha" FAKE_FINDING="${FAKE_FINDING:-}" \
+    "$BASH" --noprofile --norc -e "$script" 2>&1)"
+  rc=$?
+  set -e
+  return "$rc"
+}
+
+test_ci_lint_step_passes_clean_scripts_and_fails_on_a_finding_or_a_bad_download() {
+  local d sha f n
+  # Clean: the step passes and shellcheck gets every selected script.
+  d="$WORK/clean"; lint_fakes "$d" "$SHELLCHECK_VERSION_PINNED"
+  sha="$(sha256sum "$d/archive.tar.xz" | cut -d' ' -f1)"
+  run_lint_step "$d" "$sha" || { printf '%s\n' "$LINT_OUT" >&2; die "the step failed on clean scripts"; }
+  [ "$(cat "$d/url")" = "https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION_PINNED/shellcheck-v$SHELLCHECK_VERSION_PINNED.linux.x86_64.tar.xz" ] \
+    || die "the step downloaded $(cat "$d/url")"
+  n=0
+  while IFS= read -r f; do
+    n=$((n + 1))
+    grep -qxF "$f" "$d/args" || die "shellcheck was not given $f"
+  done < <(cd "$REPO" && eval "$LINT_SELECTION" | tr '\0' '\n')
+  [ "$n" -gt 0 ] || die "the selection is empty"
+  [ "$(wc -l <"$d/args" | tr -d ' ')" -eq "$n" ] || die "shellcheck was given $(wc -l <"$d/args" | tr -d ' ') files, want $n"
+  # A finding fails the step.
+  d="$WORK/finding"; lint_fakes "$d" "$SHELLCHECK_VERSION_PINNED"
+  sha="$(sha256sum "$d/archive.tar.xz" | cut -d' ' -f1)"
+  ! FAKE_FINDING=1 run_lint_step "$d" "$sha" || die "the step passed on a finding"
+  # An archive with another hash fails before anything is run from it.
+  d="$WORK/hash"; lint_fakes "$d" "$SHELLCHECK_VERSION_PINNED"
+  ! run_lint_step "$d" "$SHELLCHECK_SHA256_PINNED" || die "the step passed with an archive of another hash"
+  [ ! -e "$d/args" ] || die "shellcheck ran from an archive of another hash"
+  # A shellcheck that reports another version fails before the lint.
+  d="$WORK/version"; lint_fakes "$d" 0.9.0
+  sha="$(sha256sum "$d/archive.tar.xz" | cut -d' ' -f1)"
+  ! run_lint_step "$d" "$sha" || die "the step passed with shellcheck 0.9.0"
+  [ ! -e "$d/args" ] || die "shellcheck 0.9.0 was run on the scripts"
 }
 
 # ---------- run ----------
