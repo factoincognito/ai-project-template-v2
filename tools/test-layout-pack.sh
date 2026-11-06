@@ -793,6 +793,89 @@ test_packs_workflow_runs_each_packs_rules_edition_step_in_the_project() {
   [ "$n" -eq 5 ] || die "checked $n pack jobs, expected 5"
 }
 
+# ---------- no job that checks the edition can be switched off ----------
+# A job-level `if:` skips the job, and a skipped job reports success, even
+# as a required check; a job-level `continue-on-error:` lets the workflow
+# pass when the job fails. Either one, on a job that holds the edition
+# step, would turn the check off for every project made from that file
+# with `build` green. A `shell:` (or a workflow-level `defaults:`, which
+# can set it) would change how the step runs without touching it. The key
+# is matched bare and quoted ("if": and 'if': are the same key to YAML).
+# Not caught: a key inside a flow mapping.
+
+# job_of <workflow file> <job id>: the lines of that job, after its own.
+job_of() {
+  awk -v job="  $2:" '$0 == job { injob = 1; next } /^  [a-z][a-z-]*:$/ { injob = 0 } injob' "$1"
+}
+
+# job_switch_problems <job id> <job text>: prints one line per way the job
+# can be switched off or have the step run differently; nothing if none.
+job_switch_problems() {
+  local id="$1" text="$2" key q="[\"']?"
+  for key in if continue-on-error; do
+    if grep -qE "^    $q$key$q[[:space:]]*:" <<<"$text"; then
+      echo "$id: job-level $key: (it can switch off the edition check)"
+    fi
+  done
+  if grep -qE "(^|[[:space:]])${q}shell$q[[:space:]]*:" <<<"$text"; then
+    echo "$id: shell: in the job (it changes how the edition check runs)"
+  fi
+}
+
+# The 11 jobs that hold the edition step: "<file> <job id>".
+edition_jobs() {
+  local p
+  echo "bootstrap/stubs/.github/workflows/ci.yml build"
+  for p in $PACKS; do echo "languages/$p/ci.yml build"; done
+  for p in $PACKS; do echo ".github/workflows/packs.yml pack-$p"; done
+}
+
+test_no_job_that_checks_the_rules_edition_can_be_switched_off() {
+  local f id job problems n=0
+  while read -r f id; do
+    n=$((n + 1))
+    job="$(job_of "$REPO/$f" "$id")"
+    [ -n "$job" ] || die "$f: no job $id"
+    expect_edition_step "$f, job $id" "$job"
+    problems="$(job_switch_problems "$f, job $id" "$job")"
+    [ -z "$problems" ] || die "$problems"
+  done < <(edition_jobs)
+  [ "$n" -eq 11 ] || die "checked $n jobs, expected 11"
+  for f in bootstrap/stubs/.github/workflows/ci.yml languages/*/ci.yml .github/workflows/packs.yml; do
+    ! grep -nE "^[\"']?defaults[\"']?[[:space:]]*:" "$REPO/$f" >&2 \
+      || die "$f: workflow-level defaults: (it can set the shell of the edition check)"
+  done
+}
+
+test_the_switch_off_check_catches_each_key_bare_and_quoted() {
+  # Each key, in each of its three spellings, put on a real job (a pack's
+  # build, the stub's build, a pack-<name> job), before or after the
+  # steps, must be found and the job named; the jobs as they are pass.
+  local f_id f id job key val form line got n=0
+  for f_id in "languages/node/ci.yml build" "bootstrap/stubs/.github/workflows/ci.yml build" ".github/workflows/packs.yml pack-csharp"; do
+    f="${f_id% *}"; id="${f_id#* }"
+    job="$(job_of "$REPO/$f" "$id")"
+    [ -n "$job" ] || die "$f: no job $id"
+    [ -z "$(job_switch_problems "$id" "$job")" ] || die "$id as it is: $(job_switch_problems "$id" "$job")"
+    for key in if continue-on-error; do
+      case "$key" in if) val=false ;; *) val=true ;; esac
+      for form in "$key" "\"$key\"" "'$key'"; do
+        line="    $form: $val"
+        n=$((n + 1))
+        got="$(job_switch_problems "$id" "$(sed -n 1p <<<"$job")"$'\n'"$line"$'\n'"$(sed 1d <<<"$job")")"
+        grep -qF "$id: job-level $key:" <<<"$got" || die "$id: not caught before the steps: $line (got: $got)"
+        got="$(job_switch_problems "$id" "$job"$'\n'"$line")"
+        grep -qF "$id: job-level $key:" <<<"$got" || die "$id: not caught after the steps: $line (got: $got)"
+      done
+    done
+    for form in 'shell' '"shell"' "'shell'"; do
+      got="$(job_switch_problems "$id" "$(sed -n 1p <<<"$job")"$'\n'"    defaults:"$'\n'"      run:"$'\n'"        $form: sh"$'\n'"$(sed 1d <<<"$job")")"
+      grep -qF "$id: shell: in the job" <<<"$got" || die "$id: a defaults shell ($form) is not caught (got: $got)"
+    done
+  done
+  [ "$n" -eq 18 ] || die "tried $n insertions, expected 18"
+}
+
 test_packs_workflow_node_version_matches_pack_ci() {
   local wf="$REPO/.github/workflows/packs.yml" v
   for p in node web react-native; do
