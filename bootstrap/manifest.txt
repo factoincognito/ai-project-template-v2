@@ -6,13 +6,14 @@
 # Files that must ship with clean content live in bootstrap/stubs/.
 # Spec: docs/BACKLOG.md, PBI-1.10.
 
-CLAUDE.md
 .gitattributes
 .gitignore
 .github/PULL_REQUEST_TEMPLATE.md
 
 # The shared test-first check that each pack's CI runs.
 .github/scripts/require-test-change.sh
+# The Rules edition check that the stub's and each pack's CI run on rules/.
+.github/scripts/check-rules-edition.sh
 
 # Workflows are listed by file so template-only workflows never ship. The
 # template's own ci.yml is one of them: the project's ci.yml is the stub in
@@ -20,14 +21,8 @@ CLAUDE.md
 .github/workflows/review.yml
 .github/workflows/changelog.yml
 
-memory/roles.md
-memory/standards.md
-
-docs/CROG_ONBOARDING.md
 docs/DEV_INFRASTRUCTURE.md
-docs/ROUTINES.md
 docs/SPEC.md
-docs/decisions/0001-rebuild-workflow.md
 
 # The language packs. languages/README.md is for whoever adds or changes
 # a pack, which is work in this repo; the setup deletes it from every
