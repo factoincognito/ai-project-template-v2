@@ -6,6 +6,16 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Added
+- Recorded the newcomer pre-check on v2.9.0, findings p2.9.0-a to -c; `STATUS.md` after the tag (PR #376)
+- Backlog: PBI-1.41 spec, approved by Adam (PR #378)
+- Backlog: the findings of the product office's audit of 2026-11-06, PBI-1.42 to PBI-1.53 (PR #380)
+- NEXT_SESSION: Adam's input for the p2.9.0-b and -c fixes (PR #383)
+
+### Changed
+- The Rules edition: 2026-11-06-643aba6 (PR #377), then 2026-11-06-d0973c4 (PR #382)
+- `build` lints the template's own scripts with shellcheck 0.11.0, pinned by its hash, and fails on any finding; `.shellcheckrc` turns off three checks the scripts break on purpose (PBI-1.41 part (a)) (PR #379)
+
 ## [2.9.0] — 2026-11-06
 
 ### Added
