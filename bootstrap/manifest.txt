@@ -13,6 +13,8 @@ CLAUDE.md
 
 # The shared test-first check that each pack's CI runs.
 .github/scripts/require-test-change.sh
+# The Rules edition check that the stub's and each pack's CI run on rules/.
+.github/scripts/check-rules-edition.sh
 
 # Workflows are listed by file so template-only workflows never ship. The
 # template's own ci.yml is one of them: the project's ci.yml is the stub in

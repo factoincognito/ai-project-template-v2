@@ -696,13 +696,13 @@ EDITION_STEP_NAME='      - name: Check the Rules edition'
 EDITION_STEP_RUN='        run: bash .github/scripts/check-rules-edition.sh rules'
 
 # edition_step_block: from stdin (a workflow, or one job of it), prints the
-# lines of the edition step without blank lines: its name line up to the
-# next step or job.
+# lines of the edition step without blank and comment lines (neither
+# changes the step): its name line up to the next step or job.
 edition_step_block() {
   awk -v name="$EDITION_STEP_NAME" '
     $0 == name { inblock = 1; print; next }
     inblock && (/^      - / || /^  [a-z][a-z-]*:$/) { inblock = 0 }
-    inblock && NF { print }
+    inblock && NF && $1 !~ /^#/ { print }
   '
 }
 
