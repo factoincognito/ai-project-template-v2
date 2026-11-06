@@ -1182,7 +1182,7 @@ get a working project in any supported language.
 
   **Rules that apply.** Script, test and workflow changes: test first (red, then green), reviewed by a Crog agent on Opus, one PR per scope point.
 
-- **[NEXT] PBI-1.38** (Clead, 2026-11-06, from the design of the public Rules edition, whose intent the product owner approved on 2026-11-05; the HOW is Clead's) — New projects get the Rules edition in `rules/` as their rule set, with a slim entry point and a `RULES.md` of local rules, and the old rule files stop shipping.
+- **[DONE] PBI-1.38** (Clead, 2026-11-06, from the design of the public Rules edition, whose intent the product owner approved on 2026-11-05; the HOW is Clead's; done 2026-11-06: (a) #363 `b0d4ee0`, (b) #364 `e977da7`, (c) #366 `d960e2e`, (d) #367 `d3c709a`, each with a Clead review approval at its merged head and `build` green there, merges verified through the API) — New projects get the Rules edition in `rules/` as their rule set, with a slim entry point and a `RULES.md` of local rules, and the old rule files stop shipping.
 
   **Status: Adam approved 2026-11-06** (in chat, 09:31: "I approve the intent of the template PBI-1.38 spec as written in #360.").
 
@@ -1207,7 +1207,9 @@ get a working project in any supported language.
 
   **Done when.** A project made from `main` has `rules/` (passing its CI check), the stub `CLAUDE.md` and `RULES.md`, and none of the files in 2; every shipped file that pointed to a removed one points to `rules/` or `RULES.md` instead; the test suites are green on every leg.
 
-  **Rules that apply.** Script, test and stub changes: test first, reviewed by a Crog agent on Opus (process and rules content included); one PR per part.
+  **Rules that apply.** Script, test and stub changes: test first, reviewed on Opus by the role that did not write them (process and rules content included); one PR per part. (Corrected 2026-11-06: the first wording named a Crog reviewer; Crog wrote the four PRs, so Clead review agents reviewed them.)
+
+  **As built, beyond the scope above.** `L § 2` of the `RULES.md` stub also names `docs/SPEC.md`, the specification the edition's P-1 § 1 (2) names (#363). Part (c) also points the `docs/NEXT_SESSION.md` stub, the setup script's `fill_rows` comment and the five `code-standards.md` test-first lines to the edition, as "Done when" asks, and drops `..wrap` from the README and `memory/context.md` stubs (the edition has no stop word) (#366). The `roles.md` fixture in the e2e tests went in part (a), not (d), to keep the suites green (#363). The edition check in made projects' CI and the shipping of `check-rules-edition.sh` came with #361 and #358, before this PBI. Follow-ups: PBI-1.40.
 
 - **[LATER] PBI-1.39** (Clead, 2026-11-06, from the non-blocking notes of the Crog review of #358, comment 6681037733; the HOW is Clead's; not yet built) — Follow-ups to the Rules edition check (`.github/scripts/check-rules-edition.sh`).
 
@@ -1218,6 +1220,17 @@ get a working project in any supported language.
   Also from the review of #357 (notes 2 and 3, still open): extra file names that hold a newline are reported in pieces (`find -print0` would keep them whole); a `pull_request` event without `GITHUB_BASE_REF`, a failing `git diff` and a missing `find` or `git` have no test, and the last exits 127, not 2.
 
   **Rules that apply.** Script and test changes: test first, reviewed by a Crog agent on Opus.
+
+- **[LATER] PBI-1.40** (Clead, 2026-11-06, from the non-blocking notes of the Clead reviews of #363, #364, #366 and #367 and the author's runs; the HOW is Clead's; not yet built) — Follow-ups to PBI-1.38.
+
+  **Scope.**
+  1. **The stub-path check** in `bootstrap/test.sh` only matches paths ending in `/`, `.md` or `EDITION`; a pointer to a `.sh` or `.yml` file in the stubs is not checked to exist (#363 N4).
+  2. **"No rule text" in the `CLAUDE.md` stub** is checked as at most 15 non-empty lines, which catches growth but not one rule sentence in the existing lines (#363 N5).
+  3. **The `CLAUDE.md`-section pointer pattern** still passes three forms no shipped file uses (`` `CLAUDE.md` § … ``, "`CLAUDE.md`, under …", "`CLAUDE.md` (…)"); the citation test checks paragraphs, not subsections; Part 1's per-paragraph check passes when any subsection of a paragraph is cited; its empty-parse message can mislead (#366 notes).
+  4. **`e2e-check.sh`**: `--help` still says the checker only reads, though the new `rules-edition` check runs the copy's own script; the exit-2 path (the script cannot run) has no test (#367 N1, N3).
+  5. **Possibly flaky:** `test_ctrl_c_during_the_discard_puts_the_terminal_mode_back` and `test_keys_typed_before_a_question_are_discarded_at_a_real_terminal` failed once in shard 4 on a 2-core machine shared with other suites, and passed three times out of three alone. Watch CI; give them a timing margin if they fail there.
+
+  **Rules that apply.** Test and script changes: test first, reviewed on Opus by the role that did not write them; one PR per point.
 
 ---
 
