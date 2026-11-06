@@ -4,13 +4,13 @@ Everything in the Node/TypeScript standards applies, plus the web rules below.
 
 - **Node.js 24 LTS** — use modern ES2022+ features
 - **TypeScript strict mode** — `noImplicitReturns` and `noUncheckedIndexedAccess` are on, so an unchecked `items[0]` or a missing return path fails `npm run typecheck`. No `any`.
-- **Biome** for linting and formatting — `npx biome ci --error-on-warnings .` must be clean before pushing
+- **Biome** for linting and formatting — `npx biome ci --error-on-warnings .` is the check that is clean before a push (Process P-11 § 5 (2))
 - **Biome warnings fail CI** — Biome 2 reports several recommended rules (for example `useConst`, `noNonNullAssertion`, unused variables and imports) as warnings, so CI runs `biome ci --error-on-warnings`. `noExplicitAny` is set to error in `biome.json`, so `any` fails even without the flag.
 - **Global types are listed** — TypeScript 6 no longer loads every installed `@types` package, so `tsconfig.json` lists them in `types` (`jest` by default). Add any you install, e.g. `node` after `npm install -D @types/node`.
-- **Jest + ts-jest** for unit tests — minimum 80% line coverage enforced in CI
+- **Jest + ts-jest** for unit tests — the line coverage gate of Process P-11 § 5 (2), enforced in CI
 - **Playwright** for browser tests — they run against the built file, not the dev server
 - **Test first** — write the failing test (`src/*.test.ts`, or a browser test in `e2e/`) and run it red before the code; `build` fails a pull request that changes `src/` or `index.html` without changing a test (see `CLAUDE.md`, Both agents: test first).
-- **No hardcoded values** — everything configurable via constants or config files
+- **No hardcoded values**: Process P-11 § 5 (2).
 - **Error handling** — always type-narrow errors; never `catch (e: any)`
 - **Imports** — relative imports within the project; no barrel files unless justified
 

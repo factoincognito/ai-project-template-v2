@@ -3,15 +3,15 @@
 - **Expo SDK 57** (React Native 0.86, React 19.2) — run the app on a phone with Expo Go or in an emulator; no EAS build is needed to develop
 - **Node.js 24 LTS** — the version CI uses
 - **TypeScript strict mode** — `noImplicitReturns` and `noUncheckedIndexedAccess` are on, so an unchecked `items[0]` or a missing return path fails `npm run typecheck`. No `any`.
-- **Biome** for linting and formatting — `npx biome ci --error-on-warnings .` must be clean before pushing
+- **Biome** for linting and formatting — `npx biome ci --error-on-warnings .` is the check that is clean before a push (Process P-11 § 5 (2))
 - **Biome warnings fail CI** — Biome 2 reports several recommended rules (for example `useConst`, `noNonNullAssertion`, unused variables and imports) as warnings, so CI runs `biome ci --error-on-warnings`. `noExplicitAny` is set to error in `biome.json`, so `any` fails even without the flag.
 - **Global types are listed** — TypeScript 6 no longer loads every installed `@types` package, so `tsconfig.json` lists them in `types` (`jest` by default). Add any you install.
-- **jest-expo** preset for unit and component tests, with **React Native Testing Library** (`@testing-library/react-native`) for components — minimum 80% line coverage enforced in CI. Its `render` is async: `await render(<App />)`.
+- **jest-expo** preset for unit and component tests, with **React Native Testing Library** (`@testing-library/react-native`) for components — the line coverage gate of Process P-11 § 5 (2), enforced in CI. Its `render` is async: `await render(<App />)`.
 - **Test first** — write the failing test (`src/*.test.ts` or `src/*.test.tsx`) and run it red before the code; `build` fails a pull request that changes `src/` without changing a test (see `CLAUDE.md`, Both agents: test first).
 - **Versions come from the SDK.** `expo`, `react`, `react-native`, `jest`, `jest-expo`, `@types/react`, `@types/jest` and `typescript` must be the versions Expo SDK 57 expects. Add Expo and React Native libraries with `npx expo install <package>`, which picks the version that matches the SDK, then pin it exactly in `package.json`. `npx expo install --check` lists any that do not match (it asks Expo's servers, so it needs network access).
 - **Jest 29, not 30** — `jest-expo` 57 depends on Jest 29 (Expo SDK 57 expects `jest` `~29.7.0` and `@types/jest` 29.5.14), so this pack pins Jest 29 while the Node and web packs use Jest 30. Do not bump Jest on its own in a version refresh; move it only when an Expo SDK upgrade brings a `jest-expo` that supports the newer Jest.
 - **StyleSheet** for styles — `StyleSheet.create`, no inline style objects. No tool checks this; it is for review.
-- **No hardcoded values** — environment-specific config via `.env` (gitignored), read in app code as `process.env.EXPO_PUBLIC_*`. Anything with that prefix is built into the app bundle and readable by anyone who has the app, so never put a secret there.
+- **No hardcoded values** (Process P-11 § 5 (2)): environment-specific config via `.env` (gitignored), read in app code as `process.env.EXPO_PUBLIC_*`. Anything with that prefix is built into the app bundle and readable by anyone who has the app, so never put a secret there.
 - **Platform guards** — use `Platform.OS` or `.ios.tsx` / `.android.tsx` file extensions for platform-specific behaviour
 - **Error handling** — always type-narrow errors; never `catch (e: any)`
 - **Imports** — relative imports within the project; no barrel files unless justified

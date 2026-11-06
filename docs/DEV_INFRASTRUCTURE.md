@@ -2,8 +2,10 @@
 
 How a project made with the bootstrapper is set up, built and checked: a
 new machine, CI, branch protection, commits, and the setup for each
-language pack. The rules for code in each language live in the pack's
-`code-standards.md`; this file covers everything around the code.
+language pack. The rules are Process P-11 of the Rules in `rules/`
+(`rules/processes/P-11-engineering-infrastructure.md`), cited below by
+number; this file is the how-to that goes with them. The rules for code
+in each language live in the pack's `code-standards.md`.
 
 Part 1 applies to every project. Part 2 has one section per language
 pack.
@@ -14,17 +16,14 @@ pack.
 
 ### 1. Principles
 
-- **Automate what is mechanical, keep judgment human.** Formatting,
-  linting, type checks, tests and the coverage gate run in CI and block
-  the merge when they fail. Design and spec questions go to review.
-- **A new machine is productive in minutes.** Clone, run the pack's
-  "First-time setup", done. Nothing depends on one person's machine.
-- **Nothing reaches `main` without a pull request and a green CI run.**
-  GitHub enforces this, not convention (section 4).
-- **Only what the project needs.** Every tool here earns its place;
-  more is added when the project needs it (section 7).
+The principles are Process P-11 § 1. Branch protection (section 4) is
+how GitHub, not convention, keeps every change to `main` behind a pull
+request and a green CI run; section 7 lists what is left out until a
+project needs it.
 
 ### 2. New machine setup
+
+What a new machine needs is Process P-11 § 4 (1); the steps:
 
 1. Install git and VS Code. For Crog, install the Claude Code extension
    in VS Code.
@@ -52,15 +51,15 @@ silently rewrote whole files between LF and CRLF when edits made on
 Windows and elsewhere touched the same file. It happened three separate
 times on one pull request, and the fix came only after the damage.
 With the policy pinned from the first commit, that class of bug cannot
-happen. Do not remove it or override it per file without a
-reason recorded in `memory/decisions.md`.
+happen. When it may be removed or overridden for a file:
+Process P-11 § 4 (2), with the reason recorded in `memory/decisions.md`.
 
 **`docs/NEXT_SESSION.md`** is the staging area for reasoning, revised
 assumptions and plan changes that are not yet ready to be a backlog
 item, a decision or a doc change. It is wired into the session routine
-in `CLAUDE.md`: Clead reads and triages it at every session start, and
-every entry touched in a session is promoted, re-affirmed or deleted
-(the graduation rule) before the session counts as clean. Why it is
+of the Rules: every session reads and triages it at its start (Process
+P-1 § 4 (3)), and every entry touched in a session gets a disposition
+before the session counts as clean (Process P-8 § 4). Why it is
 mandatory: in an earlier project the same kind of file was added
 mid-project, never wired into the session start, and went unread for
 nearly a month. The file and its wiring come together; one without the
@@ -68,20 +67,18 @@ other does not work.
 
 ### 4. Branch protection runbook
 
-**What it enforces.** On `main`: every change arrives through a pull
-request, the required CI checks must pass before it can merge, and
-nobody can bypass it, admins included. The pull request needs **no**
-approvals: every PR is opened under the owner's own GitHub account, and
-GitHub does not let authors approve their own PRs. Review happens as a
-verdict comment instead (see `CLAUDE.md`, "Change execution model").
+**What it enforces.** Process P-11 § 3 (1). The pull request needs
+**no** approvals because every PR is opened under the owner's own GitHub
+account, and GitHub does not let authors approve their own PRs. Review
+happens as a verdict comment instead (Process P-3 § 4).
 
 **Turning it on in a new project.** The setup script,
 `bootstrap-project.sh`, does this: it protects `main` right after it
 creates the project, and adds `build` as a required check once the setup
 pull request's `build` has passed. It then reads the protection back and
-reports it. The steps below are the fallback, for a project set up
-without the script or whose protection was changed by hand (repo owner,
-once, after the first push of the pack's `ci.yml`):
+reports it. The steps below are the fallback of Process P-11 § 3 (3),
+for a project set up without the script or whose protection was changed
+by hand (repo owner, once, after the first push of the pack's `ci.yml`):
 
 1. Push a branch and let CI run once. The required-checks picker only
    offers checks that have run in the repo recently.
@@ -96,10 +93,9 @@ once, after the first push of the pack's `ci.yml`):
 
 On GitHub's free plan this is only available for public repositories.
 
-**Checking that it works.** Open a pull request with a deliberately
-failing test: the merge button must stay blocked until the check is
-green. Then close it without merging. A setting that shows as "on" is
-not proof on its own.
+**Checking that it works** (Process P-11 § 3 (2)). Open a pull request
+with a deliberately failing test: the merge button must stay blocked
+until the check is green. Then close it without merging.
 
 ### 5. CI/CD
 
@@ -109,58 +105,50 @@ starts with a stub `ci.yml` that only checks out the code; the language
 pack's `ci.yml` replaces it. The stub has no test-first check because,
 with no pack, there is no `src/` to define code by.
 
-The rules every pack's CI follows:
+The rules every pack's CI follows are Process P-11 § 2. How each is
+carried out:
 
-- **One job, named `build`.** Branch protection requires a check by
-  that name. Rename the job and every pull request waits for a `build`
-  check that never arrives, until the required check is changed too.
-- **Green on day one.** A fresh project passes its own CI with no
-  changes; each pack ships a placeholder or starter test for that.
-- **A code change comes with a test change.** After the checkout, the
-  first step of `build` runs `.github/scripts/require-test-change.sh` with the pack's patterns
-  and fails a pull request that changes code without changing a test. A
-  change no test can check carries a `Test-exempt: <reason>` commit
-  trailer, which the job summary shows for the reviewer. The checkout
-  needs `fetch-depth: 0` so the base branch is there to compare with. The
-  check sees file names only: whether the test exercises the code is for
-  review. To run it locally, give it the base with `TEST_FIRST_BASE`;
-  each pack's `code-standards.md` has the full command.
-- **CI enforces what a tool can check.** Where `code-standards.md`
-  states a rule a tool can check (types, lint, formatting, the 80% line
-  coverage gate), CI fails when it is broken. Rules no tool checks are
-  for review.
-- **The same checks locally and in CI.** Each pack's
-  `code-standards.md` gives the commands to run the checks locally.
-  Before pushing, run the same steps as the project's `ci.yml`, in
-  order.
-- **Pinned versions.** Tool versions are pinned exactly and refreshed
-  together, in one change, with a full CI run.
+- **One job, named `build`** (Process P-11 § 2 (1)). Branch protection
+  requires a check by that name. Rename the job and every pull request
+  waits for a `build` check that never arrives, until the required check
+  is changed too. Each pack ships a placeholder or starter test, so a
+  fresh project passes its own CI with no changes.
+- **The test-change check** (Process P-11 § 2 (3)). After the checkout,
+  the first step of `build` runs `.github/scripts/require-test-change.sh`
+  with the pack's patterns. A change no test can check carries a
+  `Test-exempt: <reason>` commit trailer, which the job summary shows
+  for the reviewer. The checkout needs `fetch-depth: 0` so the base
+  branch is there to compare with. To run it locally, give it the base
+  with `TEST_FIRST_BASE`; each pack's `code-standards.md` has the full
+  command.
+- **What a tool can check** (Process P-11 § 2 (2)): the rules a pack's
+  `code-standards.md` states that a tool can check (types, lint,
+  formatting, the line coverage gate) are steps of its `ci.yml`.
+- **The same checks locally** (Process P-11 § 2 (4)). Each pack's
+  `code-standards.md` gives the commands; run them in the order of the
+  project's `ci.yml`.
+- **Pinned versions**: Process P-11 § 2 (5).
 
-**CD.** None by default. The `web` pack ships an optional workflow that
-deploys to Cloudflare on every push to `main`; it does not re-run the
-tests, so it is only safe once branch protection requires `build`.
+**CD** (Process P-11 § 6). None by default. The `web` pack ships an
+optional workflow that deploys to Cloudflare on every push to `main`; it
+does not re-run the tests, so it is only safe once branch protection
+requires `build`.
 
 ### 6. Commits, branches and pull requests
 
-- **One PR, one change.** Unrelated changes never share a PR.
-- **Branch names:** `feat/<short-description>`,
-  `fix/<short-description>` or `docs/<short-description>`, e.g.
-  `feat/udp-listener`, `fix/multicast-join-error`.
-- **Commit messages:** imperative, present tense, specific. Say what the
-  commit does, not what you did. Good: `Add configurable UDP listener
-  with multicast support`. Bad: `Added stuff`, `WIP`, `fix`.
-- **Squash merge.** A PR lands on `main` as one commit, titled after the
-  PR, so the PR title follows the same convention. Delete the branch
-  after the merge, or turn on "Automatically delete head branches" in
-  the repo settings (Settings, General, Pull Requests) so GitHub does
-  it.
+- **One PR, one change:** § 27 of the Rules.
+- **Branch names:** Process P-2 § 1 (3), e.g. `feat/udp-listener`,
+  `fix/multicast-join-error`.
+- **Commit messages and PR titles:** Process P-2 § 2. Good:
+  `Add configurable UDP listener with multicast support`. Bad:
+  `Added stuff`, `WIP`, `fix`.
+- **Squash merge:** Process P-4 § 2 (4). To have GitHub delete the
+  branch after the merge, turn on "Automatically delete head branches"
+  in the repo settings (Settings, General, Pull Requests).
 
 ### 7. Deliberately left out
 
-Added when a project needs them, not before: Docker, continuous
-deployment beyond the web pack's optional workflow, CI matrix builds
-across OSes, automated dependency updates, status badges, secrets
-management (until there is a secret).
+What is left out until a project needs it: Process P-11 § 1 (3).
 
 ---
 

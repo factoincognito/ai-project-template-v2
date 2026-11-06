@@ -2,15 +2,15 @@
 
 - **Python 3.14** — CI uses the latest 3.14 release that `actions/setup-python` offers. Use the same minor version locally.
 - **Virtual environment** — always work in `.venv`; never install into the system Python
-- **Ruff** for linting and formatting (`line-length = 100`) — `ruff check .` and `ruff format --check .` must be clean before pushing
+- **Ruff** for linting and formatting (`line-length = 100`) — `ruff check .` and `ruff format --check .` are the checks that are clean before a push (Process P-11 § 5 (2))
 - **Ruff rules that fail CI** (set in `pyproject.toml`): pycodestyle (`E`, `W`), pyflakes (`F`), import order (`I`), bugbear (`B`), modern syntax for the target Python (`UP`), pathlib instead of `os.path` and `open()` (`PTH`), and docstrings on public classes, methods and functions (`D101`–`D103`; not required in `src/tests/`)
 - **Type hints everywhere** — mypy runs in `strict` mode over `src/`, tests included, so an unannotated function or a type error fails CI
 - **Docstrings** on public functions and classes — explain intent, not mechanics
 - **Exception chaining** — inside `except`, always `raise XxxError(...) from exc` (Ruff `B904` enforces it)
 - **Cross-platform paths** — `pathlib.Path` for all file paths, never string concatenation (Ruff `PTH` enforces it)
-- **pytest** for testing — minimum 80% line coverage of `src/` enforced in CI; `src/tests/` itself is not counted
+- **pytest** for testing — the line coverage gate of Process P-11 § 5 (2) over `src/`, enforced in CI; `src/tests/` itself is not counted
 - **Test first** — write the failing test in `src/tests/` and run it red before the code; `build` fails a pull request that changes `src/` without changing a test (see `CLAUDE.md`, Both agents: test first).
-- **No hardcoded values** — everything configurable via config file, environment variable or CLI
+- **No hardcoded values**: Process P-11 § 5 (2).
 - **Run as a module, from the project root** — `python -m src.<module>.main`, never `python src/<module>/main.py`. Run as a script, `from src.<module> import ...` fails with `ModuleNotFoundError: No module named 'src'`, on every OS.
 
 ### Project layout

@@ -3936,10 +3936,10 @@ FILL_DATE=""
 
 # fill_rows <pack> <with deploy: yes or empty>: FILL_ROWS is the table for
 # that pack, one row per line, "<file> <key>", the file relative to the
-# copy. Only the files named here are filled in: in memory/roles.md and
-# docs/CROG_ONBOARDING.md [DATE] is a format token and stays, and the
-# kept languages/<pack>/ files keep their texts (react-native
-# code-standards.md, the web wrangler.jsonc without --with-deploy).
+# copy. Only the files named here are filled in: rules/ and RULES.md
+# are never changed, and the kept languages/<pack>/ files keep their
+# texts (react-native code-standards.md, the web wrangler.jsonc without
+# --with-deploy).
 FILL_ROWS=""
 fill_rows() {
   FILL_ROWS="README.md name
