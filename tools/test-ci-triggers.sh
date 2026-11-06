@@ -13,7 +13,7 @@ FAILED=0
 
 fail() {
   echo "FAIL $*" >&2
-  FAILED=1
+    FAILED=1
 }
 
 # on_block <file>: the lines of the top-level `on:` block, comments out.
