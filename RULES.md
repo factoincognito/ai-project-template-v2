@@ -8,7 +8,7 @@ L § 2 Files and citations
 (2) What ships to the projects the template makes is what `bootstrap/manifest.txt` lists and what `bootstrap/stubs/` holds. Every other file is the template's own.
 (3) No hurdles or retrospective log is kept. A retrospective is put together when it is wanted, from `memory/decisions.md` and `memory/context.md`.
 (4) In this file and the project's other files, `§ n` and `P-n § m` refer to the Rules and Processes of the product office, and `L § n` to this file.
-Adopted: (1) not recorded, carried over from `CLAUDE.md` "Where everything is"; (2) carried over from `bootstrap/manifest.txt` (PBI-1.10); (3) Adam, 2026-06-28, `memory/decisions.md`; (4) by Clead at the cutover, as the `RULES.md` stub's L § 2 (2)
+Adopted: (1) not recorded, carried over from `CLAUDE.md` "Where everything is"; (2) carried over from `bootstrap/manifest.txt` (PBI-1.10); (3) Adam, 2026-06-28, `memory/context.md` ("Adam's call") and `memory/decisions.md`; (4) by Clead at the cutover, as the `RULES.md` stub's L § 2 (2)
 
 L § 3 Session start
 (1) At session start, Clead also reads `memory/context.md`.
@@ -20,7 +20,7 @@ Adopted: Adam, 2026-09-30, `memory/decisions.md`
 
 L § 5 Test first by kind of change
 (1) A workflow change gets a wiring assertion that fails against the old file. A real run on GitHub is the proof that the workflow works.
-(2) Before a shipped file is added or removed, the build's tests (`bootstrap/test.sh`) are run, and any of them that pin the file are changed first.
+(2) Before a shipped file is removed, the build's tests (`bootstrap/test.sh`) are run, and any of them that pin the file are changed first.
 (3) What the `build` check counts as code and as a test is listed in its test-change step in `.github/workflows/ci.yml`.
 Adopted: (1) Clead, 2026-10-01, `memory/decisions.md` ("In this template repo, test-first applies by kind of change"), made the default at every level by Adam, 2026-10-01 (PBI-1.17), `memory/decisions.md`; (2) not recorded, carried over from `docs/NEXT_SESSION.md` item 5; (3) carried over from `CLAUDE.md` "Both agents: test first"
 
@@ -36,7 +36,7 @@ L § 7 This repository's checks
 (2) `main` requires two checks, `build` and `bootstrapper-test`. The `pack-<name>` jobs of `packs.yml`, which lay each language pack out in a made project and run its checks, ship nothing and are not required checks.
 (3) Until 2026-11-13, `build` does not yet fail on lint, formatting or line coverage of this repository's own scripts. By that date a lint check (shellcheck), a format check and a line coverage gate of at least 80% are part of `build` (`docs/BACKLOG.md` PBI-1.41), and this subsection lapses. Overrides P-11 § 2 (2) until then.
 Overrides P-11 §§ 2 (1) and 3 (1) ((1) and (2)).
-Adopted: (1) Adam, 2026-10-29, on Clead's recommendation, `docs/BACKLOG.md` PBI-1.25 part 2; (2) 2026-09-30, `memory/decisions.md` ("Language packs are tested on GitHub's runners…"); (3) Adam, 2026-11-06 16:40, a dated condition of the cutover, recorded in the product office
+Adopted: (1) Adam, 2026-10-29, on Clead's recommendation, `docs/BACKLOG.md` PBI-1.25 part 2; (2) decider not recorded, 2026-09-30, `memory/decisions.md` ("Language packs are tested on GitHub's runners…"); (3) Adam, 2026-11-06 16:40, a dated condition of the cutover, recorded in the product office
 
 L § 8 The Rules edition
 (1) The copy of the Rules that § 21 (5) names is `bootstrap/stubs/rules/`, the edition. A new edition replaces it whole.
