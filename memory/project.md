@@ -8,13 +8,16 @@ ai-project-template (v1), which accumulated complexity proportional to
 workarounds rather than to the underlying problem.
 
 **Goals:**
-- A self-contained repo — clone it and everything needed to run the
-  workflow (human or agent) is inside it
-- Adam's involvement reduced to two touchpoints: describe the PBI,
-  approve the merge
+- Everything needed to run the workflow (human or agent) is in this
+  repo and in the product office whose Rules it is bound to. Each
+  project made from it gets its own copy of the Rules (the public
+  edition), so a made project is self-contained.
+- Adam's involvement reduced to the WHAT: describe the PBI, and make
+  the decisions only he can make. Reviews and merges are delegated;
+  he can stop any merge.
 - No scaffolding inherited from constraints that no longer exist
-- A workflow that a new Clead instance can cold-start from the repo
-  alone, without Adam providing orientation
+- A workflow that a new Clead instance can cold-start from this repo
+  and the product office, without Adam providing orientation
 
 **Definition of done for this phase:**
 The skeleton is committed and a real project has been bootstrapped from
