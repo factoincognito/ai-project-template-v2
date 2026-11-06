@@ -89,7 +89,7 @@ Every pack follows the same shape. A new pack should too:
    pass. Then break one rule on purpose for each thing CI is meant to
    enforce, and check that CI fails.
 4. Open a PR. It is code and config, so the reviewer is the role that
-   did not write it (see `CLAUDE.md`, "Change execution model").
+   did not write it (§ 28 (1)(a) of the Rules).
 
 In the template repository
 (https://github.com/factoincognito/ai-project-template-v2), each pack is also

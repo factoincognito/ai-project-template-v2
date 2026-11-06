@@ -2,8 +2,12 @@
 
 A project run with the Clead + Crog workflow: a product owner decides
 what gets built, Clead (Claude, Tech Owner) owns how, and Crog (Claude
-Code, Senior Developer) implements. Everything the agents need lives in
-this repo: `CLAUDE.md` is the entry point.
+Code, Senior Developer) implements. This repo is the template: a
+project under the product office (`factoincognito/product-office`), whose
+Rules bind it; its own local rules are in `RULES.md`, and `CLAUDE.md` is
+the entry point. A project made from it gets everything its agents need:
+the public edition of the Rules in `rules/`, its own `RULES.md` and a
+`CLAUDE.md` that points to both.
 
 ## Setup
 
@@ -295,9 +299,9 @@ same).
 
 ### Starting later sessions
 In the Claude app, start a new chat inside the project's Claude Project
-(it already has the repo). Clead follows the session startup steps in
-`CLAUDE.md`. The first thing you say is the first thing
-that matters.
+(it already has the repo). Clead carries out the session startup that
+`CLAUDE.md` points to. The first thing you say is the first thing that
+matters.
 
 ## The team
 
@@ -315,8 +319,8 @@ Reviews and merges are delegated: Clead reviews Crog's code, Crog
 reviews Clead's code, config and process changes, and Crog merges once
 the review passes and CI is green. After 3 review rounds without
 agreement, the product owner decides. The product owner is never used to
-pass messages between Clead and Crog. Details: `CLAUDE.md`, "Change
-execution model".
+pass messages between Clead and Crog. Details: § 28 and Processes P-2
+to P-4 of the Rules (in a project made from the template, in `rules/`).
 
 ## Working without Claude
 
@@ -352,9 +356,9 @@ on top of it.
 **What does not work without Claude.**
 
 - Clead and Crog, and everything they do: specs, reviews, merges,
-  session start and end, `..wrap` and pins.
-- `CLAUDE.md` and `memory/roles.md` are written for Clead and Crog, and
-  `memory/context.md` is Clead's session notes. Without Claude, nobody
+  session start and end.
+- `CLAUDE.md`, `RULES.md` and the Rules in `rules/` are written for
+  Clead and Crog, and `memory/context.md` is Clead's session notes. Without Claude, nobody
   reads them as instructions.
   The other files under `memory/` hold the project's own data, such as
   its description and decisions, and stay useful.
@@ -375,8 +379,9 @@ written for Clead and Crog, as they apply to a team of people only:
 - Write the test first and see it fail. The test-first check fails a
   code change without a test; a change no test can check says why in a
   `Test-exempt:` trailer line.
-- Someone other than the author reviews the pull request. Sections 1
-  to 5 of `memory/standards.md` work as the review checklist.
+- Someone other than the author reviews the pull request. The review
+  standard of the Rules, Process P-3 § 3
+  (`rules/processes/P-3-review.md`), works as the review checklist.
 - Merge once `build` is green and the review has passed.
 - Fill in the texts the setup leaves for Clead (listed above) yourself,
   and keep `STATUS.md` up to date by hand.

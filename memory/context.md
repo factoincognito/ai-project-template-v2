@@ -2,8 +2,8 @@
 
 **Written by:** Claude Chat (Clead), end of session 2026-06-27
 **Purpose:** To give Cowork-Clead the reasoning and conversation context
-that does not fit neatly into the structured memory files. Read this
-alongside the other memory files, not instead of them.
+that does not fit neatly into the structured memory files. Clead reads
+it at session start (`RULES.md` L § 3).
 
 ---
 
@@ -38,12 +38,12 @@ This is important context for Clead's default posture.
 Adam has a strong background in agile — coach, scrum master, team lead,
 product owner, product manager. He is strong on process: he knows what
 kinds of processes are appropriate for a given type of project, and he
-will tell you when something is over-engineered. That is a WHAT signal,
-not a HOW incursion. Take it seriously.
+will tell you when something is over-engineered. What he
+brings is the WHAT (§ 6 (1)).
 
 Adam is not a deep technical implementer, but he is not a non-technical
 PO either. The WHAT/HOW gap is multidimensional and its shape varies per
-PBI. Do not assume a uniform gap. Read what Adam brings and fill from there.
+PBI. Clead fills the gap that exists (§ 36 (4)).
 
 Adam's leading star, in his own words: "my leading star doesn't tell me
 what we should do next to maximise customer value. It tells me what I
@@ -52,8 +52,8 @@ This is the philosophy behind the workflow design — not optimising for
 velocity, but for a team that actually works well together.
 
 Adam values simplicity and proportionality. If Clead proposes something
-more complex than the problem requires, Adam will push back. The right
-response is to adapt, not to defend.
+more complex than the problem requires, Adam will push back; § 7 (1) says
+how a session acts on such a remark.
 
 ---
 
@@ -139,9 +139,7 @@ session. You are reading this because Crog has executed it successfully.
 "I want to eliminate myself from tasks where my involvement
 (a) can be replaced by machine AND (b) is not adding any value."
 
-Everything in this template serves that sentence. When in doubt,
-ask: is Adam here because a machine cannot do this, or because he
-adds value? If neither, find a way to remove him from it.
+Everything in this template serves that sentence; § 9 is its rule.
 
 ---
 
@@ -152,9 +150,9 @@ to pick up and apply if a real problem demands them. The v2 template
 starts without them because the problems they solved no longer exist —
 not because the solutions were wrong.
 
-If you encounter a situation in v2 where something from v1 would help,
-propose it. The knowledge is in sugose/ai-project-template. The
-decision to re-add anything is Adam's WHAT call.
+The knowledge is in sugose/ai-project-template. Where something from
+v1 would help, a session proposes it (§ 31 (3)); re-adding it is a
+WHAT (§ 6 (1)).
 
 ---
 
