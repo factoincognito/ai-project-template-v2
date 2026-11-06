@@ -1209,6 +1209,16 @@ get a working project in any supported language.
 
   **Rules that apply.** Script, test and stub changes: test first, reviewed by a Crog agent on Opus (process and rules content included); one PR per part.
 
+- **[LATER] PBI-1.39** (Clead, 2026-11-06, from the non-blocking notes of the Crog review of #358, comment 6681037733; the HOW is Clead's; not yet built) — Follow-ups to the Rules edition check (`.github/scripts/check-rules-edition.sh`).
+
+  **Scope.**
+  1. **A push to `main` that deletes the folder** (N1): it passes, by design, since `main` changes only through pull requests, which are checked; but it prints "no edition taken yet". Compare a push with its parent, or say in the message that a push is not compared.
+  2. **A failed lookup is not "absent"** (N2): `git cat-file -e … 2>/dev/null` reads any lookup error as "the folder was not there". Tell "not there" from "could not look", and exit 2 on the second.
+  3. **The guard is tested** (N3): no test fails when the `-n "$MERGE_BASE"` guard is removed, and the `die2` after `git merge-base` cannot be reached by a test. Add a test for each, or drop what cannot happen.
+  Also from the review of #357 (notes 2 and 3, still open): extra file names that hold a newline are reported in pieces (`find -print0` would keep them whole); a `pull_request` event without `GITHUB_BASE_REF`, a failing `git diff` and a missing `find` or `git` have no test, and the last exits 127, not 2.
+
+  **Rules that apply.** Script and test changes: test first, reviewed by a Crog agent on Opus.
+
 ---
 
 ## Phase 2 — Validate unproven pieces
