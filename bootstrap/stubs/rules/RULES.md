@@ -192,6 +192,7 @@ In these Rules:
 (3) Any text the product owner is to send, paste or type, whatever its length, is given as a code block. A command given to the product owner has every answer filled in.
 (5) Progress is posted in the chat as the work goes, not saved for one final report.
 (6) Where a session's work runs in more than one thread (such as a PR or a task given to an agent), each progress message starts with the short name of its thread in bold brackets, such as **[3b]**, and each reply ends, before the For you block, with a table of the open threads, one row each: for a PR, its repository as `owner/repo` and the PR, each as a link to it on GitHub; where the thread stands; and what comes next.
+(8) Every reply to the product owner ends, just before the For you block, with one line giving the session's own state: "working" (agents, CI or a scheduled check-in are running, and the session reports back by itself), "waiting for you" (it cannot go on until the product owner answers; the For you block holds the matching **Now** item) or "done" (nothing is running and nothing is waiting).
 
 § 36 Answers
 (1) A session answers the question asked, with one recommendation, not a menu.

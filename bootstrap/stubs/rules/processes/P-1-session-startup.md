@@ -10,7 +10,7 @@ P-1 § 2 Access to the repository
 (3) Access is per attached repository: another repository is attached with `add_repo` and then cloned. A token in the environment or the chat does not give access.
 (4) Two repositories with the same name under different owners cannot be attached in one session; a session that needs both says so.
 (5) The product owner opens every session they start with the start line, which names this repository as `owner/repo`: "Attach <owner>/<repo> with push access, read its CLAUDE.md, rules/RULES.md and RULES.md, and run the session startup."
-(6) If the first message of a session the product owner starts does not hold the start line and its attach is still refused after (2), the session gives the product owner the start line as a **Now** item of its For you block, as a code block. The items P-1 §§ 3 (2), 7 (1) and 8 (1) put in the first reply then go in the first reply after the attach.
+(6) If the first message of a session the product owner starts does not hold the start line and its attach is still refused after (2), the session gives the product owner the start line as a **Now** item of its For you block, as a code block. The items P-1 §§ 3 (2), 4 (5), 7 (1) and 8 (1) put in the first reply then go in the first reply after the attach.
 
 P-1 § 3 Capabilities
 (1) The session checks which capabilities it has (GitHub access and push, memory, connectors) from its actual tool list, and verifies GitHub access by using it: it fetches the repository and reads its open PRs through the API. A setting shown as connected is not proof.
@@ -21,6 +21,7 @@ P-1 § 4 State of the work
 (2) It lists the open PRs and the branches other than the default branch in this repository, and in each other repository its work touches, and checks whether a review is waiting.
 (3) Where a project keeps a staging file (`docs/NEXT_SESSION.md`), the session reads and triages it; every entry it touches gets a disposition in accordance with Process P-8 § 4.
 (4) It derives the current item from the open PRs and the project's backlog.
+(5) In its first reply, a session the product owner starts names every entry of the project's backlog not marked `DONE` that is due within the next seven days or overdue, with its date.
 
 P-1 § 5 Today's work
 (1) A session that the product owner starts asks them what today's work is, unless their first message says it.
