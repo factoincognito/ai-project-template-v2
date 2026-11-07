@@ -2219,7 +2219,7 @@ test_coverage_run_refuses_bad_arguments_and_a_missing_result() {
   local d="$WORK/cov" n
   cov_repo "$d/repo"
   cov_fakes "$d"
-  for n in "" "a b" "../x" "a/b"; do
+  for n in "" "a b" "../x" "a/b" ".x"; do
     RC=0
     (cd "$d/repo" && PATH="$d/bin:$PATH" BOOTSTRAP_COVERAGE_ROOT="$d/repo" bash "$COVERAGE" run "$d/results" "$n" "$d/suite.sh") >"$d/out" 2>&1 || RC=$?
     [ "$RC" -eq 2 ] || die "run took the name '$n' (exit $RC)"
@@ -2242,6 +2242,34 @@ test_coverage_run_refuses_bad_arguments_and_a_missing_result() {
     die "the missing result set is not named"
   }
   [ ! -e "$d/results/suite.json" ] || die "a result was written without a result set"
+}
+
+test_coverage_run_stops_when_two_counted_scripts_share_a_name() {
+  # A copy is mapped by its file name, so two counted scripts of the same
+  # name (here bootstrap/a.sh and tools/a.sh) cannot be told apart: run
+  # stops (exit 1) and names the name, writes no result (a result left
+  # from an earlier run is removed too) and leaves nothing in TMPDIR.
+  local d="$WORK/cov"
+  cov_repo "$d/repo"
+  cp "$d/repo/bootstrap/a.sh" "$d/repo/tools/a.sh"
+  cov_fakes "$d"
+  mkdir -p "$d/results"
+  printf '{"name": "suite", "files": {}}\n' >"$d/results/suite.json"
+  cov_run "$d"
+  [ "$RC" -eq 1 ] || {
+    cat "$d/out" >&2
+    die "run did not stop on two counted scripts named a.sh (exit $RC)"
+  }
+  grep -qF 'two counted scripts share a name, so a copy cannot be mapped: a.sh' "$d/out" || {
+    cat "$d/out" >&2
+    die "the shared name is not named"
+  }
+  grep -qF 'could not map the result of suite' "$d/out" || die "run does not say it could not map the result"
+  [ ! -e "$d/results/suite.json" ] || die "a result is left after the mapping failed"
+  [ -z "$(ls -A "$d/tmp")" ] || {
+    find "$d/tmp" >&2
+    die "run left files in TMPDIR after the mapping failed"
+  }
 }
 
 # cov_results <dir> <name> <json>: writes the result <name> as run writes
