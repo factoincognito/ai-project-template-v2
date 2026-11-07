@@ -6,6 +6,8 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.9.1] — 2026-11-07
+
 ### Added
 - Recorded the newcomer pre-check on v2.9.0, findings p2.9.0-a to -c; `STATUS.md` after the tag (PR #376)
 - Backlog: PBI-1.41 spec, approved by Adam (PR #378)
@@ -22,10 +24,14 @@ A bootstrapped project records the tag it was built from.
 - `THIRD-PARTY-NOTICES.md`: bashcov and simplecov (PR #397), then ShellCheck and shfmt (PR #404)
 - CHANGELOG: PRs #393 to #396 (PR #398)
 - Backlog: PBI-1.41 part (c1) done (PR #399); review inputs outside P-3 § 2, and Adam's decision that the merged four get no new reviews (PR #401, PR #402)
+- Backlog: PBI-1.41 done, and PBI-1.54 for the tests of the lines no test reaches and the review follow-ups; `STATUS.md` (PR #405)
+- CHANGELOG: PRs #397 to #404 (PR #406)
+- NEXT_SESSION: for p2.9.0-c, where the new-session button is on Android (PR #408)
 
 ### Changed
 - The Rules edition: 2026-11-06-643aba6 (PR #377), then 2026-11-06-d0973c4 (PR #382), then 2026-11-06-7b6a5b5 (PR #391)
 - `build` lints the template's own scripts with shellcheck 0.11.0, pinned by its hash, and fails on any finding; `.shellcheckrc` turns off three checks the scripts break on purpose (PBI-1.41 part (a)) (PR #379)
+- The bootstrapper's README and the setup's closing screen say to choose all files when adding the GitHub project to the Claude Project, how to start a chat in it on a computer and on an Android phone, and give the first message as text to copy: the start line of the Rules edition's P-1 § 2 (5), filled in with the project's owner and name on the screen (newcomer pre-check findings p2.9.0-b and -c) (PR #407)
 - `bootstrapper-test` gates the line coverage of the template's own scripts at 80%: the Ubuntu test jobs run under bashcov 4.0.2 and simplecov 1.3.2, pinned by their hashes, keep the script copies the tests ran, and upload their results; the gate maps each true copy onto its script (`bootstrap/coverage.sh`, `bootstrap/coverage.rb`, `.simplecov`) (PBI-1.41 part (c2)) (PR #397)
 - `RULES.md` L § 7 (3): the dated condition of the sign-off is replaced by the override that puts the coverage gate in `bootstrapper-test` (PR #403)
 - Three tests that failed under coverage tracing now pass under it; two of them now give the gate step the environment GitHub gives it, so their failing cases fail for the right reason (PBI-1.41 part (c1)) (PR #393)
