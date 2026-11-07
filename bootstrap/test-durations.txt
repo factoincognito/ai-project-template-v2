@@ -365,6 +365,7 @@ test_the_published_version_is_compared_with_the_script_version 0.1 0.2 1.1 0.2
 test_the_published_version_is_read_from_the_built_changelog 0.2 0.5 3.5 0.4
 test_the_pull_request_run_of_build_counts_and_else_any_run_of_it 5.6 11.7 77.1 7.7
 test_the_read_colour_stays_off_the_log_the_plan_lines_and_the_report 0.1 0.1 0.6 0.1
+test_the_readme_and_the_closing_lines_say_how_to_start_the_chat_and_give_the_start_line 0.1 0 0.8 0.1
 test_the_readme_setup_section_is_removed_up_to_the_next_heading 0.1 0.2 1.0 0.2
 test_the_refresh_asks_for_every_missing_permission 0.6 0.9 5.1 0.9
 test_the_refresh_never_runs_without_a_yes_typed_at_the_terminal 0.2 0.4 2.3 0.4

@@ -12636,7 +12636,9 @@ test_with_colour_a_whole_run_starts_with_the_colour_key_and_the_stars_end_their_
   }
   # r1g: in a whole run the read colour marks only the plan's heading, the
   # lines above and below the command to continue, the wait's notes and the closing
-  # "What to do next"; no line of the report or of the plan's list.
+  # "What to do next" with the two lines on starting the chat (p2.9.0-c);
+  # no line of the report or of the plan's list, and not the start line,
+  # which is text to copy.
   grep -F "$READ_ON" "$d/out" | sed "s/$esc\\[[0-9;]*m//g" | sed '/^Colour key: /d' >"$d/read-lines"
   {
     printf '%s\n' 'Here is the plan. Nothing has been created yet.'
@@ -12648,6 +12650,7 @@ test_with_colour_a_whole_run_starts_with_the_colour_key_and_the_stars_end_their_
     printf '%s\n' "$WAIT_LIMIT_LINE" "$WAIT_LINK_LINE"
   } >"$d/want-read"
   grep -F 'What to do next: ' "$d/read-lines" >>"$d/want-read" || die "the closing next step is not in the read colour"
+  printf '%s\n' "$START_CHAT" "$FIRST_MESSAGE" >>"$d/want-read"
   expect_same "the lines of a whole run in the read colour" "$d/want-read" "$d/read-lines"
   sed "s/$esc\\[[0-9;]*m//g" "$d/out" >"$d/plain"
   want="$(printf '%s\n' \
