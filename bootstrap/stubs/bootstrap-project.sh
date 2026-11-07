@@ -5239,9 +5239,15 @@ finish_copy() {
 
 # say_what_next: the one next step and then, as the very last line the
 # script prints, where to go when stuck (end-to-end run 1, finding 10).
-# One text for every ending of report, so the endings cannot drift.
+# Between them, how to start that chat and its first message, the start
+# line of the Rules' P-1 § 2 (5) with this project filled in, indented as
+# text to copy (p2.9.0-b and -c, newcomer pre-check on v2.9.0). One text
+# for every ending of report, so the endings cannot drift.
 say_what_next() {
-  say "What to do next: in the Claude app, create a Claude Project for this project (how: https://support.claude.com/en/articles/9519177-how-can-i-create-and-manage-projects), add the project on GitHub, https://github.com/$IN_OWNER/$IN_NAME, to that Claude Project (how: https://support.claude.com/en/articles/10167454-using-the-github-integration), and start a chat inside the Claude Project. The file CLAUDE.md in the project tells Claude the rest."
+  say "What to do next: in the Claude app, create a Claude Project for this project (how: https://support.claude.com/en/articles/9519177-how-can-i-create-and-manage-projects), add the project on GitHub, https://github.com/$IN_OWNER/$IN_NAME, to that Claude Project, choosing all files (how: https://support.claude.com/en/articles/10167454-using-the-github-integration), and start a chat inside the Claude Project. The file CLAUDE.md in the project tells Claude the rest."
+  say_note "To start that chat on a computer: click Projects in the menu on the left, choose the project, and type the first message in its input field. On a phone: open the menu at the top left, tap Projects, choose the project, and start a new chat there."
+  say_note "As the first message, copy this line into the input field:"
+  say "    Attach $IN_OWNER/$IN_NAME with push access, read its CLAUDE.md, rules/RULES.md and RULES.md, and run the session startup."
   say "If you ever feel stuck and do not know how to go on, Clead (Claude, the project's Tech Owner) is always there to help: just ask Clead for help, a recommendation or advice in the chat."
 }
 
