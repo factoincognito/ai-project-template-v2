@@ -2046,13 +2046,13 @@ test_harness_work_cleanup_keeps_the_build_copies_only_when_asked() {
 
 COVERAGE="$HERE/coverage.sh"
 
-# cov_repo <dir>: a checkout with coverage.sh and four counted scripts (one
-# with the two stamps, one in .github/scripts/) and a test that is not
-# counted.
+# cov_repo <dir>: a checkout with four counted scripts (one with the two
+# stamps, one in .github/scripts/) and a test that is not counted. The
+# tests run this repository's coverage.sh on it (BOOTSTRAP_COVERAGE_ROOT),
+# not a copy, so that the coverage run counts what they run of it.
 cov_repo() {
   local d="$1"
   mkdir -p "$d/bootstrap/stubs" "$d/tools" "$d/.github/scripts"
-  cp "$COVERAGE" "$d/bootstrap/coverage.sh"
   printf '%s\n' '#!/usr/bin/env bash' 'echo one' 'echo two' 'echo three' >"$d/bootstrap/a.sh"
   printf '%s\n' '#!/usr/bin/env bash' 'V="{{TEMPLATE_VERSION}}"' 'C="{{TEMPLATE_COMMIT}}"' 'echo "$V $C"' >"$d/bootstrap/stubs/s.sh"
   printf '%s\n' '#!/usr/bin/env bash' 'echo t' >"$d/tools/t.sh"
@@ -2111,7 +2111,6 @@ FAKE
   cat >"$d/result" <<'JSON'
 {"suite": {"coverage": {
   "@ROOT@/bootstrap/a.sh": {"lines": [null, 1, 0, 0]},
-  "@ROOT@/bootstrap/coverage.sh": {"lines": [null, 1]},
   "@ROOT@/bootstrap/stubs/s.sh": {"lines": [null, 0, 0, 0]},
   "@ROOT@/tools/t.sh": [null, 0, 7],
   "@ROOT@/.github/scripts/g.sh": {"lines": [null, 0]},
@@ -2136,7 +2135,7 @@ cov_run() {
   (
     unset BOOTSTRAP_TEST_KEEP_COPIES BOOTSTRAP_COVERAGE_DIR BASHCOV
     cd "$d/repo"
-    env PATH="$d/bin:$PATH" TMPDIR="$d/tmp" "$@" bash bootstrap/coverage.sh run "$d/results" suite "$d/suite.sh"
+    env PATH="$d/bin:$PATH" TMPDIR="$d/tmp" BOOTSTRAP_COVERAGE_ROOT="$d/repo" "$@" bash "$COVERAGE" run "$d/results" suite "$d/suite.sh"
   ) >"$d/out" 2>&1 || RC=$?
 }
 
@@ -2146,7 +2145,7 @@ cov_gate() {
   local d="$1" min="$2"
   shift 2
   RC=0
-  (cd "$d/repo" && bash bootstrap/coverage.sh gate "$min" "$d/results" "$@") >"$d/gate.out" 2>&1 || RC=$?
+  (cd "$d/repo" && BOOTSTRAP_COVERAGE_ROOT="$d/repo" bash "$COVERAGE" gate "$min" "$d/results" "$@") >"$d/gate.out" 2>&1 || RC=$?
 }
 
 test_coverage_run_maps_only_true_copies_onto_their_scripts() {
@@ -2177,7 +2176,6 @@ test_coverage_run_maps_only_true_copies_onto_their_scripts() {
   printf '%s\n' \
     '  0.0%     0/    1 .github/scripts/g.sh' \
     ' 66.7%     2/    3 bootstrap/a.sh' \
-    '100.0%     1/    1 bootstrap/coverage.sh' \
     ' 66.7%     2/    3 bootstrap/stubs/s.sh' \
     '  0.0%     0/    1 tools/t.sh' >"$d/want"
   grep -E '^ *[0-9.]+% ' "$d/gate.out" | diff "$d/want" - >&2 || die "the per-script figures differ (want, then got)"
@@ -2223,14 +2221,14 @@ test_coverage_run_refuses_bad_arguments_and_a_missing_result() {
   cov_fakes "$d"
   for n in "" "a b" "../x" "a/b"; do
     RC=0
-    (cd "$d/repo" && PATH="$d/bin:$PATH" bash bootstrap/coverage.sh run "$d/results" "$n" "$d/suite.sh") >"$d/out" 2>&1 || RC=$?
+    (cd "$d/repo" && PATH="$d/bin:$PATH" BOOTSTRAP_COVERAGE_ROOT="$d/repo" bash "$COVERAGE" run "$d/results" "$n" "$d/suite.sh") >"$d/out" 2>&1 || RC=$?
     [ "$RC" -eq 2 ] || die "run took the name '$n' (exit $RC)"
   done
   RC=0
-  (cd "$d/repo" && bash bootstrap/coverage.sh run "$d/results" suite) >"$d/out" 2>&1 || RC=$?
+  (cd "$d/repo" && BOOTSTRAP_COVERAGE_ROOT="$d/repo" bash "$COVERAGE" run "$d/results" suite) >"$d/out" 2>&1 || RC=$?
   [ "$RC" -eq 2 ] || die "run without a command did not exit 2 (exit $RC)"
   RC=0
-  (cd "$d/repo" && bash bootstrap/coverage.sh frobnicate) >"$d/out" 2>&1 || RC=$?
+  (cd "$d/repo" && bash "$COVERAGE" frobnicate) >"$d/out" 2>&1 || RC=$?
   { [ "$RC" -eq 2 ] && grep -qF 'usage' "$d/out"; } || die "an unknown subcommand did not exit 2 with the usage"
   # bashcov wrote no result set: run fails and says so.
   sed 's|^sed -e .*resultset[.]json"$|:|' "$d/bin/bashcov" >"$d/bin/bashcov.new"
@@ -2256,19 +2254,18 @@ cov_results() {
 test_coverage_gate_merges_the_results_and_fails_below_the_minimum() {
   # Two results: a line hit in either counts once; a line one result
   # does not have (null, or past its end) takes the other's. Merged:
-  # a.sh 2 of 3, coverage.sh 1 of 1, t.sh 1 of 1, g.sh 0 of 1, s.sh 3 of
-  # 3: 7 of 9 lines, 77.8%.
+  # a.sh 2 of 3, t.sh 1 of 1, g.sh 0 of 1, s.sh 3 of 3: 6 of 8 lines, 75%.
   local d="$WORK/gate" min
   cov_repo "$d/repo"
-  cov_results "$d" one '{"bootstrap/a.sh": [null, 1, 0, 0], "bootstrap/coverage.sh": [null, 1], "tools/t.sh": [null, 0], ".github/scripts/g.sh": [null, 0], "bootstrap/stubs/s.sh": [null, 1, 1, 0]}'
+  cov_results "$d" one '{"bootstrap/a.sh": [null, 1, 0, 0], "tools/t.sh": [null, 0], ".github/scripts/g.sh": [null, 0], "bootstrap/stubs/s.sh": [null, 1, 1, 0]}'
   cov_results "$d" two '{"bootstrap/a.sh": [null, 0, 3], "tools/t.sh": [null, 2], "bootstrap/stubs/s.sh": [null, null, 0, 1]}'
-  for min in 0 50 77; do
+  for min in 0 50 75; do
     cov_gate "$d" "$min" one two
     [ "$RC" -eq 0 ] || {
       cat "$d/gate.out" >&2
-      die "the gate failed at 77.8% against $min (exit $RC)"
+      die "the gate failed at 75% against $min (exit $RC)"
     }
-    grep -qxF "Total: 77.8% (7 of 9 lines) of 5 scripts; the minimum is $min%." "$d/gate.out" || {
+    grep -qxF "Total: 75.0% (6 of 8 lines) of 4 scripts; the minimum is $min%." "$d/gate.out" || {
       cat "$d/gate.out" >&2
       die "no total line"
     }
@@ -2276,14 +2273,13 @@ test_coverage_gate_merges_the_results_and_fails_below_the_minimum() {
   printf '%s\n' \
     '  0.0%     0/    1 .github/scripts/g.sh' \
     ' 66.7%     2/    3 bootstrap/a.sh' \
-    '100.0%     1/    1 bootstrap/coverage.sh' \
     '100.0%     3/    3 bootstrap/stubs/s.sh' \
     '100.0%     1/    1 tools/t.sh' >"$d/want"
   grep -E '^ *[0-9.]+% ' "$d/gate.out" | diff "$d/want" - >&2 || die "the per-script figures differ (want, then got)"
-  for min in 78 80 100; do
+  for min in 76 80 100; do
     cov_gate "$d" "$min" one two
-    [ "$RC" -eq 1 ] || die "the gate did not fail at 77.8% against $min (exit $RC)"
-    grep -qF "Line coverage is 77.8%, below the minimum of $min%" "$d/gate.out" || {
+    [ "$RC" -eq 1 ] || die "the gate did not fail at 75% against $min (exit $RC)"
+    grep -qF "Line coverage is 75.0%, below the minimum of $min%" "$d/gate.out" || {
       cat "$d/gate.out" >&2
       die "the failure does not say the figure and the minimum"
     }
@@ -2291,7 +2287,7 @@ test_coverage_gate_merges_the_results_and_fails_below_the_minimum() {
   # Exactly the minimum passes: 4 of 5 lines against 80.
   d="$WORK/gate.exact"
   cov_repo "$d/repo"
-  cov_results "$d" one '{"bootstrap/a.sh": [null, 1, 1, 1], "bootstrap/coverage.sh": [null, 1], "tools/t.sh": [null, 0], ".github/scripts/g.sh": [], "bootstrap/stubs/s.sh": []}'
+  cov_results "$d" one '{"bootstrap/a.sh": [null, 1, 1, 1], "tools/t.sh": [null, 1], ".github/scripts/g.sh": [null, 0], "bootstrap/stubs/s.sh": []}'
   cov_gate "$d" 80 one
   [ "$RC" -eq 0 ] || {
     cat "$d/gate.out" >&2
@@ -2320,7 +2316,7 @@ test_coverage_gate_refuses_missing_extra_and_broken_results() {
   # comes from another version of it; a result must be one run wrote.
   local d="$WORK/gate" all
   cov_repo "$d/repo"
-  all='"bootstrap/a.sh": [null, 1], "bootstrap/coverage.sh": [null, 1], "tools/t.sh": [null, 1], ".github/scripts/g.sh": [null, 1], "bootstrap/stubs/s.sh": [null, 1]'
+  all='"bootstrap/a.sh": [null, 1], "tools/t.sh": [null, 1], ".github/scripts/g.sh": [null, 1], "bootstrap/stubs/s.sh": [null, 1]'
   cov_results "$d" one "{$all}"
   cov_gate "$d" 80 one
   [ "$RC" -eq 0 ] || {
@@ -2331,7 +2327,7 @@ test_coverage_gate_refuses_missing_extra_and_broken_results() {
   cov_results "$d" extra "{$all}"
   expect_gate_refused "$d" 1 "a result that was not expected: extra.json" 80 one
   rm "$d/results/extra.json"
-  cov_results "$d" one '{"bootstrap/a.sh": [null, 1], "bootstrap/coverage.sh": [null, 1], "tools/t.sh": [null, 1], "bootstrap/stubs/s.sh": [null, 1]}'
+  cov_results "$d" one '{"bootstrap/a.sh": [null, 1], "tools/t.sh": [null, 1], "bootstrap/stubs/s.sh": [null, 1]}'
   expect_gate_refused "$d" 1 "no result for .github/scripts/g.sh, a counted script" 80 one
   cov_results "$d" one "{${all/\"tools\/t.sh\": \[null, 1\]/\"tools/t.sh\": [null, 1, 1, 1, 1]}}"
   grep -qF '"tools/t.sh": [null, 1, 1, 1, 1]' "$d/results/one.json" || die "fixture: t.sh is not longer"
