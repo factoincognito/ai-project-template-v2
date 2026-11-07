@@ -1272,6 +1272,26 @@ autonomy. Use a real project as the pilot: acuteping (decided
   **Done when.** Each item is fixed, test first, or recorded as not worth fixing with a reason.
 
   **Rules that apply.** Script, test and CI changes: test first, reviewed on Opus by the role that did not write them, within P-3 § 2; one PR per item or small group.
+
+- **[LATER] PBI-1.55** (Adam, 2026-11-07, in a product office session; the WHAT is Adam's, the HOW is Clead's; not yet specced, reviewed or intent-approved) — Bootstrap options beyond a single project: an umbrella, an umbrella with its first project, and a project into an existing umbrella.
+
+  **Adam's WHAT (2026-11-07).** What the bootstrapper can set up:
+  - A. A project, with Claude support (A1) or without it (A2). Already PBI-1.24 (the setup option) and PBI-1.31 (the Claude parts as an add-on); not repeated here.
+  - B. An umbrella bootstrap, only with Claude support.
+  - C. B and A1 together.
+  - D. A1 into an umbrella that already exists.
+
+  **What an umbrella is (Clead's reading, to be confirmed when specced).** A repository above several projects, like the product office is for Adam's own: the single entry point for work with Claude, the home of the rules and processes the projects sign off to, the list of projects, the ideas, and the view of each project's status read from its `STATUS.md`. In D, the new project is listed in the umbrella and signs off to its rules instead of carrying its own copy of them.
+
+  **Adam's question, Clead's answer (2026-11-07, not confirmed by Adam).** Adam asked whether an umbrella without Claude support would make sense. Clead: no. Its rules bind sessions, and its sign-offs, audits, status view and list of what waits for the owner are carried out by sessions; without them it is a folder of documents that nobody keeps to. For the same reason Clead does not propose an A2 project under an umbrella.
+
+  **To settle before the spec (Clead, § 31 (2)).** PBI-1.20 records Adam's WHAT of 2026-10-26: "The product office is Adam's own; it does not exist in the user's world." B to D bring an umbrella into the user's world. Which holds is Adam's decision when this item is taken up.
+
+  **Order (Clead's proposal, not decided).** After PBI-1.24, since C and D build on A1 and that option, and after the end-to-end runs, because both change the setup script the runs test.
+
+  **Rules that apply.** The spec needs Adam's intent approval. Script, test and workflow changes are code: test first, reviewed by the role that did not write them. Wording changes to process documents are reviewed by Crog.
+
+  **Done when.** Written when specced.
 - **[SUPERSEDED] PBI-2.1** (the connector was written off 2026-06-28;
   Clead now uses git and the GitHub API, see memory/decisions.md; also
   duplicated PBI-4.3) — Confirm GitHub connector write access: verify
