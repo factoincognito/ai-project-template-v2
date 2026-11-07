@@ -734,7 +734,7 @@ get a working project in any supported language.
   **Adam's WHAT (2026-10-26).**
   - "All the user knows is that I want to do something. That something may be more or less crisp, or just an itch. The user has been told there is an AI package you can use to help you do all this, you just need to describe WHAT and it fixes the rest."
   - "From the user's perspective there must be a clear entry point and a solid process to get there, initially by use of the bootstrapper." v2.4.0 is solid but covers only part of the journey.
-  - The user bootstraps the idea, not the project. The product office is Adam's own; it does not exist in the user's world.
+  - The user bootstraps the idea, not the project. The product office is Adam's own; it does not exist in the user's world. (This is about Adam's own product office; an umbrella bootstrapped for someone else is PBI-1.55, Adam, 2026-11-07, `memory/decisions.md`.)
   - **The test for every HOW decision:** it fits the journey of the intended user, who never needs to be aware of technical setup details. Wherever the user needs technical knowledge or help, that is a defect (the rule of the end-to-end runs).
   - The bootstrapper's tagline (Adam, 2026-10-26): "Have an itch? Solve it with a project!"
   - Adam's stance on the trial (2026-10-26): not sure a proposal covers the gaps, so it is tried and tested, and what the test shows decides what stays.
@@ -1272,6 +1272,26 @@ autonomy. Use a real project as the pilot: acuteping (decided
   **Done when.** Each item is fixed, test first, or recorded as not worth fixing with a reason.
 
   **Rules that apply.** Script, test and CI changes: test first, reviewed on Opus by the role that did not write them, within P-3 § 2; one PR per item or small group.
+
+- **[LATER] PBI-1.55** (Adam, 2026-11-07, in a product office session; the WHAT is Adam's, the HOW is Clead's; not yet specced, reviewed or intent-approved) — Bootstrap options beyond a single project: an umbrella, an umbrella with its first project, and a project into an existing umbrella.
+
+  **Adam's WHAT (2026-11-07).** What the bootstrapper can set up:
+  - A. A project, with Claude support (A1) or without it (A2). Already PBI-1.24 (the setup option) and PBI-1.31 (the Claude parts as an add-on); not repeated here.
+  - B. An umbrella bootstrap, only with Claude support.
+  - C. B and A1 together.
+  - D. A1 into an umbrella that already exists.
+
+  **What an umbrella is (Clead's reading, to be confirmed when specced).** A repository above several projects, like the product office is for Adam's own: the single entry point for work with Claude, the home of the rules and processes the projects sign off to, the list of projects, the ideas, and the view of each project's status read from its `STATUS.md`. In D, the new project is listed in the umbrella and signs off to its rules instead of carrying its own copy of them.
+
+  **Adam's question, Clead's answer (2026-11-07, not confirmed by Adam).** Adam asked whether an umbrella without Claude support would make sense. Clead: no. Its rules bind sessions, and its sign-offs, audits, status view and list of what waits for the owner are carried out by sessions; without them it is a folder of documents that nobody keeps to. For the same reason Clead does not propose an A2 project under an umbrella.
+
+  **Settled (Adam, 2026-11-07 23:27 and 23:28, `memory/decisions.md`).** The concept is not private, even though Adam's own product office is: an umbrella bootstrapped for someone else is developed and shipped by this template. PBI-1.20's "The product office is Adam's own; it does not exist in the user's world" is about his own office and does not rule it out.
+
+  **Order (Clead's proposal, not decided).** After PBI-1.24, since C and D build on A1 and that option, and after the end-to-end runs, because both change the setup script the runs test.
+
+  **Rules that apply.** The spec needs Adam's intent approval. Script, test and workflow changes are code: test first, reviewed by the role that did not write them. Wording changes to process documents are reviewed by Crog.
+
+  **Done when.** Written when specced.
 - **[SUPERSEDED] PBI-2.1** (the connector was written off 2026-06-28;
   Clead now uses git and the GitHub API, see memory/decisions.md; also
   duplicated PBI-4.3) — Confirm GitHub connector write access: verify
