@@ -310,6 +310,8 @@ jobs:
           fi
           BOOTSTRAP_TEST_LIST=1 bash bootstrap/test-bootstrap-project.sh >all-tests.txt
           bash bootstrap/check-shards.sh shard-list all-tests.txt ubuntu-latest ubuntu-bash32 windows-latest
+      - name: Fail on purpose (throwaway proof run, never merged)
+        run: exit 1
       - name: Download the line coverage of the test jobs
         # Also when a step before it failed, the shard check among them, so
         # the gate reports the coverage instead of every result missing.
