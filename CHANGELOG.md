@@ -19,10 +19,15 @@ A bootstrapped project records the tag it was built from.
 - Backlog: PBI-1.41 part (b) done, and the follow-ups from its review (PR #395)
 - Backlog: the PBI-1.41 spec counts the copies of the scripts the tests run, approved by Adam (PR #396)
 - The test harnesses keep the script copies they ran when `BOOTSTRAP_TEST_KEEP_COPIES=1`, for the coverage run (PBI-1.41 part (c1)) (PR #393)
+- `THIRD-PARTY-NOTICES.md`: bashcov and simplecov (PR #397), then ShellCheck and shfmt (PR #404)
+- CHANGELOG: PRs #393 to #396 (PR #398)
+- Backlog: PBI-1.41 part (c1) done (PR #399); review inputs outside P-3 § 2, and Adam's decision that the merged four get no new reviews (PR #401, PR #402)
 
 ### Changed
 - The Rules edition: 2026-11-06-643aba6 (PR #377), then 2026-11-06-d0973c4 (PR #382), then 2026-11-06-7b6a5b5 (PR #391)
 - `build` lints the template's own scripts with shellcheck 0.11.0, pinned by its hash, and fails on any finding; `.shellcheckrc` turns off three checks the scripts break on purpose (PBI-1.41 part (a)) (PR #379)
+- `bootstrapper-test` gates the line coverage of the template's own scripts at 80%: the Ubuntu test jobs run under bashcov 4.0.2 and simplecov 1.3.2, pinned by their hashes, keep the script copies the tests ran, and upload their results; the gate maps each true copy onto its script (`bootstrap/coverage.sh`, `bootstrap/coverage.rb`, `.simplecov`) (PBI-1.41 part (c2)) (PR #397)
+- `RULES.md` L § 7 (3): the dated condition of the sign-off is replaced by the override that puts the coverage gate in `bootstrapper-test` (PR #403)
 - Three tests that failed under coverage tracing now pass under it; two of them now give the gate step the environment GitHub gives it, so their failing cases fail for the right reason (PBI-1.41 part (c1)) (PR #393)
 - The template's 21 scripts are formatted with `shfmt -i 2 -ci` (shfmt 3.14.1), with no change in behaviour (PBI-1.41 part (b)) (PR #386)
 - `build` checks the format of the template's own scripts with shfmt 3.14.1 (`-i 2 -ci -d`), pinned by its hash, and fails on any difference (PBI-1.41 part (b)) (PR #389)
