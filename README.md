@@ -170,7 +170,7 @@ same `cd`: the one you ran, with every answer in it.
   Claude (the file `CLAUDE.md`, which points to the Rules in `rules/` and
   the project's own rules in `RULES.md`) do the rest. A Claude Project is a
   workspace in the Claude app that keeps the chats and files of one
-  project together. Claude's help pages say how:
+  project together. Claude's help pages say how to do the first two:
   - To create a Claude Project: "How can I create and manage projects?",
     https://support.claude.com/en/articles/9519177-how-can-i-create-and-manage-projects
   - To add the GitHub project to it: the help page on the GitHub
@@ -179,10 +179,23 @@ same `cd`: the one you ran, with every answer in it.
     It gives these steps: in the Claude Project, click the "+" button at
     the top right of the project knowledge section, then "GitHub", then
     search for the project or paste its web address (the script prints
-    it), then choose the files. If Claude cannot reach a private project
+    it), then choose all files. If Claude cannot reach a private project
     after you paste its address, the page links to the Claude GitHub App,
     where someone who administers the project on GitHub gives Claude
     access to it.
+  - To start a chat inside the Claude Project: on a computer, click
+    Projects in the menu on the left, choose the project, and type the
+    first message in its input field. In the Claude app on an Android
+    phone, open the menu at the top left, tap the projects entry, choose
+    the project, tap the new-session button at the bottom right, and type
+    the first message in the input field.
+  - The first message is this line, with `<owner>/<repo>` replaced by
+    the owner and name of the new project, as in its web address,
+    `https://github.com/<owner>/<repo>` (the script prints the line
+    with them filled in). Copy it into the input field:
+    ```
+    Attach <owner>/<repo> with push access, read its CLAUDE.md, rules/RULES.md and RULES.md, and run the session startup.
+    ```
 - Working from another computer later: follow "Working from another
   computer" in the new project's README.
 - Organisation and billing settings: in an organisation, only its

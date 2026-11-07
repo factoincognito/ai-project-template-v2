@@ -8019,11 +8019,22 @@ ALLOWED_CALL='api -i repos/octo-user/my-app/actions/permissions --jq .allowed_ac
 END_CALLS=("$CHECKS_CALL" "$PROTECT_CALL" "$READBACK_CALL" "$MERGE_CALL" "$MERGED_CALL")
 # The first line of the report at the end: the run went through.
 FINISHED='The setup is finished.'
-# The last two lines of every report (end-to-end run 1, finding 10): the
-# one next step, the same after a new setup and after --resume, and then
-# where to go when stuck, as the very last line.
-WHAT_NEXT='What to do next: in the Claude app, create a Claude Project for this project (how: https://support.claude.com/en/articles/9519177-how-can-i-create-and-manage-projects), add the project on GitHub, https://github.com/octo-user/my-app, to that Claude Project (how: https://support.claude.com/en/articles/10167454-using-the-github-integration), and start a chat inside the Claude Project. The file CLAUDE.md in the project tells Claude the rest.'
+# The last lines of every report (end-to-end run 1, finding 10): the one
+# next step, the same after a new setup and after --resume, then how to
+# start that chat and its first message (p2.9.0-b and -c, newcomer
+# pre-check on v2.9.0), and then where to go when stuck, as the very last
+# line. The first message is the start line of the Rules edition's P-1
+# § 2 (5), with the project filled in, indented as text to copy.
+WHAT_NEXT='What to do next: in the Claude app, create a Claude Project for this project (how: https://support.claude.com/en/articles/9519177-how-can-i-create-and-manage-projects), add the project on GitHub, https://github.com/octo-user/my-app, to that Claude Project, choosing all files (how: https://support.claude.com/en/articles/10167454-using-the-github-integration), and start a chat inside the Claude Project. The file CLAUDE.md in the project tells Claude the rest.'
+# The Android steps, the same words in the README and on the screen: the
+# controls Adam's screenshots show, at their places, with no English label
+# (the app was in Swedish; review of #407, fix 1).
+ANDROID_STEPS='In the Claude app on an Android phone, open the menu at the top left, tap the projects entry, choose the project, tap the new-session button at the bottom right, and type the first message in the input field.'
+START_CHAT="To start that chat on a computer: click Projects in the menu on the left, choose the project, and type the first message in its input field. $ANDROID_STEPS"
+FIRST_MESSAGE='As the first message, copy this line into the input field:'
+START_LINE='Attach octo-user/my-app with push access, read its CLAUDE.md, rules/RULES.md and RULES.md, and run the session startup.'
 ASK_CLEAD="If you ever feel stuck and do not know how to go on, Clead (Claude, the project's Tech Owner) is always there to help: just ask Clead for help, a recommendation or advice in the chat."
+CLOSING_LINES=("$WHAT_NEXT" "$START_CHAT" "$FIRST_MESSAGE" "    $START_LINE" "$ASK_CLEAD")
 
 # built_bootstrapper: BUILT is a bootstrapper made by bootstrap/build.sh
 # from this template, stamped BUILT_VERSION; built once per harness run.
@@ -12629,7 +12640,9 @@ test_with_colour_a_whole_run_starts_with_the_colour_key_and_the_stars_end_their_
   }
   # r1g: in a whole run the read colour marks only the plan's heading, the
   # lines above and below the command to continue, the wait's notes and the closing
-  # "What to do next"; no line of the report or of the plan's list.
+  # "What to do next" with the two lines on starting the chat (p2.9.0-c);
+  # no line of the report or of the plan's list, and not the start line,
+  # which is text to copy.
   grep -F "$READ_ON" "$d/out" | sed "s/$esc\\[[0-9;]*m//g" | sed '/^Colour key: /d' >"$d/read-lines"
   {
     printf '%s\n' 'Here is the plan. Nothing has been created yet.'
@@ -12641,6 +12654,7 @@ test_with_colour_a_whole_run_starts_with_the_colour_key_and_the_stars_end_their_
     printf '%s\n' "$WAIT_LIMIT_LINE" "$WAIT_LINK_LINE"
   } >"$d/want-read"
   grep -F 'What to do next: ' "$d/read-lines" >>"$d/want-read" || die "the closing next step is not in the read colour"
+  printf '%s\n' "$START_CHAT" "$FIRST_MESSAGE" >>"$d/want-read"
   expect_same "the lines of a whole run in the read colour" "$d/want-read" "$d/read-lines"
   sed "s/$esc\\[[0-9;]*m//g" "$d/out" >"$d/plain"
   want="$(printf '%s\n' \
@@ -13327,9 +13341,9 @@ These parts of the project are left for your first session with Clead (Claude, t
   - STATUS.md, where the project stands and what comes next.
 TEXT
   # The blank line above "What to do next" sets it apart from the report
-  # (finding 8: user interaction after one blank line); the line after it
-  # follows straight on.
-  printf '%s\n' "" "$WHAT_NEXT" "$ASK_CLEAD" >>"$d/want"
+  # (finding 8: user interaction after one blank line); the lines after it
+  # follow straight on.
+  printf '%s\n' "" "${CLOSING_LINES[@]}" >>"$d/want"
   expect_same "the report" "$d/want" "$d/report"
   [ -z "$(awk '{print NR ": " $0}' "$d/report" | banned_hits)" ] || {
     cat "$d/report" >&2
@@ -13354,21 +13368,24 @@ TEXT
   }
 }
 
-# last_two <dir>: the last two lines of its out, as "<line>|<line>".
-last_two() { tail -n 2 "$1/out" | tr -d '\r' | paste -sd '|' -; }
+# last_lines <dir>: the last lines of its out, as many as CLOSING_LINES
+# has, as "<line>|<line>|...".
+last_lines() { tail -n "${#CLOSING_LINES[@]}" "$1/out" | tr -d '\r' | paste -sd '|' -; }
 
 test_every_report_ends_with_the_next_step_and_then_the_line_on_asking_clead() {
   # End-to-end run 1, finding 10: the next step says to create a Claude
   # Project and chat inside it, and the very last line printed says Clead
-  # is there to help. The same two lines end a new setup, a --resume of a
-  # project the script set up, and a --resume of a project set up by hand
-  # (the "set up already" ending), with nothing on stderr after them.
+  # is there to help. p2.9.0-b and -c: between them, how to start that
+  # chat and the first message to copy, the start line with this project
+  # filled in. The same lines end a new setup, a --resume of a project the
+  # script set up, and a --resume of a project set up by hand (the "set
+  # up already" ending), with nothing on stderr after them.
   local d want
-  want="$WHAT_NEXT|$ASK_CLEAD"
+  want="$(printf '%s\n' "${CLOSING_LINES[@]}" | paste -sd '|' -)"
   d="$(tmpdir)"
   setup_run "$d" --non-interactive --yes
   expect_rc 0 "$d"
-  [ "$(last_two "$d")" = "$want" ] || {
+  [ "$(last_lines "$d")" = "$want" ] || {
     cat "$d/out" >&2
     die "new setup: the report does not end with the next step and the line on asking Clead"
   }
@@ -13378,9 +13395,9 @@ test_every_report_ends_with_the_next_step_and_then_the_line_on_asking_clead() {
   }
   setup_run "$d" --non-interactive --yes --resume
   expect_rc 0 "$d"
-  [ "$(last_two "$d")" = "$want" ] || {
+  [ "$(last_lines "$d")" = "$want" ] || {
     cat "$d/out" >&2
-    die "resumed, set up already: the report does not end with the two lines"
+    die "resumed, set up already: the report does not end with the closing lines"
   }
   [ ! -s "$d/err" ] || {
     cat "$d/err" >&2
@@ -13392,15 +13409,15 @@ test_every_report_ends_with_the_next_step_and_then_the_line_on_asking_clead() {
   setup_run "$d" --non-interactive --yes --resume
   unset STUB_GH_EXISTING
   expect_rc 0 "$d"
-  [ "$(last_two "$d")" = "$want" ] || {
+  [ "$(last_lines "$d")" = "$want" ] || {
     cat "$d/out" >&2
-    die "hand-made, set up already: the report does not end with the two lines"
+    die "hand-made, set up already: the report does not end with the closing lines"
   }
   [ "$(grep -cxF "$ASK_CLEAD" "$d/out")" -eq 1 ] || {
     cat "$d/out" >&2
     die "the line on asking Clead is not printed once"
   }
-  [ -z "$(printf '%s\n' "$WHAT_NEXT" "$ASK_CLEAD" | banned_hits)" ] || die "a banned word in the last two lines"
+  [ -z "$(printf '%s\n' "${CLOSING_LINES[@]}" | banned_hits)" ] || die "a banned word in the closing lines"
 }
 
 test_a_run_that_stops_does_not_print_the_next_step_or_the_line_on_asking_clead() {
@@ -13434,9 +13451,9 @@ test_the_next_step_is_one_text_for_both_endings() {
     IN_OWNER=octo-user IN_NAME=my-app CHANGE_ADDED=1
     say_what_next
   )"
-  [ "$a" = "$(printf '%s\n%s' "$WHAT_NEXT" "$ASK_CLEAD")" ] || {
+  [ "$a" = "$(printf '%s\n' "${CLOSING_LINES[@]}")" ] || {
     printf '%s\n' "$a" >&2
-    die "say_what_next does not print the next step and then the line on asking Clead"
+    die "say_what_next does not print the next step, how to start the chat, its first message and then the line on asking Clead"
   }
   [ "$a" = "$b" ] || die "the next step differs between the two endings"
   n="$(grep -c 'What to do next: in the Claude app' "$SCRIPT" || true)"
@@ -15909,9 +15926,15 @@ test_after_the_script_points_to_claudes_help_pages_and_names_the_github_steps() 
   body="$(section_of "$TEMPLATE_README" '### Creating a project from the template' '^##' | tr '\n' ' ' | sed 's/  */ /g')"
   body="${body#*After the script: }"
   body="${body%% - Working from another computer*}"
-  for t in "$create" "$github" 'How can I create and manage projects?' 'the "+" button at the top right of the project knowledge section' 'then "GitHub"' 'search for the project or paste its web address' 'choose the files' 'GitHub App'; do
+  for t in "$create" "$github" 'How can I create and manage projects?' 'the "+" button at the top right of the project knowledge section' 'then "GitHub"' 'search for the project or paste its web address' 'GitHub App'; do
     grep -qF -- "$t" <<<"$body" || die "the README's After the script lacks: $t"
   done
+  # p2.9.0-b (newcomer pre-check on v2.9.0): "choose the files" did not
+  # say which; the README and the closing line say all of them (Adam,
+  # 2026-11-06, docs/NEXT_SESSION.md).
+  grep -qF -- 'then choose all files.' <<<"$body" || die "the README's After the script does not say to choose all files"
+  ! grep -qF -- 'choose the files' <<<"$body" || die "the README's After the script still says choose the files and then all files"
+  grep -qF -- 'to that Claude Project, choosing all files (how: ' <<<"$WHAT_NEXT" || die "the test's next step does not say to choose all files (test is stale)"
   ! grep -qF 'has not been checked yet' <<<"$body" || die "the README's After the script still says the GitHub App part has not been checked"
   ! grep -qF 'Only select repositories' <<<"$body" || die "the README's After the script still describes the GitHub App settings by hand"
   for t in "$create" "$github"; do
@@ -15919,6 +15942,86 @@ test_after_the_script_points_to_claudes_help_pages_and_names_the_github_steps() 
     grep -qF -- "$t" "$SCRIPT" || die "the script's closing line lacks: $t"
   done
   [ "$(wc -c <<<"$WHAT_NEXT")" -lt 520 ] || die "the closing line grew past 520 characters: the README carries the detail"
+}
+
+test_the_readme_and_the_closing_lines_say_how_to_start_the_chat_and_give_the_start_line() {
+  # p2.9.0-c (newcomer pre-check on v2.9.0): "start a chat inside the
+  # Claude Project" gave no steps. The README's "After the script" and the
+  # script's closing lines give the steps Adam recorded (2026-11-06,
+  # docs/NEXT_SESSION.md): on a computer in full, with its labels; on
+  # Android, the only phone seen, the controls his screenshots show (the
+  # app in Swedish), with no English label, ending, as on a computer, with
+  # the first message typed in the input field (review of #407, fix 1). The
+  # first message is the start line of the Rules edition's P-1 § 2 (5),
+  # word for word: in the README as a code block with <owner>/<repo>, and
+  # on the screen filled in with the project the script set up.
+  local p1 line sl body raw t a n
+  p1="$REPO/bootstrap/stubs/rules/processes/P-1-session-startup.md"
+  line="$(grep -F '(5) The product owner opens every session they start with the start line' "$p1")" ||
+    die "the edition's P-1 § 2 (5) has no start line (test is stale)"
+  sl="${line#*: \"}"
+  sl="${sl%\"}"
+  case "$sl" in
+    'Attach <owner>/<repo> '*'.') ;;
+    *) die "the start line read from P-1 § 2 (5) is not one quoted sentence that names <owner>/<repo>: $sl" ;;
+  esac
+  [ "$START_LINE" = "${sl/<owner>\/<repo>/octo-user/my-app}" ] ||
+    die "the test's start line is not the edition's, filled in (test is stale): $START_LINE"
+  # The README, joined into one line, and as it is written.
+  body="$(section_of "$TEMPLATE_README" '### Creating a project from the template' '^##' | tr '\n' ' ' | sed 's/  */ /g')"
+  body="${body#*After the script: }"
+  body="${body%% - Working from another computer*}"
+  raw="$(section_of "$TEMPLATE_README" '### Creating a project from the template' '^##' |
+    sed -n '/^- After the script: /,/^- Working from another computer/p')"
+  for t in 'To start a chat inside the Claude Project: on a computer, click Projects in the menu on the left, choose the project, and type the first message in its input field.' \
+    "$ANDROID_STEPS" \
+    'The first message is this line' '`<owner>/<repo>`' 'https://github.com/<owner>/<repo>' 'the script prints the line with them filled in'; do
+    grep -qF -- "$t" <<<"$body" || die "the README's After the script lacks: $t"
+  done
+  # The step that starts the chat on Android, and then the input field.
+  grep -qF -- 'tap the new-session button at the bottom right, and type the first message in the input field.' <<<"$ANDROID_STEPS" ||
+    die "the test's Android steps do not start the chat with the new-session button (test is stale)"
+  # Adam's phone showed the app in Swedish: no English label of it was
+  # seen, so none is named; and only Android was seen, so no other phone.
+  for t in 'New session' 'New chat' '+ New' 'tap Projects' 'On a phone' 'start a new chat'; do
+    ! grep -qF -- "$t" <<<"$body" || die "the README's After the script names a phone label not seen in English, or a phone not seen: $t"
+    ! grep -qF -- "$t" <<<"$START_CHAT" || die "the test's closing lines name: $t (test is stale)"
+  done
+  # The start line is the only line of a fenced code block, indented as
+  # the sub-item it belongs to.
+  a="$(grep -nxF -- "    $sl" <<<"$raw" | cut -d: -f1 || true)"
+  [ -n "$a" ] && [ "$(grep -cxF -- "    $sl" <<<"$raw")" -eq 1 ] || {
+    printf '%s\n' "$raw" >&2
+    die "the README's After the script does not have the start line once, word for word, as a line of its own"
+  }
+  [ "$(sed -n "$((a - 1))p" <<<"$raw")" = '    ```' ] && [ "$(sed -n "$((a + 1))p" <<<"$raw")" = '    ```' ] || {
+    printf '%s\n' "$raw" >&2
+    die "the start line in the README is not a code block of its own"
+  }
+  # The screen: the steps and the start line with the owner and name the
+  # script was given, not the test's usual ones.
+  for t in 'click Projects in the menu on the left, choose the project, and type the first message in its input field' "$ANDROID_STEPS"; do
+    grep -qF -- "$t" <<<"$START_CHAT" || die "the test's closing lines lack: $t (test is stale)"
+  done
+  a="$(
+    load_script
+    IN_OWNER=some-owner IN_NAME=some-name CHANGE_ADDED=1
+    say_what_next
+  )"
+  n="$(grep -cxF -- "    ${sl/<owner>\/<repo>/some-owner/some-name}" <<<"$a" || true)"
+  [ "$n" -eq 1 ] || {
+    printf '%s\n' "$a" >&2
+    die "the closing lines do not give the start line once, filled in with some-owner/some-name"
+  }
+  grep -qF -- "$START_CHAT" <<<"$a" || {
+    printf '%s\n' "$a" >&2
+    die "the closing lines do not say how to start the chat"
+  }
+  grep -qxF -- "$FIRST_MESSAGE" <<<"$a" || {
+    printf '%s\n' "$a" >&2
+    die "the closing lines do not say to copy the line as the first message"
+  }
+  ! grep -qF -- '<owner>' <<<"$a" || die "the closing lines show the placeholder, not the project"
 }
 
 test_template_readme_branch_protection_has_no_step_reference() {
