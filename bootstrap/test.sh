@@ -3744,6 +3744,143 @@ test_ci_lint_step_passes_clean_scripts_and_fails_on_a_finding_or_a_bad_download(
   [ ! -e "$d/args" ] || die "shellcheck 0.9.0 was run on the scripts"
 }
 
+# ---------- ci.yml: the format step (PBI-1.41 part (b)) ----------
+# The build job checks the format of the same scripts the lint step lints
+# with shfmt, pinned to one release (P-11 § 2 (5)): the official Linux
+# amd64 binary from GitHub, its SHA-256 checked before it is run. The hash
+# is the one GitHub publishes as the release asset's digest (the release
+# has no checksums file).
+
+SHFMT_VERSION_PINNED="3.14.1"
+SHFMT_SHA256_PINNED="76e77641faa025814b77f153b29796b8e6fa2fca03e0c76a691608b86c7ea7bf"
+FORMAT_STEP_NAME="Check the script format with shfmt"
+SHFMT_FLAGS="-i 2 -ci -d"
+
+format_step() { ci_build_step "^      - name: $FORMAT_STEP_NAME\$"; }
+
+test_ci_build_checks_the_script_format_with_shfmt_pinned_to_3_14_1() {
+  local step script names
+  step="$(format_step)"
+  [ -n "$step" ] || die "the build job of ci.yml has no step named '$FORMAT_STEP_NAME'"
+  grep -qxF "          SHFMT_VERSION: $SHFMT_VERSION_PINNED" <<<"$step" ||
+    die "the format step does not pin shfmt $SHFMT_VERSION_PINNED exactly"
+  grep -qxF "          SHFMT_SHA256: $SHFMT_SHA256_PINNED" <<<"$step" ||
+    die "the format step does not pin the binary's SHA-256 $SHFMT_SHA256_PINNED"
+  # Nothing lets the step pass on a difference.
+  ! grep -nE '^        (if|continue-on-error):' <<<"$step" >&2 || die "the format step can be skipped or let fail (line above)"
+  script="$(printf '%s\n' "$step" | wf_run_block)"
+  [ -n "$script" ] || die "the format step has no run: | script"
+  grep -qxF 'url="https://github.com/mvdan/sh/releases/download/v$SHFMT_VERSION/shfmt_v${SHFMT_VERSION}_linux_amd64"' <<<"$script" ||
+    die "the format step does not download the official release binary"
+  ! grep -nE '\|\| *(true|:)' <<<"$script" >&2 || die "the format step ignores a result (line above)"
+  # The lint step's selection, checked by shfmt with the spec's flags.
+  grep -qxF "$LINT_SELECTION >\"\$dir/files\"" <<<"$script" ||
+    die "the format step does not select: $LINT_SELECTION"
+  grep -qxF "xargs -0 \"\$dir/shfmt\" $SHFMT_FLAGS <\"\$dir/files\"" <<<"$script" ||
+    die "the format step does not run the downloaded shfmt $SHFMT_FLAGS on the selection"
+  # It comes after the lint step.
+  names="$(ci_build_step '.' | sed -n 's/^      - name: //p')"
+  grep -qxF "$LINT_STEP_NAME" <<<"$names" || die "no lint step to come after"
+  [ "$(grep -xF -A1 "$LINT_STEP_NAME" <<<"$names" | sed -n 2p)" = "$FORMAT_STEP_NAME" ] ||
+    die "the format step does not come right after the lint step: $(tr '\n' '|' <<<"$names")"
+}
+
+# format_fakes <dir> <reported version>: a fake curl that serves a fake
+# shfmt binary, which logs every call, --version included, to <dir>/ran,
+# reports <reported version>, fails unless its first arguments are the
+# spec's flags, logs the files it is given to <dir>/args and prints a
+# difference and fails when FAKE_DIFF is set.
+format_fakes() {
+  local d="$1" v="$2"
+  mkdir -p "$d/bin" "$d/tmp"
+  cat >"$d/shfmt" <<FS
+#!/bin/sh
+printf '%s\n' "\$*" >>"$d/ran"
+if [ "\$1" = --version ]; then printf 'v%s\n' '$v'; exit 0; fi
+[ "\$1 \$2 \$3 \$4" = '$SHFMT_FLAGS' ] || { echo "fake shfmt: wrong flags: \$*"; exit 2; }
+shift 4
+[ "\$#" -gt 0 ] || { echo "fake shfmt: no files"; exit 0; }
+printf '%s\n' "\$@" >>"$d/args"
+if [ -n "\${FAKE_DIFF:-}" ]; then printf -- '--- x.sh.orig\n+++ x.sh\n@@ -1 +1 @@\n-f() { :; }\n+f() {\n' ; exit 1; fi
+exit 0
+FS
+  # Served as a download is: not executable.
+  chmod 644 "$d/shfmt"
+  cat >"$d/bin/curl" <<FC
+#!/bin/sh
+while [ "\$#" -gt 1 ]; do
+  case "\$1" in -o) out="\$2"; shift ;; esac
+  shift
+done
+printf '%s\n' "\$1" >"$d/url"
+cat "$d/shfmt" >"\$out"
+FC
+  chmod +x "$d/bin/curl"
+}
+
+# run_format_step <dir> <sha256> [<repo>]: runs the format step's script
+# in <repo> (default: this repository), as GitHub runs it, with the fakes
+# and the given pinned hash.
+run_format_step() {
+  local d="$1" sha="$2" repo="${3:-$REPO}" script="$1/step.sh" rc
+  format_step | wf_run_block >"$script"
+  [ -s "$script" ] || die "empty format script"
+  set +e
+  FORMAT_OUT="$(cd "$repo" && PATH="$d/bin:$PATH" RUNNER_TEMP="$d/tmp" \
+    SHFMT_VERSION="$SHFMT_VERSION_PINNED" SHFMT_SHA256="$sha" FAKE_DIFF="${FAKE_DIFF:-}" \
+    "$BASH" --noprofile --norc -e "$script" 2>&1)"
+  rc=$?
+  set -e
+  return "$rc"
+}
+
+test_ci_format_step_passes_formatted_scripts_and_fails_on_a_difference_a_bad_download_or_no_scripts() {
+  local d sha f n empty
+  # Formatted: the step passes and shfmt gets every selected script.
+  d="$WORK/clean"
+  format_fakes "$d" "$SHFMT_VERSION_PINNED"
+  sha="$(sha256sum "$d/shfmt" | cut -d' ' -f1)"
+  run_format_step "$d" "$sha" || {
+    printf '%s\n' "$FORMAT_OUT" >&2
+    die "the step failed on formatted scripts"
+  }
+  [ "$(cat "$d/url")" = "https://github.com/mvdan/sh/releases/download/v$SHFMT_VERSION_PINNED/shfmt_v${SHFMT_VERSION_PINNED}_linux_amd64" ] ||
+    die "the step downloaded $(cat "$d/url")"
+  n=0
+  while IFS= read -r f; do
+    n=$((n + 1))
+    grep -qxF "$f" "$d/args" || die "shfmt was not given $f"
+  done < <(cd "$REPO" && eval "$LINT_SELECTION" | tr '\0' '\n')
+  [ "$n" -gt 0 ] || die "the selection is empty"
+  [ "$(wc -l <"$d/args" | tr -d ' ')" -eq "$n" ] || die "shfmt was given $(wc -l <"$d/args" | tr -d ' ') files, want $n"
+  # A difference fails the step, and the difference is shown.
+  d="$WORK/diff"
+  format_fakes "$d" "$SHFMT_VERSION_PINNED"
+  sha="$(sha256sum "$d/shfmt" | cut -d' ' -f1)"
+  ! FAKE_DIFF=1 run_format_step "$d" "$sha" || die "the step passed on a difference"
+  grep -qxF '+++ x.sh' <<<"$FORMAT_OUT" || die "the step did not show the difference: $FORMAT_OUT"
+  # A binary with another hash fails before it is run.
+  d="$WORK/hash"
+  format_fakes "$d" "$SHFMT_VERSION_PINNED"
+  ! run_format_step "$d" "$SHFMT_SHA256_PINNED" || die "the step passed with a binary of another hash"
+  [ ! -e "$d/ran" ] || die "shfmt ran from a binary of another hash: $(cat "$d/ran")"
+  # A shfmt that reports another version fails before the check.
+  d="$WORK/version"
+  format_fakes "$d" 3.13.0
+  sha="$(sha256sum "$d/shfmt" | cut -d' ' -f1)"
+  ! run_format_step "$d" "$sha" || die "the step passed with shfmt 3.13.0"
+  [ ! -e "$d/args" ] || die "shfmt 3.13.0 was run on the scripts"
+  # No scripts selected: the step fails rather than check nothing.
+  d="$WORK/empty"
+  format_fakes "$d" "$SHFMT_VERSION_PINNED"
+  sha="$(sha256sum "$d/shfmt" | cut -d' ' -f1)"
+  empty="$WORK/empty-repo"
+  mkdir -p "$empty"
+  git -C "$empty" init -q
+  ! run_format_step "$d" "$sha" "$empty" || die "the step passed with no scripts selected"
+  [ ! -e "$d/args" ] || die "shfmt was given files in a repository with no scripts"
+}
+
 # ---------- run ----------
 
 TESTS=$(declare -F | awk '{print $3}' | grep '^test_')
