@@ -34,9 +34,9 @@ Adopted: not recorded; carried over from `docs/NEXT_SESSION.md` "Test and CI les
 L § 7 This repository's checks
 (1) `ci.yml` and `packs.yml` run on pull requests to `main` and on pushes to `main`, not on pushes to other branches, where they would run twice for every push to a pull request; `tools/test-ci-triggers.sh` checks it.
 (2) `main` requires two checks, `build` and `bootstrapper-test`. The `pack-<name>` jobs of `packs.yml`, which lay each language pack out in a made project and run its checks, ship nothing and are not required checks.
-(3) Until 2026-11-13, `build` does not yet fail on lint, formatting or line coverage of this repository's own scripts. By that date a lint check (shellcheck), a format check and a line coverage gate of at least 80% are part of `build` (`docs/BACKLOG.md` PBI-1.41), and this subsection lapses. Overrides P-11 § 2 (2) until then.
-Overrides P-11 §§ 2 (1) and 3 (1) ((1) and (2)).
-Adopted: (1) Adam, 2026-10-29, on Clead's recommendation, `docs/BACKLOG.md` PBI-1.25 part 2; (2) decider not recorded, 2026-09-30, `memory/decisions.md` ("Language packs are tested on GitHub's runners…"); (3) Adam, 2026-11-06 16:40, a dated condition of the cutover, recorded in the product office
+(3) The line coverage of this repository's own scripts is gated in `bootstrapper-test`, not in `build`: the suites that measure it run in the Bootstrapper workflow, and `bootstrapper-test` fails below 80% of the counted lines. Lint and formatting fail `build`.
+Overrides P-11 §§ 2 (1) and 3 (1) ((1) and (2)) and P-11 § 2 (2) ((3)).
+Adopted: (1) Adam, 2026-10-29, on Clead's recommendation, `docs/BACKLOG.md` PBI-1.25 part 2; (2) decider not recorded, 2026-09-30, `memory/decisions.md` ("Language packs are tested on GitHub's runners…"); (3) Adam, 2026-11-06 21:03, approving the PBI-1.41 spec in `docs/BACKLOG.md` (the gate in `bootstrapper-test`), and 2026-11-07 07:41, its amendment; it replaces the dated condition of 2026-11-06 16:40, which lapsed when the gates merged (#379, #389, #397)
 
 L § 8 The Rules edition
 (1) The copy of the Rules that § 21 (5) names is `bootstrap/stubs/rules/`, the edition. A new edition replaces it whole.
