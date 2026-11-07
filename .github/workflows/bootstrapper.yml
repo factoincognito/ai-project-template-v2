@@ -311,7 +311,10 @@ jobs:
           BOOTSTRAP_TEST_LIST=1 bash bootstrap/test-bootstrap-project.sh >all-tests.txt
           bash bootstrap/check-shards.sh shard-list all-tests.txt ubuntu-latest ubuntu-bash32 windows-latest
       - name: Download the line coverage of the test jobs
-        if: needs.changes.outputs.needed == 'true'
+        # Also when a step before it failed, the shard check among them, so
+        # the gate reports the coverage instead of every result missing.
+        # Not when the tests were skipped.
+        if: always() && needs.changes.outputs.needed == 'true'
         uses: actions/download-artifact@v7
         with:
           pattern: coverage-*
