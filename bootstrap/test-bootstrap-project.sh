@@ -8026,7 +8026,11 @@ FINISHED='The setup is finished.'
 # line. The first message is the start line of the Rules edition's P-1
 # § 2 (5), with the project filled in, indented as text to copy.
 WHAT_NEXT='What to do next: in the Claude app, create a Claude Project for this project (how: https://support.claude.com/en/articles/9519177-how-can-i-create-and-manage-projects), add the project on GitHub, https://github.com/octo-user/my-app, to that Claude Project, choosing all files (how: https://support.claude.com/en/articles/10167454-using-the-github-integration), and start a chat inside the Claude Project. The file CLAUDE.md in the project tells Claude the rest.'
-START_CHAT='To start that chat on a computer: click Projects in the menu on the left, choose the project, and type the first message in its input field. On a phone: open the menu at the top left, tap Projects, choose the project, and start a new chat there.'
+# The Android steps, the same words in the README and on the screen: the
+# controls Adam's screenshots show, at their places, with no English label
+# (the app was in Swedish; review of #407, fix 1).
+ANDROID_STEPS='In the Claude app on an Android phone, open the menu at the top left, tap the projects entry, choose the project, tap the new-session button at the bottom right, and type the first message in the input field.'
+START_CHAT="To start that chat on a computer: click Projects in the menu on the left, choose the project, and type the first message in its input field. $ANDROID_STEPS"
 FIRST_MESSAGE='As the first message, copy this line into the input field:'
 START_LINE='Attach octo-user/my-app with push access, read its CLAUDE.md, rules/RULES.md and RULES.md, and run the session startup.'
 ASK_CLEAD="If you ever feel stuck and do not know how to go on, Clead (Claude, the project's Tech Owner) is always there to help: just ask Clead for help, a recommendation or advice in the chat."
@@ -15922,13 +15926,14 @@ test_after_the_script_points_to_claudes_help_pages_and_names_the_github_steps() 
   body="$(section_of "$TEMPLATE_README" '### Creating a project from the template' '^##' | tr '\n' ' ' | sed 's/  */ /g')"
   body="${body#*After the script: }"
   body="${body%% - Working from another computer*}"
-  for t in "$create" "$github" 'How can I create and manage projects?' 'the "+" button at the top right of the project knowledge section' 'then "GitHub"' 'search for the project or paste its web address' 'choose the files' 'GitHub App'; do
+  for t in "$create" "$github" 'How can I create and manage projects?' 'the "+" button at the top right of the project knowledge section' 'then "GitHub"' 'search for the project or paste its web address' 'GitHub App'; do
     grep -qF -- "$t" <<<"$body" || die "the README's After the script lacks: $t"
   done
   # p2.9.0-b (newcomer pre-check on v2.9.0): "choose the files" did not
   # say which; the README and the closing line say all of them (Adam,
   # 2026-11-06, docs/NEXT_SESSION.md).
-  grep -qF -- 'choose all files' <<<"$body" || die "the README's After the script does not say to choose all files"
+  grep -qF -- 'then choose all files.' <<<"$body" || die "the README's After the script does not say to choose all files"
+  ! grep -qF -- 'choose the files' <<<"$body" || die "the README's After the script still says choose the files and then all files"
   grep -qF -- 'to that Claude Project, choosing all files (how: ' <<<"$WHAT_NEXT" || die "the test's next step does not say to choose all files (test is stale)"
   ! grep -qF 'has not been checked yet' <<<"$body" || die "the README's After the script still says the GitHub App part has not been checked"
   ! grep -qF 'Only select repositories' <<<"$body" || die "the README's After the script still describes the GitHub App settings by hand"
@@ -15943,8 +15948,10 @@ test_the_readme_and_the_closing_lines_say_how_to_start_the_chat_and_give_the_sta
   # p2.9.0-c (newcomer pre-check on v2.9.0): "start a chat inside the
   # Claude Project" gave no steps. The README's "After the script" and the
   # script's closing lines give the steps Adam recorded (2026-11-06,
-  # docs/NEXT_SESSION.md): on a computer in full; on a phone only what his
-  # Swedish screens support, with no English button name made up. The
+  # docs/NEXT_SESSION.md): on a computer in full, with its labels; on
+  # Android, the only phone seen, the controls his screenshots show (the
+  # app in Swedish), with no English label, ending, as on a computer, with
+  # the first message typed in the input field (review of #407, fix 1). The
   # first message is the start line of the Rules edition's P-1 § 2 (5),
   # word for word: in the README as a code block with <owner>/<repo>, and
   # on the screen filled in with the project the script set up.
@@ -15967,18 +15974,22 @@ test_the_readme_and_the_closing_lines_say_how_to_start_the_chat_and_give_the_sta
   raw="$(section_of "$TEMPLATE_README" '### Creating a project from the template' '^##' |
     sed -n '/^- After the script: /,/^- Working from another computer/p')"
   for t in 'To start a chat inside the Claude Project: on a computer, click Projects in the menu on the left, choose the project, and type the first message in its input field.' \
-    'On a phone, open the menu at the top left, tap Projects, choose the project, and start a new chat there.' \
+    "$ANDROID_STEPS" \
     'The first message is this line' '`<owner>/<repo>`' 'https://github.com/<owner>/<repo>' 'the script prints the line with them filled in'; do
     grep -qF -- "$t" <<<"$body" || die "the README's After the script lacks: $t"
   done
-  # Adam's phone showed the app in Swedish: no English label for its
-  # button to start a chat was seen, so none is named.
-  for t in 'New session' 'New chat' '+ New'; do
-    ! grep -qF -- "$t" <<<"$body" || die "the README's After the script names a phone button not seen in English: $t"
+  # The step that starts the chat on Android, and then the input field.
+  grep -qF -- 'tap the new-session button at the bottom right, and type the first message in the input field.' <<<"$ANDROID_STEPS" ||
+    die "the test's Android steps do not start the chat with the new-session button (test is stale)"
+  # Adam's phone showed the app in Swedish: no English label of it was
+  # seen, so none is named; and only Android was seen, so no other phone.
+  for t in 'New session' 'New chat' '+ New' 'tap Projects' 'On a phone' 'start a new chat'; do
+    ! grep -qF -- "$t" <<<"$body" || die "the README's After the script names a phone label not seen in English, or a phone not seen: $t"
+    ! grep -qF -- "$t" <<<"$START_CHAT" || die "the test's closing lines name: $t (test is stale)"
   done
   # The start line is the only line of a fenced code block, indented as
   # the sub-item it belongs to.
-  a="$(grep -nxF -- "    $sl" <<<"$raw" | cut -d: -f1)"
+  a="$(grep -nxF -- "    $sl" <<<"$raw" | cut -d: -f1 || true)"
   [ -n "$a" ] && [ "$(grep -cxF -- "    $sl" <<<"$raw")" -eq 1 ] || {
     printf '%s\n' "$raw" >&2
     die "the README's After the script does not have the start line once, word for word, as a line of its own"
@@ -15989,7 +16000,7 @@ test_the_readme_and_the_closing_lines_say_how_to_start_the_chat_and_give_the_sta
   }
   # The screen: the steps and the start line with the owner and name the
   # script was given, not the test's usual ones.
-  for t in 'click Projects in the menu on the left, choose the project, and type the first message in its input field' 'tap Projects'; do
+  for t in 'click Projects in the menu on the left, choose the project, and type the first message in its input field' "$ANDROID_STEPS"; do
     grep -qF -- "$t" <<<"$START_CHAT" || die "the test's closing lines lack: $t (test is stale)"
   done
   a="$(
