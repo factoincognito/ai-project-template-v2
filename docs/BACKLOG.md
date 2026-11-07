@@ -1601,6 +1601,21 @@ to fall out of a chat session.
 
 ---
 
+## Moved from the product office (2026-11-08)
+
+Template work that the product office's backlog held until the product owner decided, on 2026-11-08, that a project's work lives in its own backlog. Each entry names the product office entry it came from, which now points here.
+
+- **[LATER] PBI-1.56** (Adam, 2026-10-01; moved 2026-11-08 from the product office's PO-12) — Renew the bootstrapper's publish token `fi-bootstrap-publish` before it expires on 2027-10-02.
+  Create a new token with the same permissions (Contents and Workflows, read and write, only `factoincognito/ai-project-bootstrap`), update the `BOOTSTRAP_PUSH_TOKEN` secret in this repository, and delete the old token. Adam does all three; a session cannot. A calendar reminder goes in around 2027-09-18. The setup this token belongs to is described under PBI-1.10.
+
+- **[LATER] PBI-1.57** (Clead, 2026-10-26, from Adam's decision that the template propagates the product office's rules to new projects; moved 2026-11-08 from the product office's PO-56, part 2) — A check that the purpose and goal in a made project's `memory/project.md` are filled in once its setup phase is over. The bootstrapper already leaves them for the first Clead session; after that phase the check fails CI.
+  Part 1 of the product office entry, the `STATUS.md` stub, is done (`bootstrap/stubs/STATUS.md`, checked 2026-11-08). Part 3, the product office's reader skill flagging a project whose purpose or goal is missing, belongs to the product office and stays there.
+
+- **[LATER] PBI-1.58** (Clead, 2026-10-26, a HOW decision Adam delegated in chat; moved 2026-11-08 from the product office's PO-51) — Skills and subagents in the template, so that made projects inherit them. One PBI each, in this order:
+  1. Crog as fixed subagent definitions (`.claude/agents/`): a reviewer on Opus whose only input is the diff, `docs/SPEC.md` and `memory/standards.md`, and a merger on Sonnet (verdict comment first, then squash-merge). This replaces briefing Crog afresh in every Clead session. Not checked: how a made project's Claude setup picks up agent files; test it before promising it. The product office entry pointed to `docs/NEXT_SESSION.md` item 13 for the "roster" part; no such item was found there on 2026-11-08.
+  2. A handover skill (`.claude/skills/`) carrying the procedure for handing a session's role back, so it runs when a session is told to hand over.
+  Whether the inputs in item 1 still match the review inputs of the Rules (P-3 § 2) is checked when the PBI is specced.
+
 ## Audit findings (2026-11-06)
 
 The findings of the product office's audit of this project (Process P-6 § 8 (2)). Adam's decision: conditional accept, 2026-11-06.
