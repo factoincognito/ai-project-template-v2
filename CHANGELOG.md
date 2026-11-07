@@ -14,11 +14,13 @@ A bootstrapped project records the tag it was built from.
 - CHANGELOG: PRs #376 to #383 (PR #384)
 - Backlog: PBI-1.41 part (a) done, and the follow-ups from its review (PR #385)
 - NEXT_SESSION: for p2.9.0-c, the first message is a pre-written one (PR #387), and the steps on Android (PR #388)
+- CHANGELOG: PRs #384 to #388 (PR #390)
 
 ### Changed
-- The Rules edition: 2026-11-06-643aba6 (PR #377), then 2026-11-06-d0973c4 (PR #382)
+- The Rules edition: 2026-11-06-643aba6 (PR #377), then 2026-11-06-d0973c4 (PR #382), then 2026-11-06-7b6a5b5 (PR #391)
 - `build` lints the template's own scripts with shellcheck 0.11.0, pinned by its hash, and fails on any finding; `.shellcheckrc` turns off three checks the scripts break on purpose (PBI-1.41 part (a)) (PR #379)
 - The template's 21 scripts are formatted with `shfmt -i 2 -ci` (shfmt 3.14.1), with no change in behaviour (PBI-1.41 part (b)) (PR #386)
+- `build` checks the format of the template's own scripts with shfmt 3.14.1 (`-i 2 -ci -d`), pinned by its hash, and fails on any difference (PBI-1.41 part (b)) (PR #389)
 
 ## [2.9.0] — 2026-11-06
 
