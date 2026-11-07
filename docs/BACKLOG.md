@@ -734,7 +734,7 @@ get a working project in any supported language.
   **Adam's WHAT (2026-10-26).**
   - "All the user knows is that I want to do something. That something may be more or less crisp, or just an itch. The user has been told there is an AI package you can use to help you do all this, you just need to describe WHAT and it fixes the rest."
   - "From the user's perspective there must be a clear entry point and a solid process to get there, initially by use of the bootstrapper." v2.4.0 is solid but covers only part of the journey.
-  - The user bootstraps the idea, not the project. The product office is Adam's own; it does not exist in the user's world.
+  - The user bootstraps the idea, not the project. The product office is Adam's own; it does not exist in the user's world. (This is about Adam's own product office; an umbrella bootstrapped for someone else is PBI-1.55, Adam, 2026-11-07, `memory/decisions.md`.)
   - **The test for every HOW decision:** it fits the journey of the intended user, who never needs to be aware of technical setup details. Wherever the user needs technical knowledge or help, that is a defect (the rule of the end-to-end runs).
   - The bootstrapper's tagline (Adam, 2026-10-26): "Have an itch? Solve it with a project!"
   - Adam's stance on the trial (2026-10-26): not sure a proposal covers the gaps, so it is tried and tested, and what the test shows decides what stays.
@@ -1285,7 +1285,7 @@ autonomy. Use a real project as the pilot: acuteping (decided
 
   **Adam's question, Clead's answer (2026-11-07, not confirmed by Adam).** Adam asked whether an umbrella without Claude support would make sense. Clead: no. Its rules bind sessions, and its sign-offs, audits, status view and list of what waits for the owner are carried out by sessions; without them it is a folder of documents that nobody keeps to. For the same reason Clead does not propose an A2 project under an umbrella.
 
-  **To settle before the spec (Clead, § 31 (2)).** PBI-1.20 records Adam's WHAT of 2026-10-26: "The product office is Adam's own; it does not exist in the user's world." B to D bring an umbrella into the user's world. Which holds is Adam's decision when this item is taken up.
+  **Settled (Adam, 2026-11-07 23:27 and 23:28, `memory/decisions.md`).** The concept is not private, even though Adam's own product office is: an umbrella bootstrapped for someone else is developed and shipped by this template. PBI-1.20's "The product office is Adam's own; it does not exist in the user's world" is about his own office and does not rule it out.
 
   **Order (Clead's proposal, not decided).** After PBI-1.24, since C and D build on A1 and that option, and after the end-to-end runs, because both change the setup script the runs test.
 
