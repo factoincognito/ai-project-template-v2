@@ -9,13 +9,13 @@ all projects reads them.
 
 # Status
 
-Last update: 2026-11-06
+Last update: 2026-11-07
 
 ## Phase
-Build and release. v2.9.0 is tagged (2026-11-06): new projects get the public edition of the product office's Rules as their rule set (PBI-1.38), and the template itself is bound to those Rules (#369).
+Build and release. v2.9.0 is tagged (2026-11-06): new projects get the public edition of the product office's Rules as their rule set (PBI-1.38), and the template itself is bound to those Rules (#369). On `main` since then, not yet released: lint and format gates in `build` and a line coverage gate at 80% in `bootstrapper-test` for this repository's own scripts (PBI-1.41).
 
 ## Current focus
-PBI-1.41, due 2026-11-13: lint, format and line coverage (at least 80%) gates in `build` for this repository's own scripts. It is the dated condition of the template's sign-off to the Rules (`RULES.md` L § 7 (3)). Also the two defects that the newcomer pre-check found on v2.9.0 (p2.9.0-b and -c in `docs/NEXT_SESSION.md`): the steps in the Claude app after the setup.
+The two defects that the newcomer pre-check found on v2.9.0 (p2.9.0-b and -c in `docs/NEXT_SESSION.md`): the steps in the Claude app after the setup. Then PBI-1.54: tests for the lines no test reaches, and the follow-ups of PBI-1.41's reviews.
 
 ## Next step
 Fix p2.9.0-b and -c in a release Adam tags, then run the pre-check again on it. Run 5 comes after that: someone who has never used a terminal or gh sets up a project from the bootstrapper's README alone.
