@@ -1232,7 +1232,7 @@ get a working project in any supported language.
 
   **Rules that apply.** Test and script changes: test first, reviewed on Opus by the role that did not write them; one PR per point.
 
-- **[NEXT] PBI-1.41** (Adam, 2026-11-06 16:40, a dated condition of the template's sign-off to the product office's Rules; due 2026-11-13; the HOW is Clead's; not yet specced) — `build` fails on lint, formatting and line coverage below 80% of this repository's own scripts, as P-11 § 2 (2) asks; until then `RULES.md` L § 7 (3) overrides it.
+- **[DONE] PBI-1.41** (Adam, 2026-11-06 16:40, a dated condition of the template's sign-off to the product office's Rules; due 2026-11-13; the HOW is Clead's; specced and approved 2026-11-06 21:03, amended 2026-11-07 07:41; done 2026-11-07: (a) #379, (b) #386 and #389, (c1) #393, (c2) #397, (d) #403. The Done-when is met in the form the approved spec gives it: lint and format fail `build`, coverage fails `bootstrapper-test` below 80% (94.2% at `bcd5056`), and `RULES.md` L § 7 (3) is replaced by the override that placement needs, not removed. Part (c3) and the review follow-ups moved to PBI-1.54) — `build` fails on lint, formatting and line coverage below 80% of this repository's own scripts, as P-11 § 2 (2) asks; until then `RULES.md` L § 7 (3) overrides it.
 
   **Scope.** A lint check (shellcheck) and a format check of the template's own scripts (`bootstrap/`, `tools/`, `.github/scripts/`), and a line coverage measurement of them under the existing test suites (kcov or bashcov; which one, and how it copes with the tests' subshells, `sh -c` and the Windows and bash 3.2 legs, is settled in the spec), then a gate at 80%. Measure first: where coverage is short, tests are added test first. Each tool is recorded under the third-party policy before it is used.
 
@@ -1264,6 +1264,14 @@ get a working project in any supported language.
 autonomy. Use a real project as the pilot: acuteping (decided
 2026-09-30; previously python-blackjack-v2, see Phase 3).
 
+
+- **[NEXT] PBI-1.54** (Clead, 2026-11-07, from PBI-1.41: part (c3) of its spec and the follow-ups of its reviews; the HOW is Clead's) — tests for the lines of the template's scripts that no test reaches, and the follow-ups the reviews of PBI-1.41 left.
+
+  **Scope.** (1) Tests for the about 150 lines of `bootstrap/stubs/bootstrap-project.sh` that no test reaches (the largest pieces in `resume_read_github`, `layout_into`, `check_changed_paths`, `check_license_answer` and `api_call`), and for the lines `bootstrap/coverage.sh` leaves untested; each test checks an outcome and is shown to fail when its line is broken. (2) PBI-1.41's follow-ups (1) to (9) as listed there. (3) From the review of #397: an interrupted coverage run leaves its temporary folder (no trap); `.simplecov` is not in the test-change check's code patterns; `coverage.rb` matches only a lower-case hex commit; the copy check's stamp patterns are not tested on the negative side; the coverage download has no `always()`.
+
+  **Done when.** Each item is fixed, test first, or recorded as not worth fixing with a reason.
+
+  **Rules that apply.** Script, test and CI changes: test first, reviewed on Opus by the role that did not write them, within P-3 § 2; one PR per item or small group.
 - **[SUPERSEDED] PBI-2.1** (the connector was written off 2026-06-28;
   Clead now uses git and the GitHub API, see memory/decisions.md; also
   duplicated PBI-4.3) — Confirm GitHub connector write access: verify
