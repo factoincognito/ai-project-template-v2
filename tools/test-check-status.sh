@@ -246,7 +246,10 @@ test_ci_build_runs_the_check() {
 }
 
 test_scripts_test_runs_these_tests() {
-  grep -qxF '        run: bash tools/test-check-status.sh' "$REPO/.github/workflows/bootstrapper.yml" ||
+  # Under coverage since PBI-1.41 (c2): bootstrap/coverage.sh run
+  # <folder> <name> <suite> runs it.
+  grep -qxE '        run: bash (bootstrap/coverage[.]sh run "[$]RUNNER_TEMP/coverage-results" [a-z0-9-]+ )?tools/test-check-status[.]sh' \
+    "$REPO/.github/workflows/bootstrapper.yml" ||
     die "bootstrapper.yml does not run these tests as a step"
 }
 

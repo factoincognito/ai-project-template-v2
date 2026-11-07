@@ -39,6 +39,16 @@
 #   tests it ran; bootstrapper-test also fails unless, for every leg,
 #   its shards together ran every test exactly once
 #   (bootstrap/check-shards.sh).
+# - Line coverage of the template's own scripts (PBI-1.41 c2): the
+#   suites of scripts-test and of the ubuntu-latest leg's shards run
+#   under bashcov (bootstrap/coverage.sh run, bashcov and simplecov pinned
+#   in it; .simplecov configures simplecov), with the harnesses keeping
+#   the copies of the scripts they run, and each job uploads its results.
+#   bootstrapper-test merges them, prints the coverage of each counted
+#   script (every .sh in bootstrap/, tools/ and .github/scripts/ whose
+#   name does not start with test) and fails below 80% of their lines in
+#   total (bootstrap/coverage.sh gate). The Windows and bash 3.2 legs run
+#   without coverage. When the tests are skipped, so is the gate.
 # - A pull request that changes only files no test reads
 #   (bootstrap/not-read-by-tests.txt, judged by the base branch's copy
 #   of bootstrap/changed-inputs.sh and of that list, so an accidental
@@ -116,16 +126,28 @@ jobs:
       - uses: actions/checkout@v7
       - name: Delete the files no test reads
         run: bash bootstrap/changed-inputs.sh remove
+      - name: Install bashcov
+        run: |
+          bash bootstrap/coverage.sh install "$RUNNER_TEMP/bashcov"
+          echo "$RUNNER_TEMP/bashcov/bin" >>"$GITHUB_PATH"
+      # Each suite runs under bashcov, its result in coverage-results/.
       - name: Test build.sh and publish.sh
-        run: bash bootstrap/test.sh
+        run: bash bootstrap/coverage.sh run "$RUNNER_TEMP/coverage-results" build-and-publish bootstrap/test.sh
       - name: Test the require-test-change check
-        run: bash tools/test-require-test-change.sh
+        run: bash bootstrap/coverage.sh run "$RUNNER_TEMP/coverage-results" require-test-change tools/test-require-test-change.sh
       - name: Test the STATUS.md format check
-        run: bash tools/test-check-status.sh
+        run: bash bootstrap/coverage.sh run "$RUNNER_TEMP/coverage-results" check-status tools/test-check-status.sh
       - name: Test the Rules edition check
-        run: bash tools/test-check-rules-edition.sh
+        run: bash bootstrap/coverage.sh run "$RUNNER_TEMP/coverage-results" check-rules-edition tools/test-check-rules-edition.sh
       - name: Test e2e-check.sh
-        run: bash bootstrap/test-e2e-check.sh
+        run: bash bootstrap/coverage.sh run "$RUNNER_TEMP/coverage-results" e2e-check bootstrap/test-e2e-check.sh
+      - name: Upload the line coverage of these suites
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-scripts-test
+          path: ${{ runner.temp }}/coverage-results/
+          if-no-files-found: error
+          retention-days: 1
 
   bootstrap-project-test:
     needs: [changes]
@@ -211,8 +233,16 @@ jobs:
         # The download and the build take about 2 min (PBI-1.36).
         timeout-minutes: 20
         run: bash bootstrap/bash32.sh "$RUNNER_TEMP/bash32"
+      - name: Install bashcov
+        if: matrix.leg == 'ubuntu-latest'
+        run: |
+          bash bootstrap/coverage.sh install "$RUNNER_TEMP/bashcov"
+          echo "$RUNNER_TEMP/bashcov/bin" >>"$GITHUB_PATH"
+      - name: Test bootstrap-project.sh under bashcov
+        if: matrix.leg == 'ubuntu-latest'
+        run: bash bootstrap/coverage.sh run "$RUNNER_TEMP/coverage-results" bootstrap-project-${{matrix.shard}}-of-${{matrix.of}} bootstrap/test-bootstrap-project.sh
       - name: Test bootstrap-project.sh
-        if: matrix.leg != 'ubuntu-bash32'
+        if: matrix.leg == 'windows-latest'
         run: bash bootstrap/test-bootstrap-project.sh
       - name: Test bootstrap-project.sh with bash 3.2 built on Linux
         if: matrix.leg == 'ubuntu-bash32'
@@ -234,6 +264,14 @@ jobs:
         with:
           name: bootstrap-tests-${{ matrix.leg }}-${{ matrix.shard }}
           path: shard-list/
+          if-no-files-found: error
+          retention-days: 1
+      - name: Upload the line coverage of this shard
+        if: matrix.leg == 'ubuntu-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-ubuntu-latest-${{ matrix.shard }}
+          path: ${{ runner.temp }}/coverage-results/
           if-no-files-found: error
           retention-days: 1
 
@@ -272,6 +310,18 @@ jobs:
           fi
           BOOTSTRAP_TEST_LIST=1 bash bootstrap/test-bootstrap-project.sh >all-tests.txt
           bash bootstrap/check-shards.sh shard-list all-tests.txt ubuntu-latest ubuntu-bash32 windows-latest
+      - name: Download the line coverage of the test jobs
+        if: needs.changes.outputs.needed == 'true'
+        uses: actions/download-artifact@v7
+        with:
+          pattern: coverage-*
+          path: coverage-results
+          merge-multiple: true
+      - name: Require 80% line coverage of the template's scripts
+        # Also when the download failed: the gate then names what is
+        # missing. Not when the tests were skipped.
+        if: always() && needs.changes.outputs.needed == 'true'
+        run: bash bootstrap/coverage.sh gate 80 coverage-results build-and-publish require-test-change check-status check-rules-edition e2e-check bootstrap-project-1-of-4 bootstrap-project-2-of-4 bootstrap-project-3-of-4 bootstrap-project-4-of-4
 
   packs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')

@@ -1300,7 +1300,9 @@ wf_needs() {
 # the script with bash or /bin/bash and no arguments.
 wf_jobs_running() {
   local id re
-  re="^ *(run: )?(/bin/)?bash $(printf '%s' "$1" | sed 's/[./]/\\&/g') *$"
+  # A suite run under coverage (bootstrap/coverage.sh run <folder> <name>
+  # <suite>, PBI-1.41 c2) runs it too.
+  re="^ *(run: )?(/bin/)?bash (bootstrap/coverage[.]sh run \"[\$]RUNNER_TEMP/coverage-results\" [^ ]+ )?$(printf '%s' "$1" | sed 's/[./]/\\&/g') *$"
   for id in $(wf_job_ids); do
     if wf_job "$id" | grep -E "$re" >/dev/null; then echo "$id"; fi
   done
@@ -1659,8 +1661,8 @@ test_not_read_list_holds_only_tracked_files_and_every_test_job_deletes_them() {
     job="$(wf_job "$j")"
     grep -qxF '        run: bash bootstrap/changed-inputs.sh remove' <<<"$job" ||
       die "job $j runs tests without deleting the files no test reads first"
-    # Before the first step that runs a suite.
-    awk '/run: bash bootstrap\/changed-inputs.sh remove/ { r = NR } /(\/bin\/)?bash (bootstrap|tools)\/test/ && !f { f = NR } END { exit !(r && f && r < f) }' <<<"$job" ||
+    # Before the first step that runs a suite, plainly or under coverage.
+    awk '/run: bash bootstrap\/changed-inputs.sh remove/ { r = NR } /(\/bin\/)?bash (bootstrap|tools)\/test|bash bootstrap\/coverage[.]sh run / && !f { f = NR } END { exit !(r && f && r < f) }' <<<"$job" ||
       die "job $j deletes the files after a suite has run"
   done
 }
@@ -2030,6 +2032,519 @@ test_harness_work_cleanup_keeps_the_build_copies_only_when_asked() {
     clean_work "$WORK/plain"
   ) || die "clean_work failed without the setting"
   [ ! -e "$WORK/plain" ] || die "without the setting, the work folder was left"
+}
+
+# ---------- line coverage of the template's scripts (PBI-1.41 c2) ----------
+# bootstrap/coverage.sh: install (bashcov and simplecov, pinned), run (a
+# suite under bashcov, its result mapped onto the counted scripts) and gate
+# (the merged results, per script and in total, against a minimum). The
+# counted scripts are every .sh in bootstrap/, tools/ and .github/scripts/
+# whose name does not start with test. run maps a file bashcov traced
+# outside the checkout onto the counted script of the same name only when
+# it is a copy: as many lines, each the same or the script's line with
+# its {{TEMPLATE_VERSION}} and {{TEMPLATE_COMMIT}} stamped.
+
+COVERAGE="$HERE/coverage.sh"
+
+# cov_repo <dir>: a checkout with four counted scripts (one with the two
+# stamps, one in .github/scripts/) and a test that is not counted. The
+# tests run this repository's coverage.sh on it (BOOTSTRAP_COVERAGE_ROOT),
+# not a copy, so that the coverage run counts what they run of it.
+cov_repo() {
+  local d="$1"
+  mkdir -p "$d/bootstrap/stubs" "$d/tools" "$d/.github/scripts"
+  printf '%s\n' '#!/usr/bin/env bash' 'echo one' 'echo two' 'echo three' >"$d/bootstrap/a.sh"
+  printf '%s\n' '#!/usr/bin/env bash' 'V="{{TEMPLATE_VERSION}}"' 'C="{{TEMPLATE_COMMIT}}"' 'echo "$V $C"' >"$d/bootstrap/stubs/s.sh"
+  printf '%s\n' '#!/usr/bin/env bash' 'echo t' >"$d/tools/t.sh"
+  printf '%s\n' '#!/usr/bin/env bash' 'echo g' >"$d/.github/scripts/g.sh"
+  printf '%s\n' '#!/usr/bin/env bash' 'echo x' >"$d/bootstrap/test-a.sh"
+}
+
+# cov_fakes <dir>: in <dir>/bin a stand-in for bashcov, and <dir>/suite.sh.
+# The stand-in logs its arguments and what the suite gets (folder,
+# TMPDIR, BOOTSTRAP_TEST_KEEP_COPIES, BOOTSTRAP_COVERAGE_DIR) to
+# <dir>/bashcov.log, runs the command after --, then writes <dir>/result
+# (its @TMP@ and @ROOT@ replaced by the suite's TMPDIR and the --root) as
+# $BOOTSTRAP_COVERAGE_DIR/.resultset.json, and exits as the command did.
+# The suite makes, in its TMPDIR: x1/a.sh a copy of bootstrap/a.sh, x2/s.sh
+# a stamped copy of bootstrap/stubs/s.sh, x3/a.sh bootstrap/a.sh with one
+# line changed, x4/t.sh tools/t.sh with a line added; it exits
+# $SUITE_RC (default 0).
+cov_fakes() {
+  local d="$1"
+  mkdir -p "$d/bin"
+  cat >"$d/bin/bashcov" <<'FAKE'
+#!/usr/bin/env bash
+log="${0%/bin/bashcov}/bashcov.log"
+printf 'args:' >>"$log"
+printf ' [%s]' "$@" >>"$log"
+printf '\npwd=%s\nTMPDIR=%s\nKEEP=%s\nDIR=%s\n' "$PWD" "${TMPDIR-<unset>}" "${BOOTSTRAP_TEST_KEEP_COPIES-<unset>}" \
+  "${BOOTSTRAP_COVERAGE_DIR-<unset>}" >>"$log"
+[ "$1" = --root ] && [ "$3" = --command-name ] && [ "$5" = -- ] || { echo "fake bashcov: unexpected arguments" >&2; exit 64; }
+root="$2"
+shift 5
+rc=0
+"$@" || rc=$?
+mkdir -p "$BOOTSTRAP_COVERAGE_DIR"
+sed -e "s|@TMP@|$TMPDIR|g" -e "s|@ROOT@|$root|g" "${0%/bin/bashcov}/result" >"$BOOTSTRAP_COVERAGE_DIR/.resultset.json"
+exit "$rc"
+FAKE
+  chmod +x "$d/bin/bashcov"
+  cat >"$d/suite.sh" <<FAKE
+#!/usr/bin/env bash
+set -e
+mkdir -p "\$TMPDIR/x1" "\$TMPDIR/x2" "\$TMPDIR/x3" "\$TMPDIR/x4"
+cp "$d/repo/bootstrap/a.sh" "\$TMPDIR/x1/a.sh"
+sed -e 's/{{TEMPLATE_VERSION}}/v1.2.3/' -e 's/{{TEMPLATE_COMMIT}}/0123456789abcdef0123456789abcdef01234567/' \
+  "$d/repo/bootstrap/stubs/s.sh" >"\$TMPDIR/x2/s.sh"
+sed 's/echo three/echo 3/' "$d/repo/bootstrap/a.sh" >"\$TMPDIR/x3/a.sh"
+{ cat "$d/repo/tools/t.sh"; echo 'echo more'; } >"\$TMPDIR/x4/t.sh"
+echo "suite ran in \$PWD"
+exit "\${SUITE_RC:-0}"
+FAKE
+  chmod +x "$d/suite.sh"
+  # What bashcov traced: the counted scripts in the checkout (one in the
+  # array form older result sets use, with a line past the script's end,
+  # as bashcov reports for bootstrap/build.sh), a test, the four files in
+  # the suite's TMPDIR and a file named like a counted script that is
+  # gone.
+  cat >"$d/result" <<'JSON'
+{"suite": {"coverage": {
+  "@ROOT@/bootstrap/a.sh": {"lines": [null, 1, 0, 0]},
+  "@ROOT@/bootstrap/stubs/s.sh": {"lines": [null, 0, 0, 0]},
+  "@ROOT@/tools/t.sh": [null, 0, 7],
+  "@ROOT@/.github/scripts/g.sh": {"lines": [null, 0]},
+  "@ROOT@/bootstrap/test-a.sh": {"lines": [null, 1]},
+  "@TMP@/x1/a.sh": {"lines": [null, 0, 2, 0]},
+  "@TMP@/x2/s.sh": {"lines": [null, 1, 1]},
+  "@TMP@/x3/a.sh": {"lines": [null, 0, 0, 5]},
+  "@TMP@/x4/t.sh": {"lines": [null, 1, 1]},
+  "/nowhere/gone/g.sh": {"lines": [null, 1]}
+}, "timestamp": 1}}
+JSON
+}
+
+# cov_run <dir> [NAME=value ...] : coverage.sh run of the fake suite, from
+# the checkout <dir>/repo, results to <dir>/results, its TMPDIR under
+# <dir>/tmp; output in <dir>/out, exit code in RC.
+cov_run() {
+  local d="$1"
+  shift
+  mkdir -p "$d/tmp"
+  RC=0
+  (
+    unset BOOTSTRAP_TEST_KEEP_COPIES BOOTSTRAP_COVERAGE_DIR BASHCOV
+    cd "$d/repo"
+    env PATH="$d/bin:$PATH" TMPDIR="$d/tmp" BOOTSTRAP_COVERAGE_ROOT="$d/repo" "$@" bash "$COVERAGE" run "$d/results" suite "$d/suite.sh"
+  ) >"$d/out" 2>&1 || RC=$?
+}
+
+# cov_gate <dir> <min> <name...>: coverage.sh gate of <dir>/results;
+# output in <dir>/gate.out, exit code in RC.
+cov_gate() {
+  local d="$1" min="$2"
+  shift 2
+  RC=0
+  (cd "$d/repo" && BOOTSTRAP_COVERAGE_ROOT="$d/repo" bash "$COVERAGE" gate "$min" "$d/results" "$@") >"$d/gate.out" 2>&1 || RC=$?
+}
+
+test_coverage_run_maps_only_true_copies_onto_their_scripts() {
+  # The result of a suite: the counted scripts in the checkout, with the
+  # traced copy and the stamped copy added line by line; the test, the
+  # changed and the longer file named like a counted script, the one
+  # that is gone, and the line past the end of tools/t.sh are left out.
+  # The gate then reads it per script.
+  local d="$WORK/cov"
+  cov_repo "$d/repo"
+  cov_fakes "$d"
+  cov_run "$d"
+  [ "$RC" -eq 0 ] || {
+    cat "$d/out" >&2
+    die "run failed (exit $RC)"
+  }
+  grep -qxF "suite ran in $d/repo" "$d/out" || die "the suite did not run from the checkout"
+  grep -qF 'suite: 2 copies mapped onto their scripts, 3 files named like a counted script left out (not copies)' "$d/out" || {
+    cat "$d/out" >&2
+    die "run does not say what it mapped"
+  }
+  [ -s "$d/results/suite.json" ] || die "no result at results/suite.json"
+  cov_gate "$d" 0 suite
+  [ "$RC" -eq 0 ] || {
+    cat "$d/gate.out" >&2
+    die "gate failed (exit $RC)"
+  }
+  printf '%s\n' \
+    '  0.0%     0/    1 .github/scripts/g.sh' \
+    ' 66.7%     2/    3 bootstrap/a.sh' \
+    ' 66.7%     2/    3 bootstrap/stubs/s.sh' \
+    '  0.0%     0/    1 tools/t.sh' >"$d/want"
+  grep -E '^ *[0-9.]+% ' "$d/gate.out" | diff "$d/want" - >&2 || die "the per-script figures differ (want, then got)"
+}
+
+test_coverage_run_gives_the_suite_its_own_tmpdir_and_removes_it() {
+  # The suite runs with BOOTSTRAP_TEST_KEEP_COPIES=1 (its harness keeps
+  # the copies) and a TMPDIR of its own, which run removes once the copies
+  # are mapped, also when the suite failed; run then exits as the suite
+  # did, with the result written. bashcov gets the checkout as --root and
+  # the result folder in BOOTSTRAP_COVERAGE_DIR, outside the checkout.
+  local d="$WORK/cov" t rc
+  cov_repo "$d/repo"
+  cov_fakes "$d"
+  for rc in 0 3; do
+    rm -rf "$d/results" "$d/tmp" "$d/bashcov.log"
+    cov_run "$d" SUITE_RC="$rc"
+    [ "$RC" -eq "$rc" ] || {
+      cat "$d/out" >&2
+      die "run exited $RC after a suite that exited $rc"
+    }
+    [ -s "$d/results/suite.json" ] || die "no result after a suite that exited $rc"
+    grep -qxF "args: [--root] [$d/repo] [--command-name] [suite] [--] [$d/suite.sh]" "$d/bashcov.log" || {
+      cat "$d/bashcov.log" >&2
+      die "bashcov did not get the checkout as root, the name and the suite"
+    }
+    grep -qxF 'KEEP=1' "$d/bashcov.log" || die "the suite did not get BOOTSTRAP_TEST_KEEP_COPIES=1"
+    t="$(sed -n 's/^TMPDIR=//p' "$d/bashcov.log")"
+    case "$t" in "$d/tmp/"?*) ;; *) die "the suite's TMPDIR is not a folder of its own under the caller's: $t" ;; esac
+    [ ! -e "$t" ] || die "the suite's TMPDIR was left (exit $rc): $t"
+    case "$(sed -n 's/^DIR=//p' "$d/bashcov.log")" in "$d/repo"* | "<unset>" | "") die "bashcov's result folder is in the checkout or unset" ;; esac
+    [ -z "$(ls -A "$d/tmp")" ] || {
+      find "$d/tmp" >&2
+      die "run left files in TMPDIR (exit $rc)"
+    }
+    [ -z "$(cd "$d/repo" && find . -newer "$d/result" ! -name . -print)" ] || die "run wrote into the checkout"
+  done
+}
+
+test_coverage_run_refuses_bad_arguments_and_a_missing_result() {
+  local d="$WORK/cov" n
+  cov_repo "$d/repo"
+  cov_fakes "$d"
+  for n in "" "a b" "../x" "a/b" ".x"; do
+    RC=0
+    (cd "$d/repo" && PATH="$d/bin:$PATH" BOOTSTRAP_COVERAGE_ROOT="$d/repo" bash "$COVERAGE" run "$d/results" "$n" "$d/suite.sh") >"$d/out" 2>&1 || RC=$?
+    [ "$RC" -eq 2 ] || die "run took the name '$n' (exit $RC)"
+  done
+  RC=0
+  (cd "$d/repo" && BOOTSTRAP_COVERAGE_ROOT="$d/repo" bash "$COVERAGE" run "$d/results" suite) >"$d/out" 2>&1 || RC=$?
+  [ "$RC" -eq 2 ] || die "run without a command did not exit 2 (exit $RC)"
+  RC=0
+  (cd "$d/repo" && bash "$COVERAGE" frobnicate) >"$d/out" 2>&1 || RC=$?
+  { [ "$RC" -eq 2 ] && grep -qF 'usage' "$d/out"; } || die "an unknown subcommand did not exit 2 with the usage"
+  # bashcov wrote no result set: run fails and says so.
+  sed 's|^sed -e .*resultset[.]json"$|:|' "$d/bin/bashcov" >"$d/bin/bashcov.new"
+  ! grep -qF 'resultset.json"' "$d/bin/bashcov.new" || die "fixture: the result set is still written"
+  mv "$d/bin/bashcov.new" "$d/bin/bashcov"
+  chmod +x "$d/bin/bashcov"
+  cov_run "$d"
+  [ "$RC" -eq 1 ] || die "run passed without a result set (exit $RC)"
+  grep -qF 'bashcov wrote no result' "$d/out" || {
+    cat "$d/out" >&2
+    die "the missing result set is not named"
+  }
+  [ ! -e "$d/results/suite.json" ] || die "a result was written without a result set"
+}
+
+test_coverage_run_stops_when_two_counted_scripts_share_a_name() {
+  # A copy is mapped by its file name, so two counted scripts of the same
+  # name (here bootstrap/a.sh and tools/a.sh) cannot be told apart: run
+  # stops (exit 1) and names the name, writes no result (a result left
+  # from an earlier run is removed too) and leaves nothing in TMPDIR.
+  local d="$WORK/cov"
+  cov_repo "$d/repo"
+  cp "$d/repo/bootstrap/a.sh" "$d/repo/tools/a.sh"
+  cov_fakes "$d"
+  mkdir -p "$d/results"
+  printf '{"name": "suite", "files": {}}\n' >"$d/results/suite.json"
+  cov_run "$d"
+  [ "$RC" -eq 1 ] || {
+    cat "$d/out" >&2
+    die "run did not stop on two counted scripts named a.sh (exit $RC)"
+  }
+  grep -qF 'two counted scripts share a name, so a copy cannot be mapped: a.sh' "$d/out" || {
+    cat "$d/out" >&2
+    die "the shared name is not named"
+  }
+  grep -qF 'could not map the result of suite' "$d/out" || die "run does not say it could not map the result"
+  [ ! -e "$d/results/suite.json" ] || die "a result is left after the mapping failed"
+  [ -z "$(ls -A "$d/tmp")" ] || {
+    find "$d/tmp" >&2
+    die "run left files in TMPDIR after the mapping failed"
+  }
+}
+
+# cov_results <dir> <name> <json>: writes the result <name> as run writes
+# it, with the given files ({"path": [lines]}).
+cov_results() {
+  mkdir -p "$1/results"
+  printf '{"name": "%s", "files": %s}\n' "$2" "$3" >"$1/results/$2.json"
+}
+
+test_coverage_gate_merges_the_results_and_fails_below_the_minimum() {
+  # Two results: a line hit in either counts once; a line one result
+  # does not have (null, or past its end) takes the other's. Merged:
+  # a.sh 2 of 3, t.sh 1 of 1, g.sh 0 of 1, s.sh 3 of 3: 6 of 8 lines, 75%.
+  local d="$WORK/gate" min
+  cov_repo "$d/repo"
+  cov_results "$d" one '{"bootstrap/a.sh": [null, 1, 0, 0], "tools/t.sh": [null, 0], ".github/scripts/g.sh": [null, 0], "bootstrap/stubs/s.sh": [null, 1, 1, 0]}'
+  cov_results "$d" two '{"bootstrap/a.sh": [null, 0, 3], "tools/t.sh": [null, 2], "bootstrap/stubs/s.sh": [null, null, 0, 1]}'
+  for min in 0 50 75; do
+    cov_gate "$d" "$min" one two
+    [ "$RC" -eq 0 ] || {
+      cat "$d/gate.out" >&2
+      die "the gate failed at 75% against $min (exit $RC)"
+    }
+    grep -qxF "Total: 75.0% (6 of 8 lines) of 4 scripts; the minimum is $min%." "$d/gate.out" || {
+      cat "$d/gate.out" >&2
+      die "no total line"
+    }
+  done
+  printf '%s\n' \
+    '  0.0%     0/    1 .github/scripts/g.sh' \
+    ' 66.7%     2/    3 bootstrap/a.sh' \
+    '100.0%     3/    3 bootstrap/stubs/s.sh' \
+    '100.0%     1/    1 tools/t.sh' >"$d/want"
+  grep -E '^ *[0-9.]+% ' "$d/gate.out" | diff "$d/want" - >&2 || die "the per-script figures differ (want, then got)"
+  for min in 76 80 100; do
+    cov_gate "$d" "$min" one two
+    [ "$RC" -eq 1 ] || die "the gate did not fail at 75% against $min (exit $RC)"
+    grep -qF "Line coverage is 75.0%, below the minimum of $min%" "$d/gate.out" || {
+      cat "$d/gate.out" >&2
+      die "the failure does not say the figure and the minimum"
+    }
+  done
+  # Exactly the minimum passes: 4 of 5 lines against 80.
+  d="$WORK/gate.exact"
+  cov_repo "$d/repo"
+  cov_results "$d" one '{"bootstrap/a.sh": [null, 1, 1, 1], "tools/t.sh": [null, 1], ".github/scripts/g.sh": [null, 0], "bootstrap/stubs/s.sh": []}'
+  cov_gate "$d" 80 one
+  [ "$RC" -eq 0 ] || {
+    cat "$d/gate.out" >&2
+    die "the gate failed at exactly 80% against 80 (exit $RC)"
+  }
+}
+
+# expect_gate_refused <dir> <rc> <text> <min> <name...>
+expect_gate_refused() {
+  local d="$1" rc="$2" text="$3"
+  shift 3
+  cov_gate "$d" "$@"
+  [ "$RC" -eq "$rc" ] || {
+    cat "$d/gate.out" >&2
+    die "the gate exited $RC, want $rc, for: $text"
+  }
+  grep -qF -- "$text" "$d/gate.out" || {
+    cat "$d/gate.out" >&2
+    die "the gate does not say: $text"
+  }
+}
+
+test_coverage_gate_refuses_missing_extra_and_broken_results() {
+  # Every result it is told to expect must be there, and no other; every
+  # counted script must have a result; a result longer than its script
+  # comes from another version of it; a result must be one run wrote.
+  local d="$WORK/gate" all
+  cov_repo "$d/repo"
+  all='"bootstrap/a.sh": [null, 1], "tools/t.sh": [null, 1], ".github/scripts/g.sh": [null, 1], "bootstrap/stubs/s.sh": [null, 1]'
+  cov_results "$d" one "{$all}"
+  cov_gate "$d" 80 one
+  [ "$RC" -eq 0 ] || {
+    cat "$d/gate.out" >&2
+    die "the complete result failed (exit $RC)"
+  }
+  expect_gate_refused "$d" 1 "no result two: there is no two.json in $d/results" 80 one two
+  cov_results "$d" extra "{$all}"
+  expect_gate_refused "$d" 1 "a result that was not expected: extra.json" 80 one
+  rm "$d/results/extra.json"
+  cov_results "$d" one '{"bootstrap/a.sh": [null, 1], "tools/t.sh": [null, 1], "bootstrap/stubs/s.sh": [null, 1]}'
+  expect_gate_refused "$d" 1 "no result for .github/scripts/g.sh, a counted script" 80 one
+  cov_results "$d" one "{${all/\"tools\/t.sh\": \[null, 1\]/\"tools/t.sh\": [null, 1, 1, 1, 1]}}"
+  grep -qF '"tools/t.sh": [null, 1, 1, 1, 1]' "$d/results/one.json" || die "fixture: t.sh is not longer"
+  expect_gate_refused "$d" 1 "the result for tools/t.sh has 5 lines, more than the script's 2" 80 one
+  printf 'not json\n' >"$d/results/one.json"
+  expect_gate_refused "$d" 1 "results/one.json is not a result of coverage.sh run" 80 one
+  printf '{"name": "other", "files": {}}\n' >"$d/results/one.json"
+  expect_gate_refused "$d" 1 "results/one.json is not a result of coverage.sh run" 80 one
+  cov_results "$d" one "{$all}"
+  expect_gate_refused "$d" 2 "the minimum must be a whole number from 0 to 100" 80.5 one
+  expect_gate_refused "$d" 2 "the minimum must be a whole number from 0 to 100" 101 one
+  expect_gate_refused "$d" 2 "usage" 80
+}
+
+test_coverage_install_checks_ruby_and_the_gems_before_installing() {
+  # install needs Ruby 3.3 or later (simplecov 1.3.2 does): ruby on PATH,
+  # else the newest in the runner's tool cache. Each gem's download is
+  # checked against its pinned SHA-256 before anything is installed.
+  local d="$WORK/inst" rc
+  mkdir -p "$d/bin" "$d/cache/Ruby/3.3.9/x64/bin" "$d/cache/Ruby/3.1.7/x64/bin"
+  # Fake rubies: the version check is the only call they answer.
+  printf '%s\n' '#!/usr/bin/env bash' '[ "$1" = -e ] && exit 1' 'exit 64' >"$d/bin/ruby"
+  printf '%s\n' '#!/usr/bin/env bash' '[ "$1" = -e ] && exit 1' 'exit 64' >"$d/cache/Ruby/3.1.7/x64/bin/ruby"
+  printf '%s\n' '#!/usr/bin/env bash' '[ "$1" = -e ] && exit 0' 'echo "fake ruby: $*" >&2' 'exit 64' >"$d/cache/Ruby/3.3.9/x64/bin/ruby"
+  printf '%s\n' '#!/usr/bin/env bash' 'while [ $# -gt 1 ]; do [ "$1" = -o ] && { echo "not the gem" >"$2"; }; shift; done' 'echo "$*" >>"${0%/bin/curl}/curl.log"' >"$d/bin/curl"
+  chmod +x "$d/bin/ruby" "$d/cache/Ruby/3.3.9/x64/bin/ruby" "$d/cache/Ruby/3.1.7/x64/bin/ruby" "$d/bin/curl"
+  rc=0
+  PATH="$d/bin:$PATH" RUNNER_TOOL_CACHE="$d/cache" bash "$COVERAGE" install "$d/inst" >"$d/out" 2>&1 || rc=$?
+  [ "$rc" -eq 1 ] || {
+    cat "$d/out" >&2
+    die "install passed with a download that is not the gem (exit $rc)"
+  }
+  grep -qF "Ruby: $d/cache/Ruby/3.3.9/x64/bin/ruby" "$d/out" || {
+    cat "$d/out" >&2
+    die "install did not take the tool cache's Ruby 3.3 when the one on PATH is older"
+  }
+  grep -qF 'does not have the pinned SHA-256' "$d/out" || {
+    cat "$d/out" >&2
+    die "the wrong download is not named"
+  }
+  [ ! -e "$d/inst/bin/bashcov" ] || die "bashcov was installed from a download that failed its check"
+  # No Ruby new enough anywhere.
+  rm -rf "$d/cache/Ruby/3.3.9"
+  rc=0
+  PATH="$d/bin:$PATH" RUNNER_TOOL_CACHE="$d/cache" bash "$COVERAGE" install "$d/inst2" >"$d/out" 2>&1 || rc=$?
+  { [ "$rc" -eq 1 ] && grep -qF 'needs Ruby 3.3 or later' "$d/out"; } || {
+    cat "$d/out" >&2
+    die "install did not stop without a Ruby 3.3 (exit $rc)"
+  }
+  [ ! -e "$d/inst2/bin/bashcov" ] || die "bashcov was installed without a Ruby 3.3"
+}
+
+test_coverage_install_takes_the_first_ruby_without_a_broken_pipe() {
+  # The first Ruby new enough ends the search; the candidates listed
+  # after it must not make the search fail. Seen in CI (run 42354797208,
+  # ubuntu-latest shard 3 of 4): with SIGPIPE ignored, the writer of the
+  # list failed with "Broken pipe" once the search had stopped reading,
+  # and install stopped without a word. A slow sort makes that writer late
+  # every time here.
+  local d="$WORK/inst" rc real_sort r
+  real_sort="$(command -v sort)"
+  mkdir -p "$d/bin" "$d/cache/Ruby/3.4.1/x64/bin" "$d/cache/Ruby/3.3.9/x64/bin"
+  for r in "$d/bin/ruby" "$d/cache/Ruby/3.4.1/x64/bin/ruby" "$d/cache/Ruby/3.3.9/x64/bin/ruby"; do
+    printf '%s\n' '#!/usr/bin/env bash' '[ "$1" = -e ] && exit 0' 'exit 64' >"$r"
+    chmod +x "$r"
+  done
+  printf '#!/usr/bin/env bash\nsleep 1\nexec %q "$@"\n' "$real_sort" >"$d/bin/sort"
+  printf '%s\n' '#!/usr/bin/env bash' 'while [ $# -gt 1 ]; do [ "$1" = -o ] && { echo "not the gem" >"$2"; }; shift; done' >"$d/bin/curl"
+  chmod +x "$d/bin/sort" "$d/bin/curl"
+  rc=0
+  (
+    trap '' PIPE
+    PATH="$d/bin:$PATH" RUNNER_TOOL_CACHE="$d/cache" bash "$COVERAGE" install "$d/inst"
+  ) >"$d/out" 2>&1 || rc=$?
+  grep -qxF "Ruby: $d/bin/ruby" "$d/out" || {
+    cat "$d/out" >&2
+    die "install stopped before it named the Ruby on PATH (exit $rc)"
+  }
+  ! grep -qi 'broken pipe' "$d/out" || {
+    cat "$d/out" >&2
+    die "the search for Ruby broke a pipe"
+  }
+  grep -qF 'does not have the pinned SHA-256' "$d/out" || {
+    cat "$d/out" >&2
+    die "install did not go on to check the download (exit $rc)"
+  }
+}
+
+test_simplecov_configuration_keeps_dot_folders_and_the_copies() {
+  # simplecov leaves out files in folders whose names start with a dot
+  # (.github/scripts/) and files outside the checkout (the copies), and
+  # writes into the checkout; the committed configuration keeps every
+  # file and writes where coverage.sh says.
+  local f="$REPO/.simplecov"
+  [ -f "$f" ] || die "no .simplecov at the root"
+  grep -qxF 'SimpleCov.filters.clear' "$f" || die ".simplecov does not clear simplecov's filters"
+  grep -qxF 'SimpleCov.coverage_dir(ENV["BOOTSTRAP_COVERAGE_DIR"]) if ENV["BOOTSTRAP_COVERAGE_DIR"]' "$f" ||
+    die ".simplecov does not write where BOOTSTRAP_COVERAGE_DIR says"
+  ! grep -E '^[[:space:]]*(SimpleCov\.)?(skip|add_filter|load_profile)' "$f" >&2 || die ".simplecov filters again"
+}
+
+# The coverage runs of the Bootstrapper workflow: each Ubuntu test job
+# installs bashcov, runs its suites through coverage.sh run into
+# $RUNNER_TEMP/coverage-results and uploads that folder; bootstrapper-test
+# downloads them all and runs the gate at 80% on exactly those results.
+COVERAGE_RUN_RE='^ *(run: )?bash bootstrap/coverage[.]sh run "[$]RUNNER_TEMP/coverage-results" ([^ ]+) ([^ ]+) *$'
+
+# wf_coverage_runs <job>: "<name> <suite>" for each coverage run of the job.
+wf_coverage_runs() { wf_job "$1" | sed -nE "s|$COVERAGE_RUN_RE|\\2 \\3|p"; }
+
+# wf_has_line <step-or-job text> <line>: the text has that exact line.
+wf_has_line() { grep -qxF -- "$2" <<<"$1"; }
+
+test_workflow_scripts_test_runs_every_suite_under_coverage_and_uploads_the_results() {
+  local job runs s install first
+  job="$(wf_job scripts-test)"
+  runs="$(wf_coverage_runs scripts-test)"
+  for s in bootstrap/test.sh tools/test-require-test-change.sh tools/test-check-status.sh \
+    tools/test-check-rules-edition.sh bootstrap/test-e2e-check.sh; do
+    [ "$(awk -v s="$s" '$2 == s' <<<"$runs" | grep -c .)" = 1 ] || {
+      printf '%s\n' "$runs" >&2
+      die "scripts-test does not run $s under coverage, once"
+    }
+    ! grep -qE "^ *(run: )?bash $s *\$" <<<"$job" || die "scripts-test still runs $s without coverage"
+  done
+  [ -z "$(awk '{ print $1 }' <<<"$runs" | LC_ALL=C sort | uniq -d)" ] || die "two coverage runs of scripts-test share a name"
+  install="$(grep -nE '^ +(run: )?bash bootstrap/coverage[.]sh install "[$]RUNNER_TEMP/bashcov"$' <<<"$job" | head -1 | cut -d: -f1)"
+  first="$(grep -nE "$COVERAGE_RUN_RE" <<<"$job" | head -1 | cut -d: -f1)"
+  [ -n "$install" ] && [ "$install" -lt "$first" ] || die "scripts-test does not install bashcov before its first coverage run"
+  wf_has_line "$job" '          name: coverage-scripts-test' || die "scripts-test does not upload coverage-scripts-test"
+  wf_has_line "$job" '          path: ${{ runner.temp }}/coverage-results/' || die "scripts-test does not upload the coverage results"
+  [ "$(grep -cxF '          if-no-files-found: error' <<<"$job")" = 1 ] || die "the coverage upload of scripts-test does not fail without results"
+}
+
+test_workflow_only_the_ubuntu_shards_run_under_coverage() {
+  # The ubuntu-latest leg's shards run the tests under coverage; the
+  # Windows and bash 3.2 legs run them as before, without it.
+  local j job s
+  j="$(matrix_job)"
+  job="$(wf_job "$j")"
+  [ "$(wf_coverage_runs "$j")" = 'bootstrap-project-${{matrix.shard}}-of-${{matrix.of}} bootstrap/test-bootstrap-project.sh' ] || {
+    wf_coverage_runs "$j" >&2
+    die "$j does not run the tests under coverage, named by shard"
+  }
+  s="$(wf_step "$j" "$COVERAGE_RUN_RE")"
+  wf_has_line "$s" "        if: matrix.leg == 'ubuntu-latest'" || die "the coverage run is not for the ubuntu-latest leg only"
+  s="$(wf_step "$j" '^ +run: bash bootstrap/test-bootstrap-project[.]sh *$')"
+  wf_has_line "$s" "        if: matrix.leg == 'windows-latest'" || die "the plain run of the tests is not for the Windows leg"
+  s="$(wf_step "$j" 'bash bootstrap/coverage[.]sh install')"
+  wf_has_line "$s" "        if: matrix.leg == 'ubuntu-latest'" || die "bashcov is not installed on the ubuntu-latest leg only"
+  s="$(wf_step "$j" 'name: coverage-')"
+  wf_has_line "$s" "        if: matrix.leg == 'ubuntu-latest'" || die "the coverage upload is not for the ubuntu-latest leg only"
+  wf_has_line "$s" '          name: coverage-ubuntu-latest-${{ matrix.shard }}' || die "the coverage upload is not named by shard"
+  wf_has_line "$s" '          path: ${{ runner.temp }}/coverage-results/' || die "the shards do not upload the coverage results"
+  wf_has_line "$s" '          if-no-files-found: error' || die "a shard's coverage upload does not fail without results"
+  # Every step of the job that names coverage is for that leg only.
+  ! wf_job "$j" | awk '/^      - / { if (cov && !leg) bad = 1; cov = 0; leg = 0 }
+      /coverage/ { cov = 1 } /^        if: matrix[.]leg == .ubuntu-latest.$/ { leg = 1 }
+      END { if (cov && !leg) bad = 1; exit !bad }' || die "a step of $j about coverage runs on another leg too"
+}
+
+test_workflow_bootstrapper_test_gates_coverage_at_80_on_every_result() {
+  local agg dl gate names want n i
+  agg="$(wf_job bootstrapper-test)"
+  dl="$(wf_step bootstrapper-test '^          pattern: coverage-[*]$')"
+  [ -n "$dl" ] || die "bootstrapper-test does not download the coverage results"
+  wf_has_line "$dl" '          path: coverage-results' || die "the coverage results are not downloaded to coverage-results"
+  wf_has_line "$dl" '          merge-multiple: true' || die "the coverage results are not merged into one folder"
+  wf_has_line "$dl" "        if: needs.changes.outputs.needed == 'true'" || die "the coverage download runs when the tests were skipped"
+  gate="$(wf_step bootstrapper-test '^ *run: bash bootstrap/coverage[.]sh gate ')"
+  [ -n "$gate" ] || die "bootstrapper-test has no coverage gate"
+  # Also when the download failed (the gate then names what is missing),
+  # but not when the changes job skipped the tests.
+  wf_has_line "$gate" "        if: always() && needs.changes.outputs.needed == 'true'" || die "the gate does not run exactly when the tests were needed"
+  names="$(sed -nE 's|^ *run: bash bootstrap/coverage[.]sh gate 80 coverage-results (.+)$|\1|p' <<<"$gate" | tr ' ' '\n' | grep . | LC_ALL=C sort)"
+  [ -n "$names" ] || die "the gate is not at 80% on coverage-results"
+  n="$(wf_legs | awk '$1 == "ubuntu-latest" { print $4 }' | sort -u)"
+  want="$({
+    wf_coverage_runs scripts-test | awk '{ print $1 }'
+    i=1
+    while [ "$i" -le "$n" ]; do
+      echo "bootstrap-project-$i-of-$n"
+      i=$((i + 1))
+    done
+  } | LC_ALL=C sort)"
+  [ "$names" = "$want" ] || {
+    printf 'want:\n%s\ngot:\n%s\n' "$want" "$names" >&2
+    die "the gate does not expect exactly the results the jobs write"
+  }
 }
 
 # ---------- shards split by measured duration (PBI-1.22, part 2) ----------
@@ -2838,10 +3353,14 @@ test_workflow_bootstrap_project_tests_run_on_ubuntu_bash32_and_windows() {
   }
   # (Comments may name it: the header says the durations file keeps its column.)
   ! grep -vE '^[[:space:]]*#' "$BWF" | grep -F 'macos-latest' >&2 || die "bootstrapper.yml still names macos-latest outside comments"
-  # The plain step is for every leg but the bash 3.2 one, which has its own.
+  # The Windows leg runs the tests with plain bash, the ubuntu-latest leg
+  # under coverage (PBI-1.41 c2); the bash 3.2 leg has its own step.
   local plain
-  plain="$(wf_step "$j" "^        if: matrix[.]leg != 'ubuntu-bash32'\$")"
-  grep -qE '^ +run: bash bootstrap/test-bootstrap-project\.sh *$' <<<"$plain" || die "no step runs the tests with bash on the other legs"
+  plain="$(wf_step "$j" "^        if: matrix[.]leg == 'windows-latest'\$")"
+  grep -qE '^ +run: bash bootstrap/test-bootstrap-project\.sh *$' <<<"$plain" || die "no step runs the tests with bash on the Windows leg"
+  plain="$(wf_step "$j" "^        if: matrix[.]leg == 'ubuntu-latest'\$")"
+  grep -qE '^ +run: bash bootstrap/coverage[.]sh run "[$]RUNNER_TEMP/coverage-results" [^ ]+ bootstrap/test-bootstrap-project\.sh *$' <<<"$plain" ||
+    die "no step runs the tests under coverage on the ubuntu-latest leg"
   # The bash 3.2 leg runs on Linux (PBI-1.26).
   [ "$(wf_legs | awk '$1 == "ubuntu-bash32" { print $2 }' | sort -u)" = ubuntu-latest ] || die "the ubuntu-bash32 leg does not run on ubuntu-latest"
   # All three results show, even when one leg fails first.
