@@ -34,9 +34,9 @@ Adopted: not recorded; carried over from `docs/NEXT_SESSION.md` "Test and CI les
 L § 7 This repository's checks
 (1) `ci.yml` and `packs.yml` run on pull requests to `main` and on pushes to `main`, not on pushes to other branches, where they would run twice for every push to a pull request; `tools/test-ci-triggers.sh` checks it.
 (2) `main` requires two checks, `build` and `bootstrapper-test`. The `pack-<name>` jobs of `packs.yml`, which lay each language pack out in a made project and run its checks, ship nothing and are not required checks.
-(3) The line coverage of this repository's own scripts is gated in `bootstrapper-test`, not in `build`: the suites that measure it run in the Bootstrapper workflow, and `bootstrapper-test` fails below 80% of the counted lines. Lint and formatting fail `build`.
+(3) The line coverage of this repository's own scripts is gated in `bootstrapper-test`, not in `build`: the suites that measure it run in the Bootstrapper workflow, and when they run, `bootstrapper-test` fails below 80% of the counted lines.
 Overrides P-11 §§ 2 (1) and 3 (1) ((1) and (2)) and P-11 § 2 (2) ((3)).
-Adopted: (1) Adam, 2026-10-29, on Clead's recommendation, `docs/BACKLOG.md` PBI-1.25 part 2; (2) decider not recorded, 2026-09-30, `memory/decisions.md` ("Language packs are tested on GitHub's runners…"); (3) Adam, 2026-11-06 21:03, approving the PBI-1.41 spec in `docs/BACKLOG.md` (the gate in `bootstrapper-test`), and 2026-11-07 07:41, its amendment; it replaces the dated condition of 2026-11-06 16:40, which lapsed when the gates merged (#379, #389, #397)
+Adopted: (1) Adam, 2026-10-29, on Clead's recommendation, `docs/BACKLOG.md` PBI-1.25 part 2; (2) decider not recorded, 2026-09-30, `memory/decisions.md` ("Language packs are tested on GitHub's runners…"); (3) wording by Clead under § 3 (4), carrying out Adam, 2026-11-06 21:03, approving the PBI-1.41 spec in `docs/BACKLOG.md` (the gate in `bootstrapper-test`), and 2026-11-07 07:41, its amendment; it replaces the dated condition of 2026-11-06 16:40, recorded in the product office, whose gates merged in #379, #389 and #397, the coverage gate in `bootstrapper-test` as the spec has it
 
 L § 8 The Rules edition
 (1) The copy of the Rules that § 21 (5) names is `bootstrap/stubs/rules/`, the edition. A new edition replaces it whole.
