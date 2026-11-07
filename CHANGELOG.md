@@ -6,6 +6,10 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Added
+- Rules edition `2026-11-07-4fdfd54`: session startup gains a paragraph on the startup report (PR #410)
+- Backlog: PBI-1.55, bootstrap options for an umbrella, and the decision that the concept is developed in this template (PR #411)
+
 ## [2.9.1] — 2026-11-07
 
 ### Added
