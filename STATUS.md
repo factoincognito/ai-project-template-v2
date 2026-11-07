@@ -12,13 +12,13 @@ all projects reads them.
 Last update: 2026-11-07
 
 ## Phase
-Build and release. v2.9.1 is prepared: it fixes the steps in the Claude app after the setup that the newcomer pre-check found on v2.9.0 (p2.9.0-b and -c), and adds lint and format gates in `build` and a line coverage gate at 80% in `bootstrapper-test` for this repository's own scripts (PBI-1.41).
+Build and release. v2.9.1 is tagged (2026-11-07): the steps in the Claude app after the setup are fixed (p2.9.0-b and -c), and lint, format and line coverage gates check this repository's own scripts (PBI-1.41). The newcomer pre-check passed on it.
 
 ## Current focus
-The release of v2.9.1, then PBI-1.54: tests for the lines no test reaches, and the follow-ups of PBI-1.41's reviews.
+PBI-1.54: tests for the lines no test reaches, and the follow-ups of PBI-1.41's reviews.
 
 ## Next step
-Clead runs the newcomer pre-check on `main` (`docs/NEWCOMER_PRECHECK.md`); when it passes, Adam tags v2.9.1. Run 5 comes after that: someone who has never used a terminal or gh sets up a project from the bootstrapper's README alone.
+Run 5 on v2.9.1: someone who has never used a terminal or gh sets up a project from the bootstrapper's README alone.
 
 ## Blockers
 None. acuteping waits until run 5 passes.
