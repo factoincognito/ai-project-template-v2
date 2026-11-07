@@ -28,6 +28,11 @@
 # turned off, and why, is in .shellcheckrc. shellcheck is the official
 # release archive, its SHA-256 checked before it is unpacked; it is a CI
 # and local tool only, never copied into the repository or shipped.
+# Its sixth step checks the format of the same scripts with shfmt 3.14.1
+# (`shfmt -i 2 -ci -d`) and fails on any difference, and on an empty
+# selection (PBI-1.41 part (b)). shfmt is the official Linux amd64 release
+# binary, its SHA-256 checked before it is run; like shellcheck, it is
+# never copied into the repository or shipped.
 name: CI
 
 on:
@@ -65,3 +70,21 @@ jobs:
           tar -xJf "$dir/shellcheck.tar.xz" -C "$dir" --strip-components=1 "shellcheck-v$SHELLCHECK_VERSION/shellcheck"
           "$dir/shellcheck" --version | grep -qxF "version: $SHELLCHECK_VERSION"
           git ls-files -z 'bootstrap/*.sh' 'tools/*.sh' '.github/scripts/*' | xargs -0 "$dir/shellcheck"
+      - name: Check the script format with shfmt
+        env:
+          SHFMT_VERSION: 3.14.1
+          SHFMT_SHA256: 76e77641faa025814b77f153b29796b8e6fa2fca03e0c76a691608b86c7ea7bf
+        run: |
+          url="https://github.com/mvdan/sh/releases/download/v$SHFMT_VERSION/shfmt_v${SHFMT_VERSION}_linux_amd64"
+          dir="$RUNNER_TEMP/shfmt"
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 --max-time 120 -o "$dir/shfmt" "$url"
+          echo "$SHFMT_SHA256  $dir/shfmt" | sha256sum -c -
+          chmod +x "$dir/shfmt"
+          "$dir/shfmt" --version | grep -qxF "v$SHFMT_VERSION"
+          git ls-files -z 'bootstrap/*.sh' 'tools/*.sh' '.github/scripts/*' >"$dir/files"
+          if [ ! -s "$dir/files" ]; then
+            echo "::error::no scripts selected to check"
+            exit 1
+          fi
+          xargs -0 "$dir/shfmt" -i 2 -ci -d <"$dir/files"
