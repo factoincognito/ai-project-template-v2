@@ -224,23 +224,27 @@ end
 '
 
 # find_ruby: prints the path of a Ruby 3.3 or later: ruby on PATH, else the
-# newest in the tool cache; fails if there is none.
+# newest in the tool cache; prints nothing if there is none. The list is
+# made in full before the search: a search that stops at the first fit
+# while the list is still being written breaks the writer's pipe (with
+# SIGPIPE ignored, as on GitHub's runners, the writer then fails).
 find_ruby() {
-  local r p v
-  {
+  local r p v list
+  list="$(
     command -v ruby 2>/dev/null || true
     for p in "${RUNNER_TOOL_CACHE:-/opt/hostedtoolcache}"/Ruby/*/x64/bin/ruby; do
       [ -x "$p" ] || continue
       v="${p%/x64/bin/ruby}"
       printf '%s %s\n' "${v##*/}" "$p"
     done | sort -t. -k1,1nr -k2,2nr -k3,3nr | cut -d' ' -f2-
-  } | while IFS= read -r r; do
+  )"
+  while IFS= read -r r; do
     [ -n "$r" ] || continue
     if "$r" -e 'exit((RUBY_VERSION.split(".").map(&:to_i) <=> [3, 3]) >= 0)' 2>/dev/null; then
       printf '%s\n' "$r"
-      exit 0
+      return 0
     fi
-  done
+  done <<<"$list"
 }
 
 sha256_ok() {
@@ -254,7 +258,7 @@ sha256_ok() {
 cmd_install() {
   [ "$#" -eq 1 ] || usage
   local dir="$1" ruby g f v
-  ruby="$(find_ruby)"
+  ruby="$(find_ruby || true)"
   [ -n "$ruby" ] ||
     die 1 "installing bashcov $BASHCOV_VERSION with simplecov $SIMPLECOV_VERSION needs Ruby 3.3 or later (simplecov's minimum); there is none on PATH or in ${RUNNER_TOOL_CACHE:-/opt/hostedtoolcache}/Ruby."
   echo "Ruby: $ruby"

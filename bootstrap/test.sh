@@ -2384,6 +2384,42 @@ test_coverage_install_checks_ruby_and_the_gems_before_installing() {
   [ ! -e "$d/inst2/bin/bashcov" ] || die "bashcov was installed without a Ruby 3.3"
 }
 
+test_coverage_install_takes_the_first_ruby_without_a_broken_pipe() {
+  # The first Ruby new enough ends the search; the candidates listed
+  # after it must not make the search fail. Seen in CI (run 42354797208,
+  # ubuntu-latest shard 3 of 4): with SIGPIPE ignored, the writer of the
+  # list failed with "Broken pipe" once the search had stopped reading,
+  # and install stopped without a word. A slow sort makes that writer late
+  # every time here.
+  local d="$WORK/inst" rc real_sort r
+  real_sort="$(command -v sort)"
+  mkdir -p "$d/bin" "$d/cache/Ruby/3.4.1/x64/bin" "$d/cache/Ruby/3.3.9/x64/bin"
+  for r in "$d/bin/ruby" "$d/cache/Ruby/3.4.1/x64/bin/ruby" "$d/cache/Ruby/3.3.9/x64/bin/ruby"; do
+    printf '%s\n' '#!/usr/bin/env bash' '[ "$1" = -e ] && exit 0' 'exit 64' >"$r"
+    chmod +x "$r"
+  done
+  printf '#!/usr/bin/env bash\nsleep 1\nexec %q "$@"\n' "$real_sort" >"$d/bin/sort"
+  printf '%s\n' '#!/usr/bin/env bash' 'while [ $# -gt 1 ]; do [ "$1" = -o ] && { echo "not the gem" >"$2"; }; shift; done' >"$d/bin/curl"
+  chmod +x "$d/bin/sort" "$d/bin/curl"
+  rc=0
+  (
+    trap '' PIPE
+    PATH="$d/bin:$PATH" RUNNER_TOOL_CACHE="$d/cache" bash "$COVERAGE" install "$d/inst"
+  ) >"$d/out" 2>&1 || rc=$?
+  grep -qxF "Ruby: $d/bin/ruby" "$d/out" || {
+    cat "$d/out" >&2
+    die "install stopped before it named the Ruby on PATH (exit $rc)"
+  }
+  ! grep -qi 'broken pipe' "$d/out" || {
+    cat "$d/out" >&2
+    die "the search for Ruby broke a pipe"
+  }
+  grep -qF 'does not have the pinned SHA-256' "$d/out" || {
+    cat "$d/out" >&2
+    die "install did not go on to check the download (exit $rc)"
+  }
+}
+
 test_simplecov_configuration_keeps_dot_folders_and_the_copies() {
   # simplecov leaves out files in folders whose names start with a dot
   # (.github/scripts/) and files outside the checkout (the copies), and
