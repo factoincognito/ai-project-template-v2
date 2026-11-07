@@ -4,6 +4,10 @@
 # Each test builds into its own temp dir. Fixture repos are small fake
 # source trees with a copy of build.sh in their bootstrap/ folder, so the
 # failure cases do not depend on this repo's real content.
+# BOOTSTRAP_TEST_KEEP_COPIES=1 (set by the coverage run only, PBI-1.41
+# c1): at the end, keep those copies of build.sh where they ran and delete
+# the rest of the work folder, so that bashcov can still read them once
+# this has ended. Unset or any other value: the work folder is deleted.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -11,7 +15,17 @@ REPO="$(cd "$HERE/.." && pwd)"
 BUILD="$HERE/build.sh"
 PUBLISH="$HERE/publish.sh"
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+# clean_work <dir>: what the exit trap leaves of the work folder: nothing,
+# or with BOOTSTRAP_TEST_KEEP_COPIES=1 only the copies of build.sh.
+clean_work() {
+  if [ "${BOOTSTRAP_TEST_KEEP_COPIES:-}" = 1 ]; then
+    find "$1" ! -type d ! -name build.sh -exec rm -f {} +
+    find "$1" -type d -empty -delete
+  else
+    rm -rf "$1"
+  fi
+}
+trap 'clean_work "$WORK"' EXIT
 
 SHA="0123456789abcdef0123456789abcdef01234567"
 PASSED=0
@@ -1909,6 +1923,113 @@ test_harness_records_the_tests_it_ran() {
     cat "$out" >&2
     die "not exactly one test ran"
   }
+}
+
+# ---------- the copies kept for the coverage run (PBI-1.41 c1) ----------
+# Most tests run a copy of the script they test, and both harnesses
+# delete their work folder at the end, before bashcov reads what it
+# traced. With BOOTSTRAP_TEST_KEEP_COPIES=1 (only the coverage run sets
+# it) each harness leaves its copies where the tests ran them and
+# deletes everything else; without it, nothing changes.
+
+# harness_one <dir> <test> [NAME=value ...]: runs only <test> of the
+# setup script's harness, with its temp folder in <dir>/tmp and its
+# output in <dir>/out: a weights file makes <test> the one heavy test,
+# alone in shard 1 of 2 (another test weighs 1, so the median that every
+# unlisted test weighs is 1).
+harness_one() {
+  local d="$1" t="$2" light
+  shift 2
+  harness_tests >"$WORK/tests"
+  grep -qxF "$t" "$WORK/tests" || die "the harness has no test $t"
+  light="$(grep -vxF "$t" "$WORK/tests" | sed -n 1p)"
+  mkdir -p "$d/tmp"
+  printf 'test a\n%s 100000\n%s 1\n' "$t" "$light" >"$d/w"
+  # The setting only as given: the coverage run sets it for this harness
+  # too.
+  (
+    unset BOOTSTRAP_TEST_KEEP_COPIES
+    run_harness "$d/out" TMPDIR="$d/tmp" BOOTSTRAP_TEST_SHARD=1/2 BOOTSTRAP_TEST_WEIGHTS="$d/w:a" "$@"
+  ) || {
+    tail -n 20 "$d/out" >&2
+    die "the run of $t failed"
+  }
+  { grep -qxF "ok   $t" "$d/out" && grep -qxF '1 passed, 0 failed' "$d/out"; } || {
+    cat "$d/out" >&2
+    die "not $t alone ran"
+  }
+}
+
+test_harness_keeps_its_copies_of_the_setup_script_only_when_asked() {
+  # One test that runs a copy of the template's script (whole: in
+  # scripts/ of the harness's work folder) and one that runs the built,
+  # stamped copy (use_built: built/ and the test's dl/). With the setting,
+  # those copies are left, and only they; without it, nothing is left.
+  local script="$REPO/bootstrap/stubs/bootstrap-project.sh" n t d f
+  n="$(wc -l <"$script" | tr -d ' ')"
+  t=test_again_without_a_saved_file_stops_with_a_plain_error_and_runs_nothing
+  d="$WORK/keep.whole"
+  harness_one "$d" "$t" BOOTSTRAP_TEST_KEEP_COPIES=1
+  find "$d/tmp" ! -type d >"$d/left"
+  ! grep -v '/bootstrap-project[.]sh$' "$d/left" >&2 || die "$t: more than the copies of the script was left"
+  grep -q '/scripts/[^/]*/bootstrap-project[.]sh$' "$d/left" || {
+    cat "$d/left" >&2
+    die "$t: the copy it ran was not kept"
+  }
+  while IFS= read -r f; do
+    cmp -s "$script" "$f" || die "$t: $f is not a copy of the script"
+  done <"$d/left"
+  t=test_the_plan_is_shown_after_the_checks_and_a_dry_run_creates_nothing
+  d="$WORK/keep.built"
+  harness_one "$d" "$t" BOOTSTRAP_TEST_KEEP_COPIES=1
+  find "$d/tmp" ! -type d >"$d/left"
+  ! grep -v '/bootstrap-project[.]sh$' "$d/left" >&2 || die "$t: more than the copies of the script was left"
+  { grep -q '/built/bootstrap-project[.]sh$' "$d/left" && grep -q '/dl/bootstrap-project[.]sh$' "$d/left"; } || {
+    cat "$d/left" >&2
+    die "$t: the built copies it ran were not kept"
+  }
+  # Stamping substitutes in place: each copy has the script's lines.
+  while IFS= read -r f; do
+    [ "$(wc -l <"$f" | tr -d ' ')" = "$n" ] || die "$t: $f has not the script's $n lines"
+  done <"$d/left"
+  # Without the setting the work folder goes, as before.
+  for t in test_again_without_a_saved_file_stops_with_a_plain_error_and_runs_nothing \
+    test_the_plan_is_shown_after_the_checks_and_a_dry_run_creates_nothing; do
+    d="$WORK/default.$t"
+    harness_one "$d" "$t"
+    [ -z "$(ls -A "$d/tmp")" ] || {
+      find "$d/tmp" >&2
+      die "$t: the harness left files behind without the setting"
+    }
+  done
+}
+
+test_harness_work_cleanup_keeps_the_build_copies_only_when_asked() {
+  # This harness's own exit trap: clean_work, on a work folder like the
+  # one its tests leave (fixtures with a copy of build.sh in bootstrap/,
+  # built files, a read-only file, empty folders).
+  local d
+  grep -qxF "trap 'clean_work \"\$WORK\"' EXIT" "$HERE/test.sh" || die "the exit trap does not run clean_work on WORK"
+  for d in "$WORK/keep" "$WORK/plain"; do
+    mkdir -p "$d/fx a/bootstrap" "$d/fx b/bootstrap" "$d/out/stubs" "$d/empty/deeper"
+    cp "$BUILD" "$d/fx a/bootstrap/build.sh"
+    cp "$BUILD" "$d/fx b/bootstrap/build.sh"
+    printf 'x\n' >"$d/fx a/bootstrap/publish.sh"
+    printf 'x\n' >"$d/out/stubs/bootstrap-project.sh"
+    printf 'x\n' >"$d/out/read-only"
+    chmod a-w "$d/out/read-only"
+  done
+  (BOOTSTRAP_TEST_KEEP_COPIES=1 clean_work "$WORK/keep") || die "clean_work failed with the setting"
+  (cd "$WORK/keep" && find . ! -type d | LC_ALL=C sort) >"$WORK/left"
+  printf '%s\n' "./fx a/bootstrap/build.sh" "./fx b/bootstrap/build.sh" | diff - "$WORK/left" >&2 ||
+    die "with the setting, not exactly the copies of build.sh were left (want, then got)"
+  [ ! -e "$WORK/keep/empty" ] && [ ! -e "$WORK/keep/out" ] || die "with the setting, folders with no copy in them were left"
+  cmp -s "$BUILD" "$WORK/keep/fx a/bootstrap/build.sh" || die "a kept copy changed"
+  (
+    unset BOOTSTRAP_TEST_KEEP_COPIES
+    clean_work "$WORK/plain"
+  ) || die "clean_work failed without the setting"
+  [ ! -e "$WORK/plain" ] || die "without the setting, the work folder was left"
 }
 
 # ---------- shards split by measured duration (PBI-1.22, part 2) ----------

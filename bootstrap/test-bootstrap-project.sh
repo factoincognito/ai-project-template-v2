@@ -35,6 +35,14 @@
 #                              docs/NEWCOMER_PRECHECK.md (an absolute path
 #                              or relative to where this starts; unset:
 #                              a folder of the test, deleted with it).
+#   BOOTSTRAP_TEST_KEEP_COPIES=1  at the end, keep every copy of the
+#                              setup script the tests ran (each file
+#                              named bootstrap-project.sh in the work
+#                              folder), where it ran, and delete the rest:
+#                              the coverage run sets it, so that bashcov
+#                              can still read the copies once this has
+#                              ended (PBI-1.41 c1). Unset or any other
+#                              value: the work folder is deleted.
 #
 # Template-only: bootstrap/ is not in bootstrap/manifest.txt, so this
 # file never ships. It runs on bash 3.2 (macOS /bin/bash) and Git for
@@ -95,7 +103,18 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 SCRIPT="$HERE/stubs/bootstrap-project.sh"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/test-bootstrap-project.XXXXXX")"
-trap 'rm -rf "$WORK"' EXIT
+# clean_work <dir>: what the exit trap leaves of the work folder: nothing,
+# or with BOOTSTRAP_TEST_KEEP_COPIES=1 only the copies of the setup script
+# (see the settings above).
+clean_work() {
+  if [ "${BOOTSTRAP_TEST_KEEP_COPIES:-}" = 1 ]; then
+    find "$1" ! -type d ! -name bootstrap-project.sh -exec rm -f {} +
+    find "$1" -type d -empty -delete
+  else
+    rm -rf "$1"
+  fi
+}
+trap 'clean_work "$WORK"' EXIT
 
 PASSED=0
 FAILED=0
