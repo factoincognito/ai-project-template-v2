@@ -317,11 +317,11 @@ jobs:
           pattern: coverage-*
           path: coverage-results
           merge-multiple: true
-      - name: Require 80% line coverage of the template's scripts
+      - name: Require 99% line coverage of the template's scripts
         # Also when the download failed: the gate then names what is
         # missing. Not when the tests were skipped.
         if: always() && needs.changes.outputs.needed == 'true'
-        run: bash bootstrap/coverage.sh gate 80 coverage-results build-and-publish require-test-change check-status check-rules-edition e2e-check bootstrap-project-1-of-4 bootstrap-project-2-of-4 bootstrap-project-3-of-4 bootstrap-project-4-of-4
+        run: bash bootstrap/coverage.sh gate 99 coverage-results build-and-publish require-test-change check-status check-rules-edition e2e-check bootstrap-project-1-of-4 bootstrap-project-2-of-4 bootstrap-project-3-of-4 bootstrap-project-4-of-4
 
   packs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')

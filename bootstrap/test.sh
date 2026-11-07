@@ -2506,8 +2506,8 @@ test_workflow_bootstrapper_test_gates_coverage_at_80_on_every_result() {
   # Also when the download failed (the gate then names what is missing),
   # but not when the changes job skipped the tests.
   wf_has_line "$gate" "        if: always() && needs.changes.outputs.needed == 'true'" || die "the gate does not run exactly when the tests were needed"
-  names="$(sed -nE 's|^ *run: bash bootstrap/coverage[.]sh gate 80 coverage-results (.+)$|\1|p' <<<"$gate" | tr ' ' '\n' | grep . | LC_ALL=C sort)"
-  [ -n "$names" ] || die "the gate is not at 80% on coverage-results"
+  names="$(sed -nE 's|^ *run: bash bootstrap/coverage[.]sh gate 99 coverage-results (.+)$|\1|p' <<<"$gate" | tr ' ' '\n' | grep . | LC_ALL=C sort)"
+  [ -n "$names" ] || die "the gate is not at 99% on coverage-results"
   n="$(wf_legs | awk '$1 == "ubuntu-latest" { print $4 }' | sort -u)"
   want="$({
     wf_coverage_runs scripts-test | awk '{ print $1 }'
