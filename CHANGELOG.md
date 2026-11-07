@@ -15,10 +15,15 @@ A bootstrapped project records the tag it was built from.
 - Backlog: PBI-1.41 part (a) done, and the follow-ups from its review (PR #385)
 - NEXT_SESSION: for p2.9.0-c, the first message is a pre-written one (PR #387), and the steps on Android (PR #388)
 - CHANGELOG: PRs #384 to #388 (PR #390)
+- CHANGELOG: PRs #389 to #391 (PR #394)
+- Backlog: PBI-1.41 part (b) done, and the follow-ups from its review (PR #395)
+- Backlog: the PBI-1.41 spec counts the copies of the scripts the tests run, approved by Adam (PR #396)
+- The test harnesses keep the script copies they ran when `BOOTSTRAP_TEST_KEEP_COPIES=1`, for the coverage run (PBI-1.41 part (c1)) (PR #393)
 
 ### Changed
 - The Rules edition: 2026-11-06-643aba6 (PR #377), then 2026-11-06-d0973c4 (PR #382), then 2026-11-06-7b6a5b5 (PR #391)
 - `build` lints the template's own scripts with shellcheck 0.11.0, pinned by its hash, and fails on any finding; `.shellcheckrc` turns off three checks the scripts break on purpose (PBI-1.41 part (a)) (PR #379)
+- Three tests that failed under coverage tracing now pass under it; two of them now give the gate step the environment GitHub gives it, so their failing cases fail for the right reason (PBI-1.41 part (c1)) (PR #393)
 - The template's 21 scripts are formatted with `shfmt -i 2 -ci` (shfmt 3.14.1), with no change in behaviour (PBI-1.41 part (b)) (PR #386)
 - `build` checks the format of the template's own scripts with shfmt 3.14.1 (`-i 2 -ci -d`), pinned by its hash, and fails on any difference (PBI-1.41 part (b)) (PR #389)
 
