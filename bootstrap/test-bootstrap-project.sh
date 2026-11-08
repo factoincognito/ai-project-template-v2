@@ -13976,6 +13976,109 @@ test_ctrl_c_says_what_exists_and_the_resume_finishes_without_duplicates() {
   expect_one_of_each "$d"
 }
 
+test_a_terminal_that_cannot_be_opened_or_read_is_a_no_and_shows_no_error() {
+  # #428 keeps the question's own errors silent: a terminal that cannot
+  # be opened (/dev/tty with no terminal attached; only where this
+  # computer has none, as on CI's runners), one that opens but cannot be
+  # read (here a folder), and one at its end (/dev/null, a character
+  # device with nothing to read, as a terminal after Ctrl-D) are each a
+  # no, the question line is ended, and nothing appears on stderr.
+  local d t want
+  d="$(tmpdir)"
+  mkdir -p "$d/a folder"
+  want="$(printf '%s\n' 'Why it is asked, in a sentence.' 'Run it now? (yes or no) [no]: ' 'rc=1')"
+  for t in "$d/a folder" /dev/null /dev/tty; do
+    if [ "$t" = /dev/tty ] && (: </dev/tty) 2>/dev/null; then
+      echo "note: /dev/tty can be opened here; the case of a terminal that cannot be opened was not run"
+      continue
+    fi
+    (
+      load_script
+      export BOOTSTRAP_TTY="$t"
+      rc=0
+      ask_terminal "Why it is asked, in a sentence." "Run it now? (yes or no)" || rc=$?
+      echo "rc=$rc"
+    ) </dev/null >"$d/out" 2>"$d/err"
+    [ "$(cat "$d/out")" = "$want" ] || {
+      cat "$d/out" >&2
+      die "$t: not a no with the question line ended"
+    }
+    [ ! -s "$d/err" ] || {
+      cat "$d/err" >&2
+      die "$t: an error was shown"
+    }
+  done
+}
+
+test_ctrl_c_at_a_question_on_the_terminal_shows_the_stop_and_the_command_to_continue() {
+  # #428: Ctrl-C while the script waits for the answer to a question read
+  # from the terminal (here "Make the project public now?"): the stop
+  # says the script was stopped and what exists, and the command to
+  # continue is shown, with exit 130. Before the fix, the question's
+  # 2>/dev/null was still in force while the trap ran, so the stop went
+  # there and only the command to continue was shown. The terminal is a
+  # named pipe the test holds open, so the question waits. The script runs
+  # as a job with a process group of its own (set -m), and Ctrl-C goes to
+  # that whole group, as a terminal sends it: the script and the subshell
+  # that reads the answer.
+  local d i pid
+  [ "$("$BASH" -c 'trap "echo caught" INT; kill -INT $$; sleep 1' 2>/dev/null)" = caught ] || {
+    skip_test "Ctrl-C is ignored in this shell"
+    return 0
+  }
+  d="$(tmpdir)"
+  if ! mkfifo "$d/tty" 2>/dev/null || [ ! -p "$d/tty" ]; then
+    skip_test "no named pipes here"
+    return 0
+  fi
+  working_git "$d"
+  use_built "$d"
+  prepare "$d"
+  # Opened for reading and writing, so the open does not wait for the
+  # script; the script does not get it (9>&-).
+  exec 9<>"$d/tty"
+  export STUB_GH_PROTECT_FAIL=plan
+  # The job starts with job control on in this shell: a job started
+  # without it would ignore Ctrl-C from the start, and bash 3.2 would
+  # keep that ignored in the script, which then could not trap it.
+  set -m
+  (
+    in_env "$d"
+    exec "$BASH" "$RUN_SCRIPT" "${REQUIRED_OPTS[@]}" --pack python "${ALL_OPTS[@]}" --yes --private \
+      <"$d/in" >"$d/out" 2>"$d/err" 9>&-
+  ) &
+  pid=$!
+  set +m
+  unset STUB_GH_PROTECT_FAIL
+  i=0
+  until grep -qF 'Make the project public now? (yes or no) [no]:' "$d/out" 2>/dev/null; do
+    i=$((i + 1))
+    if [ "$i" -gt 600 ] || ! kill -0 "$pid" 2>/dev/null; then
+      exec 9>&-
+      wait "$pid" || true
+      cat "$d/out" "$d/err" >&2
+      die "the question was not asked"
+    fi
+    sleep 0.1
+  done
+  # The question is shown; the script is then waiting for its answer.
+  sleep 1
+  if ! kill -INT -- "-$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+    exec 9>&-
+    wait "$pid" || true
+    skip_test "a job here has no process group of its own"
+    return 0
+  fi
+  exec 9>&-
+  RC=0
+  wait "$pid" || RC=$?
+  expect_rc 130 "$d"
+  expect_err_shape "$d" "The script was stopped before it finished\. The project octo-user/my-app exists on GitHub"
+  expect_continue_command "$d" " --resume"
+  [ ! -e "$d/made-public" ] || die "the project was made public"
+}
+
 test_ctrl_c_during_any_gh_call_shows_the_stop_and_the_command_to_run_next() {
   # #425: Ctrl-C while gh runs. Each gh call that keeps gh's output in
   # files (#416 review of the bug): the stop says the script was
