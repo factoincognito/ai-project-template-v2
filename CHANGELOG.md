@@ -10,6 +10,7 @@ A bootstrapped project records the tag it was built from.
 - NEXT_SESSION: the newcomer pre-check on v2.9.2, the state of the release and what is left of PBI-1.54 (PR #444)
 - `STATUS.md` and NEXT_SESSION after the v2.9.2 tag (PR #446)
 - Tests for 32 lines of the setup script that no test reached, each shown to fail with its line broken, and PBI-1.54's progress: what is covered, what is unreachable and why (PBI-1.54 item (1), first group) (PR #447)
+- Tests for the rest of the setup script's lines that no test reached, and PBI-1.54's record of every other such line: run but not counted, no command, unreachable or not observable, with the reason (PBI-1.54 item (1), second group) (PR #450)
 
 ### Fixed
 - A stop of the setup script between two steps no longer names the step that had finished as still running: it says "after:" with that step, and a stop at a question names the question (end-to-end run 2, finding r2b) (PR #445)
