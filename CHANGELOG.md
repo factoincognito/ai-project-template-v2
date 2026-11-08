@@ -6,6 +6,8 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.9.2] — 2026-11-08
+
 ### Added
 - Rules edition `2026-11-07-4fdfd54`: session startup gains a paragraph on the startup report (PR #410)
 - Backlog: PBI-1.55, bootstrap options for an umbrella, and the decision that the concept is developed in this template (PR #411)
@@ -20,7 +22,15 @@ A bootstrapped project records the tag it was built from.
 - Rules edition `2026-11-08-b70fd0c`: a new edition id, the text unchanged (PR #432)
 - Rules edition `2026-11-08-6f35986`: session startup marks a file read in part on purpose, where no paragraph requires it in full (PR #435)
 - Rules edition `2026-11-08-b47d79c`: a new edition id, the text unchanged (PR #436)
+- Rules edition `2026-11-08-8378c33`: in `STATUS.md` fields, references to linkable things are written as links (P-9 § 6 (7)) (PR #438)
 - Rules edition `2026-11-08-16a4865`: a new edition id, the text unchanged (PR #439)
+- NEXT_SESSION: the newcomer pre-check on v2.9.1 passed (PR #412); `STATUS.md` after the v2.9.1 tag (PR #414)
+- Tests for 46 more lines of the setup script, with stand-ins that fail one gh or git call on purpose; the setup script is at 96.8% line coverage (PBI-1.54 part (b)) (PR #416)
+
+### Changed
+- The lint and format steps of `build` start with `set -euo pipefail` and their tests forbid a `shell:` key; `.shellcheckrc` and `.simplecov` need a test change like code; the coverage results download runs even when a test shard failed, so the gate prints its figure (PBI-1.54 part (a)) (PR #415)
+- Ctrl-C while the setup script waits on a gh call now shows the stop and the command to continue: gh's output is redirected on gh itself, not on the function that runs it, so the stop no longer goes into a temporary file that is then deleted (PR #425)
+- Ctrl-C while the setup script waits at a question now shows the stop: the question no longer silences error output while it waits for the answer (PR #428)
 
 ## [2.9.1] — 2026-11-07
 
