@@ -302,9 +302,10 @@ seed_project() {
   rm -rf "$w"
 }
 # STUB_GH_FAIL_ON=<mode>:<text>: the first call whose arguments, joined
-# by spaces, hold <text> fails as <mode>, one of emit_failure's; the
-# later ones are not failed. That first call leaves the file fail-on-used
-# next to the log; a test deletes it to fail the next such call too. The
+# by spaces, hold <text> fails as <mode>: one of emit_failure's, or
+# interrupt (gh sends the script Ctrl-C, then fails, #425); the later
+# ones are not failed. That first call leaves the file fail-on-used next
+# to the log; a test deletes it to fail the next such call too. The
 # other settings fail a kind of call (every file read, say); this one
 # fails a single call of that kind.
 if [ -n "${STUB_GH_FAIL_ON:-}" ]; then
@@ -313,6 +314,10 @@ if [ -n "${STUB_GH_FAIL_ON:-}" ]; then
       f="${STUB_GH_LOG%/*}/fail-on-used"
       if [ ! -f "$f" ]; then
         : >"$f"
+        if [ "${STUB_GH_FAIL_ON%%:*}" = interrupt ]; then
+          kill -INT "$PPID"
+          exit 1
+        fi
         emit_failure "${STUB_GH_FAIL_ON%%:*}"
       fi
       ;;
@@ -1374,7 +1379,8 @@ command_arg_violations() {
 #   - each run_gh, gh, git, npm, cat or tee command whose own stdout is
 #     neither captured ($( ), <( ) or backticks around it) nor sent
 #     elsewhere with a stdout redirect (>, >>, 1>, &>) in the same
-#     command, or after the same pipeline or ( ) subshell. The command
+#     command, or after the same pipeline or ( ) subshell, and no
+#     run_gh --to <out> <err>, which sends it to those files. The command
 #     may be written \gh or with a path (/usr/bin/gh, ./bin/gh). A walker
 #     reads the code with its quotes ('...', "...", $'...' with its \
 #     escapes), $( ), $(( )) and ( ) nesting and continuation lines, so a
@@ -1536,7 +1542,9 @@ bypass_lines() {
         if (c ~ /[A-Za-z_]/ && (i == 1 || i == wb || pv !~ /[A-Za-z0-9_$={}\/.-]/ || (pv == "/" && after_path(i)))) {
           w = substr($0, i); match(w, /^[A-Za-z0-9_-]+/); w = substr(w, 1, RLENGTH)
           nw = substr($0, i + length(w), 1)
-          if (w ~ /^(run_gh|gh|git|npm|cat|tee)$/ && nw != "=" && nw != "(" && !captured()) pend[d] = NR
+          # run_gh --to <out> <err> sends the output of gh to those files.
+          if (w ~ /^(run_gh|gh|git|npm|cat|tee)$/ && nw != "=" && nw != "(" && !captured() &&
+            !(w == "run_gh" && substr($0, i + length(w), 6) == " --to ")) pend[d] = NR
           i += length(w); continue
         }
         i++
@@ -2836,6 +2844,37 @@ test_gh_hook_returns_gh_exit_code_and_stderr() {
   }
 }
 
+test_gh_hook_to_puts_gh_output_in_the_files_given_and_returns_its_code() {
+  # #425: run_gh --to <out> <err> <args...> runs gh with the rest of the
+  # arguments unchanged, its prompts off, its stdout in <out> and its
+  # stderr in <err>, nothing on the caller's own, and returns gh's code.
+  local d log rc=0
+  d="$(tmpdir)"
+  log="$d/gh.log"
+  make_stub_gh "$d/gh"
+  (
+    load_script
+    STUB_GH_LOG="$log" BOOTSTRAP_GH="$d/gh" run_gh --to "$d/o" "$d/e" --version
+  ) >"$d/out" 2>"$d/err" || rc=$?
+  [ "$rc" -eq 0 ] || die "run_gh --to returned $rc"
+  [ "$(cat "$d/o")" = "gh version 0.0.0 (stub)" ] || die "gh's stdout is not in the file given"
+  [ "$(cat "$log")" = "$(printf 'GH_PROMPT_DISABLED=1\t--version')" ] || {
+    cat "$log" >&2
+    die "the arguments after the two files changed"
+  }
+  rc=0
+  (
+    load_script
+    STUB_GH_LOG="$log" BOOTSTRAP_GH="$d/gh" run_gh --to "$d/o" "$d/e" api 'a b' '*'
+  ) >>"$d/out" 2>>"$d/err" || rc=$?
+  [ "$rc" -eq 64 ] || die "run_gh --to returned $rc, want the stub's 64"
+  grep -qF 'stub gh: no emulation for: api a b *' "$d/e" || {
+    cat "$d/e" >&2
+    die "gh's stderr is not in the file given"
+  }
+  [ ! -s "$d/out" ] && [ ! -s "$d/err" ] || die "gh's output reached the caller's own"
+}
+
 test_gh_hook_defaults_to_gh_on_the_path() {
   # Unset or empty BOOTSTRAP_GH: the real command name, gh, found on PATH.
   local d log
@@ -3168,12 +3207,13 @@ test_output_routes_without_echo_or_printf_are_caught() {
     '  tee /dev/stderr <<<"Clone failed"' \
     '  cat >/dev/stderr' \
     '  printf "%s" x >/dev/tty' \
+    '  run_gh pr checks --to "$f" "$err" 1' \
     '}')"
   from="$(planted_from)"
   n="$(bypass_lines "$copy" | only_planted "$from" | wc -l | tr -d ' ')"
-  [ "$n" -eq 5 ] || {
+  [ "$n" -eq 6 ] || {
     bypass_lines "$copy" >&2
-    die "caught $n of 5 planted output routes"
+    die "caught $n of 6 planted output routes"
   }
 }
 
@@ -3193,6 +3233,8 @@ test_captured_or_redirected_gh_output_is_allowed() {
     '  run_gh api user | tr -d x >"$f"' \
     '  done < <(run_gh api user)' \
     '  x=cat; y=$(git rev-parse HEAD)' \
+    '  run_gh --to "$f" "$err" api user || rc=$?' \
+    '  GIT_TERMINAL_PROMPT=0 run_gh --to /dev/null /dev/null --version' \
     '}')"
   from="$(planted_from)"
   hits="$(bypass_lines "$copy" | only_planted "$from")"
@@ -13932,6 +13974,128 @@ test_ctrl_c_says_what_exists_and_the_resume_finishes_without_duplicates() {
   expect_rc 0 "$d"
   [ "$(saved_changes "$d")" -eq 1 ] || die "the change was saved again"
   expect_one_of_each "$d"
+}
+
+test_ctrl_c_during_any_gh_call_shows_the_stop_and_the_command_to_run_next() {
+  # #425: Ctrl-C while gh runs. Each gh call that keeps gh's output in
+  # files (#416 review of the bug): the stop says the script was
+  # stopped, and while doing what, and shows the command to continue or
+  # to start again, on the terminal, with exit 130, and no temporary
+  # file is left. Before the fix the stop went into gh's output files,
+  # which the script then deleted: exit 130 and nothing shown.
+  local d c text how line
+  [ "$("$BASH" -c 'trap "echo caught" INT; kill -INT $$; sleep 1' 2>/dev/null)" = caught ] || {
+    skip_test "Ctrl-C is ignored in this shell"
+    return 0
+  }
+  for c in \
+    "--version|plain" \
+    "api -i user|plain" \
+    "repo create octo-user/my-app|plain" \
+    "repo edit octo-user/my-app --delete-branch-on-merge|plain" \
+    "repo clone octo-user/my-app|plain" \
+    "pr create --repo octo-user/my-app|plain" \
+    "pr checks 1|plain" \
+    "repo edit octo-user/my-app --visibility public|public"; do
+    text="${c%|*}"
+    how="${c#*|}"
+    d="$(tmpdir)"
+    working_git "$d"
+    if [ "$how" = public ]; then
+      # Made public at the terminal's yes, after the plan refused the
+      # protection of a private project.
+      export STUB_GH_PROTECT_FAIL=plan
+      printf 'yes\n' >"$d/tty"
+    fi
+    export STUB_GH_FAIL_ON="interrupt:$text"
+    if [ "$how" = public ]; then setup_run "$d" --yes --private; else setup_run "$d" --non-interactive --yes; fi
+    unset STUB_GH_FAIL_ON STUB_GH_PROTECT_FAIL
+    [ -f "$d/fail-on-used" ] || {
+      cat "$d/gh.log" >&2
+      die "$text: the call was not made (test is stale)"
+    }
+    expect_rc 130 "$d"
+    expect_err_shape "$d" "The script was stopped before it finished\."
+    grep -E '^    The script was stopped with Ctrl-C \(or by a request to stop\) while: [A-Z]' "$d/err" >/dev/null || {
+      cat "$d/err" >&2
+      die "$text: the stop does not say what the script was doing"
+    }
+    line="$(grep -A1 -xE 'To continue the setup, run this command:|To start again, run this command:' "$d/out" | sed -n 2p)"
+    case "$line" in
+      "    "*bash*) ;;
+      *)
+        cat "$d/out" >&2
+        die "$text: no command to run next"
+        ;;
+    esac
+    [ -z "$(ls -A "$d/tmp")" ] || {
+      ls -A "$d/tmp" >&2
+      die "$text: temporary files were left"
+    }
+  done
+}
+
+# redirected_function_calls <file>: lines that call a function of the
+# file with its stdout or stderr sent to a file, /dev/null or the other
+# stream's file ("f >x", "f 2>x", "f &>x"). While a trap runs, the
+# redirect of the call it interrupted is still in force, so a stop shown
+# from a trap inside such a call would go into that file (#425). A
+# redirect to the terminal's stderr (>&2) is allowed, and so is a capture
+# ($( )), which runs in a subshell. A call over several lines is read as
+# one. Not seen: a function named through a variable, and a { } group or
+# loop with a redirect (the script has one: in ask_terminal, the group
+# that reads the answer from the terminal, } 2>/dev/null <"$tty").
+redirected_function_calls() {
+  local funcs
+  funcs="$(grep -oE '^[A-Za-z_][A-Za-z0-9_]*\(\)' "$1" | tr -d '()' | LC_ALL=C sort -u | paste -sd'|' -)"
+  awk -v funcs="$funcs" -v sq="'" '
+    pend == "" && /^[[:space:]]*#/ { next }
+    {
+      # A call over several lines (each but the last ending in \) is
+      # read as one, and named by its first line.
+      if (pend == "") start = NR
+      if ($0 ~ /\\$/) { pend = pend substr($0, 1, length($0) - 1) " "; next }
+      full = pend $0
+      pend = ""
+      line = full
+      # Quoted text is a word, never a redirect.
+      gsub(/"([^"\\]|\\.)*"/, "S", line); gsub(sq "[^" sq "]*" sq, "S", line)
+      sub(/[[:space:]]#.*$/, "", line)
+      # Captures run in a subshell: their redirects are the child'"'"'s.
+      while (match(line, /\$\([^()]*\)/)) line = substr(line, 1, RSTART - 1) "X" substr(line, RSTART + RLENGTH)
+      n = split(line, cmd, /&&|\|\||;|\||\(|\)|!/)
+      for (k = 1; k <= n; k++) {
+        c = cmd[k]
+        # The words before the command: keywords, then settings (X=1).
+        while (sub(/^[[:space:]]*(then|do|else|elif|if|while|until)[[:space:]]+/, "", c)) {}
+        sub(/^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*/, "", c)
+        w = c; sub(/[[:space:]].*$/, "", w)
+        if (w !~ ("^(" funcs ")$")) continue
+        r = c; gsub(/[0-9]?>&[12]/, "", r)
+        if (r ~ /(^|[[:space:]])([12&]?>>?)/) { print start ": " full; break }
+      }
+    }
+  ' "$1"
+}
+
+test_no_function_of_the_script_runs_with_its_output_redirected() {
+  local hits bad
+  hits="$(redirected_function_calls "$SCRIPT")"
+  [ -z "$hits" ] || {
+    printf '%s\n' "$hits" >&2
+    die "a function of the script is called with its output redirected (lines above)"
+  }
+  # The check finds each form, and leaves the allowed ones alone.
+  bad="$WORK/redirected.$RANDOM"
+  # shellcheck disable=SC1003 # two planted lines end in a backslash, kept as script text
+  printf '%s\n' 'f() { :; }' 'g() { :; }' \
+    'f >"$out"' '  X=1 f a 2>/dev/null || rc=$?' 'g &>x' 'if f >>log; then :; fi' 'a && f b c >x' \
+    'f >&2' 'x="$(f >y)"' '# f >x' 'f' 'h >x' 'f a | sort >x' 'f "a >b" '"'c >d'" \
+    'f a \' '  b 2>"$err" || rc=$?' 'f a \' '  b || rc=$?' >"$bad"
+  [ "$(redirected_function_calls "$bad" | cut -d: -f1 | tr '\n' ' ')" = "3 4 5 6 7 15 " ] || {
+    redirected_function_calls "$bad" >&2
+    die "the check on planted calls found other lines (want 3 4 5 6 7 15)"
+  }
 }
 
 # advance_again <dir> [options...]: runs the command shown before the
