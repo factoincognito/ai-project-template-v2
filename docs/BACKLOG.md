@@ -1301,6 +1301,18 @@ autonomy. Use a real project as the pilot: acuteping (decided
   **Rules that apply.** The spec needs Adam's intent approval. Script, test and workflow changes are code: test first, reviewed by the role that did not write them. Wording changes to process documents are reviewed by Crog.
 
   **Done when.** Written when specced.
+
+- **[LATER] PBI-1.59** (Adam, 2026-11-08 00:14; the WHAT is Adam's, the HOW is Clead's; not yet specced; when it is built is not decided) — The bootstrapper's README says which kinds of setup it supports, which are not supported but planned, and, where relevant, which are not supported and not planned.
+
+  **Why (Adam, 2026-11-08).** A reader should see from the README what the bootstrapper can set up today and what not, before starting.
+
+  **Facts (Clead, checked 2026-11-08 at `main`).** The README is `bootstrap/bootstrapper-README.md`, built into the bootstrapper's `.github/README.md` (`bootstrap/build.sh`). The setup script supports one kind of setup: a new project with Claude support, with the node, web, python or react-native pack (`--pack`), and continuing a stopped setup (`--resume`, `--again`). The C# pack is laid out by `layout-pack` but not offered by the setup (PBI-1.23 part 2). Planned: PBI-1.24 (without Claude support), PBI-1.55 (umbrellas and existing repositories), PBI-1.23 part 2. Not planned: the paths PBI-1.55 leaves out.
+
+  **Open (Clead, for the spec).** Where the list sits in the README, and how a planned item's line stays true when its PBI changes status (a test against the backlog, or a step in each PBI's "Done when").
+
+  **Rules that apply.** The README is shipped and its prose is checked by `bootstrap/test.sh`; a README change and its tests: test first, reviewed by Crog. The spec is approved by Adam in chat (§ 29 (2)).
+
+  **Done when.** Written when specced.
 - **[SUPERSEDED] PBI-2.1** (the connector was written off 2026-06-28;
   Clead now uses git and the GitHub API, see memory/decisions.md; also
   duplicated PBI-4.3) — Confirm GitHub connector write access: verify
