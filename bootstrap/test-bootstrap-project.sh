@@ -14001,6 +14001,7 @@ test_ctrl_c_during_any_gh_call_shows_the_stop_and_the_command_to_run_next() {
     "repo create octo-user/my-app|plain" \
     "repo edit octo-user/my-app --delete-branch-on-merge|plain" \
     "repo clone octo-user/my-app|plain" \
+    "pr create --repo octo-user/my-app|plain" \
     "pr checks 1|plain" \
     "repo edit octo-user/my-app --visibility public|public"; do
     text="${c%|*}"
@@ -14047,16 +14048,23 @@ test_ctrl_c_during_any_gh_call_shows_the_stop_and_the_command_to_run_next() {
 # redirect of the call it interrupted is still in force, so a stop shown
 # from a trap inside such a call would go into that file (#425). A
 # redirect to the terminal's stderr (>&2) is allowed, and so is a capture
-# ($( )), which runs in a subshell. Not seen: a call over several lines,
-# a function named through a variable, and a { } group or loop with a
-# redirect (the script has none).
+# ($( )), which runs in a subshell. A call over several lines is read as
+# one. Not seen: a function named through a variable, and a { } group or
+# loop with a redirect (the script has one: in ask_terminal, the group
+# that reads the answer from the terminal, } 2>/dev/null <"$tty").
 redirected_function_calls() {
   local funcs
   funcs="$(grep -oE '^[A-Za-z_][A-Za-z0-9_]*\(\)' "$1" | tr -d '()' | LC_ALL=C sort -u | paste -sd'|' -)"
   awk -v funcs="$funcs" -v sq="'" '
-    /^[[:space:]]*#/ { next }
+    pend == "" && /^[[:space:]]*#/ { next }
     {
-      line = $0
+      # A call over several lines (each but the last ending in \) is
+      # read as one, and named by its first line.
+      if (pend == "") start = NR
+      if ($0 ~ /\\$/) { pend = pend substr($0, 1, length($0) - 1) " "; next }
+      full = pend $0
+      pend = ""
+      line = full
       # Quoted text is a word, never a redirect.
       gsub(/"([^"\\]|\\.)*"/, "S", line); gsub(sq "[^" sq "]*" sq, "S", line)
       sub(/[[:space:]]#.*$/, "", line)
@@ -14071,7 +14079,7 @@ redirected_function_calls() {
         w = c; sub(/[[:space:]].*$/, "", w)
         if (w !~ ("^(" funcs ")$")) continue
         r = c; gsub(/[0-9]?>&[12]/, "", r)
-        if (r ~ /(^|[[:space:]])([12&]?>>?)/) { print NR ": " $0; break }
+        if (r ~ /(^|[[:space:]])([12&]?>>?)/) { print start ": " full; break }
       }
     }
   ' "$1"
@@ -14086,12 +14094,14 @@ test_no_function_of_the_script_runs_with_its_output_redirected() {
   }
   # The check finds each form, and leaves the allowed ones alone.
   bad="$WORK/redirected.$RANDOM"
+  # shellcheck disable=SC1003 # two planted lines end in a backslash, kept as script text
   printf '%s\n' 'f() { :; }' 'g() { :; }' \
     'f >"$out"' '  X=1 f a 2>/dev/null || rc=$?' 'g &>x' 'if f >>log; then :; fi' 'a && f b c >x' \
-    'f >&2' 'x="$(f >y)"' '# f >x' 'f' 'h >x' 'f a | sort >x' 'f "a >b" '"'c >d'" >"$bad"
-  [ "$(redirected_function_calls "$bad" | cut -d: -f1 | tr '\n' ' ')" = "3 4 5 6 7 " ] || {
+    'f >&2' 'x="$(f >y)"' '# f >x' 'f' 'h >x' 'f a | sort >x' 'f "a >b" '"'c >d'" \
+    'f a \' '  b 2>"$err" || rc=$?' 'f a \' '  b || rc=$?' >"$bad"
+  [ "$(redirected_function_calls "$bad" | cut -d: -f1 | tr '\n' ' ')" = "3 4 5 6 7 15 " ] || {
     redirected_function_calls "$bad" >&2
-    die "the check on planted calls found other lines (want 3 4 5 6 7)"
+    die "the check on planted calls found other lines (want 3 4 5 6 7 15)"
   }
 }
 
