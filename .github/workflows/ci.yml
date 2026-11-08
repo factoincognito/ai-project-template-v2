@@ -5,7 +5,8 @@
 #
 # The job is named `build` because branch protection requires that name.
 # Its first step is the test-first check: a pull request that changes code
-# (scripts, workflows, pack files, the shipped dotfiles) without changing
+# (scripts, workflows, pack files, the shipped dotfiles, and the lint and
+# coverage configurations .shellcheckrc and .simplecov) without changing
 # a test fails. Patterns: see the --code, --test and --ignore flags below.
 # Its second step checks that STATUS.md and the shipped stub keep the
 # headings the product owner's overview reads (tools/check-status.sh); it
@@ -33,6 +34,9 @@
 # selection (PBI-1.41 part (b)). shfmt is the official Linux amd64 release
 # binary, its SHA-256 checked before it is run; like shellcheck, it is
 # never copied into the repository or shipped.
+# The lint and format steps set no shell: of their own, and each script
+# starts with `set -euo pipefail`, so a wrong hash or version stops it
+# whatever shell runs it (PBI-1.41 follow-up (4)).
 name: CI
 
 on:
@@ -50,7 +54,7 @@ jobs:
           # Full history, so the base branch is there to compare with.
           fetch-depth: 0
       - name: Require a test change with a code change
-        run: bash .github/scripts/require-test-change.sh --code '*.sh' 'bootstrap/*' 'tools/*' '.github/workflows/*' '.github/scripts/*' 'languages/*' '.gitattributes' '.gitignore' --test 'bootstrap/test.sh' 'bootstrap/test-*.sh' 'tools/test-*.sh' 'languages/*.test.ts' 'languages/*.test.tsx' 'languages/*.spec.ts' 'languages/*.spec.tsx' 'languages/*__tests__/*' 'languages/*/src/tests/*' 'languages/*/starter/tests/*' 'languages/*/test_*.py' 'languages/*.e2e.ts' --ignore '*.md' 'bootstrap/stubs/licenses/*' 'bootstrap/stubs/rules/*'
+        run: bash .github/scripts/require-test-change.sh --code '*.sh' 'bootstrap/*' 'tools/*' '.github/workflows/*' '.github/scripts/*' 'languages/*' '.gitattributes' '.gitignore' '.shellcheckrc' '.simplecov' --test 'bootstrap/test.sh' 'bootstrap/test-*.sh' 'tools/test-*.sh' 'languages/*.test.ts' 'languages/*.test.tsx' 'languages/*.spec.ts' 'languages/*.spec.tsx' 'languages/*__tests__/*' 'languages/*/src/tests/*' 'languages/*/starter/tests/*' 'languages/*/test_*.py' 'languages/*.e2e.ts' --ignore '*.md' 'bootstrap/stubs/licenses/*' 'bootstrap/stubs/rules/*'
       - name: Check the STATUS.md format
         run: bash tools/check-status.sh
       - name: Check the triggers of ci.yml and packs.yml
@@ -62,6 +66,7 @@ jobs:
           SHELLCHECK_VERSION: 0.11.0
           SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
         run: |
+          set -euo pipefail
           url="https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION/shellcheck-v$SHELLCHECK_VERSION.linux.x86_64.tar.xz"
           dir="$RUNNER_TEMP/shellcheck"
           mkdir -p "$dir"
@@ -75,6 +80,7 @@ jobs:
           SHFMT_VERSION: 3.14.1
           SHFMT_SHA256: 76e77641faa025814b77f153b29796b8e6fa2fca03e0c76a691608b86c7ea7bf
         run: |
+          set -euo pipefail
           url="https://github.com/mvdan/sh/releases/download/v$SHFMT_VERSION/shfmt_v${SHFMT_VERSION}_linux_amd64"
           dir="$RUNNER_TEMP/shfmt"
           mkdir -p "$dir"

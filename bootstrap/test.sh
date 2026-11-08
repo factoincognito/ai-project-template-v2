@@ -2524,7 +2524,11 @@ test_workflow_bootstrapper_test_gates_coverage_at_80_on_every_result() {
   [ -n "$dl" ] || die "bootstrapper-test does not download the coverage results"
   wf_has_line "$dl" '          path: coverage-results' || die "the coverage results are not downloaded to coverage-results"
   wf_has_line "$dl" '          merge-multiple: true' || die "the coverage results are not merged into one folder"
-  wf_has_line "$dl" "        if: needs.changes.outputs.needed == 'true'" || die "the coverage download runs when the tests were skipped"
+  # Also when a step before it failed, the shard check among them: without
+  # always() the download is skipped and the gate reports every result
+  # missing instead of the coverage (the review of #397). Not when the
+  # tests were skipped.
+  wf_has_line "$dl" "        if: always() && needs.changes.outputs.needed == 'true'" || die "the coverage download does not run exactly when the tests were needed, also after a failed step"
   gate="$(wf_step bootstrapper-test '^ *run: bash bootstrap/coverage[.]sh gate ')"
   [ -n "$gate" ] || die "bootstrapper-test has no coverage gate"
   # Also when the download failed (the gate then names what is missing),
@@ -4289,8 +4293,13 @@ test_ci_build_lints_every_script_with_shellcheck_pinned_to_0_11_0() {
     die "the lint step does not pin the archive's SHA-256 $SHELLCHECK_SHA256_PINNED"
   # Nothing lets the step pass on a finding.
   ! grep -nE '^        (if|continue-on-error):' <<<"$step" >&2 || die "the lint step can be skipped or let fail (line above)"
+  # GitHub's default shell runs the script with bash -e; a shell: key can
+  # drop the -e, so the step keeps the default (PBI-1.41 follow-up (4)).
+  ! grep -nE '^        shell:' <<<"$step" >&2 || die "the lint step sets its own shell (line above)"
   script="$(printf '%s\n' "$step" | wf_run_block)"
   [ -n "$script" ] || die "the lint step has no run: | script"
+  # The script stops on its own at the first failure, whatever runs it.
+  [ "$(head -n 1 <<<"$script")" = 'set -euo pipefail' ] || die "the lint step's script does not start with set -euo pipefail"
   grep -qxF 'url="https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION/shellcheck-v$SHELLCHECK_VERSION.linux.x86_64.tar.xz"' <<<"$script" ||
     die "the lint step does not download the official release archive"
   ! grep -nE '\|\| *(true|:)|--severity|(^| )-S|(^| )-e ' <<<"$script" >&2 || die "the lint step loosens shellcheck or ignores its result (line above)"
@@ -4344,7 +4353,9 @@ FC
 }
 
 # run_lint_step <dir> <sha256>: runs the lint step's script in the
-# repository, as GitHub runs it, with the fakes and the given pinned hash.
+# repository with the fakes and the given pinned hash. It runs with plain
+# bash, without the -e of GitHub's default shell, so only the script's
+# own set line can stop it at a failure (PBI-1.41 follow-up (4)).
 run_lint_step() {
   local d="$1" sha="$2" script="$1/step.sh" rc
   lint_step | wf_run_block >"$script"
@@ -4352,7 +4363,7 @@ run_lint_step() {
   set +e
   LINT_OUT="$(cd "$REPO" && PATH="$d/bin:$PATH" RUNNER_TEMP="$d/tmp" \
     SHELLCHECK_VERSION="$SHELLCHECK_VERSION_PINNED" SHELLCHECK_SHA256="$sha" FAKE_FINDING="${FAKE_FINDING:-}" \
-    "$BASH" --noprofile --norc -e "$script" 2>&1)"
+    "$BASH" --noprofile --norc "$script" 2>&1)"
   rc=$?
   set -e
   return "$rc"
@@ -4419,8 +4430,11 @@ test_ci_build_checks_the_script_format_with_shfmt_pinned_to_3_14_1() {
     die "the format step does not pin the binary's SHA-256 $SHFMT_SHA256_PINNED"
   # Nothing lets the step pass on a difference.
   ! grep -nE '^        (if|continue-on-error):' <<<"$step" >&2 || die "the format step can be skipped or let fail (line above)"
+  # As in the lint step: no shell: key, and a script that stops on its own.
+  ! grep -nE '^        shell:' <<<"$step" >&2 || die "the format step sets its own shell (line above)"
   script="$(printf '%s\n' "$step" | wf_run_block)"
   [ -n "$script" ] || die "the format step has no run: | script"
+  [ "$(head -n 1 <<<"$script")" = 'set -euo pipefail' ] || die "the format step's script does not start with set -euo pipefail"
   grep -qxF 'url="https://github.com/mvdan/sh/releases/download/v$SHFMT_VERSION/shfmt_v${SHFMT_VERSION}_linux_amd64"' <<<"$script" ||
     die "the format step does not download the official release binary"
   ! grep -nE '\|\| *(true|:)' <<<"$script" >&2 || die "the format step ignores a result (line above)"
@@ -4470,8 +4484,8 @@ FC
 }
 
 # run_format_step <dir> <sha256> [<repo>]: runs the format step's script
-# in <repo> (default: this repository), as GitHub runs it, with the fakes
-# and the given pinned hash.
+# in <repo> (default: this repository) with the fakes and the given
+# pinned hash. Like run_lint_step, with plain bash, without -e.
 run_format_step() {
   local d="$1" sha="$2" repo="${3:-$REPO}" script="$1/step.sh" rc
   format_step | wf_run_block >"$script"
@@ -4479,7 +4493,7 @@ run_format_step() {
   set +e
   FORMAT_OUT="$(cd "$repo" && PATH="$d/bin:$PATH" RUNNER_TEMP="$d/tmp" \
     SHFMT_VERSION="$SHFMT_VERSION_PINNED" SHFMT_SHA256="$sha" FAKE_DIFF="${FAKE_DIFF:-}" \
-    "$BASH" --noprofile --norc -e "$script" 2>&1)"
+    "$BASH" --noprofile --norc "$script" 2>&1)"
   rc=$?
   set -e
   return "$rc"
