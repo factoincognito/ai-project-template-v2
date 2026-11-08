@@ -29,6 +29,7 @@ P-9 § 6 `STATUS.md`
 (4) A session whose work changes what a field says updates the file in the same PR and sets "Last update". A change that has no PR of its own, such as an escalation, gets a PR that updates only `STATUS.md`.
 (5) A blocker that waits on the product owner starts with "Product Owner:", written exactly so. A session that finds a blocker resolved removes it the same way.
 (6) The specification of the format is the header of the project's `STATUS.md`.
+(7) In the fields, a reference to something that can be linked (a backlog entry, a PR, a commit, a file, a repository) is written as a Markdown link to it, and a line of a file as a link at a commit of the default branch. A session that changes a field writes its own references that way; older text gets its links when its field is next changed.
 
 P-9 § 8 Renames
 (1) When a name or path changes, live references are repointed; dated history keeps the names it was written with.
