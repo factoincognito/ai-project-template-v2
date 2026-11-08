@@ -596,23 +596,36 @@ wait_for_enter() {
 # Returns 0 for yes, 1 for any other answer, an empty one, or when there
 # is no terminal to read from. A terminal that cannot be read is a no at
 # once, with the question line ended. One that can be read but not opened
-# (/dev/tty with no terminal attached) is a no too: the redirection
-# fails, nothing in the braces runs, the question is shown with its line
-# ended, and that is not a yes. Keys typed before the question was shown
-# are discarded first (discard_typeahead, finding r1f), with the terminal
-# opened once for the discard and the read.
+# (/dev/tty with no terminal attached) is a no too: the open, tried first
+# in a subshell with its error silenced, fails, nothing in the braces
+# runs, the question is shown with its line ended, and that is not a yes.
+# Keys typed before the question was shown are discarded first
+# (discard_typeahead, finding r1f), with the terminal opened once for the
+# discard and the read. No redirect of stderr is in force in this shell
+# while it waits: a trap after Ctrl-C runs with the redirects of the
+# command it interrupted, so a 2>/dev/null here sent the stop to
+# /dev/null (#428). So the group has only the terminal as its stdin, and
+# the answer is read from it in a $( ) subshell, which silences its own
+# errors.
 ask_terminal() {
   local tty="${BOOTSTRAP_TTY:-/dev/tty}" got="" opened="" eof=""
   block_start
   read_line "$1"
-  if [ -r "$tty" ]; then
+  if [ -r "$tty" ] && (: <"$tty") 2>/dev/null; then
     {
       opened=1
       discard_typeahead
       answer_line "$2 [no]:"
       printf ' '
-      IFS= read -r got || eof=1
-    } 2>/dev/null <"$tty" || true
+      # The line read, also a last one with no line break, and read's
+      # own result: a failed read (end of input) is eof, as before.
+      got="$(
+        IFS= read -r line 2>/dev/null
+        rc=$?
+        printf '%s' "${line-}"
+        exit "$rc"
+      )" || eof=1
+    } <"$tty" || true
   fi
   if [ -z "$opened" ]; then
     answer_line "$2 [no]:"
