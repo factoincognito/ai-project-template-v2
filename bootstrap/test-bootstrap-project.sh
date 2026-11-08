@@ -9662,6 +9662,28 @@ test_again_after_another_option_stops_and_says_it_comes_first() {
   [ -z "$(ls -A "$d/cwd")" ] || die "something was created"
 }
 
+test_an_option_given_only_spaces_is_refused_as_empty() {
+  # PBI-1.54: parse_args refuses only a value with no characters, so a
+  # value of spaces reaches check_name, check_owner and check_dir, which
+  # trim it to nothing and refuse it as empty: exit 2, each option's own
+  # problem line, and nothing checked or created.
+  local d opt
+  d="$(tmpdir)"
+  whole "$d" --name " " --owner "  " --dir " "
+  expect_rc 2 "$d"
+  for opt in --name --owner --dir; do
+    grep -xF "    - $opt: It cannot be empty." "$d/err" >/dev/null || {
+      cat "$d/err" >&2
+      die "$opt: no line saying it cannot be empty"
+    }
+  done
+  [ ! -s "$d/gh.log" ] || {
+    cat "$d/gh.log" >&2
+    die "gh was called"
+  }
+  [ -z "$(ls -A "$d/cwd")" ] || die "something was created"
+}
+
 test_an_answer_with_a_newline_or_a_folder_inside_the_copy_is_not_saved_and_the_long_command_is_shown() {
   local t out
   t="$(tmpdir)"
