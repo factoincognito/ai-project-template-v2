@@ -13,6 +13,10 @@ A bootstrapped project records the tag it was built from.
 - Backlog: PBI-1.55, the paths for existing repositories (PR #418)
 - Backlog: PBI-1.59, the bootstrapper's README lists what it can set up (PR #419)
 - Rules edition `2026-11-08-9239d41`: a new edition id, the text unchanged (PR #422)
+- Rules editions `2026-11-08-7160ddd` and `2026-11-08-1233ece`: new edition ids, the text unchanged (PRs #426 and #427)
+- Rules edition `2026-11-08-54894ce`: the delegation line of session startup names scheduled-task changes, tool installs and branch deletions (PR #430)
+- Backlog: the `DONE` entries move to `docs/BACKLOG-DONE.md`, which `docs/BACKLOG.md` includes for vizi; `RULES.md` L § 2 (1) names the file (PR #429)
+- Backlog: PBI-1.60 and PBI-1.61, follow-ups of the move (PR #431)
 
 ## [2.9.1] — 2026-11-07
 
