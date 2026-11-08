@@ -1,7 +1,7 @@
-2026-11-08-7160ddd
+2026-11-08-54894ce
 d44f2c44941b802417d1dcd282606195328e93fe1896296d530005ea14637778  RULES.md
 4ad72e0ca38dd38cd8e9c21b62f5530fe11291d8cef1d8fef111bf77e52789b7  policies/third-party-ip.md
-d11942511db99e5c898b9b6a91bf796f7635bd04303db71d009b8c067f6a3334  processes/P-1-session-startup.md
+55735ee38a3f13eb063258d61783047d3e288ab2d587621ba21e81260252b999  processes/P-1-session-startup.md
 fc0bcd573766dca8a3f9d83790e1f97d47a628eca823c41bb3a4d8a12ce05d2d  processes/P-10-unattended-and-scheduled-work.md
 5087a8f5ab3f77f04311becf694d423b2c3abf744584452fbd05b7d525d69bcb  processes/P-11-engineering-infrastructure.md
 1ef4013d1ccfafa42ba776ef01a97b4bd6187628de1a75bfc1738a7b538a5c82  processes/P-2-change-flow.md

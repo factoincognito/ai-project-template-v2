@@ -4,11 +4,11 @@ Adopted: Adam, 2026-11-05, the sign-off of the product office's projects, record
 Pointer: the product office is the repository `factoincognito/product-office` (private). Its Rules are its `RULES.md` and `processes/`, its entry point its `CLAUDE.md`. This project's status is in `STATUS.md`.
 
 L § 2 Files and citations
-(1) `docs/BACKLOG.md` is the project's backlog, `docs/SPEC.md` its specification, `memory/decisions.md` its decisions file (longer records in `docs/decisions/`), `STATUS.md` its status, `docs/NEXT_SESSION.md` its staging file, `CHANGELOG.md` its change history, and `memory/` holds the memory files Clead maintains: `project.md` the purpose and goals, `context.md` the session context. `docs/NEWCOMER_PRECHECK.md` is a local process (L § 13).
+(1) `docs/BACKLOG.md` is the project's backlog, `docs/SPEC.md` its specification, `memory/decisions.md` its decisions file (longer records in `docs/decisions/`), `STATUS.md` its status, `docs/NEXT_SESSION.md` its staging file, `CHANGELOG.md` its change history, and `memory/` holds the memory files Clead maintains: `project.md` the purpose and goals, `context.md` the session context. `docs/NEWCOMER_PRECHECK.md` is a local process (L § 13). `docs/BACKLOG-DONE.md` holds the backlog's entries marked `DONE`, moved there in the PR that marks them, under the heading of their section; an entry ID is used once across both files, and a new ID is checked against both.
 (2) What ships to the projects the template makes is what `bootstrap/manifest.txt` lists and what `bootstrap/stubs/` holds. Every other file is the template's own.
 (3) No hurdles or retrospective log is kept. A retrospective is put together when it is wanted, from `memory/decisions.md` and `memory/context.md`.
 (4) In this file and the project's other files, `§ n` and `P-n § m` refer to the Rules and Processes of the product office, and `L § n` to this file.
-Adopted: (1) not recorded, carried over from `CLAUDE.md` "Where everything is"; (2) carried over from `bootstrap/manifest.txt` (PBI-1.10); (3) Adam, 2026-06-28, `memory/context.md` ("Adam's call") and `memory/decisions.md`; (4) by Clead at the cutover, as the `RULES.md` stub's L § 2 (2)
+Adopted: (1) not recorded, carried over from `CLAUDE.md` "Where everything is", and `docs/BACKLOG-DONE.md` Adam, 2026-11-08 04:03, "Apyr on backlog done", product-office DECISIONS.md, wording by Clead under product-office `RULES.md` § 3 (4); (2) carried over from `bootstrap/manifest.txt` (PBI-1.10); (3) Adam, 2026-06-28, `memory/context.md` ("Adam's call") and `memory/decisions.md`; (4) by Clead at the cutover, as the `RULES.md` stub's L § 2 (2)
 
 L § 3 Session start
 (1) At session start, Clead also reads `memory/context.md`.

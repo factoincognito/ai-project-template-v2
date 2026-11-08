@@ -705,7 +705,20 @@ awk_run() {
 # run_gh <args...>: runs gh, or $BOOTSTRAP_GH, with gh's own prompts
 # turned off. They misbehave in Git Bash's terminal, so the script asks
 # its own questions.
+# run_gh --to <out> <err> <args...>: the same, with gh's stdout in the
+# file <out> and its stderr in <err>. Give the files here, never as a
+# redirect of the call (run_gh ... >"$out"): while a trap runs, the
+# redirect of the function call it interrupted is still in force, so a
+# stop after Ctrl-C during gh went into those files, which the script
+# then deleted, and the user saw nothing (#425). A redirect of gh itself
+# is made in gh's own process.
 run_gh() {
+  if [ "${1:-}" = --to ]; then
+    local out="$2" err="$3"
+    shift 3
+    GH_PROMPT_DISABLED=1 "${BOOTSTRAP_GH:-gh}" "$@" >"$out" 2>"$err"
+    return
+  fi
   GH_PROMPT_DISABLED=1 "${BOOTSTRAP_GH:-gh}" "$@"
 }
 
@@ -2184,7 +2197,7 @@ preflight_git() {
 GH_PROBLEM=""
 check_gh() {
   local help=""
-  if ! run_gh --version >/dev/null 2>&1; then
+  if ! run_gh --to /dev/null /dev/null --version; then
     GH_PROBLEM=missing
     return 1
   fi
@@ -2682,7 +2695,7 @@ api_call() {
   out="$(make_temp)"
   err="$(make_temp)"
   API_RC=0
-  run_gh api -i "$@" >"$out" 2>"$err" || API_RC=$?
+  run_gh --to "$out" "$err" api -i "$@" || API_RC=$?
   API_STATUS="" API_HEADERS="" API_BODY="" API_BODY_CR="" API_MESSAGE=""
   API_ERR="$(tr -d '\r' <"$err")"
   while IFS= read -r raw || [ -n "$raw" ]; do
@@ -3448,7 +3461,7 @@ create_project() {
   step_start "Creating the project $IN_OWNER/$IN_NAME on GitHub"
   out="$(make_temp)"
   err="$(make_temp)"
-  run_gh repo create "$IN_OWNER/$IN_NAME" --template "$BOOTSTRAPPER" "--$IN_VISIBILITY" --description "$IN_DESCRIPTION" >"$out" 2>"$err" || rc=$?
+  run_gh --to "$out" "$err" repo create "$IN_OWNER/$IN_NAME" --template "$BOOTSTRAPPER" "--$IN_VISIBILITY" --description "$IN_DESCRIPTION" || rc=$?
   CREATE_ERR="$(tr -d '\r' <"$err")"
   rm -f "$out" "$err"
   if [ "$rc" -eq 0 ]; then
@@ -3666,7 +3679,7 @@ offer_public() {
   }
   out="$(make_temp)"
   err="$(make_temp)"
-  run_gh repo edit "$IN_OWNER/$IN_NAME" --visibility public --accept-visibility-change-consequences >"$out" 2>"$err" || rc=$?
+  run_gh --to "$out" "$err" repo edit "$IN_OWNER/$IN_NAME" --visibility public --accept-visibility-change-consequences || rc=$?
   raw="$(cat "$out" "$err" | tr -d '\r')"
   rm -f "$out" "$err"
   if [ "$rc" -eq 0 ]; then
@@ -3732,7 +3745,7 @@ set_merge_settings() {
   step_start "Setting how proposed changes are added to the project"
   out="$(make_temp)"
   err="$(make_temp)"
-  run_gh repo edit "$IN_OWNER/$IN_NAME" --delete-branch-on-merge --enable-squash-merge >"$out" 2>"$err" || rc=$?
+  run_gh --to "$out" "$err" repo edit "$IN_OWNER/$IN_NAME" --delete-branch-on-merge --enable-squash-merge || rc=$?
   raw="$(tr -d '\r' <"$err")"
   rm -f "$out" "$err"
   if [ "$rc" -ne 0 ]; then
@@ -3896,7 +3909,7 @@ try_clone() {
   if [ -n "$MADE_DIR" ] && [ -e "$MADE_DIR" ]; then rm -rf -- "$MADE_DIR"; fi
   out="$(make_temp)"
   err="$(make_temp)"
-  GIT_TERMINAL_PROMPT=0 run_gh repo clone "$IN_OWNER/$IN_NAME" "$IN_DIR" >"$out" 2>"$err" || rc=$?
+  GIT_TERMINAL_PROMPT=0 run_gh --to "$out" "$err" repo clone "$IN_OWNER/$IN_NAME" "$IN_DIR" || rc=$?
   raw="$(cat "$out" "$err" | tr -d '\r')"
   rm -f "$out" "$err"
   [ "$rc" -ne 0 ] || return 0
@@ -4830,8 +4843,8 @@ propose_change() {
   out="$(make_temp)"
   err="$(make_temp)"
   cat <<<"$PR_BODY" >"$body"
-  run_gh pr create --repo "$IN_OWNER/$IN_NAME" --base main --head "$SETUP_BRANCH" --title "Set up $IN_NAME" \
-    --body-file "$body" >"$out" 2>"$err" || rc=$?
+  run_gh --to "$out" "$err" pr create --repo "$IN_OWNER/$IN_NAME" --base main --head "$SETUP_BRANCH" \
+    --title "Set up $IN_NAME" --body-file "$body" || rc=$?
   PR_URL="$(tr -d '\r' <"$out" | grep -E '^https://[^ ]*/pull/[0-9]+$' | tail -1)" || PR_URL=""
   raw="$(cat "$out" "$err" | tr -d '\r')"
   rm -f "$body" "$out" "$err"
@@ -4917,7 +4930,7 @@ look_at_build() {
   local out err rc=0 lines raw line runs="" pr_runs="" b
   out="$(make_temp)"
   err="$(make_temp)"
-  run_gh pr checks "$PR_NUMBER" --repo "$IN_OWNER/$IN_NAME" --json name,bucket,event --jq "$BUILD_JQ" >"$out" 2>"$err" || rc=$?
+  run_gh --to "$out" "$err" pr checks "$PR_NUMBER" --repo "$IN_OWNER/$IN_NAME" --json name,bucket,event --jq "$BUILD_JQ" || rc=$?
   lines="$(tr -d '\r' <"$out")"
   raw="$(tr -d '\r' <"$err")"
   rm -f "$out" "$err"
