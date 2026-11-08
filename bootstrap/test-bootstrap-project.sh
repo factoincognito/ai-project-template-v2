@@ -16888,7 +16888,7 @@ test_a_line_of_work_renamed_in_the_copy_during_the_wait_is_not_added() {
   export BOOTSTRAP_SLEEP="$WORK/refuse/sleep"
   expect_rc 1 "$d"
   expect_err_shape "$d" "git could not tell which change the script sent to GitHub: the line of work bootstrap-setup is missing from the copy of the project on this computer, in \./my-app\. The proposed change stays open on GitHub\."
-  ! calls_from_create "$d" | grep -q '^pr merge ' || die "the change was added"
+  ! calls_from_create "$d" | grep '^pr merge ' >/dev/null || die "the change was added"
   [ "$(in_git --git-dir="$(bare_of "$d")" rev-list --count main)" -eq 1 ] || die "main has a new change"
   expect_continue_command "$d" " --resume"
 }
@@ -16913,7 +16913,7 @@ test_a_project_without_the_table_of_decisions_is_not_set_up_without_protection()
   unset STUB_GH_TEMPLATE STUB_GH_PROTECT_FAIL
   expect_rc 1 "$d"
   expect_err_shape "$d" "The file memory/decisions\.md in the copy of the project has no table of decisions, where the setup writes that the main version is not protected\."
-  sed -n 2p "$d/err" | grep -qF "Report it to the bootstrapper's maintainers" || {
+  sed -n 2p "$d/err" | grep -F "Report it to the bootstrapper's maintainers" >/dev/null || {
     cat "$d/err" >&2
     die "the next action is not to report the broken bootstrapper"
   }
@@ -16939,7 +16939,7 @@ test_a_project_without_its_pack_folder_is_reported_as_a_broken_bootstrapper() {
     cat "$d/err" >&2
     die "the details do not name the folder"
   }
-  sed -n 2p "$d/err" | grep -qF "Report it to the bootstrapper's maintainers" || {
+  sed -n 2p "$d/err" | grep -F "Report it to the bootstrapper's maintainers" >/dev/null || {
     cat "$d/err" >&2
     die "the next action is not to report the broken bootstrapper"
   }
