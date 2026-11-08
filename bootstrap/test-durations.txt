@@ -76,7 +76,7 @@ test_a_signed_out_gh_is_guided_to_sign_in 0.1 0.3 1.3 0.2
 test_a_stop_after_the_project_exists_saves_resume_and_the_guide_offers_the_short_command_with_allow 20.8 39.8 34.2 60.5
 test_a_stop_and_the_closing_next_step_come_after_one_blank_line 0.1 0.2 0.3 0.1
 test_a_stop_at_a_guide_shows_the_short_command_and_saves_the_long_ones_arguments 0.3 0.6 3.2 0.4
-test_a_stop_at_a_question_names_the_question 0.2 0 1.4 0.2
+test_a_stop_at_a_question_names_the_question 0.5 0 3.7 0.6
 test_a_stop_before_any_answer_shows_the_plain_command_and_it_works 0.1 0.3 1.3 0.2
 test_a_stop_between_steps_names_the_last_step_as_finished 0.1 0 1.0 0.1
 test_a_stop_that_runs_no_trap_still_leaves_the_command_to_continue 26.9 40.9 52.8 38.0
@@ -94,6 +94,8 @@ test_a_wrong_answer_is_explained_and_asked_again 0.1 0.2 1.1 0.1
 test_actions_turned_off_stop_before_the_copy_with_their_guide 1.9 4.0 25.3 2.3
 test_actions_turned_on_are_checked_right_after_protection 1.0 2.8 11.4 1.4
 test_after_the_script_points_to_claudes_help_pages_and_names_the_github_steps 0.1 0.1 0.4 0.1
+test_again_after_another_option_stops_and_says_it_comes_first 0.1 0 0.4 0.1
+test_again_names_the_project_of_answers_saved_as_option_equals_value_or_says_none_was_given 0.1 0 0.3 0.1
 test_again_runs_with_the_saved_answers_and_adds_the_options_after_them 0.3 0.6 3.1 0.4
 test_again_without_a_saved_file_stops_with_a_plain_error_and_runs_nothing 0.1 0.1 1.3 0.1
 test_allow_unprotected_goes_on_without_protection_and_writes_the_decision 60.6 106.7 106.8 186.4
@@ -109,7 +111,9 @@ test_an_id_of_the_new_main_that_is_not_one_stops_before_the_finish 1.1 2.4 14.4 
 test_an_instruction_and_the_command_below_it_are_in_two_colours 0.1 0.1 0.3 0.1
 test_an_offered_command_run_after_yes_never_doubles_a_blank_line 0.1 0.1 0.3 0.1
 test_an_offered_command_runs_after_yes_through_the_runner 0.1 0.1 0.6 0.1
+test_an_offered_command_that_fails_is_said_to_have_failed_and_the_check_runs_again 0.1 0 0.6 0.1
 test_an_older_script_is_told_to_download_the_current_one 0.1 0.2 1.4 0.2
+test_an_option_given_only_spaces_is_refused_as_empty 0.1 0 0.5 0.1
 test_an_unexpected_failure_says_what_exists_and_leaves_no_temporary_files 1.8 3.8 22.8 2.2
 test_an_unknown_answer_after_create_says_what_failed_and_how_to_continue 1.7 3.7 24.7 2.5
 test_an_unknown_licence_given_as_an_option_stops_before_anything_is_created 0.6 1.1 5.5 0.6
@@ -120,6 +124,7 @@ test_an_unterminated_heredoc_is_flagged 0.1 0.4 0.5 0.1
 test_answering_no_every_time_reads_input_on_every_round 0.2 0.4 2.3 0.4
 test_answering_no_or_nothing_to_an_offer_runs_nothing 0.2 0.4 2.3 0.3
 test_answers_have_spaces_and_carriage_returns_removed 0.1 0.2 0.9 0.1
+test_answers_that_cannot_be_moved_into_place_are_not_saved_and_leave_no_file 0.1 0 0.3 0.1
 test_api_call_keeps_a_carriage_return_on_a_last_line_without_a_line_end 0.1 0.1 0.2 0.1
 test_api_call_keeps_carriage_returns_only_when_asked 0.1 0.1 0.4 0.1
 test_ask_terminal_says_no_at_once_when_there_is_no_terminal 0.1 0.1 0.1 0.1
@@ -160,6 +165,7 @@ test_error_without_raw_text_has_no_support_block 0.1 0.1 0.1 0.1
 test_every_command_comes_right_after_its_instruction_line 0.1 0.1 0.2 0.1
 test_every_gh_sign_in_guide_says_what_to_answer_when_gh_asks_to_authenticate_git 0.3 0.6 3.3 0.5
 test_every_guide_says_why_how_what_you_see_and_how_it_is_checked 5.1 8.8 30.5 7.6
+test_every_numbered_choice_gives_its_value_and_a_refused_visibility_is_asked_again 0.6 0 3.5 0.5
 test_every_pack_leaves_exactly_the_expected_tree 8.5 17.4 78.4 9.3
 test_every_problem_is_listed_at_once 0.1 0.2 0.6 0.1
 test_every_question_has_a_one_line_explanation_above_it 0.1 0.1 0.7 0.1
@@ -238,6 +244,7 @@ test_not_run_says_where_to_run_the_command 0.3 0.5 2.1 0.5
 test_nothing_is_created_when_a_check_fails 0.3 0.5 3.5 0.4
 test_npm_and_folder_checks_come_after_the_questions 0.3 0.5 3.1 0.3
 test_npm_is_needed_only_for_node_web_and_react_native 0.3 0.5 1.9 0.4
+test_on_a_system_that_is_not_linux_windows_or_macos_the_git_and_gh_guides_send_to_their_download_pages 0.2 0 1.2 0.1
 test_on_a_terminal_the_wait_shows_a_star_a_second_and_each_check_on_a_new_line 4.1 11.1 87.4 5.8
 test_on_linux_the_npm_guide_has_you_start_again_in_a_new_window 0.1 0.2 1.2 0.1
 test_only_the_whole_setup_heading_starts_the_section_the_readme_loses 0.1 0.1 0.2 0.1
@@ -362,6 +369,7 @@ test_the_git_folder_of_a_run_holds_only_git_and_its_helpers 0.1 0.1 0.6 0.1
 test_the_git_name_and_email_are_checked_before_the_change_is_saved 3.4 6.6 46.3 3.6
 test_the_git_name_and_email_are_written_into_the_copy_only 1.0 2.2 14.0 1.2
 test_the_harness_fill_copies_an_ampersand_literally 0.1 0.1 0.1 0.1
+test_the_home_folder_is_shown_as_a_tilde_and_an_empty_word_as_two_quotes 0.1 0 0.1 0.1
 test_the_jq_expressions_read_githubs_documented_answers 0.1 0.1 0.6 0.1
 test_the_licence_is_checked_with_github_before_anything_is_created 1.1 2.6 11.9 1.6
 test_the_lines_that_opt_out_of_the_literal_scan_are_pinned 0.1 0.1 0.1 0.1
@@ -372,6 +380,7 @@ test_the_name_and_permissions_are_checked_after_the_questions 0.3 0.5 3.6 0.5
 test_the_next_step_is_one_text_for_both_endings 0.1 0.1 0.2 0.1
 test_the_npm_guide_on_macos_and_windows_keeps_its_steps 0.1 0.2 1.4 0.2
 test_the_npm_packs_get_a_lockfile_made_by_npm_after_the_fill 5.6 11.9 54.8 7.5
+test_the_old_bash_guide_gives_the_install_command_of_each_linux 0.2 0 1.1 0.2
 test_the_os_is_read_from_uname_and_the_linux_release_file 0.5 0.8 2.8 0.8
 test_the_pack_overlay_replaces_ci_yml_adds_missing_gitignore_lines_and_refuses_other_targets 0.4 0.6 3.7 0.4
 test_the_placeholders_left_for_clead_are_listed_in_plain_words 0.1 0.1 0.2 0.1

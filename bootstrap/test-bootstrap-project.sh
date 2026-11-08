@@ -4436,6 +4436,35 @@ test_pack_and_licence_can_be_chosen_by_number_or_name() {
   expect_inputs "$d" PACK=python VISIBILITY=private LICENSE=agpl-3.0
 }
 
+test_every_numbered_choice_gives_its_value_and_a_refused_visibility_is_asked_again() {
+  # PBI-1.54: no test chose the python pack by its number (3) or the
+  # licences 2 to 5 by theirs, and no test gave the visibility question
+  # an answer it refuses. Each number gives its choice; a visibility
+  # answer that is neither a number of the list nor public or private
+  # shows the problem and the question again, and the next answer counts.
+  local d c n want
+  for c in "2 mit" "3 apache-2.0" "4 gpl-3.0" "5 bsd-3-clause"; do
+    n="${c%% *}"
+    want="${c#* }"
+    d="$(tmpdir)"
+    printf '%s\n' my-app "" "Lends tools." "" "" 3 "" "$n" "" "" "" "" >"$d/in"
+    inputs "$d"
+    expect_inputs "$d" PACK=python LICENSE="$want"
+  done
+  d="$(tmpdir)"
+  printf '%s\n' my-app "" "Lends tools." "" "" 3 maybe 2 1 "" "" "" >"$d/in"
+  inputs "$d"
+  expect_inputs "$d" PACK=python VISIBILITY=private LICENSE=none
+  grep -qF 'Choose public or private. Please try again.' "$d/out" || {
+    cat "$d/out" >&2
+    die "the refused visibility answer was not explained"
+  }
+  [ "$(grep -cF 'Visibility (type the number or the name)' "$d/out")" -eq 2 ] || {
+    cat "$d/out" >&2
+    die "the visibility question was not asked again"
+  }
+}
+
 test_running_out_of_answers_stops_with_exit_2() {
   local d
   d="$(tmpdir)"
@@ -4894,6 +4923,27 @@ strip_cd() {
       ;;
     *) printf '%s\n' "$2" ;;
   esac
+}
+
+test_the_home_folder_is_shown_as_a_tilde_and_an_empty_word_as_two_quotes() {
+  # PBI-1.54: no test started the script in the home folder itself, and
+  # none quoted an empty word for the command shown at a stop. Started in
+  # the home folder (also when HOME ends in a /), the cd in front of the
+  # command is to ~; an empty word is written '', which a shell reads back
+  # as the empty word.
+  local home
+  home="$(tmpdir)"
+  (
+    load_script
+    START_DIR="$(cd "$home" && pwd)"
+    for HOME in "$home" "$home/"; do
+      start_cd
+      [ "$SHOWN_CD" = "~" ] || die "HOME=$HOME: the cd is to $SHOWN_CD, want ~"
+    done
+    quote_word ""
+    [ "$QUOTED" = "''" ] || die "an empty word is quoted as [$QUOTED], want ''"
+    [ "$(eval "printf '[%s]' $QUOTED")" = "[]" ] || die "'' is not read back as the empty word"
+  ) || die "the checks failed"
 }
 
 # strip_any_cd <line>: the shown line without the cd in front of it,
@@ -5677,6 +5727,44 @@ test_gh_missing_or_too_old_is_guided() {
   ! grep -q '^GH_PROMPT_DISABLED=<unset>' "$d/gh.log" || die "gh ran with its prompts on"
 }
 
+test_on_a_system_that_is_not_linux_windows_or_macos_the_git_and_gh_guides_send_to_their_download_pages() {
+  # PBI-1.54: the git and gh guides were run only on Linux, Windows and
+  # macOS. On any other system (here uname says FreeBSD) each guide sends
+  # the user to its tool's download page for their system, then back to
+  # this window, and the check runs again.
+  local d want
+  d="$(tmpdir)"
+  fake_tool "$d" uname FreeBSD
+  missing "$d" git 1
+  printf '\n' >"$d/in"
+  pre "$d" preflight_git
+  expect_rc 0 "$d"
+  expect_out "$d" "git is not installed."
+  for want in "  1. Open https://git-scm.com/downloads in your browser and follow the steps for your system." \
+    "  2. Come back to this window." "    Done. git is installed."; do
+    grep -qxF -- "$want" "$d/out" || {
+      cat "$d/out" >&2
+      die "git guide: no line: $want"
+    }
+  done
+  d="$(tmpdir)"
+  fake_tool "$d" uname FreeBSD
+  working_git "$d"
+  make_stub_gh "$d/gh"
+  echo 1 >"$d/gh-missing"
+  printf '\n' >"$d/in"
+  pre "$d" preflight_gh
+  expect_rc 0 "$d"
+  expect_out "$d" "The GitHub command-line tool (gh) is not installed."
+  for want in "  1. Open https://cli.github.com in your browser and follow the steps for your system." \
+    "  2. Come back to this window." "    Done. gh is installed and can create a project from a template."; do
+    grep -qxF -- "$want" "$d/out" || {
+      cat "$d/out" >&2
+      die "gh guide: no line: $want"
+    }
+  done
+}
+
 test_a_gh_too_old_to_read_checks_or_merge_stops_before_anything_is_made() {
   # S18b: steps 15 and 17 use gh pr checks --json and gh pr merge
   # --match-head-commit. A gh without one of them failed only after the
@@ -6051,6 +6139,29 @@ test_bash_older_than_3_2_is_refused_with_steps() {
   pre "$d" preflight_bash 3 2
   expect_rc 0 "$d"
   expect_out "$d" "    Done. bash 3.2 is new enough."
+}
+
+test_the_old_bash_guide_gives_the_install_command_of_each_linux() {
+  # PBI-1.54: the guide for a bash that is too old was run only on a
+  # Debian-like Linux. On Fedora, Arch and openSUSE it shows the install
+  # command of that system's package manager; on a Linux whose package
+  # manager the script does not know, it says to use the system's own.
+  local d c distro want
+  for c in "fedora|    sudo dnf install bash" "arch|    sudo pacman -S bash" \
+    "suse|    sudo zypper install bash" "other|    (your system's own install command, followed by the word bash)"; do
+    distro="${c%%|*}"
+    want="${c#*|}"
+    d="$(tmpdir)"
+    on_os "$d" linux "$distro"
+    printf '\n' >"$d/in"
+    pre "$d" preflight_bash 3 1
+    expect_rc 3 "$d"
+    expect_out "$d" "This bash is too old for the script: it needs version 3.2 or later."
+    grep -qxF -- "$want" "$d/out" || {
+      cat "$d/out" >&2
+      die "$distro: no line: $want"
+    }
+  done
 }
 
 test_the_tool_checks_print_a_start_and_a_done_line() {
@@ -7727,6 +7838,36 @@ RUN
     die "no done line"
   }
   ! grep -q "$(printf '\tauth\t')" "$d/gh.log" || die "the refresh ran through gh with prompts off"
+}
+
+test_an_offered_command_that_fails_is_said_to_have_failed_and_the_check_runs_again() {
+  # PBI-1.54: no test ran an offered command that ends with an error.
+  # After the yes, the refresh runs and exits 1: the script says the
+  # command stopped with an error and that it checks again, and the check
+  # runs again at once (here it then passes).
+  local d run_text
+  d="$(tmpdir)"
+  export STUB_GH_SCOPES="repo, read:org, gist" STUB_GH_SCOPES_LATER="repo, read:org, gist, workflow"
+  echo 1 >"$d/scopes-old"
+  printf 'yes\n' >"$d/tty"
+  prepare "$d"
+  IFS= read -r -d '' run_text <<'RUN' || true
+printf '%s\n' "$*" >>"$STUB_RUN_LOG"
+exit 1
+RUN
+  write_stand_in "$d/run" "$run_text"
+  pre "$d" with_vis public preflight_github_permissions
+  expect_rc 0 "$d"
+  [ "$(cat "$d/run.log")" = "gh auth refresh -h github.com -s workflow" ] || {
+    cat "$d/run.log" >&2
+    die "the refresh did not run once"
+  }
+  expect_out "$d" "The command stopped with an error (its messages are above). Checking again."
+  expect_no_out "$d" "The command finished. Checking again."
+  [ "$(tail -1 "$d/out")" = "    Done. gh has the permissions on GitHub that the setup needs." ] || {
+    cat "$d/out" >&2
+    die "the check did not run again"
+  }
 }
 
 test_the_refresh_asks_for_every_missing_permission() {
@@ -9498,6 +9639,51 @@ test_again_without_a_saved_file_stops_with_a_plain_error_and_runs_nothing() {
   done
 }
 
+test_again_after_another_option_stops_and_says_it_comes_first() {
+  # PBI-1.54: --again is read only as the first word (main); after
+  # another option it stops with exit 2, says that it comes first, and
+  # shows how, before anything is checked or created.
+  local d
+  d="$(tmpdir)"
+  whole "$d" --dry-run --again
+  expect_rc 2 "$d"
+  sed -n 1p "$d/err" | grep -xF 'What happened: The option --again must come first, right after the name of the script.' >/dev/null || {
+    cat "$d/err" >&2
+    die "no plain message"
+  }
+  grep -qF 'What to do next: Run the script with --again first and the other options after it, as in bash bootstrap-project.sh --again --dry-run.' "$d/err" || {
+    cat "$d/err" >&2
+    die "does not say how"
+  }
+  [ ! -s "$d/gh.log" ] || {
+    cat "$d/gh.log" >&2
+    die "gh was called"
+  }
+  [ -z "$(ls -A "$d/cwd")" ] || die "something was created"
+}
+
+test_an_option_given_only_spaces_is_refused_as_empty() {
+  # PBI-1.54: parse_args refuses only a value with no characters, so a
+  # value of spaces reaches check_name, check_owner and check_dir, which
+  # trim it to nothing and refuse it as empty: exit 2, each option's own
+  # problem line, and nothing checked or created.
+  local d opt
+  d="$(tmpdir)"
+  whole "$d" --name " " --owner "  " --dir " "
+  expect_rc 2 "$d"
+  for opt in --name --owner --dir; do
+    grep -xF "    - $opt: It cannot be empty." "$d/err" >/dev/null || {
+      cat "$d/err" >&2
+      die "$opt: no line saying it cannot be empty"
+    }
+  done
+  [ ! -s "$d/gh.log" ] || {
+    cat "$d/gh.log" >&2
+    die "gh was called"
+  }
+  [ -z "$(ls -A "$d/cwd")" ] || die "something was created"
+}
+
 test_an_answer_with_a_newline_or_a_folder_inside_the_copy_is_not_saved_and_the_long_command_is_shown() {
   local t out
   t="$(tmpdir)"
@@ -9556,6 +9742,59 @@ test_an_answer_with_a_newline_or_a_folder_inside_the_copy_is_not_saved_and_the_l
     printf '%s\n' "$out" >&2
     die "inside the copy: the long command is not shown"
   }
+}
+
+test_answers_that_cannot_be_moved_into_place_are_not_saved_and_leave_no_file() {
+  # PBI-1.54: no test made the last step of save_again fail, the move of
+  # the written temporary file over the saved one. Here mv fails (a
+  # stand-in on PATH): nothing is saved, the temporary file is removed,
+  # and the long command is shown instead of the short one.
+  local t out
+  t="$(tmpdir)"
+  mkdir -p "$t/folder"
+  write_stand_in "$t/bin/mv" 'exit 1'
+  out="$(
+    load_script
+    PATH="$t/bin:$PATH"
+    remember_command --name my-app
+    AGAIN_DIR="$t/folder"
+    RESTART_SCRIPT=x.sh
+    stop_at_guide 2>/dev/null
+  )" || true
+  [ -z "$(ls -A "$t/folder")" ] || {
+    ls -A "$t/folder" >&2
+    die "a file was left in the folder"
+  }
+  ! grep -qF -- '--again' <<<"$out" || {
+    printf '%s\n' "$out" >&2
+    die "the short command was shown"
+  }
+  grep -qE '^    bash .* --name my-app$' <<<"$out" || {
+    printf '%s\n' "$out" >&2
+    die "the long command is not shown"
+  }
+}
+
+test_again_names_the_project_of_answers_saved_as_option_equals_value_or_says_none_was_given() {
+  # PBI-1.54: the line --again starts with names the project the saved
+  # answers are for. No test saved them in the --option=value form, which
+  # the options also take, and none saved answers without a project
+  # name. Both forms give the project; with no --name the line says that
+  # no project name was given yet. A saved --dir=... counts for neither.
+  local t c want got
+  t="$(tmpdir)"
+  for c in "--owner=octo-user|--name=my-app|for the project octo-user/my-app." \
+    "--name=my-app|--dir=./x|for the project my-app." \
+    "--description|Lends tools.|before a project name was given."; do
+    want="Using the answers saved when the script stopped last time, ${c##*|}"
+    printf '%s\n' "${c%%|*}" "$(printf '%s' "$c" | cut -d'|' -f2)" >"$t/$AGAIN_FILE"
+    got="$(
+      load_script
+      AGAIN_DIR="$t"
+      read_again
+    )" || die "read_again failed for: $c"
+    [ "$got" = "$want" ] || die "for [$c]: [$got], want [$want]"
+  done
 }
 
 test_a_finished_setup_removes_its_saved_file_and_nothing_else() {
