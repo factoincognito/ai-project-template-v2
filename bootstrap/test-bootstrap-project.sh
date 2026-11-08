@@ -9647,7 +9647,7 @@ test_again_after_another_option_stops_and_says_it_comes_first() {
   d="$(tmpdir)"
   whole "$d" --dry-run --again
   expect_rc 2 "$d"
-  sed -n 1p "$d/err" | grep -qxF 'What happened: The option --again must come first, right after the name of the script.' || {
+  sed -n 1p "$d/err" | grep -xF 'What happened: The option --again must come first, right after the name of the script.' >/dev/null || {
     cat "$d/err" >&2
     die "no plain message"
   }
