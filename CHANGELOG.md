@@ -18,6 +18,8 @@ A bootstrapped project records the tag it was built from.
 - Backlog: the `DONE` entries move to `docs/BACKLOG-DONE.md`, which `docs/BACKLOG.md` includes for vizi; `RULES.md` L § 2 (1) names the file (PR #429)
 - Backlog: PBI-1.60 and PBI-1.61, follow-ups of the move (PR #431)
 - Rules edition `2026-11-08-b70fd0c`: a new edition id, the text unchanged (PR #432)
+- Rules edition `2026-11-08-6f35986`: session startup marks a file read in part on purpose, where no paragraph requires it in full (PR #435)
+- Rules edition `2026-11-08-b47d79c`: a new edition id, the text unchanged (PR #436)
 
 ## [2.9.1] — 2026-11-07
 
