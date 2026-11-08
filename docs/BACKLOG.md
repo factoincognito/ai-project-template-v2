@@ -713,4 +713,6 @@ The findings of the product office's audit of this project (Process P-6 § 8 (2)
 - Elixir language pack — planned in v1, not yet built, not a Phase 1 priority
 - Automated merge — Adam merges, always
 
+The entries marked `DONE` are in [`docs/BACKLOG-DONE.md`](BACKLOG-DONE.md) (`RULES.md` L § 2 (1)).
+
 <!-- vizi:include BACKLOG-DONE.md -->
