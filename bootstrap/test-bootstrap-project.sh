@@ -1386,7 +1386,8 @@ command_arg_violations() {
 #   - each run_gh, gh, git, npm, cat or tee command whose own stdout is
 #     neither captured ($( ), <( ) or backticks around it) nor sent
 #     elsewhere with a stdout redirect (>, >>, 1>, &>) in the same
-#     command, or after the same pipeline or ( ) subshell. The command
+#     command, or after the same pipeline or ( ) subshell, and no
+#     run_gh --to <out> <err>, which sends it to those files. The command
 #     may be written \gh or with a path (/usr/bin/gh, ./bin/gh). A walker
 #     reads the code with its quotes ('...', "...", $'...' with its \
 #     escapes), $( ), $(( )) and ( ) nesting and continuation lines, so a
@@ -1548,7 +1549,9 @@ bypass_lines() {
         if (c ~ /[A-Za-z_]/ && (i == 1 || i == wb || pv !~ /[A-Za-z0-9_$={}\/.-]/ || (pv == "/" && after_path(i)))) {
           w = substr($0, i); match(w, /^[A-Za-z0-9_-]+/); w = substr(w, 1, RLENGTH)
           nw = substr($0, i + length(w), 1)
-          if (w ~ /^(run_gh|gh|git|npm|cat|tee)$/ && nw != "=" && nw != "(" && !captured()) pend[d] = NR
+          # run_gh --to <out> <err> sends the output of gh to those files.
+          if (w ~ /^(run_gh|gh|git|npm|cat|tee)$/ && nw != "=" && nw != "(" && !captured() &&
+            !(w == "run_gh" && substr($0, i + length(w), 6) == " --to ")) pend[d] = NR
           i += length(w); continue
         }
         i++
@@ -3211,12 +3214,13 @@ test_output_routes_without_echo_or_printf_are_caught() {
     '  tee /dev/stderr <<<"Clone failed"' \
     '  cat >/dev/stderr' \
     '  printf "%s" x >/dev/tty' \
+    '  run_gh pr checks --to "$f" "$err" 1' \
     '}')"
   from="$(planted_from)"
   n="$(bypass_lines "$copy" | only_planted "$from" | wc -l | tr -d ' ')"
-  [ "$n" -eq 5 ] || {
+  [ "$n" -eq 6 ] || {
     bypass_lines "$copy" >&2
-    die "caught $n of 5 planted output routes"
+    die "caught $n of 6 planted output routes"
   }
 }
 
@@ -3236,6 +3240,8 @@ test_captured_or_redirected_gh_output_is_allowed() {
     '  run_gh api user | tr -d x >"$f"' \
     '  done < <(run_gh api user)' \
     '  x=cat; y=$(git rev-parse HEAD)' \
+    '  run_gh --to "$f" "$err" api user || rc=$?' \
+    '  GIT_TERMINAL_PROMPT=0 run_gh --to /dev/null /dev/null --version' \
     '}')"
   from="$(planted_from)"
   hits="$(bypass_lines "$copy" | only_planted "$from")"
