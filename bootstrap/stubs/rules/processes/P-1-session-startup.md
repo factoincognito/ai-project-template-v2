@@ -33,7 +33,7 @@ P-1 § 6 Model and effort
 (4) Clead sets the model of the agents it starts; the product owner sets the model and effort of their own sessions.
 
 P-1 § 7 Delegation for the session
-(1) In its first reply, a session the product owner starts gives them, as a **Now** item of its For you block and as a code block, this line to send: "I delegate to you, for the rest of this session, every change that the project's rules allow, merges included, in this repository." Where the product owner's first message already holds that line, the session says instead that it was received (P-1 § 10 (2)).
+(1) In its first reply, a session the product owner starts gives them, as a **Now** item of its For you block and as a code block, this line to send: "I delegate to you, for the rest of this session, every change that the project's rules allow, merges, scheduled-task changes, tool installs and branch deletions included, in this repository." Where the product owner's first message already holds that line, the session says instead that it was received (P-1 § 10 (2)).
 (2) The line delegates nothing these Rules do not already allow; it gives in chat the delegation that Claude's permission check has been seen to ask for.
 (3) A step that is still refused after the product owner has sent the line is handled in accordance with Process P-5, and the refusal is recorded in accordance with P-5 § 3 (2).
 
