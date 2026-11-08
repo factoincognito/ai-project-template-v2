@@ -13,6 +13,7 @@ test_a_command_that_ran_is_offered_again_only_after_enter 0.2 0.2 1.0 0.9
 test_a_copy_broken_off_before_a_retry_is_removed_first 1.3 2.6 15.5 1.8
 test_a_copy_from_another_version_or_without_its_stamp_is_refused 1.3 3.0 19.7 1.6
 test_a_copy_git_cannot_sign_in_for_gets_the_same_guide 1.4 3.3 20.9 2.8
+test_a_copy_left_without_its_line_of_work_gets_one_at_the_resume 28.2 0 31.3 63.6
 test_a_copy_not_at_the_new_main_version_stops_with_both_versions_below 1.0 2.9 15.3 1.5
 test_a_copy_that_does_not_fit_the_setup_stops_with_the_continue_command 3.5 9.5 38.3 4.6
 test_a_copy_with_changes_not_saved_after_the_update_stops 1.4 2.9 11.6 1.6
@@ -24,6 +25,7 @@ test_a_failed_settings_change_is_explained_with_the_continue_command 0.4 0.9 4.6
 test_a_failed_update_of_the_copy_stops_with_gits_text_below 1.1 2.7 14.4 1.4
 test_a_failed_visibility_read_does_not_count_as_private 0.4 1.2 5.3 0.9
 test_a_failing_push_hook_counts_down_and_names_its_mode 0.1 0.1 0.3 0.1
+test_a_failure_after_the_wait_at_the_resume_names_the_step_of_the_resume 16.0 0 24.8 61.7
 test_a_file_changed_or_deleted_that_the_setup_does_not_change_stops_before_anything_is_saved 1.6 3.7 22.7 2.3
 test_a_file_to_fill_that_is_missing_stops_before_any_file_is_filled 0.5 1.1 6.9 0.6
 test_a_file_with_windows_line_endings_stops_before_anything_is_saved 1.9 4.9 21.7 2.7
@@ -44,11 +46,14 @@ test_a_here_string_or_a_shift_is_not_a_heredoc 0.2 0.4 0.6 0.1
 test_a_heredoc_inside_a_capture_does_not_hide_later_output 0.1 0.5 0.6 0.2
 test_a_key_in_the_environment_never_appears_in_output_or_files 1.0 2.7 14.3 1.5
 test_a_licence_github_does_not_know_is_explained_with_the_next_action 0.9 3.5 9.7 1.3
+test_a_line_of_work_renamed_in_the_copy_during_the_wait_is_not_added 1.7 0 10.8 1.4
 test_a_missing_workflow_permission_offers_the_refresh_and_checks_again 0.1 0.3 1.1 0.2
 test_a_no_at_proceed_saves_the_answers_and_shows_the_command_to_start_again 20.7 38.7 34.4 53.6
 test_a_pending_run_of_build_is_waited_for_even_next_to_a_failed_one 1.0 2.4 14.4 1.0
 test_a_project_is_read_as_added_from_each_signal_alone 42.3 76.4 42.9 104.7
 test_a_project_with_its_setup_heading_gone_but_its_script_kept_is_refused_before_anything_is_written 24.6 35.9 37.3 62.6
+test_a_project_without_its_pack_folder_is_reported_as_a_broken_bootstrapper 0.6 0 8.5 0.6
+test_a_project_without_the_table_of_decisions_is_not_set_up_without_protection 27.0 0 22.5 62.1
 test_a_protection_read_back_that_differs_stops_before_the_change_is_added 3.9 7.8 38.6 5.5
 test_a_push_git_cannot_sign_in_for_offers_gh_auth_setup_git_after_saying_what_it_changes 2.9 7.5 34.6 4.1
 test_a_question_after_progress_lines_comes_after_one_blank_line 0.1 0.1 0.1 0.1
@@ -122,6 +127,7 @@ test_banned_words_through_an_unlisted_helper_are_caught 0.1 0.3 0.5 0.1
 test_bash_older_than_3_2_is_refused_with_steps 0.1 0.2 1.1 0.2
 test_blocks_one_after_another_have_one_blank_line_between_never_two 0.1 0.1 0.3 0.1
 test_bootstrapper_readme_draft_has_no_banned_words_and_the_stubs_resume_command 0.1 0.1 0.2 0.1
+test_both_files_stored_with_crlf_on_github_are_named_together 15.8 0 14.5 60.3
 test_build_is_required_after_it_passed_with_the_exact_body_and_read_back 1.1 2.6 14.6 1.2
 test_build_still_running_is_looked_at_again_every_15_seconds_until_it_passes 3.1 7.3 43.2 3.6
 test_bypass_check_catches_a_planted_echo 0.2 0.5 0.5 0.2
@@ -172,6 +178,8 @@ test_gh_missing_or_too_old_is_guided 0.1 0.2 1.2 0.2
 test_gh_pr_merge_may_not_ask_at_the_terminal 1.0 2.5 14.6 1.4
 test_git_borrows_the_gh_sign_in_for_one_command_and_no_settings_change 1.0 2.5 15.0 1.3
 test_git_defaults_are_the_global_settings_not_those_of_a_local_project 0.1 0.1 0.7 0.1
+test_git_failing_in_the_copy_stops_before_anything_is_saved_or_sent 7.2 0 54.5 6.6
+test_git_failing_to_look_at_the_copy_at_the_resume_stops_plainly 34.8 0 26.5 61.6
 test_git_missing_is_guided_and_checked_again_after_enter 0.1 0.1 0.6 0.1
 test_git_name_and_email_are_checked_like_the_other_names 1.0 1.9 8.6 1.6
 test_git_name_and_email_are_only_collected_not_written 0.1 0.1 0.6 0.1
@@ -272,6 +280,7 @@ test_resume_dry_run_says_where_it_continues_and_changes_nothing 25.4 33.0 30.9 3
 test_resume_keeps_a_folder_only_when_it_is_this_projects_own_copy 0.4 0.9 4.8 0.4
 test_resume_keeps_resume_when_the_check_after_the_project_missing_guide_fails 0.2 0.4 2.4 0.3
 test_resume_of_a_finished_setup_only_checks_the_protection_and_reports 1.8 3.4 22.3 2.5
+test_resume_of_a_website_with_its_publishing_files_reads_them_from_github 59.3 0 41.2 123.3
 test_resume_past_the_pack_step_takes_the_publishing_choice_from_the_project 144.2 198.2 163.5 359.3
 test_resume_proposes_a_sent_change_that_was_not_proposed 25.6 33.5 35.4 60.5
 test_resume_redoes_the_copys_steps_in_a_copy_with_nothing_saved_and_takes_another_licence 24.5 35.9 36.2 59.8
@@ -282,7 +291,9 @@ test_resume_refuses_a_copy_without_the_line_of_work_github_has 24.2 34.6 28.2 60
 test_resume_refuses_a_project_from_another_version_or_not_from_the_bootstrapper 1.1 2.0 14.5 1.1
 test_resume_sends_a_saved_change_that_was_not_sent 20.6 33.7 28.1 59.8
 test_resume_sends_only_the_single_change_the_script_saved 66.0 97.7 91.8 180.6
+test_resume_stops_plainly_when_a_read_of_github_fails 58.7 0 67.6 122.5
 test_resume_waits_for_build_on_the_proposed_change_that_is_there 76.6 104.0 107.0 146.4
+test_resume_waits_while_github_is_still_copying_the_files 34.7 0 27.8 61.3
 test_resume_with_no_project_on_github_creates_nothing 0.2 0.4 2.1 0.3
 test_run_hook_replaces_the_runner_so_nothing_runs 0.1 0.1 0.2 0.1
 test_run_hook_returns_the_runner_exit_code 0.1 0.1 0.1 0.1
