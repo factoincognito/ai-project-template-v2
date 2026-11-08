@@ -134,6 +134,7 @@ test_colour_off_output_is_the_coloured_output_without_its_codes 0.1 0.3 1.2 0.2
 test_copyright_holder_defaults_to_the_po_name_given 0.1 0.1 0.5 0.1
 test_create_failures_are_guided_or_explained_and_nothing_else_runs 1.3 2.2 15.0 1.6
 test_create_waits_for_the_files_then_protects_main_with_the_exact_body 2.2 5.1 34.8 2.8
+test_ctrl_c_during_any_gh_call_shows_the_stop_and_the_command_to_run_next 5.2 0 31.9 3.7
 test_ctrl_c_during_the_discard_puts_the_terminal_mode_back 0.1 0.2 0.8 0.1
 test_ctrl_c_says_what_exists_and_the_resume_finishes_without_duplicates 21.7 36.5 35.3 61.7
 test_defaults_fill_the_options_left_out 0.1 0.2 1.0 0.1
@@ -166,6 +167,7 @@ test_gh_hook_passes_arguments_unchanged 0.1 0.1 0.2 0.1
 test_gh_hook_returns_gh_exit_code_and_stderr 0.1 0.1 0.1 0.1
 test_gh_hook_runs_the_command_named_in_bootstrap_gh 0.1 0.1 0.2 0.1
 test_gh_hook_set_means_gh_on_the_path_is_not_called 0.1 0.1 0.2 0.1
+test_gh_hook_to_puts_gh_output_in_the_files_given_and_returns_its_code 0.1 0 0.2 0.1
 test_gh_missing_or_too_old_is_guided 0.1 0.2 1.2 0.2
 test_gh_pr_merge_may_not_ask_at_the_terminal 1.0 2.5 14.6 1.4
 test_git_borrows_the_gh_sign_in_for_one_command_and_no_settings_change 1.0 2.5 15.0 1.3
@@ -208,6 +210,7 @@ test_new_files_in_src_must_be_the_packs_and_ignored_ones_are_left_alone 2.3 4.2 
 test_no_banned_words_in_user_facing_strings 0.1 0.2 0.3 0.1
 test_no_color_and_a_dumb_terminal_win_over_the_colour_hook 0.1 0.1 0.2 0.1
 test_no_colour_codes_by_default_in_a_file_or_pipe 0.1 0.1 0.3 0.1
+test_no_function_of_the_script_runs_with_its_output_redirected 0.1 0 0.4 0.1
 test_no_licence_adds_no_file_and_warns_only_for_a_public_project 2.8 6.0 37.5 3.8
 test_no_offer_without_brew_or_winget_and_never_on_linux 0.4 0.7 2.8 0.5
 test_no_output_bypasses_the_message_helpers 0.2 0.4 0.3 0.2
