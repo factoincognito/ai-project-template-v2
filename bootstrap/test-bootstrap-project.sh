@@ -7140,6 +7140,150 @@ test_ctrl_c_during_the_discard_puts_the_terminal_mode_back() {
   done
 }
 
+test_a_stop_between_steps_names_the_last_step_as_finished() {
+  # End-to-end run 2 on v2.8.0, finding r2b: a stop that comes after a
+  # step has ended and before the next one starts said "while:" with the
+  # finished step, as if it were still running. It says "after:" with
+  # that step; before the first step it still says "while: starting up".
+  # For Ctrl-C (exit 130; the line under "Details for support") and for a
+  # failure the script did not plan for (the first line).
+  local d how rc
+  for how in interrupt fail first; do
+    d="$(tmpdir)"
+    set +e
+    (
+      load_script
+      catch_stops
+      if [ "$how" != first ]; then
+        step_start "Checking the first thing"
+        step_end "It is there."
+      fi
+      case "$how" in
+        interrupt | first) "$BASH" -c 'kill -INT "$PPID"' ;;
+        fail) false ;;
+      esac
+      echo "not stopped"
+    ) </dev/null >"$d/out" 2>"$d/err"
+    rc=$?
+    set -e
+    ! grep -qx 'not stopped' "$d/out" || die "[$how] the script went on"
+    case "$how" in
+      interrupt)
+        [ "$rc" -eq 130 ] || die "[$how] exit $rc, want 130 (Ctrl-C)"
+        expect_err_shape "$d" "The script was stopped before it finished\. Nothing was created\.\$"
+        grep -qxF '    The script was stopped with Ctrl-C (or by a request to stop) after: Checking the first thing' "$d/err" || {
+          cat "$d/err" >&2
+          die "[$how] the stop does not name the finished step as finished"
+        }
+        ;;
+      fail)
+        [ "$rc" -ne 0 ] || die "[$how] exit 0"
+        expect_err_shape "$d" "Something unexpected happened, so the script stopped after: Checking the first thing\. Nothing was created\.\$"
+        ;;
+      first)
+        [ "$rc" -eq 130 ] || die "[$how] exit $rc, want 130 (Ctrl-C)"
+        grep -qxF '    The script was stopped with Ctrl-C (or by a request to stop) while: starting up' "$d/err" || {
+          cat "$d/err" >&2
+          die "[$how] a stop before the first step does not say starting up"
+        }
+        ;;
+    esac
+    ! grep -qF 'while: Checking the first thing' "$d/err" || {
+      cat "$d/err" >&2
+      die "[$how] the finished step is named as running"
+    }
+  done
+}
+
+test_a_stop_at_a_question_names_the_question() {
+  # r2b: Ctrl-C at "Proceed?" named the step that had finished before the
+  # question. A stop while the script waits at a question names the
+  # question: "Proceed?", the offer to run a command and the pause of a
+  # guide, each after a finished step (here Ctrl-C comes during the
+  # discard of the keys typed before the question, from the stand-in dd,
+  # as in test_ctrl_c_during_the_discard_puts_the_terminal_mode_back).
+  # A question read from stdin (ask) names itself while it waits, between
+  # two steps and inside one (here Ctrl-C comes as the question is shown:
+  # answer_line, which ask calls once it has named the question, is
+  # replaced by one that sends it). Once a question is answered, a stop
+  # names again what was there before: the step for ask, the offer and a
+  # guide's pause inside a step; for "Proceed?", in a new setup and with
+  # --resume, the step that ended before it (an answer read, then Ctrl-C).
+  local d mode rc want
+  for mode in proceed offer pause asking asking-in-step answered offer-answered pause-answered proceed-answered resume-proceed-answered; do
+    d="$(tmpdir)"
+    typeahead_tools "$d"
+    printf '\nyes\n' >"$d/tty"
+    printf 'Ada\nyes\n' >"$d/in"
+    case "$mode" in
+      proceed) want='while: waiting for your answer to "Proceed? (yes or no)"' ;;
+      offer) want='while: waiting for your answer to "Run it now? (yes or no)"' ;;
+      pause) want='while: waiting for your answer to "Press Enter to check again, or type q to stop"' ;;
+      asking) want='while: waiting for your answer to "Repo name"' ;;
+      asking-in-step) want='while: waiting for your answer to "Your name for git"' ;;
+      answered) want='while: Checking the git name' ;;
+      offer-answered) want='while: Checking the permissions of gh' ;;
+      pause-answered) want='while: Checking that git is installed' ;;
+      proceed-answered | resume-proceed-answered) want='after: Checking the last thing' ;;
+    esac
+    set +e
+    (
+      load_script
+      export PATH="$d/bin:$PATH" BOOTSTRAP_TTY="$d/tty" BOOTSTRAP_INPUT_TERMINAL=yes
+      case "$mode" in
+        proceed | offer | pause) export STUB_DD_INT=1 ;;
+        asking | asking-in-step)
+          answer_line() { "$BASH" -c 'kill -INT "$PPID"'; }
+          ;;
+      esac
+      catch_stops
+      step_start "Checking the last thing"
+      step_end "It is there."
+      case "$mode" in
+        proceed) confirm_plan ;;
+        offer) ask_terminal "Why it is asked, in a sentence." "Run it now? (yes or no)" ;;
+        pause) wait_for_enter ;;
+        asking) ask "Why it is asked, in a sentence." "Repo name" "" ;;
+        asking-in-step)
+          step_start "Checking the git name"
+          ask "Why it is asked, in a sentence." "Your name for git" ""
+          ;;
+        answered)
+          step_start "Checking the git name"
+          ask "Why it is asked, in a sentence." "Your name for git" ""
+          "$BASH" -c 'kill -INT "$PPID"'
+          ;;
+        offer-answered)
+          step_start "Checking the permissions of gh"
+          ask_terminal "Why it is asked, in a sentence." "Run it now? (yes or no)"
+          "$BASH" -c 'kill -INT "$PPID"'
+          ;;
+        pause-answered)
+          step_start "Checking that git is installed"
+          wait_for_enter
+          "$BASH" -c 'kill -INT "$PPID"'
+          ;;
+        proceed-answered | resume-proceed-answered)
+          [ "$mode" = proceed-answered ] || OPT_RESUME=1
+          confirm_plan
+          "$BASH" -c 'kill -INT "$PPID"'
+          ;;
+      esac
+      echo "not stopped"
+    ) <"$d/in" >"$d/out" 2>"$d/err"
+    rc=$?
+    set -e
+    [ "$rc" -eq 130 ] || {
+      cat "$d/out" "$d/err" >&2
+      die "[$mode] exit $rc, want 130 (Ctrl-C)"
+    }
+    grep -qxF "    The script was stopped with Ctrl-C (or by a request to stop) $want" "$d/err" || {
+      cat "$d/err" >&2
+      die "[$mode] the stop does not say: $want"
+    }
+  done
+}
+
 test_the_discard_comes_before_the_question_is_shown() {
   # #247 review, N2: what is waiting is discarded before the question is
   # printed, never after, so nothing typed once the question is shown is

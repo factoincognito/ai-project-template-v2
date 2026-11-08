@@ -84,9 +84,13 @@ SCRIPT_VERSION='{{TEMPLATE_VERSION}}'
 SCRIPT_COMMIT='{{TEMPLATE_COMMIT}}'
 
 # State of the stop handling (see catch_stops): CLEAN is set by every
-# deliberate stop, CURRENT_STEP is the step being done.
+# deliberate stop, CURRENT_STEP is the step being done, or the question
+# the script waits at (waiting_for), and empty between two steps;
+# LAST_STEP is the last step that ended (end-to-end run 2, finding r2b:
+# a stop at "Proceed?" named the step before it as still running).
 CLEAN=""
 CURRENT_STEP=""
+LAST_STEP=""
 WORK_DIR=""
 
 # ---------- messages ----------
@@ -417,6 +421,8 @@ step_start() {
   IN_LOG=1
 }
 step_end() {
+  [ -z "$CURRENT_STEP" ] || LAST_STEP="$CURRENT_STEP"
+  CURRENT_STEP=""
   log_resumes
   end_line
   printf '    '
@@ -490,9 +496,12 @@ NO_LICENCE_WARNING="Warning: the project is public and has no licence: anyone ca
 # among them) are removed, and an empty answer takes the default. Returns 1 when stdin has no more
 # answers. When stdin is not a terminal (answers given in a file or
 # pipe), a line break follows the question, as typing one would.
+# While it waits, CURRENT_STEP names the question (waiting_for), and what
+# it was before is put back once the answer is read.
 ask() {
-  local why="$1" question="$2" default="$3" got=""
+  local why="$1" question="$2" default="$3" got="" before="$CURRENT_STEP"
   shift 3
+  waiting_for "$question"
   block_start
   read_line "$why"
   [ "$#" -eq 0 ] || printf '  %s\n' "$@"
@@ -503,13 +512,23 @@ ask() {
   fi
   printf ' '
   if ! IFS= read -r got && [ -z "$got" ]; then
+    CURRENT_STEP="$before"
     printf '\n'
     return 1
   fi
+  CURRENT_STEP="$before"
   [ -t 0 ] || printf '\n'
   LOG_GAP=1
   trim_into "$got"
   ANSWER="${TRIMMED:-$default}"
+}
+
+# waiting_for <question>: CURRENT_STEP names the question the script is
+# about to wait at, so that a stop there names the question, not a step
+# (r2b). The caller keeps what CURRENT_STEP was and puts it back once the
+# answer is read.
+waiting_for() {
+  CURRENT_STEP="waiting for your answer to \"$1\""
 }
 
 # input_is_terminal: stdin is a terminal (BOOTSTRAP_INPUT_TERMINAL, yes
@@ -572,15 +591,18 @@ restore_terminal_mode() {
 # (or stop) or stdin has no more lines, else 0 (check again). Keys typed
 # before the pause was shown are discarded (discard_typeahead).
 wait_for_enter() {
-  local got=""
+  local got="" before="$CURRENT_STEP"
+  waiting_for 'Press Enter to check again, or type q to stop'
   block_start
   discard_typeahead
   answer_line 'Press Enter to check again, or type q to stop:'
   printf ' '
   if ! IFS= read -r got && [ -z "$got" ]; then
+    CURRENT_STEP="$before"
     printf '\n'
     return 1
   fi
+  CURRENT_STEP="$before"
   [ -t 0 ] || printf '\n'
   LOG_GAP=1
   trim_into "$got"
@@ -608,7 +630,8 @@ wait_for_enter() {
 # the answer is read from it in a $( ) subshell, which silences its own
 # errors.
 ask_terminal() {
-  local tty="${BOOTSTRAP_TTY:-/dev/tty}" got="" opened="" eof=""
+  local tty="${BOOTSTRAP_TTY:-/dev/tty}" got="" opened="" eof="" before="$CURRENT_STEP"
+  waiting_for "$2"
   block_start
   read_line "$1"
   if [ -r "$tty" ] && (: <"$tty") 2>/dev/null; then
@@ -627,6 +650,7 @@ ask_terminal() {
       )" || eof=1
     } <"$tty" || true
   fi
+  CURRENT_STEP="$before"
   if [ -z "$opened" ]; then
     answer_line "$2 [no]:"
     printf ' \n'
@@ -3414,12 +3438,16 @@ show_plan() {
 # are discarded (discard_typeahead, finding r1f): the answer is one typed
 # after the plan was shown.
 confirm_plan() {
+  local before="$CURRENT_STEP"
   [ -z "$OPT_YES" ] || return 0
+  # From the discard on, a stop names the question (r2b).
+  waiting_for "Proceed? (yes or no)"
   discard_typeahead
   if [ -n "$OPT_RESUME" ]; then
     prompt_for check_yes_no \
       "If you answer yes, the script continues the setup as described above; if you answer no, it stops and changes nothing. Pressing Enter alone answers no, so nothing is changed by accident; type yes to go on." \
       "Proceed? (yes or no)" no
+    CURRENT_STEP="$before"
     [ "$CHECKED" != yes ] || return 0
     shown_command
     say "$CONTINUE_INTRO"
@@ -3430,6 +3458,7 @@ confirm_plan() {
   prompt_for check_yes_no \
     "If you answer yes, the script creates the project on GitHub and carries out the plan above; if you answer no, it stops and creates nothing. Pressing Enter alone answers no, so nothing is created by accident; type yes to go on." \
     "Proceed? (yes or no)" no
+  CURRENT_STEP="$before"
   [ "$CHECKED" != yes ] || return 0
   shown_command
   say "$START_AGAIN_INTRO"
@@ -5368,13 +5397,22 @@ leave_script() {
 # unexpected_stop: the plain stop for a failure the script did not plan
 # for, or for Ctrl-C (exit 130).
 unexpected_stop() {
-  local what next raw
+  local what next raw doing
+  # What the script was doing: the step or the question, or, between two
+  # steps, the last one that ended (r2b).
+  if [ -n "$CURRENT_STEP" ]; then
+    doing="while: $CURRENT_STEP"
+  elif [ -n "$LAST_STEP" ]; then
+    doing="after: $LAST_STEP"
+  else
+    doing="while: starting up"
+  fi
   if [ -n "$INTERRUPTED" ]; then
     STOP_CODE=130
     what="The script was stopped before it finished."
-    raw="The script was stopped with Ctrl-C (or by a request to stop) while: ${CURRENT_STEP:-starting up}"
+    raw="The script was stopped with Ctrl-C (or by a request to stop) $doing"
   else
-    what="Something unexpected happened, so the script stopped while: ${CURRENT_STEP:-starting up}."
+    what="Something unexpected happened, so the script stopped $doing."
     raw="The command that failed: ${ERR_CMD:-not known} (exit code ${ERR_RC:-not known}, line ${ERR_LINE:-not known} of the script)"
     [ -z "$UNEXPECTED_LOG" ] || raw="$raw${NL}Its own message:$NL$UNEXPECTED_LOG"
   fi
