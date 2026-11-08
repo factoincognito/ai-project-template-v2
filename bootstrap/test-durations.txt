@@ -113,6 +113,7 @@ test_an_offered_command_run_after_yes_never_doubles_a_blank_line 0.1 0.1 0.3 0.1
 test_an_offered_command_runs_after_yes_through_the_runner 0.1 0.1 0.6 0.1
 test_an_offered_command_that_fails_is_said_to_have_failed_and_the_check_runs_again 0.1 0 0.6 0.1
 test_an_older_script_is_told_to_download_the_current_one 0.1 0.2 1.4 0.2
+test_an_option_given_only_spaces_is_refused_as_empty 0.1 0 0.5 0.1
 test_an_unexpected_failure_says_what_exists_and_leaves_no_temporary_files 1.8 3.8 22.8 2.2
 test_an_unknown_answer_after_create_says_what_failed_and_how_to_continue 1.7 3.7 24.7 2.5
 test_an_unknown_licence_given_as_an_option_stops_before_anything_is_created 0.6 1.1 5.5 0.6
