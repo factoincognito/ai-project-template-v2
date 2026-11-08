@@ -4843,8 +4843,8 @@ propose_change() {
   out="$(make_temp)"
   err="$(make_temp)"
   cat <<<"$PR_BODY" >"$body"
-  run_gh pr create --repo "$IN_OWNER/$IN_NAME" --base main --head "$SETUP_BRANCH" --title "Set up $IN_NAME" \
-    --body-file "$body" >"$out" 2>"$err" || rc=$?
+  run_gh --to "$out" "$err" pr create --repo "$IN_OWNER/$IN_NAME" --base main --head "$SETUP_BRANCH" \
+    --title "Set up $IN_NAME" --body-file "$body" || rc=$?
   PR_URL="$(tr -d '\r' <"$out" | grep -E '^https://[^ ]*/pull/[0-9]+$' | tail -1)" || PR_URL=""
   raw="$(cat "$out" "$err" | tr -d '\r')"
   rm -f "$body" "$out" "$err"
