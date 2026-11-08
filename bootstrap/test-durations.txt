@@ -25,6 +25,7 @@ test_a_failed_settings_change_is_explained_with_the_continue_command 0.4 0.9 4.6
 test_a_failed_update_of_the_copy_stops_with_gits_text_below 1.1 2.7 14.4 1.4
 test_a_failed_visibility_read_does_not_count_as_private 0.4 1.2 5.3 0.9
 test_a_failing_push_hook_counts_down_and_names_its_mode 0.1 0.1 0.3 0.1
+test_a_failure_after_the_wait_at_the_resume_names_the_step_of_the_resume 16.0 0 24.8 61.7
 test_a_file_changed_or_deleted_that_the_setup_does_not_change_stops_before_anything_is_saved 1.6 3.7 22.7 2.3
 test_a_file_to_fill_that_is_missing_stops_before_any_file_is_filled 0.5 1.1 6.9 0.6
 test_a_file_with_windows_line_endings_stops_before_anything_is_saved 1.9 4.9 21.7 2.7
