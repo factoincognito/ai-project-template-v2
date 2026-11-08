@@ -301,32 +301,20 @@ seed_project() {
   "$g" -C "$w" push -q "$bare" main 2>/dev/null
   rm -rf "$w"
 }
-# STUB_GH_FAIL_ON=<modes>:<text>: the calls whose arguments, joined by
-# spaces, hold <text> fail in turn as the modes of the comma-separated
-# list <modes>: one of emit_failure's, interrupt (gh sends the script
-# Ctrl-C, then fails) or pass (not failed). Once the list is used up,
-# they are not failed. The calls are counted in the file fail-on-count
-# next to the log; a test deletes it to start the list again. The other
-# settings fail a kind of call (every file read, say); this one fails a
-# single call of that kind.
+# STUB_GH_FAIL_ON=<mode>:<text>: the first call whose arguments, joined
+# by spaces, hold <text> fails as <mode>, one of emit_failure's; the
+# later ones are not failed. That first call leaves the file fail-on-used
+# next to the log; a test deletes it to fail the next such call too. The
+# other settings fail a kind of call (every file read, say); this one
+# fails a single call of that kind.
 if [ -n "${STUB_GH_FAIL_ON:-}" ]; then
   case "$*" in
     *"${STUB_GH_FAIL_ON#*:}"*)
-      f="${STUB_GH_LOG%/*}/fail-on-count"
-      n=0
-      if [ -f "$f" ]; then read -r n <"$f" || true; fi
-      n=$((n + 1))
-      echo "$n" >"$f"
-      IFS=, read -r -a modes <<<"${STUB_GH_FAIL_ON%%:*}"
-      mode="${modes[$((n - 1))]:-pass}"
-      case "$mode" in
-        pass) ;;
-        interrupt)
-          kill -INT "$PPID"
-          exit 1
-          ;;
-        *) emit_failure "$mode" ;;
-      esac
+      f="${STUB_GH_LOG%/*}/fail-on-used"
+      if [ ! -f "$f" ]; then
+        : >"$f"
+        emit_failure "${STUB_GH_FAIL_ON%%:*}"
+      fi
       ;;
   esac
 fi
@@ -16626,11 +16614,14 @@ test_the_screen_of_the_setup_a_newcomer_meets_is_written_for_the_precheck() {
 }
 
 # ---------- lines no test reached (PBI-1.54 b) ----------
-# The lines of the setup script that no test reached, measured with
-# bootstrap/coverage.sh (PBI-1.41), each now run by a test that checks what
-# it does: GitHub's reads at --resume that fail or find the files not
-# there yet, git failing in the copy, and the smaller branches of the
-# questions, the guides and the commands shown.
+# Tests for some of the lines of the setup script that no test reached,
+# measured with bootstrap/coverage.sh (PBI-1.41): GitHub's reads at
+# --resume that fail or find the files not there yet, the publishing
+# files of a web project at --resume, README.md and CHANGELOG.md both
+# with carriage returns on GitHub, git failing in the copy, the line of
+# work missing from the copy or renamed in it, a decisions file without
+# its table and a missing pack folder. Other lines no test reaches are
+# left for later parts of PBI-1.54.
 
 # resume_stopped_at_step_3 <dir>: a private project the plan cannot
 # protect: the run stops at step 3 (exit 3) with only the template's files
@@ -16660,7 +16651,7 @@ test_resume_stops_plainly_when_a_read_of_github_fails() {
     what="${c#*|*|}"
     raw="${what#*|}"
     what="${what%%|*}"
-    rm -f "$d/fail-on-count"
+    rm -f "$d/fail-on-used"
     n="$(calls_count "$d")"
     export STUB_GH_FAIL_ON="${c%%|*}:$text"
     again "$d"
@@ -16713,6 +16704,49 @@ test_resume_waits_while_github_is_still_copying_the_files() {
   expect_out "$d" "==> Waiting for GitHub to put the bootstrapper's files into the project"
   expect_out "$d" "GitHub is still copying the files"
   [ -s "$d/sleep.log" ] || die "it did not pause between two checks"
+  expect_one_of_each "$d"
+}
+
+test_a_failure_after_the_wait_at_the_resume_names_the_step_of_the_resume() {
+  # After the wait for the files, --resume is back in its own step: an
+  # unexpected failure there (here mktemp, at the read of CHANGELOG.md
+  # that follows the wait) names that step, not the wait. The same
+  # command then goes through.
+  local d n real text
+  d="$(tmpdir)"
+  resume_stopped_at_step_3 "$d"
+  n="$(calls_count "$d")"
+  echo 2 >"$d/main-missing"
+  real="$(command -v mktemp)"
+  # The fake mktemp fails once, with no message of its own, at the first
+  # call after the wait's own read of CHANGELOG.md (the last gh call
+  # logged is that read).
+  IFS= read -r -d '' text <<EOF || true
+last=""
+while IFS= read -r line || [ -n "\$line" ]; do last="\$line"; done <"$d/gh.log"
+case "\$last" in
+  *\$'\t'-i\$'\t'repos/octo-user/my-app/contents/CHANGELOG.md)
+    if [ ! -e "$d/mktemp-failed" ]; then
+      : >"$d/mktemp-failed"
+      exit 1
+    fi
+    ;;
+esac
+exec "$real" "\$@"
+EOF
+  write_stand_in "$d/bin/mktemp" "$text"
+  export STUB_GH_FAIL_ON="not-found:raw+json repos/octo-user/my-app/contents/CHANGELOG.md"
+  again "$d"
+  unset STUB_GH_FAIL_ON
+  rm -f "$d/bin/mktemp"
+  expect_rc 1 "$d"
+  [ -e "$d/mktemp-failed" ] || die "the fake mktemp did not fail (test is stale)"
+  expect_out "$d" "==> Waiting for GitHub to put the bootstrapper's files into the project"
+  expect_err_shape "$d" "Something unexpected happened, so the script stopped while: Working out where the setup stopped, from GitHub and from the copy on this computer\. The project octo-user/my-app exists on GitHub"
+  expect_continue_command "$d" " --resume"
+  expect_nothing_changed_since "$d" "$n"
+  again "$d"
+  expect_rc 0 "$d"
   expect_one_of_each "$d"
 }
 
@@ -16803,9 +16837,13 @@ test_git_failing_in_the_copy_stops_before_anything_is_saved_or_sent() {
     "status --porcelain -z|git could not list the setup's changes in the copy of the project on this computer\.|fatal: index file corrupt" \
     "status --porcelain -z|git could not list the setup's changes in the copy of the project on this computer\.|-" \
     "grep --cached -l -E|git could not check the setup's changes for sign-in keys\.|fatal: index file corrupt" \
+    "grep --cached -l -E|git could not check the setup's changes for sign-in keys\.|-" \
     "grep --cached -I -l|git could not check the line endings of the files in the copy of the project\.|fatal: index file corrupt" \
+    "grep --cached -I -l|git could not check the line endings of the files in the copy of the project\.|-" \
     "var GIT_COMMITTER_IDENT|git could not tell under which name and email it would save the setup's changes\.|fatal: index file corrupt" \
-    "add -A|git could not mark the setup's changes to be saved in the copy of the project on this computer\.|fatal: index file corrupt"; do
+    "var GIT_COMMITTER_IDENT|git could not tell under which name and email it would save the setup's changes\.|-" \
+    "add -A|git could not mark the setup's changes to be saved in the copy of the project on this computer\.|fatal: index file corrupt" \
+    "add -A|git could not mark the setup's changes to be saved in the copy of the project on this computer\.|-"; do
     text="${c%%|*}"
     raw="${c##*|}"
     what="${c#*|}"
@@ -16847,30 +16885,39 @@ test_a_copy_left_without_its_line_of_work_gets_one_at_the_resume() {
   again "$d"
   expect_rc 0 "$d"
   [ "$(grep -c 'checkout -q --no-track -b bootstrap-setup origin/main' "$d/tools.log")" -eq 2 ] || die "the resume did not start the line of work"
+  # Having started it, the resume does not also go on in it as in one
+  # it found.
+  ! grep -F '==> Going on in the line of work bootstrap-setup of the copy' "$d/out" >/dev/null || die "the resume also went on in the line of work it had just started"
+  ! grep -E ' checkout -q bootstrap-setup$' "$d/tools.log" >/dev/null || die "the resume switched to the line of work it had just started"
   expect_one_of_each "$d"
 }
 
 test_git_failing_to_look_at_the_copy_at_the_resume_stops_plainly() {
   # --resume asks git what the copy has not saved; when git fails, the run
-  # stops with git's text and the command to continue, and changes nothing.
-  local d n
+  # stops with git's text (or that it gave none) and the command to
+  # continue, and changes nothing.
+  local d n message raw
   d="$(tmpdir)"
   working_git "$d"
   export STUB_GH_BUILD="pull_request fail"
   setup_run "$d" --non-interactive --yes
   unset STUB_GH_BUILD
   expect_rc 1 "$d"
-  git_fails_on "$d" "status --porcelain --untracked-files=all"
-  n="$(calls_count "$d")"
-  again "$d"
-  expect_rc 1 "$d"
-  expect_err_shape "$d" "git could not look at the copy of the project on this computer, in \./my-app\."
-  grep -qxF "    fatal: index file corrupt" "$d/err" || {
-    cat "$d/err" >&2
-    die "git's text is not below"
-  }
-  expect_continue_command "$d" " --resume"
-  expect_nothing_changed_since "$d" "$n"
+  for message in "fatal: index file corrupt" -; do
+    git_fails_on "$d" "status --porcelain --untracked-files=all" "$message"
+    n="$(calls_count "$d")"
+    again "$d"
+    expect_rc 1 "$d"
+    expect_err_shape "$d" "git could not look at the copy of the project on this computer, in \./my-app\."
+    raw="$message"
+    [ "$raw" != - ] || raw="git stopped with exit code 128 and no message."
+    grep -qxF "    $raw" "$d/err" || {
+      cat "$d/err" >&2
+      die "$message: git's text is not below: $raw"
+    }
+    expect_continue_command "$d" " --resume"
+    expect_nothing_changed_since "$d" "$n"
+  done
 }
 
 test_a_line_of_work_renamed_in_the_copy_during_the_wait_is_not_added() {
