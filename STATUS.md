@@ -12,13 +12,13 @@ all projects reads them.
 Last update: 2026-11-08
 
 ## Phase
-Build and release. v2.9.2 is prepared: Ctrl-C during a gh call or at a question now shows the stop and the command to continue ([#425](https://github.com/factoincognito/ai-project-template-v2/pull/425), [#428](https://github.com/factoincognito/ai-project-template-v2/pull/428)), and the setup script has tests for 46 more lines ([#416](https://github.com/factoincognito/ai-project-template-v2/pull/416)).
+Build and release. v2.9.2 is released: Ctrl-C during a gh call or at a question shows the stop and the command to continue ([#425](https://github.com/factoincognito/ai-project-template-v2/pull/425), [#428](https://github.com/factoincognito/ai-project-template-v2/pull/428)), and the setup script has tests for 46 more lines ([#416](https://github.com/factoincognito/ai-project-template-v2/pull/416)).
 
 ## Current focus
-The release of v2.9.2, then the rest of PBI-1.54 in [`docs/BACKLOG.md`](https://github.com/factoincognito/ai-project-template-v2/blob/main/docs/BACKLOG.md).
+The rest of PBI-1.54 in [`docs/BACKLOG.md`](https://github.com/factoincognito/ai-project-template-v2/blob/main/docs/BACKLOG.md), and the fix of end-to-end finding r2b, the stop message after a finished step ([#445](https://github.com/factoincognito/ai-project-template-v2/pull/445)).
 
 ## Next step
-Clead runs the newcomer pre-check on `main` ([`docs/NEWCOMER_PRECHECK.md`](https://github.com/factoincognito/ai-project-template-v2/blob/main/docs/NEWCOMER_PRECHECK.md)); when it passes, Adam tags v2.9.2. Run 5 comes after that: someone who has never used a terminal or gh sets up a project from the bootstrapper's README alone.
+Run 5 on v2.9.2: someone who has never used a terminal or gh sets up a project from the bootstrapper's README alone.
 
 ## Blockers
 None. acuteping waits until run 5 passes.

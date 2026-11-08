@@ -6,6 +6,9 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Added
+- NEXT_SESSION: the newcomer pre-check on v2.9.2, the state of the release and what is left of PBI-1.54 (PR #444)
+
 ## [2.9.2] — 2026-11-08
 
 ### Added
