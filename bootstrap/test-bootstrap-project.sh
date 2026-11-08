@@ -7202,25 +7202,40 @@ test_a_stop_at_a_question_names_the_question() {
   # guide, each after a finished step (here Ctrl-C comes during the
   # discard of the keys typed before the question, from the stand-in dd,
   # as in test_ctrl_c_during_the_discard_puts_the_terminal_mode_back).
-  # Once a question inside a step is answered, a stop names the step
-  # again (an answer read from stdin, then Ctrl-C).
+  # A question read from stdin (ask) names itself while it waits, between
+  # two steps and inside one (here Ctrl-C comes as the question is shown:
+  # answer_line, which ask calls once it has named the question, is
+  # replaced by one that sends it). Once a question is answered, a stop
+  # names again what was there before: the step for ask, the offer and a
+  # guide's pause inside a step; for "Proceed?", in a new setup and with
+  # --resume, the step that ended before it (an answer read, then Ctrl-C).
   local d mode rc want
-  for mode in proceed offer pause answered; do
+  for mode in proceed offer pause asking asking-in-step answered offer-answered pause-answered proceed-answered resume-proceed-answered; do
     d="$(tmpdir)"
     typeahead_tools "$d"
     printf '\nyes\n' >"$d/tty"
     printf 'Ada\nyes\n' >"$d/in"
     case "$mode" in
-      proceed) want='waiting for your answer to "Proceed? (yes or no)"' ;;
-      offer) want='waiting for your answer to "Run it now? (yes or no)"' ;;
-      pause) want='waiting for your answer to "Press Enter to check again, or type q to stop"' ;;
-      answered) want='Checking the git name' ;;
+      proceed) want='while: waiting for your answer to "Proceed? (yes or no)"' ;;
+      offer) want='while: waiting for your answer to "Run it now? (yes or no)"' ;;
+      pause) want='while: waiting for your answer to "Press Enter to check again, or type q to stop"' ;;
+      asking) want='while: waiting for your answer to "Repo name"' ;;
+      asking-in-step) want='while: waiting for your answer to "Your name for git"' ;;
+      answered) want='while: Checking the git name' ;;
+      offer-answered) want='while: Checking the permissions of gh' ;;
+      pause-answered) want='while: Checking that git is installed' ;;
+      proceed-answered | resume-proceed-answered) want='after: Checking the last thing' ;;
     esac
     set +e
     (
       load_script
       export PATH="$d/bin:$PATH" BOOTSTRAP_TTY="$d/tty" BOOTSTRAP_INPUT_TERMINAL=yes
-      [ "$mode" = answered ] || export STUB_DD_INT=1
+      case "$mode" in
+        proceed | offer | pause) export STUB_DD_INT=1 ;;
+        asking | asking-in-step)
+          answer_line() { "$BASH" -c 'kill -INT "$PPID"'; }
+          ;;
+      esac
       catch_stops
       step_start "Checking the last thing"
       step_end "It is there."
@@ -7228,9 +7243,29 @@ test_a_stop_at_a_question_names_the_question() {
         proceed) confirm_plan ;;
         offer) ask_terminal "Why it is asked, in a sentence." "Run it now? (yes or no)" ;;
         pause) wait_for_enter ;;
+        asking) ask "Why it is asked, in a sentence." "Repo name" "" ;;
+        asking-in-step)
+          step_start "Checking the git name"
+          ask "Why it is asked, in a sentence." "Your name for git" ""
+          ;;
         answered)
           step_start "Checking the git name"
           ask "Why it is asked, in a sentence." "Your name for git" ""
+          "$BASH" -c 'kill -INT "$PPID"'
+          ;;
+        offer-answered)
+          step_start "Checking the permissions of gh"
+          ask_terminal "Why it is asked, in a sentence." "Run it now? (yes or no)"
+          "$BASH" -c 'kill -INT "$PPID"'
+          ;;
+        pause-answered)
+          step_start "Checking that git is installed"
+          wait_for_enter
+          "$BASH" -c 'kill -INT "$PPID"'
+          ;;
+        proceed-answered | resume-proceed-answered)
+          [ "$mode" = proceed-answered ] || OPT_RESUME=1
+          confirm_plan
           "$BASH" -c 'kill -INT "$PPID"'
           ;;
       esac
@@ -7242,9 +7277,9 @@ test_a_stop_at_a_question_names_the_question() {
       cat "$d/out" "$d/err" >&2
       die "[$mode] exit $rc, want 130 (Ctrl-C)"
     }
-    grep -qxF "    The script was stopped with Ctrl-C (or by a request to stop) while: $want" "$d/err" || {
+    grep -qxF "    The script was stopped with Ctrl-C (or by a request to stop) $want" "$d/err" || {
       cat "$d/err" >&2
-      die "[$mode] the stop does not say: while: $want"
+      die "[$mode] the stop does not say: $want"
     }
   done
 }
