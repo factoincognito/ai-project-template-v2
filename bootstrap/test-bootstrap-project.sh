@@ -2795,9 +2795,9 @@ test_layout_pack_errors_use_the_error_format() {
 }
 
 test_layout_pack_without_its_words_shows_only_the_two_usage_lines() {
-  # PBI-1.54: layout-pack with a word missing exits 2 with the usage, its
-  # two lines and nothing else: usage marks the stop as deliberate
-  # (CLEAN), so the message for an unplanned stop does not follow it.
+  # PBI-1.54: layout-pack with a word missing exits 2 with the usage: its
+  # two lines and nothing else on stderr. (tools/test-layout-pack.sh
+  # checks the exit code and "usage:"; this checks both lines exactly.)
   local err rc want
   err="$WORK/err.$RANDOM"
   want="$WORK/want.$RANDOM"
