@@ -683,6 +683,8 @@ Template work that the product office's backlog held until the product owner dec
 
 - **[LATER] PBI-1.61** (Crog's note b on #429, 2026-11-08) — The header of the shipped `bootstrap/stubs/bootstrap-project.sh` (lines 3 and 4) links the PBI-1.14 spec at `docs/BACKLOG.md`, and a test in `bootstrap/test.sh` pins that URL; the entry is now in `docs/BACKLOG-DONE.md`, so a reader following the link does not find it. Point both at the new file.
 
+- **[LATER] PBI-1.62** (Clead, 2026-11-08) — The `build` check downloads shellcheck from `github.com/koalaman/shellcheck/releases` (`.github/workflows/ci.yml`, step "Check the scripts with shellcheck") with `curl --retry 3`, so a GitHub outage on release downloads blocks every merge. Seen on 2026-11-08: from about 09:11 UTC every CI run failed on HTTP 504 for that download (runs 42466069856 on `main`, 42466077633 three attempts until 10:11 UTC, 42468753924, 42469213520); a run at about 09:01 UTC still passed. Possible fixes, to be specced: cache the checked archive between runs (`actions/cache`, keyed on version and SHA-256), or fall back to a second source with the same checksum. The same holds for the shfmt download in the next step.
+
 ## Audit findings (2026-11-06)
 
 The findings of the product office's audit of this project (Process P-6 § 8 (2)). Adam's decision: conditional accept, 2026-11-06.
