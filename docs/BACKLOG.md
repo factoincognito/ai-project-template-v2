@@ -1281,6 +1281,15 @@ autonomy. Use a real project as the pilot: acuteping (decided
   - C. B and A1 together.
   - D. A1 into an umbrella that already exists.
 
+  **Paths for existing repositories (Adam's questions, 2026-11-08 00:10; the list is Clead's proposal, recorded at Adam's "apyr", 00:12).** None is covered by the bootstrapper today: the setup script refuses a repository it did not create, and the migration branch of PBI-1.4 was superseded on 2026-10-01 without becoming an item of its own.
+  - E1. An existing repository becomes a standalone project with Claude support.
+  - E2. An existing repository into a project with Claude support under an existing umbrella. Done by hand so far: fomo-f and acuteping's interim repository, both repositories without the template's files, were brought in line and signed off to the product office's Rules by a session in each, at the 2026-11-05 cutover.
+  - E3. An existing repository into a project with Claude support under a new umbrella: C with an existing repository in place of a new one.
+  - E4. An A1 project made by the bootstrapper joins an umbrella later, new or existing; its own copy of the Rules gives way to the umbrella's. Done by hand so far: vizi, made by the bootstrapper on 2026-11-04 and signed off to the product office's Rules on 2026-11-05.
+  - E5. A pre-project inside an umbrella: a folder in the umbrella's repository, with its own status and rules, that later moves into a repository of its own.
+  - Left out: an existing repository into a project without Claude support. It would add only branch protection, CI and the test-change check, which the owner it suits can set up without the bootstrapper (Adam and Clead, 2026-11-08).
+  - Already open elsewhere: an A2 project adding Claude support later (PBI-1.24, "Open").
+
   **What an umbrella is (Clead's reading, to be confirmed when specced).** A repository above several projects, like the product office is for Adam's own: the single entry point for work with Claude, the home of the rules and processes the projects sign off to, the list of projects, the ideas, and the view of each project's status read from its `STATUS.md`. In D, the new project is listed in the umbrella and signs off to its rules instead of carrying its own copy of them.
 
   **Adam's question, Clead's answer (2026-11-07, not confirmed by Adam).** Adam asked whether an umbrella without Claude support would make sense. Clead: no. Its rules bind sessions, and its sign-offs, audits, status view and list of what waits for the owner are carried out by sessions; without them it is a folder of documents that nobody keeps to. For the same reason Clead does not propose an A2 project under an umbrella.
@@ -1290,6 +1299,18 @@ autonomy. Use a real project as the pilot: acuteping (decided
   **Order (Clead's proposal, not decided).** After PBI-1.24, since C and D build on A1 and that option, and after the end-to-end runs, because both change the setup script the runs test.
 
   **Rules that apply.** The spec needs Adam's intent approval. Script, test and workflow changes are code: test first, reviewed by the role that did not write them. Wording changes to process documents are reviewed by Crog.
+
+  **Done when.** Written when specced.
+
+- **[LATER] PBI-1.59** (Adam, 2026-11-08 00:14; the WHAT is Adam's, the HOW is Clead's; not yet specced; when it is built is not decided) — The bootstrapper's README says which kinds of setup it supports, which are not supported but planned, and, where relevant, which are not supported and not planned.
+
+  **Why (Adam, 2026-11-08).** A reader should see from the README what the bootstrapper can set up today and what not, before starting.
+
+  **Facts (Clead, checked 2026-11-08 at `main`).** The README is `bootstrap/bootstrapper-README.md`, built into the bootstrapper's `.github/README.md` (`bootstrap/build.sh`). The setup script supports one kind of setup: a new project with Claude support, with the node, web, python or react-native pack (`--pack`), and continuing a stopped setup (`--resume`, `--again`). The C# pack is laid out by `layout-pack` but not offered by the setup (PBI-1.23 part 2). Planned: PBI-1.24 (without Claude support), PBI-1.55 (umbrellas and existing repositories), PBI-1.23 part 2. Not planned: the paths PBI-1.55 leaves out.
+
+  **Open (Clead, for the spec).** Where the list sits in the README, and how a planned item's line stays true when its PBI changes status (a test against the backlog, or a step in each PBI's "Done when").
+
+  **Rules that apply.** The README is shipped and its prose is checked by `bootstrap/test.sh`; a README change and its tests: test first, reviewed by Crog. The spec is approved by Adam in chat (§ 29 (2)).
 
   **Done when.** Written when specced.
 - **[SUPERSEDED] PBI-2.1** (the connector was written off 2026-06-28;
@@ -1588,6 +1609,21 @@ to fall out of a chat session.
   updated to "Crog: open a PR updating CHANGELOG.md."
 
 ---
+
+## Moved from the product office (2026-11-08)
+
+Template work that the product office's backlog held until the product owner decided, on 2026-11-08, that a project's work lives in its own backlog. Each entry names the product office entry it came from, which now points here.
+
+- **[LATER] PBI-1.56** (Adam, 2026-10-01; moved 2026-11-08 from the product office's PO-12) — Renew the bootstrapper's publish token `fi-bootstrap-publish` before it expires on 2027-10-02.
+  Create a new token with the same permissions (Contents and Workflows, read and write, only `factoincognito/ai-project-bootstrap`), update the `BOOTSTRAP_PUSH_TOKEN` secret in this repository, and delete the old token. Adam does all three; a session cannot. A calendar reminder goes in around 2027-09-18. The setup this token belongs to is described under PBI-1.10.
+
+- **[LATER] PBI-1.57** (Clead, 2026-10-26, from Adam's decision that the template propagates the product office's rules to new projects; moved 2026-11-08 from the product office's PO-56, part 2) — A check that the purpose and goal in a made project's `memory/project.md` are filled in once its setup phase is over. The bootstrapper already leaves them for the first Clead session; after that phase the check fails CI.
+  Part 1 of the product office entry, the `STATUS.md` stub, is done (`bootstrap/stubs/STATUS.md`, checked 2026-11-08). Part 3, the product office's reader skill flagging a project whose purpose or goal is missing, belongs to the product office and stays there.
+
+- **[LATER] PBI-1.58** (Clead, 2026-10-26, a HOW decision Adam delegated in chat; moved 2026-11-08 from the product office's PO-51) — Skills and subagents in the template, so that made projects inherit them. One PBI each, in this order:
+  1. Crog as fixed subagent definitions (`.claude/agents/`): a reviewer on Opus whose only input is the diff, `docs/SPEC.md` and `memory/standards.md`, and a merger on Sonnet (verdict comment first, then squash-merge). This replaces briefing Crog afresh in every Clead session. Not checked: how a made project's Claude setup picks up agent files; test it before promising it. The product office entry pointed to `docs/NEXT_SESSION.md` item 13 for the "roster" part; no such item was found there on 2026-11-08.
+  2. A handover skill (`.claude/skills/`) carrying the procedure for handing a session's role back, so it runs when a session is told to hand over.
+  Whether the inputs in item 1 still match the review inputs of the Rules (P-3 § 2) is checked when the PBI is specced.
 
 ## Audit findings (2026-11-06)
 

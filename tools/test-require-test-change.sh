@@ -810,6 +810,12 @@ test_template_dotfiles_alone_fail() {
   template_verdict 1 .gitattributes
   template_verdict 1 .gitignore
 }
+# The lint and coverage configurations change what build and
+# bootstrapper-test check, so a change to them alone needs a test change
+# (PBI-1.41 follow-up (2), the review of #397).
+test_template_shellcheckrc_alone_fails() { template_verdict 1 .shellcheckrc; }
+test_template_simplecov_alone_fails() { template_verdict 1 .simplecov; }
+test_template_lint_and_coverage_configs_with_a_test_pass() { template_verdict 0 .shellcheckrc .simplecov bootstrap/test.sh; }
 test_template_pack_prose_alone_passes() { template_verdict 0 languages/node/code-standards.md; }
 test_template_claude_md_alone_passes() { template_verdict 0 CLAUDE.md; }
 test_template_docs_and_memory_alone_pass() { template_verdict 0 docs/BACKLOG.md memory/decisions.md; }
