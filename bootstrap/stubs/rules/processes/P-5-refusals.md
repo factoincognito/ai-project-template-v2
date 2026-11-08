@@ -24,3 +24,12 @@ P-5 § 5 Refused changes that are not delegated
 
 P-5 § 6 Refused startup attach
 (1) A refused attach at startup is handled in accordance with Process P-1 § 2 (2) and (6).
+
+P-5 § 7 Avoidable prompts
+(1) A session writes its commands so that Claude's permission check has no cause to stop for the product owner's approval of a step the work does not need. To that end:
+(a) no command's text contains `.claude`, as a path or as text that only mentions it; a file there is read with the file-reading tool;
+(b) text the session composes for a file, such as a brief, a comment, a PR description or a script, is written with the file tools, not through a heredoc, `echo`, `printf` or `sed`;
+(c) a command holds no delete of a file or folder the work does not need removed;
+(d) a step the check may stop for runs as a command of its own.
+(2) When the check stops for the product owner's approval of a step all the same, the session records it as P-5 § 3 (2) records a refusal: the command, the cause it can see, or infers and marks as inferred, and whether the step was needed.
+(3) A prompt that starts or resumes an agent states (1) as limits on the agent's own commands.
