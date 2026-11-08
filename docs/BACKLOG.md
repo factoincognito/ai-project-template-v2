@@ -1281,6 +1281,15 @@ autonomy. Use a real project as the pilot: acuteping (decided
   - C. B and A1 together.
   - D. A1 into an umbrella that already exists.
 
+  **Paths for existing repositories (Adam's questions, 2026-11-08 00:10; the list is Clead's proposal, recorded at Adam's "apyr", 00:12).** None is covered by the bootstrapper today: the setup script refuses a repository it did not create, and the migration branch of PBI-1.4 was superseded on 2026-10-01 without becoming an item of its own.
+  - E1. An existing repository becomes a standalone project with Claude support.
+  - E2. An existing repository into a project with Claude support under an existing umbrella. Done by hand so far: fomo-f and acuteping's interim repository, both repositories without the template's files, were brought in line and signed off to the product office's Rules by a session in each, at the 2026-11-05 cutover.
+  - E3. An existing repository into a project with Claude support under a new umbrella: C with an existing repository in place of a new one.
+  - E4. An A1 project made by the bootstrapper joins an umbrella later, new or existing; its own copy of the Rules gives way to the umbrella's. Done by hand so far: vizi, made by the bootstrapper on 2026-11-04 and signed off to the product office's Rules on 2026-11-05.
+  - E5. A pre-project inside an umbrella: a folder in the umbrella's repository, with its own status and rules, that later moves into a repository of its own.
+  - Left out: an existing repository into a project without Claude support. It would add only branch protection, CI and the test-change check, which the owner it suits can set up without the bootstrapper (Adam and Clead, 2026-11-08).
+  - Already open elsewhere: an A2 project adding Claude support later (PBI-1.24, "Open").
+
   **What an umbrella is (Clead's reading, to be confirmed when specced).** A repository above several projects, like the product office is for Adam's own: the single entry point for work with Claude, the home of the rules and processes the projects sign off to, the list of projects, the ideas, and the view of each project's status read from its `STATUS.md`. In D, the new project is listed in the umbrella and signs off to its rules instead of carrying its own copy of them.
 
   **Adam's question, Clead's answer (2026-11-07, not confirmed by Adam).** Adam asked whether an umbrella without Claude support would make sense. Clead: no. Its rules bind sessions, and its sign-offs, audits, status view and list of what waits for the owner are carried out by sessions; without them it is a folder of documents that nobody keeps to. For the same reason Clead does not propose an A2 project under an umbrella.
