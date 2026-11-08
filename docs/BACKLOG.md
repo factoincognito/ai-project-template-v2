@@ -23,6 +23,8 @@ set out in vizi's format spec:
 https://github.com/factoincognito/vizi/blob/main/docs/BACKLOG-FORMAT.md
 (linked, not copied).
 
+The entries marked `DONE` are in [`docs/BACKLOG-DONE.md`](BACKLOG-DONE.md) (`RULES.md` L § 2 (1)).
+
 ---
 
 ## Phase 1 — Language packs and bootstrap wizard
@@ -677,6 +679,10 @@ Template work that the product office's backlog held until the product owner dec
   2. A handover skill (`.claude/skills/`) carrying the procedure for handing a session's role back, so it runs when a session is told to hand over.
   Whether the inputs in item 1 still match the review inputs of the Rules (P-3 § 2) is checked when the PBI is specced.
 
+- **[LATER] PBI-1.60** (Crog's note a on #429, 2026-11-08) — Add `docs/BACKLOG-DONE.md` to `bootstrap/not-read-by-tests.txt`, so that a PR which only marks an entry `DONE` does not run the full Bootstrapper test matrix. A change to a CI input, so the test that pins the list's effect comes first.
+
+- **[LATER] PBI-1.61** (Crog's note b on #429, 2026-11-08) — The header of the shipped `bootstrap/stubs/bootstrap-project.sh` (lines 3 and 4) links the PBI-1.14 spec at `docs/BACKLOG.md`, and a test in `bootstrap/test.sh` pins that URL; the entry is now in `docs/BACKLOG-DONE.md`, so a reader following the link does not find it. Point both at the new file.
+
 ## Audit findings (2026-11-06)
 
 The findings of the product office's audit of this project (Process P-6 § 8 (2)). Adam's decision: conditional accept, 2026-11-06.
@@ -712,7 +718,5 @@ The findings of the product office's audit of this project (Process P-6 § 8 (2)
 - ~~C# language pack~~ — moved into Phase 1 as PBI-1.23 (Adam, 2026-10-28), as a base pack
 - Elixir language pack — planned in v1, not yet built, not a Phase 1 priority
 - Automated merge — Adam merges, always
-
-The entries marked `DONE` are in [`docs/BACKLOG-DONE.md`](BACKLOG-DONE.md) (`RULES.md` L § 2 (1)).
 
 <!-- vizi:include BACKLOG-DONE.md -->
