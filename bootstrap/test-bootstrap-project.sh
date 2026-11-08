@@ -301,6 +301,35 @@ seed_project() {
   "$g" -C "$w" push -q "$bare" main 2>/dev/null
   rm -rf "$w"
 }
+# STUB_GH_FAIL_ON=<modes>:<text>: the calls whose arguments, joined by
+# spaces, hold <text> fail in turn as the modes of the comma-separated
+# list <modes>: one of emit_failure's, interrupt (gh sends the script
+# Ctrl-C, then fails) or pass (not failed). Once the list is used up,
+# they are not failed. The calls are counted in the file fail-on-count
+# next to the log; a test deletes it to start the list again. The other
+# settings fail a kind of call (every file read, say); this one fails a
+# single call of that kind.
+if [ -n "${STUB_GH_FAIL_ON:-}" ]; then
+  case "$*" in
+    *"${STUB_GH_FAIL_ON#*:}"*)
+      f="${STUB_GH_LOG%/*}/fail-on-count"
+      n=0
+      if [ -f "$f" ]; then read -r n <"$f" || true; fi
+      n=$((n + 1))
+      echo "$n" >"$f"
+      IFS=, read -r -a modes <<<"${STUB_GH_FAIL_ON%%:*}"
+      mode="${modes[$((n - 1))]:-pass}"
+      case "$mode" in
+        pass) ;;
+        interrupt)
+          kill -INT "$PPID"
+          exit 1
+          ;;
+        *) emit_failure "$mode" ;;
+      esac
+      ;;
+  esac
+fi
 case "${1:-}" in
   --version)
     # gh-missing: gh is not installed (yet).
@@ -16594,6 +16623,327 @@ test_the_screen_of_the_setup_a_newcomer_meets_is_written_for_the_precheck() {
     cat "$dest/screen.txt" >&2
     die "the screen lacks the end of the second run"
   }
+}
+
+# ---------- lines no test reached (PBI-1.54 b) ----------
+# The lines of the setup script that no test reached, measured with
+# bootstrap/coverage.sh (PBI-1.41), each now run by a test that checks what
+# it does: GitHub's reads at --resume that fail or find the files not
+# there yet, git failing in the copy, and the smaller branches of the
+# questions, the guides and the commands shown.
+
+# resume_stopped_at_step_3 <dir>: a private project the plan cannot
+# protect: the run stops at step 3 (exit 3) with only the template's files
+# on GitHub and no copy, so the next run is a --resume of that state.
+resume_stopped_at_step_3() {
+  export STUB_GH_PROTECT_FAIL=plan
+  setup_run "$1" --non-interactive --yes --private
+  unset STUB_GH_PROTECT_FAIL
+  expect_rc 3 "$1"
+}
+
+test_resume_stops_plainly_when_a_read_of_github_fails() {
+  # Each of GitHub's reads that --resume makes to work out where the
+  # setup stopped can fail: the run stops with what happened for that
+  # read, GitHub's answer below, and the command to continue, and changes
+  # nothing. The same command then goes through.
+  local d n c text what raw
+  d="$(tmpdir)"
+  resume_stopped_at_step_3 "$d"
+  for c in \
+    "server|raw+json repos/octo-user/my-app/contents/CHANGELOG.md|GitHub had a problem of its own, so the script could not read the file CHANGELOG\.md of the project\.|HTTP 503: Service Unavailable" \
+    "offline|repos/octo-user/my-app/contents/README.md|The script could not reach GitHub to read the file README\.md of the project\.|error connecting to api.github.com" \
+    "forbidden|repos/octo-user/my-app/contents/bootstrap-project.sh|GitHub refused to let the script look for the file bootstrap-project\.sh in the project\.|HTTP 403: Resource not accessible by integration" \
+    "teapot|repos/octo-user/my-app/branches/bootstrap-setup --jq|Something unexpected happened, so the script could not look for the line of work bootstrap-setup of the project\.|HTTP 418: Short and stout"; do
+    text="${c#*|}"
+    text="${text%%|*}"
+    what="${c#*|*|}"
+    raw="${what#*|}"
+    what="${what%%|*}"
+    rm -f "$d/fail-on-count"
+    n="$(calls_count "$d")"
+    export STUB_GH_FAIL_ON="${c%%|*}:$text"
+    again "$d"
+    unset STUB_GH_FAIL_ON
+    expect_rc 1 "$d"
+    expect_err_shape "$d" "$what The project octo-user/my-app exists on GitHub"
+    grep -qxF "    $raw" "$d/err" || {
+      cat "$d/err" >&2
+      die "${c%%|*}: GitHub's answer is not below: $raw"
+    }
+    expect_continue_command "$d" " --resume"
+    expect_nothing_changed_since "$d" "$n"
+    [ ! -e "$(copy_of "$d")" ] || die "${c%%|*}: a copy was made"
+  done
+  again "$d"
+  expect_rc 0 "$d"
+  expect_one_of_each "$d"
+}
+
+test_resume_waits_while_github_is_still_copying_the_files() {
+  # --resume of a project whose CHANGELOG.md and main version GitHub has
+  # not made yet (it is still copying the template): it waits for the
+  # files, as a new setup does, reads CHANGELOG.md again and goes on.
+  local d n want
+  d="$(tmpdir)"
+  resume_stopped_at_step_3 "$d"
+  n="$(calls_count "$d")"
+  # main is missing for the resume's own check and the wait's first one.
+  echo 2 >"$d/main-missing"
+  rm -f "$d/sleep.log"
+  # The first read of CHANGELOG.md finds nothing, the read after the wait
+  # finds it.
+  export STUB_GH_FAIL_ON="not-found:raw+json repos/octo-user/my-app/contents/CHANGELOG.md"
+  again "$d"
+  unset STUB_GH_FAIL_ON
+  expect_rc 0 "$d"
+  want="$(printf '%s\n' \
+    "api -i repos/octo-user/my-app --jq .private" \
+    "api -i -H Accept: application/vnd.github.raw+json repos/octo-user/my-app/contents/CHANGELOG.md" \
+    "$BRANCH_CALL" "$BRANCH_CALL" "$BRANCH_CALL" "$FILES_CALL" \
+    "api -i -H Accept: application/vnd.github.raw+json repos/octo-user/my-app/contents/CHANGELOG.md" \
+    "api -i -H Accept: application/vnd.github.raw+json repos/octo-user/my-app/contents/README.md")"
+  # From the resume's first read of the project on (the preflight's
+  # calls before it are those of every run) to its read of README.md.
+  [ "$(calls_since "$d" "$n" | sed -n '/ --jq .private$/,/contents\/README.md$/p')" = "$want" ] || {
+    printf 'want:\n%s\ngot:\n' "$want" >&2
+    calls_since "$d" "$n" >&2
+    die "it did not wait for the files and read CHANGELOG.md again"
+  }
+  expect_out "$d" "==> Waiting for GitHub to put the bootstrapper's files into the project"
+  expect_out "$d" "GitHub is still copying the files"
+  [ -s "$d/sleep.log" ] || die "it did not pause between two checks"
+  expect_one_of_each "$d"
+}
+
+test_resume_of_a_website_with_its_publishing_files_reads_them_from_github() {
+  # A web project with the publishing files, stopped at the wait for
+  # build, its copy moved away: --resume reads from GitHub whether the
+  # setup's change has the files, and stops plainly when that read fails.
+  # Once the setup is finished, a --resume reads the pack and the
+  # publishing files from the project's CHANGELOG.md and names both.
+  local d n
+  d="$(tmpdir)"
+  working_git "$d"
+  fake_tool "$d" npm 10.0.0
+  export STUB_GH_BUILD="pull_request fail"
+  setup_run "$d" --non-interactive --yes --pack web --with-deploy
+  unset STUB_GH_BUILD
+  expect_rc 1 "$d"
+  mv "$(copy_of "$d")" "$d/elsewhere"
+  n="$(calls_count "$d")"
+  export STUB_GH_FAIL_ON="server:contents/.github/workflows/deploy.yml?ref=bootstrap-setup"
+  setup_run "$d" --yes --resume --pack web
+  unset STUB_GH_FAIL_ON
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "GitHub had a problem of its own, so the script could not look for the files that publish the website in the setup's changes on GitHub\."
+  expect_continue_command "$d" " --resume"
+  expect_nothing_changed_since "$d" "$n"
+  rm -rf "$d/elsewhere"
+  setup_run "$d" --yes --resume --pack web
+  expect_rc 0 "$d"
+  expect_one_of_each "$d"
+  n="$(calls_count "$d")"
+  setup_run "$d" --yes --resume --pack web
+  expect_rc 0 "$d"
+  expect_nothing_changed_since "$d" "$n"
+  grep -qxF '    Language pack: web, with the files that publish the website' "$d/out" || {
+    cat "$d/out" >&2
+    die "the report of the set-up project does not name the publishing files"
+  }
+}
+
+test_both_files_stored_with_crlf_on_github_are_named_together() {
+  # S18a: README.md and CHANGELOG.md both have carriage returns on GitHub:
+  # one stop names both, before anything is written.
+  local d
+  d="$(tmpdir)"
+  hand_made_project "$d" kept crlf crlf
+  export STUB_GH_EXISTING=octo-user/my-app
+  setup_run "$d" --non-interactive --yes --resume
+  unset STUB_GH_EXISTING
+  expect_rc 3 "$d"
+  nothing_changed_on_github "$d"
+  expect_out "$d" "The files README.md and CHANGELOG.md of the project octo-user/my-app on GitHub each have a carriage return (as files saved on Windows do)."
+  expect_out "$d" "Save README.md and CHANGELOG.md with LF line endings"
+}
+
+# git_fails_on <dir> <text> [message] [times]: the fake git of <dir> fails
+# each call whose arguments, joined by spaces, hold <text>, that many times
+# (default: always), with <message> on stderr (default: git's text for a
+# broken index; "-": nothing) and exit 128. Every other call runs the
+# real git.
+git_fails_on() {
+  printf '%s\n' "$2" >"$1/git-fail-text"
+  printf '%s\n' "${3:-fatal: index file corrupt}" >"$1/git-fail-message"
+  printf '%s\n' "${4:-9999}" >"$1/git-fail-count"
+  write_stand_in "$1/push-hook" "$GIT_FAIL_HOOK_TEXT"
+}
+IFS= read -r -d '' GIT_FAIL_HOOK_TEXT <<'HOOK' || true
+case "$0" in */*) here="${0%/*}" ;; *) here=. ;; esac
+IFS= read -r text <"$here/git-fail-text" || true
+case "$*" in *"$text"*) ;; *) exit 0 ;; esac
+read -r n <"$here/git-fail-count" || true
+[ "$n" -gt 0 ] || exit 0
+echo $((n - 1)) >"$here/git-fail-count"
+IFS= read -r message <"$here/git-fail-message" || true
+[ "$message" = - ] || printf '%s\n' "$message" >&2
+exit 128
+HOOK
+
+test_git_failing_in_the_copy_stops_before_anything_is_saved_or_sent() {
+  # Each git command of the checks before the change is saved (the list
+  # of changes, the search for keys and for carriage returns, the name
+  # and email git would save under) and the one that marks the changes
+  # to be saved: when git fails, the run stops with what git could not
+  # do, git's own text below (or that it gave none), and the command to
+  # continue; nothing is saved or sent.
+  local d c text what raw
+  for c in \
+    "status --porcelain -z|git could not list the setup's changes in the copy of the project on this computer\.|fatal: index file corrupt" \
+    "status --porcelain -z|git could not list the setup's changes in the copy of the project on this computer\.|-" \
+    "grep --cached -l -E|git could not check the setup's changes for sign-in keys\.|fatal: index file corrupt" \
+    "grep --cached -I -l|git could not check the line endings of the files in the copy of the project\.|fatal: index file corrupt" \
+    "var GIT_COMMITTER_IDENT|git could not tell under which name and email it would save the setup's changes\.|fatal: index file corrupt" \
+    "add -A|git could not mark the setup's changes to be saved in the copy of the project on this computer\.|fatal: index file corrupt"; do
+    text="${c%%|*}"
+    raw="${c##*|}"
+    what="${c#*|}"
+    what="${what%|*}"
+    d="$(tmpdir)"
+    working_git "$d"
+    git_fails_on "$d" "$text" "$raw"
+    setup_run "$d" --non-interactive --yes
+    expect_rc 1 "$d"
+    expect_err_shape "$d" "$what The project octo-user/my-app exists on GitHub"
+    [ "$raw" != - ] || raw="git stopped with exit code 128 and no message."
+    grep -qxF "    $raw" "$d/err" || {
+      cat "$d/err" >&2
+      die "$text: git's text is not below: $raw"
+    }
+    expect_continue_command "$d" " --resume"
+    [ "$(saved_changes "$d")" -eq 0 ] || die "$text: the change was saved"
+    ! in_git --git-dir="$(bare_of "$d")" rev-parse -q --verify refs/heads/bootstrap-setup >/dev/null || die "$text: the change was sent"
+  done
+}
+
+test_a_copy_left_without_its_line_of_work_gets_one_at_the_resume() {
+  # git could not start the line of work bootstrap-setup in the new copy:
+  # the run stops with git's text. --resume finds the copy with none of
+  # the setup's changes and no line of work of its own, starts it, and
+  # goes through.
+  local d
+  d="$(tmpdir)"
+  working_git "$d"
+  git_fails_on "$d" "checkout -q --no-track -b bootstrap-setup origin/main" "fatal: cannot lock ref" 1
+  setup_run "$d" --non-interactive --yes
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "git could not start the line of work bootstrap-setup in the copy of the project on this computer\."
+  grep -qxF "    fatal: cannot lock ref" "$d/err" || {
+    cat "$d/err" >&2
+    die "git's text is not below"
+  }
+  ! in_git -C "$(copy_of "$d")" rev-parse -q --verify refs/heads/bootstrap-setup >/dev/null || die "the line of work is there (test is stale)"
+  again "$d"
+  expect_rc 0 "$d"
+  [ "$(grep -c 'checkout -q --no-track -b bootstrap-setup origin/main' "$d/tools.log")" -eq 2 ] || die "the resume did not start the line of work"
+  expect_one_of_each "$d"
+}
+
+test_git_failing_to_look_at_the_copy_at_the_resume_stops_plainly() {
+  # --resume asks git what the copy has not saved; when git fails, the run
+  # stops with git's text and the command to continue, and changes nothing.
+  local d n
+  d="$(tmpdir)"
+  working_git "$d"
+  export STUB_GH_BUILD="pull_request fail"
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_BUILD
+  expect_rc 1 "$d"
+  git_fails_on "$d" "status --porcelain --untracked-files=all"
+  n="$(calls_count "$d")"
+  again "$d"
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "git could not look at the copy of the project on this computer, in \./my-app\."
+  grep -qxF "    fatal: index file corrupt" "$d/err" || {
+    cat "$d/err" >&2
+    die "git's text is not below"
+  }
+  expect_continue_command "$d" " --resume"
+  expect_nothing_changed_since "$d" "$n"
+}
+
+test_a_line_of_work_renamed_in_the_copy_during_the_wait_is_not_added() {
+  # The user renames the line of work bootstrap-setup in the copy while
+  # the script waits for build: the script cannot tell which change it
+  # sent, so it adds nothing and stops with the command to continue.
+  local d
+  d="$(tmpdir)"
+  echo 1 >"$d/build-pending"
+  write_stand_in "$d/rename" "printf '%s\n' \"\$*\" >>\"$d/sleep.log\"
+\"$REAL_GIT\" -C \"$d/cwd/my-app\" branch -q -m bootstrap-setup renamed 2>/dev/null || true
+"
+  export BOOTSTRAP_SLEEP="$d/rename"
+  setup_run "$d" --non-interactive --yes
+  export BOOTSTRAP_SLEEP="$WORK/refuse/sleep"
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "git could not tell which change the script sent to GitHub: the line of work bootstrap-setup is missing from the copy of the project on this computer, in \./my-app\. The proposed change stays open on GitHub\."
+  ! calls_from_create "$d" | grep -q '^pr merge ' || die "the change was added"
+  [ "$(in_git --git-dir="$(bare_of "$d")" rev-list --count main)" -eq 1 ] || die "main has a new change"
+  expect_continue_command "$d" " --resume"
+}
+
+test_a_project_without_the_table_of_decisions_is_not_set_up_without_protection() {
+  # --allow-unprotected writes its decision into the table of
+  # memory/decisions.md; a project whose file has no table stops before
+  # the copy is changed, as a broken bootstrapper.
+  local d f
+  d="$(tmpdir)"
+  built_bootstrapper
+  mkdir -p "$d/template"
+  cp -R "$BUILT/." "$d/template/"
+  f="$d/template/memory/decisions.md"
+  grep -v '^|' "$f" >"$f.new"
+  mv "$f.new" "$f"
+  export STUB_GH_TEMPLATE="$d/template"
+  resume_stopped_at_step_3 "$d"
+  # The plan still cannot protect it.
+  export STUB_GH_PROTECT_FAIL=plan
+  again "$d" --allow-unprotected
+  unset STUB_GH_TEMPLATE STUB_GH_PROTECT_FAIL
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "The file memory/decisions\.md in the copy of the project has no table of decisions, where the setup writes that the main version is not protected\."
+  sed -n 2p "$d/err" | grep -qF "Report it to the bootstrapper's maintainers" || {
+    cat "$d/err" >&2
+    die "the next action is not to report the broken bootstrapper"
+  }
+  expect_copy_untouched "$d"
+}
+
+test_a_project_without_its_pack_folder_is_reported_as_a_broken_bootstrapper() {
+  # The pack's files come from the project GitHub made: a project whose
+  # languages/ lacks the pack stops at the pack's step, as a broken
+  # bootstrapper, before anything is laid out.
+  local d
+  d="$(tmpdir)"
+  built_bootstrapper
+  mkdir -p "$d/template"
+  cp -R "$BUILT/." "$d/template/"
+  rm -rf "$d/template/languages/python"
+  export STUB_GH_TEMPLATE="$d/template"
+  setup_run "$d" --non-interactive --yes
+  unset STUB_GH_TEMPLATE
+  expect_rc 1 "$d"
+  expect_err_shape "$d" "pack folder not found: \./my-app/languages/python"
+  grep -qxF "    Not a folder: ./my-app/languages/python" "$d/err" || {
+    cat "$d/err" >&2
+    die "the details do not name the folder"
+  }
+  sed -n 2p "$d/err" | grep -qF "Report it to the bootstrapper's maintainers" || {
+    cat "$d/err" >&2
+    die "the next action is not to report the broken bootstrapper"
+  }
+  expect_copy_untouched "$d"
 }
 
 # ---------- run ----------
