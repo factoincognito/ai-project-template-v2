@@ -8,6 +8,10 @@ A bootstrapped project records the tag it was built from.
 
 ### Added
 - NEXT_SESSION: the newcomer pre-check on v2.9.2, the state of the release and what is left of PBI-1.54 (PR #444)
+- `STATUS.md` and NEXT_SESSION after the v2.9.2 tag (PR #446)
+
+### Fixed
+- A stop of the setup script between two steps no longer names the step that had finished as still running: it says "after:" with that step, and a stop at a question names the question (end-to-end run 2, finding r2b) (PR #445)
 
 ## [2.9.2] — 2026-11-08
 
