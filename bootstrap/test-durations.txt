@@ -76,7 +76,9 @@ test_a_signed_out_gh_is_guided_to_sign_in 0.1 0.3 1.3 0.2
 test_a_stop_after_the_project_exists_saves_resume_and_the_guide_offers_the_short_command_with_allow 20.8 39.8 34.2 60.5
 test_a_stop_and_the_closing_next_step_come_after_one_blank_line 0.1 0.2 0.3 0.1
 test_a_stop_at_a_guide_shows_the_short_command_and_saves_the_long_ones_arguments 0.3 0.6 3.2 0.4
+test_a_stop_at_a_question_names_the_question 0.2 0 1.4 0.2
 test_a_stop_before_any_answer_shows_the_plain_command_and_it_works 0.1 0.3 1.3 0.2
+test_a_stop_between_steps_names_the_last_step_as_finished 0.1 0 1.0 0.1
 test_a_stop_that_runs_no_trap_still_leaves_the_command_to_continue 26.9 40.9 52.8 38.0
 test_a_temporary_file_of_the_saved_answers_is_removed_on_the_way_out 0.1 0.1 0.1 0.1
 test_a_terminal_that_cannot_be_opened_or_read_is_a_no_and_shows_no_error 0.1 0 0.3 0.1
