@@ -24,6 +24,7 @@ A bootstrapped project records the tag it was built from.
 - Rules edition `2026-11-08-b47d79c`: a new edition id, the text unchanged (PR #436)
 - Rules edition `2026-11-08-8378c33`: in `STATUS.md` fields, references to linkable things are written as links (P-9 § 6 (7)) (PR #438)
 - Rules edition `2026-11-08-16a4865`: a new edition id, the text unchanged (PR #439)
+- Rules edition `2026-11-08-9acd383`: the process on refusals gains P-5 § 7, on avoiding needless permission prompts (PR #442)
 - NEXT_SESSION: the newcomer pre-check on v2.9.1 passed (PR #412); `STATUS.md` after the v2.9.1 tag (PR #414)
 - Tests for 46 more lines of the setup script, with stand-ins that fail one gh or git call on purpose; the setup script is at 96.8% line coverage (PBI-1.54 part (b)) (PR #416)
 
