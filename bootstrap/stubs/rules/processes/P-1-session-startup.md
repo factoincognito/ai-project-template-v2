@@ -38,7 +38,7 @@ P-1 § 7 Delegation for the session
 (3) A step that is still refused after the product owner has sent the line is handled in accordance with Process P-5, and the refusal is recorded in accordance with P-5 § 3 (2).
 
 P-1 § 8 Files in context
-(1) In its first reply, a session the product owner starts gives a numbered list of every file whose content has entered its context so far, by any route: read by the session, loaded by the harness (such as a `CLAUDE.md`), or returned by a tool. A file read only in part is marked with the part read.
+(1) In its first reply, a session the product owner starts gives a numbered list of every file whose content has entered its context so far, by any route: read by the session, loaded by the harness (such as a `CLAUDE.md`), or returned by a tool. A file read only in part is marked with the part read; where no paragraph of these Rules requires it to be read in full, the mark adds: "intentional partial read, outside the full-read rule; no violation, no action needed".
 (2) A file from GitHub, also when it was read from a local clone, is named `owner/repo/path/filename.extension`. A file from another source is named so that it is as easy as possible to identify, for example by its source and full path: `memory: <path>` or `local file: <absolute path>`.
 (3) The list comes before the delegation line of P-1 § 7.
 
