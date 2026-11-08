@@ -428,8 +428,10 @@ case "${1:-}" in
     elif [ "${2:-}" = edit ] && [ "$*" = "repo edit ${3:-} --visibility public --accept-visibility-change-consequences" ]; then
       # gh repo edit OWNER/NAME --visibility public ...: the project is no
       # longer listed as private. STUB_GH_VISIBILITY_FAIL: gh's text for a
-      # 403, nothing changes.
-      if [ -n "${STUB_GH_VISIBILITY_FAIL:-}" ]; then
+      # 403, nothing changes; =silent: it fails with no text at all.
+      if [ "${STUB_GH_VISIBILITY_FAIL:-}" = silent ]; then
+        exit 1
+      elif [ -n "${STUB_GH_VISIBILITY_FAIL:-}" ]; then
         echo "HTTP 403: Must have admin rights to Repository. (https://api.github.com/repos/$3)" >&2
         exit 1
       fi
@@ -2792,6 +2794,42 @@ test_layout_pack_errors_use_the_error_format() {
   }
 }
 
+test_layout_pack_without_its_words_shows_only_the_two_usage_lines() {
+  # PBI-1.54: layout-pack with a word missing exits 2 with the usage: its
+  # two lines and nothing else on stderr. (tools/test-layout-pack.sh
+  # checks the exit code and "usage:"; this checks both lines exactly.)
+  local err rc want
+  err="$WORK/err.$RANDOM"
+  want="$WORK/want.$RANDOM"
+  printf '%s\n' "usage: bootstrap-project.sh layout-pack <node|web|python|react-native|csharp> <target-dir>" \
+    "   or: bootstrap-project.sh [options]   (run it with --help to see them)" >"$want"
+  rc=0
+  bash "$SCRIPT" layout-pack node 2>"$err" >/dev/null || rc=$?
+  [ "$rc" -eq 2 ] || die "layout-pack with one word exited $rc, want 2"
+  expect_same "the usage" "$want" "$err"
+}
+
+test_layout_pack_with_no_pack_folder_says_where_the_packs_must_be() {
+  # PBI-1.54: the layout-pack subcommand (strict mode) with no folder for
+  # the pack stops with exit 1, names the folder it looked for and says
+  # where the packs must be; nothing is laid out.
+  local out err rc
+  out="$(tmpdir)/new"
+  err="$WORK/err.$RANDOM"
+  rc=0
+  PACKS_DIR="$WORK/no packs here" bash "$SCRIPT" layout-pack node "$out" 2>"$err" >/dev/null || rc=$?
+  [ "$rc" -eq 1 ] || die "no pack folder exited $rc, want 1"
+  sed -n 1p "$err" | grep -xF "What happened: layout-pack: pack folder not found: $WORK/no packs here/node" >/dev/null || {
+    cat "$err" >&2
+    die "does not name the folder looked for"
+  }
+  grep -xF "What to do next: Check that the languages folder is next to this script, or set PACKS_DIR to the folder that holds the packs." "$err" >/dev/null || {
+    cat "$err" >&2
+    die "does not say where the packs must be"
+  }
+  [ ! -e "$out" ] || die "something was laid out"
+}
+
 # ---------- hook: BOOTSTRAP_GH ----------
 
 test_gh_hook_runs_the_command_named_in_bootstrap_gh() {
@@ -4463,6 +4501,16 @@ test_every_numbered_choice_gives_its_value_and_a_refused_visibility_is_asked_aga
     cat "$d/out" >&2
     die "the visibility question was not asked again"
   }
+}
+
+test_a_licence_typed_by_its_name_is_taken_as_that_licence() {
+  # PBI-1.54: the licence question takes the licence's name as well as its
+  # number ("or type the licence's name"); no test typed a name.
+  local d
+  d="$(tmpdir)"
+  printf '%s\n' my-app "" "Lends tools." "" "" 3 "" gpl-3.0 "" "" "" "" >"$d/in"
+  inputs "$d"
+  expect_inputs "$d" PACK=python LICENSE=gpl-3.0
 }
 
 test_running_out_of_answers_stops_with_exit_2() {
@@ -7523,6 +7571,73 @@ EOF
         cat "$d/out.$mode.int" >&2
         die "[$mode, Ctrl-C] the terminal was left without icanon"
       }
+  done
+}
+
+test_at_a_real_terminal_ctrl_d_and_enter_each_end_the_question_line_once() {
+  # PBI-1.54: ask_terminal at a real terminal (a pseudo-terminal, as in
+  # the test above; skipped visibly on Windows). Ctrl-D on an empty line
+  # (end of input) is a no, and the script ends the question's line
+  # itself, since the terminal does not; Enter on an empty line is a no
+  # too, and the terminal has already ended the line, so the script adds
+  # no second line break. Either way the next output starts on a line of
+  # its own, right below the question.
+  local d key out prev
+  if ! command -v python3 >/dev/null 2>&1 || ! python3 -I -c 'import pty, termios' >/dev/null 2>&1; then
+    case "$(uname -s)" in
+      MINGW* | MSYS* | CYGWIN*)
+        skip_test "no python3 with a pty module on Windows"
+        return 0
+        ;;
+    esac
+    die "python3 with its pty module is needed for this test here (it is skipped only on Windows)"
+  fi
+  d="$(tmpdir)"
+  cat >"$d/drive.py" <<'EOF'
+import os, pty, sys, time, select
+bash, script, key = sys.argv[1:4]
+child = ('. "$1"; unset BOOTSTRAP_TTY BOOTSTRAP_INPUT_TERMINAL; export NO_COLOR=1; '
+         'if ( ask_terminal "Why it is asked." "Run it now? (yes or no)" ); '
+         'then echo ANSWER=yes; else echo ANSWER=no; fi')
+pid, fd = pty.fork()
+if pid == 0:
+    os.execv(bash, [bash, '-c', child, '_', script])
+out, typed, deadline = b'', False, time.time() + 30
+while time.time() < deadline:
+    if not typed and b'[no]:' in out:
+        os.write(fd, b'\x04' if key == 'ctrl-d' else b'\n')
+        typed = True
+    r, _, _ = select.select([fd], [], [], 0.2)
+    if not r:
+        continue
+    try:
+        got = os.read(fd, 4096)
+    except OSError:
+        break
+    if not got:
+        break
+    out += got
+else:
+    os.kill(pid, 9)
+    out += b'\nTIMEOUT\n'
+os.waitpid(pid, 0)
+sys.stdout.write(out.decode('utf-8', 'replace').replace('\r', ''))
+EOF
+  for key in ctrl-d enter; do
+    out="$d/out.$key"
+    python3 -I "$d/drive.py" "$BASH" "$SCRIPT" "$key" >"$out" 2>&1 || true
+    grep -xF 'ANSWER=no' "$out" >/dev/null || {
+      cat "$out" >&2
+      die "[$key] not a no on a line of its own"
+    }
+    prev="$(grep -B1 -xF 'ANSWER=no' "$out" | sed -n 1p)"
+    case "$prev" in
+      *"Run it now? (yes or no) [no]:"*) ;;
+      *)
+        cat "$out" >&2
+        die "[$key] the line above the next output is [$prev], want the question's"
+        ;;
+    esac
   done
 }
 
@@ -14267,37 +14382,49 @@ test_resume_past_the_pack_step_takes_the_publishing_choice_from_the_project() {
     }
     expect_one_of_each "$d"
   done
-  # Without the publishing files: a yes is refused, no option takes the no.
-  d="$(tmpdir)"
-  working_git "$d"
-  : >"$d/git-bash-paths"
-  git_bash_git "$d"
-  export STUB_GIT="$d/git-bash-git"
-  fake_tool "$d" npm 10.0.0
-  export STUB_GH_BUILD="pull_request fail"
-  setup_run "$d" --non-interactive --yes --pack web
-  unset STUB_GH_BUILD
-  expect_rc 1 "$d"
-  n="$(calls_count "$d")"
-  setup_run "$d" --yes --resume --pack web --with-deploy
-  expect_rc 2 "$d"
-  grep -qE -- '^    - --with-deploy: .{10,}' "$d/err" || {
-    cat "$d/err" >&2
-    die "a yes that contradicts the change is not refused with its option"
-  }
-  expect_nothing_changed_since "$d" "$n"
-  setup_run "$d" --yes --resume --pack web
-  expect_rc 0 "$d"
-  ! grep -qF 'Add the publishing files' "$d/out" || {
-    cat "$d/out" >&2
-    die "the publishing question was asked"
-  }
-  grep -qxF '    Language pack: web' "$d/out" || {
-    cat "$d/out" >&2
-    die "the report does not name the pack without the publishing files"
-  }
-  [ ! -e "$(copy_of "$d")/.github/workflows/deploy.yml" ] || die "the publishing files were added"
-  expect_one_of_each "$d"
+  # Without the publishing files: a yes is refused, no option takes the
+  # no; with no copy, from GitHub's answer that the change has no such
+  # file (404; PBI-1.54).
+  for how in copy moved; do
+    d="$(tmpdir)"
+    working_git "$d"
+    : >"$d/git-bash-paths"
+    git_bash_git "$d"
+    export STUB_GIT="$d/git-bash-git"
+    fake_tool "$d" npm 10.0.0
+    export STUB_GH_BUILD="pull_request fail"
+    setup_run "$d" --non-interactive --yes --pack web
+    unset STUB_GH_BUILD
+    expect_rc 1 "$d"
+    [ "$how" != moved ] || mv "$(copy_of "$d")" "$d/elsewhere"
+    n="$(calls_count "$d")"
+    setup_run "$d" --yes --resume --pack web --with-deploy
+    expect_rc 2 "$d"
+    grep -qE -- '^    - --with-deploy: .{10,}' "$d/err" || {
+      cat "$d/err" >&2
+      die "$how: a yes that contradicts the change is not refused with its option"
+    }
+    expect_nothing_changed_since "$d" "$n"
+    if [ "$how" = moved ]; then
+      calls_since "$d" "$n" | grep -xF 'api -i -H Accept: application/vnd.github.raw+json repos/octo-user/my-app/contents/.github/workflows/deploy.yml?ref=bootstrap-setup' >/dev/null ||
+        {
+          calls_since "$d" "$n" >&2
+          die "moved: the setup's change on GitHub was not read"
+        }
+    fi
+    setup_run "$d" --yes --resume --pack web
+    expect_rc 0 "$d"
+    ! grep -qF 'Add the publishing files' "$d/out" || {
+      cat "$d/out" >&2
+      die "$how: the publishing question was asked"
+    }
+    grep -qxF '    Language pack: web' "$d/out" || {
+      cat "$d/out" >&2
+      die "$how: the report does not name the pack without the publishing files"
+    }
+    [ ! -e "$(copy_of "$d")/.github/workflows/deploy.yml" ] || die "$how: the publishing files were added"
+    expect_one_of_each "$d"
+  done
 }
 
 test_resume_before_the_pack_step_asks_the_publishing_question_once_the_state_is_known() {
@@ -15265,6 +15392,33 @@ test_making_the_project_public_runs_only_after_its_own_yes() {
   [ ! -e "$d/made-public" ] || die "made public with --non-interactive"
 }
 
+test_a_refused_make_public_shows_githubs_answer_or_that_gh_gave_none() {
+  # PBI-1.54: when gh does not make the project public, the script says
+  # so, says what to check, and shows gh's answer below; when gh stopped
+  # with no text at all, it says that instead, with gh's exit code. The
+  # project stays private and the stop for the plan limit follows.
+  local d how want
+  for how in message silent; do
+    d="$(tmpdir)"
+    export STUB_GH_PROTECT_FAIL=plan STUB_GH_VISIBILITY_FAIL="$how"
+    printf 'yes\n' >"$d/tty"
+    setup_run "$d" --yes --private
+    unset STUB_GH_PROTECT_FAIL STUB_GH_VISIBILITY_FAIL
+    expect_rc 3 "$d"
+    [ ! -e "$d/made-public" ] || die "$how: made public although gh failed"
+    expect_out "$d" "GitHub did not make the project public; its answer is below. Check on https://github.com/octo-user/my-app/settings that your account is one of the project's admins (who may change its settings), or run the command shown above that starts with gh yourself."
+    case "$how" in
+      message) want="HTTP 403: Must have admin rights to Repository. (https://api.github.com/repos/octo-user/my-app)" ;;
+      silent) want="gh stopped with exit code 1 and no message." ;;
+    esac
+    grep -xF -- "    $want" "$d/out" >/dev/null || {
+      cat "$d/out" >&2
+      die "$how: gh's answer is not shown: $want"
+    }
+    expect_no_out "$d" "is public now"
+  done
+}
+
 # ---------- round 2 of the S15 review (PR #159) ----------
 
 # The protection a project with build required has (REQUIRE_BODY).
@@ -16114,6 +16268,114 @@ test_api_call_keeps_carriage_returns_only_when_asked() {
     api_call repos/o/n/contents/README.md
     [ -z "$API_BODY_CR" ] || die "API_BODY_CR was left from the call before"
   )
+}
+
+test_api_call_reads_an_answer_with_no_status_line_as_all_body() {
+  # PBI-1.54: an answer from gh that does not start with an HTTP status
+  # line is all body: every line of it is kept, with its carriage returns
+  # in API_BODY_CR when asked, and the status stays empty, which every
+  # caller treats as no answer.
+  local d
+  d="$(tmpdir)"
+  printf 'not a status line\r\nsecond\r\n' >"$d/answer"
+  printf '#!/bin/sh\ncat "%s"\n' "$d/answer" >"$d/gh"
+  chmod +x "$d/gh"
+  (
+    load_script
+    BOOTSTRAP_GH="$d/gh"
+    API_KEEP_CR=1 api_call repos/o/n
+    [ -z "$API_STATUS" ] || die "a status was read: $API_STATUS"
+    [ "$API_BODY" = "not a status line${NL}second$NL" ] || die "API_BODY is not every line: [$API_BODY]"
+    [ "$API_BODY_CR" = "not a status line$CR${NL}second$CR$NL" ] || die "API_BODY_CR lost a line or a carriage return"
+  )
+}
+
+test_an_account_answer_with_no_login_is_another_account_problem() {
+  # PBI-1.54: GitHub answers the account read with 200 but no login: the
+  # account check fails as "other", not as a signed-in account.
+  local d rc
+  d="$(tmpdir)"
+  printf 'HTTP/2.0 200 OK\r\nX-OAuth-Scopes: repo, workflow\r\n\r\n\nOcto User\n' >"$d/answer"
+  printf '#!/bin/sh\ncat "%s"\n' "$d/answer" >"$d/gh"
+  chmod +x "$d/gh"
+  (
+    load_script
+    BOOTSTRAP_GH="$d/gh"
+    rc=0
+    check_github_account || rc=$?
+    [ "$rc" -eq 1 ] || die "the check passed with no login"
+    [ "$ACCOUNT_PROBLEM" = other ] || die "ACCOUNT_PROBLEM is [$ACCOUNT_PROBLEM], want other"
+  )
+}
+
+test_a_permissions_check_whose_account_read_fails_guides_to_the_account() {
+  # PBI-1.54: the permissions are read from a fresh read of the account;
+  # when that read fails (here: signed in no longer, a 401), the check
+  # fails as an account problem and its guide is the account's guide,
+  # not a list of missing permissions.
+  local d rc got want
+  d="$(tmpdir)"
+  printf 'HTTP/2.0 401 Unauthorized\r\n\r\n{"message":"Bad credentials"}\n' >"$d/answer"
+  printf '#!/bin/sh\ncat "%s"\nexit 1\n' "$d/answer" >"$d/gh"
+  chmod +x "$d/gh"
+  (
+    load_script
+    BOOTSTRAP_GH="$d/gh"
+    rc=0
+    check_github_permissions || rc=$?
+    [ "$rc" -eq 1 ] || die "the check passed with the account read failing"
+    [ "$PERM_PROBLEM" = account ] || die "PERM_PROBLEM is [$PERM_PROBLEM], want account"
+    [ "$ACCOUNT_PROBLEM" = expired ] || die "ACCOUNT_PROBLEM is [$ACCOUNT_PROBLEM], want expired"
+    got="$(guide_github_permissions 2>&1)"
+    want="$(guide_github_account 2>&1)"
+    [ -n "$want" ] || die "the account's guide is empty"
+    [ "$got" = "$want" ] || {
+      printf 'got:\n%s\nwant:\n%s\n' "$got" "$want" >&2
+      die "the guide is not the account's"
+    }
+  )
+}
+
+test_a_relative_folder_inside_a_git_project_names_its_top_folder_as_the_shell_writes_it() {
+  # PBI-1.54: set_dir_outer with a relative folder (./sub) inside a git
+  # project gives the top folder as the shell writes the folder the
+  # script runs in (pwd), not git's own path, which resolves symbolic
+  # links (here the project is reached through one; where ln -s copies,
+  # as Git Bash may, git still writes its path as C:/...).
+  local t got
+  t="$(tmpdir)"
+  "$REAL_GIT" -c init.defaultBranch=main init -q "$t/repo"
+  mkdir "$t/repo/sub"
+  ln -s "$t/repo" "$t/link" 2>/dev/null || cp -R "$t/repo" "$t/link"
+  got="$(
+    cd "$t/link"
+    load_script
+    set_dir_outer ./sub
+    printf '%s' "$DIR_OUTER"
+  )"
+  [ "$got" = "$(cd "$t/link" && pwd)" ] || die "the top folder is [$got], want [$(cd "$t/link" && pwd)]"
+}
+
+test_the_name_and_email_are_compared_in_the_form_git_saves_them() {
+  # PBI-1.54: --git-name accepts a name that starts or ends with a space
+  # or one of , : ; ' (check_text refuses only " \ < > & and the
+  # backtick), and git drops those characters at both ends when it saves
+  # the name. git_ident_form must give exactly what git writes, or the
+  # check before the commit (check_git_identity) would stop a setup whose
+  # name git saves as given.
+  local t name got want
+  t="$(tmpdir)"
+  "$REAL_GIT" -c init.defaultBranch=main init -q "$t/repo"
+  for name in ",Ada Lovelace" "'Ada'" ": Ada ;" "Ada, " "Ada"; do
+    want="$(GIT_AUTHOR_NAME="$name" GIT_AUTHOR_EMAIL="ada@example.com" "$REAL_GIT" -C "$t/repo" var GIT_AUTHOR_IDENT)"
+    want="${want%% <*}"
+    got="$(
+      load_script
+      git_ident_form "$name"
+      printf '%s' "$IDENT_FORM"
+    )"
+    [ "$got" = "$want" ] || die "for [$name]: [$got], git writes [$want]"
+  done
 }
 
 test_the_step_16_refusal_holds_with_the_decision_row_in_the_change() {
