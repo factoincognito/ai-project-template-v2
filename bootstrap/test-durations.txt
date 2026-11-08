@@ -79,6 +79,7 @@ test_a_stop_at_a_guide_shows_the_short_command_and_saves_the_long_ones_arguments
 test_a_stop_before_any_answer_shows_the_plain_command_and_it_works 0.1 0.3 1.3 0.2
 test_a_stop_that_runs_no_trap_still_leaves_the_command_to_continue 26.9 40.9 52.8 38.0
 test_a_temporary_file_of_the_saved_answers_is_removed_on_the_way_out 0.1 0.1 0.1 0.1
+test_a_terminal_that_cannot_be_opened_or_read_is_a_no_and_shows_no_error 0.1 0 0.3 0.1
 test_a_terminal_whose_mode_cannot_be_set_is_read_as_it_is 0.1 0.2 1.1 0.1
 test_a_test_that_forgets_the_hooks_runs_nothing_real 0.1 0.1 0.4 0.1
 test_a_text_left_to_fill_in_stops_the_self_check_but_a_value_holding_one_does_not 0.5 0.5 3.0 0.4
@@ -140,7 +141,8 @@ test_colour_off_output_is_the_coloured_output_without_its_codes 0.1 0.3 1.2 0.2
 test_copyright_holder_defaults_to_the_po_name_given 0.1 0.1 0.5 0.1
 test_create_failures_are_guided_or_explained_and_nothing_else_runs 1.3 2.2 15.0 1.6
 test_create_waits_for_the_files_then_protects_main_with_the_exact_body 2.2 5.1 34.8 2.8
-test_ctrl_c_during_any_gh_call_shows_the_stop_and_the_command_to_run_next 5.2 0 31.9 3.7
+test_ctrl_c_at_a_question_on_the_terminal_shows_the_stop_and_the_command_to_continue 2.8 0 8.2 2.5
+test_ctrl_c_during_any_gh_call_shows_the_stop_and_the_command_to_run_next 5.5 0 35.0 5.0
 test_ctrl_c_during_the_discard_puts_the_terminal_mode_back 0.1 0.2 0.8 0.1
 test_ctrl_c_says_what_exists_and_the_resume_finishes_without_duplicates 21.7 36.5 35.3 61.7
 test_defaults_fill_the_options_left_out 0.1 0.2 1.0 0.1
