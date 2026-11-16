@@ -28,7 +28,7 @@ P-1 § 5 Today's work
 (1) A session that the product owner starts asks them what today's work is, unless their first message says it.
 
 P-1 § 6 Model and effort
-(1) Reviews of code, process and architecture changes, and architecture design drafts, run in a separate agent on Opus. Merge-only runs and the writing of docs, backlog and changelog use the default model.
+(1) The session chooses the model and effort of each agent it starts. The default model is the cheaper one, for reviews too; a review runs in a separate agent. A stronger model runs only where the product owner asks for it.
 (2) Clead sessions run by default on Sonnet at High effort; Medium effort is used for a purely mechanical batch.
 (3) Clead cannot read or change the model or effort of its own session. Before a task that warrants another setting, Clead recommends one and waits for the product owner to switch or to say proceed, and says when to switch back.
 (4) Clead sets the model of the agents it starts; the product owner sets the model and effort of their own sessions.
