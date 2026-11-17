@@ -7,6 +7,7 @@ A bootstrapped project records the tag it was built from.
 ## [Unreleased]
 
 ### Added
+- NEXT_SESSION cut from 134,970 bytes to a short handover: finished entries removed, open ones kept or listed in the new PBI-1.63 (PR #458)
 - NEXT_SESSION: the newcomer pre-check on v2.9.2, the state of the release and what is left of PBI-1.54 (PR #444)
 - `STATUS.md` and NEXT_SESSION after the v2.9.2 tag (PR #446)
 - Tests for 32 lines of the setup script that no test reached, each shown to fail with its line broken, and PBI-1.54's progress: what is covered, what is unreachable and why (PBI-1.54 item (1), first group) (PR #447)
