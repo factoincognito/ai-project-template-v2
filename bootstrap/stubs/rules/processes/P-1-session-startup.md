@@ -2,7 +2,7 @@
 
 P-1 § 1 (C) Reading before work
 (1) Before any other work, a session reads all of these Rules (`rules/RULES.md`), the processes its work needs, and the project's local rules and local processes. For an agent that a session starts, the reading before work is, in place of that sentence and of (2), the files its brief names and no others, and the brief names the Rules, local rules and local processes its task needs; (3) applies to it as written. A review agent under Process P-3 gets no brief; its reading is the inputs of Process P-3 § 2.
-(2) Before writing code in a project, a session also reads the project's specification and developer onboarding, where the project has them, and the files its local rules name for session start.
+(2) Before writing code in a project, a session also reads the project's specification and developer onboarding, where the project has them, and the files its local rules name for session start. A specification kept as an index with section files is read as its index and the sections its task touches.
 (3) When a session's earlier turns have been replaced by a summary, it reads all of these Rules (`rules/RULES.md`) again, in the way P-1 § 9 sets out, before its next action.
 
 P-1 § 2 Access to the repository
