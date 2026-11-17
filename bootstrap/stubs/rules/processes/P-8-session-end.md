@@ -7,14 +7,14 @@ P-8 § 1 Writing as the work goes
 P-8 § 2 End-of-session check
 Whenever a session reports work as done, and when the product owner says they are stopping, in any words, the session, before replying:
 (1) gives every staging-file entry it touched a disposition in accordance with P-8 § 4, and resolves every pin it wrote this session in accordance with Process P-9 § 5;
-(2) opens PRs for anything agreed in the session and not yet written down, to the container Process P-9 assigns;
+(2) writes anything agreed in the session and not yet written down, to the container Process P-9 assigns, into the PR that § 18 (1) assigns;
 (3) runs the check of P-8 § 3 last, so that it checks the state after (1) and (2);
 (4) reports the session clean, or what is open and why, links the PRs from (2), and shows the product owner the diff of every memory file touched.
 
 P-8 § 3 Clean session end state
 A session is clean only when each of the following was checked in this session, not assumed from an earlier report:
 (1) `git status` is clean in every repository touched, carry-over from earlier sessions included;
-(2) every PR opened in the session is merged and verified in accordance with Process P-4 § 3, or left open with the product owner's knowledge and a stated reason; a PR from P-8 § 2 (2) goes through the normal review and merge;
+(2) every PR opened in the session, a records PR of § 18 (1) included, is merged and verified in accordance with Process P-4 § 3, or left open with the product owner's knowledge and a stated reason;
 (3) every follow-up is persisted in the repository, in the container Process P-9 assigns; private memory does not count;
 (4) every claim of done or confirmed rests on a direct check of that claim;
 (5) `CHANGELOG.md`, where the project keeps one, reflects all merged PRs except the one documenting itself;
