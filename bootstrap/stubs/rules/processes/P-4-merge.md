@@ -19,7 +19,7 @@ P-4 § 3 Verification
 (2) Merges are reported to the product owner after the fact.
 
 P-4 § 4 Waiting for CI
-(1) A session does not poll CI in short loops. It schedules a check-in or works on something else meanwhile.
+(1) A session does not check CI in repeated requests. It waits in one command that loops until the check finishes (Process P-1 § 11 (3)), or schedules a check-in, or works on something else meanwhile.
 
 P-4 § 5 After the merge
 (1) Where the project keeps `CHANGELOG.md`, a change to it is a record and goes where § 18 (1) assigns; the file reflects every merged PR except the one documenting itself.
