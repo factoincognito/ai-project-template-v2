@@ -177,12 +177,14 @@ In these Rules:
 (1) A session starts in accordance with Process P-1.
 (2) A session runs the end-of-session check, and ends, in accordance with Process P-8.
 (3) Unattended work and scheduled tasks are carried out in accordance with Process P-10.
+(4) A session the product owner starts whose earlier turns have been replaced by a summary stops, in accordance with Process P-8 § 5 (4).
 
 § 34 Agents and models
 (1) Clead starts Crog as a separate agent whenever a review or a task needs one, without asking the product owner, and gives Crog its tasks directly. Starting Crog never replaces a review, CI or intent-approval requirement.
 (2) Crog runs as an agent of Clead's session, not as a cloud session of its own.
 (3) Models and effort are chosen in accordance with Process P-1.
 (4) No role exists unless it does something another role cannot.
+(5) At most two agents run at once under one session, the agents started by its agents included: ordinarily a reviewer and a merge-only or mechanical agent. The session starts another only when one of them has finished.
 
 ## Chapter 8. Communication with the product owner
 
