@@ -1,12 +1,12 @@
-2026-11-17-e55333d
+2026-11-17-a112b03
 5efd8fb23ba86b54dfe5f9db7257fad2ddf34ff1d3462a603975f6933c80926b  RULES.md
 4ad72e0ca38dd38cd8e9c21b62f5530fe11291d8cef1d8fef111bf77e52789b7  policies/third-party-ip.md
-9581279edc4a9bc4453790e98be20d2ec2fe81640410fc6c06469bd806195717  processes/P-1-session-startup.md
+f6171f6b279490458d16cd2d949b2c422694f8c7d8cbc82e659755e39a63ae38  processes/P-1-session-startup.md
 fc0bcd573766dca8a3f9d83790e1f97d47a628eca823c41bb3a4d8a12ce05d2d  processes/P-10-unattended-and-scheduled-work.md
 5087a8f5ab3f77f04311becf694d423b2c3abf744584452fbd05b7d525d69bcb  processes/P-11-engineering-infrastructure.md
 1ef4013d1ccfafa42ba776ef01a97b4bd6187628de1a75bfc1738a7b538a5c82  processes/P-2-change-flow.md
 7be20b85abc9dd7fe2c755f47fbdf3b81cd5d027dffad5e4462a4b4420494c4c  processes/P-3-review.md
-e041efff4c0e52b98cf3debcb5dfa49b046f5dc25753b434b28b3ce5887eb132  processes/P-4-merge.md
+55917a8f26d12c97b87026b9bedc276f0b2901406e3bc842f1847e333219a295  processes/P-4-merge.md
 b566418f9dfd66de285f1d4e9f517d2818a29e0b44c3ad9f92ce13f513c32d05  processes/P-5-refusals.md
 18c11493141e014348842060e5e3b3fedc709b9f09924b3781e8f998c2b5ad13  processes/P-7-sign-off.md
 420fd2256f29f8ec4a613e733530a442df9dae149b814260248659744e0ba81e  processes/P-8-session-end.md

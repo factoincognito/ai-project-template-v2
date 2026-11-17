@@ -50,3 +50,9 @@ P-1 § 9 Complete reads
 P-1 § 10 Startup report
 (1) In a session the product owner starts, the first reply that P-1 §§ 3 (2), 4 (5), 7 (1) and 8 (1) name is the session's first message to the product owner after the reads of P-1 § 1 and § 4. It is sent before any work on the day's task begins, also when the product owner's first message holds the start line, the delegation line and the task together. Where the task would otherwise begin in the same turn, the session sends the report with the tool that shows the product owner a message while the session goes on working (in the Claude app, `SendUserMessage`), and starts the task only after it has been sent. A session without such a tool gives the report as the first text of its turn, before any tool call for the task.
 (2) The report gives, in this order: the capabilities line of P-1 § 3 (2); the entries P-1 § 4 (5) names, or that there are none; the list of P-1 § 8 (1); the line of P-1 § 7 (1), or, where the product owner's first message already holds that line, that it was received; and, where the product owner's first message names no task, the question of P-1 § 5 (1).
+
+P-1 § 11 Requests
+(1) Each request a session makes reads the whole context again, so a session makes few: it puts independent commands into one tool call, and reads a file once and only as far as its task needs. A file that a paragraph of these Rules requires in full is read in full, as P-1 § 9 sets out.
+(2) A command filters its output (`head`, `grep`, `jq`, a quiet flag) so that long output does not enter the context, unless the session needs all of it.
+(3) A session waits for CI in one command that loops until the check finishes or a stated time has passed, not in repeated requests.
+(4) A session puts what it needs from the product owner into one reply and does not ask in turns.
