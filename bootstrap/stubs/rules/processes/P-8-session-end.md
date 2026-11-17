@@ -23,3 +23,8 @@ A session is clean only when each of the following was checked in this session, 
 
 P-8 § 4 Graduation of staging entries
 (1) Every staging-file entry touched in a session is promoted (to a backlog item, a decision or a document), re-affirmed as still next, or deleted as resolved or obsolete before the session is clean.
+
+P-8 § 5 One task per session
+(1) A session does one task; the next task starts in a fresh session.
+(2) The handover of what is not finished is written to the repository, in the container Process P-9 assigns, before the session tells the product owner to start a fresh session.
+(3) In a session the product owner starts, Clead tells the product owner, when its task is done, to start a fresh session for the next one. In the same reply it gives the product owner, as a **Now** item of its For you block and as one code block, the complete first message for that session: the start line of Process P-1 § 2 (5), the delegation line of Process P-1 § 7 (1), and the next task where one is open.
