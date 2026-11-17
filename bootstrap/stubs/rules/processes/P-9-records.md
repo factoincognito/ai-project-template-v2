@@ -26,7 +26,7 @@ P-9 § 6 `STATUS.md`
 (1) Every project keeps a `STATUS.md` at its root.
 (2) It has the fixed headings Phase, Current focus, Next step and Blockers, and a "Last update" line (`YYYY-MM-DD`). Its headings and format are not changed.
 (3) It holds only what lies ahead; history is in Git.
-(4) A session whose work changes what a field says updates the file in the same PR and sets "Last update". A change that has no PR of its own, such as an escalation, gets a PR that updates only `STATUS.md`.
+(4) A session whose work changes what a field says updates the file where § 18 (1) assigns, and sets "Last update"; so does a change that has no PR of its own, such as an escalation.
 (5) A blocker that waits on the product owner starts with "Product Owner:", written exactly so. A session that finds a blocker resolved removes it the same way.
 (6) The specification of the format is the header of the project's `STATUS.md`.
 (7) In the fields, a reference to something that can be linked (a backlog entry, a PR, a commit, a file, a repository) is written as a Markdown link to it, and a line of a file as a link at a commit of the default branch. A session that changes a field writes its own references that way; older text gets its links when its field is next changed.

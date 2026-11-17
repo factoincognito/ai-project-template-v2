@@ -22,7 +22,7 @@ P-4 § 4 Waiting for CI
 (1) A session does not poll CI in short loops. It schedules a check-in or works on something else meanwhile.
 
 P-4 § 5 After the merge
-(1) Where the project keeps `CHANGELOG.md`, a PR updates it after each merge; the file reflects every merged PR except the one documenting itself.
+(1) Where the project keeps `CHANGELOG.md`, a change to it is a record and goes where § 18 (1) assigns; the file reflects every merged PR except the one documenting itself.
 (2) Merged branches stay until deleted in GitHub or removed by the repository's automatic deletion setting; branch deletion from a cloud session has been refused (403).
 
 P-4 § 6 Refused merges
