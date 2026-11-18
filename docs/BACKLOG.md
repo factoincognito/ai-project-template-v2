@@ -12,16 +12,10 @@
 | [NOW] | Active — being worked on |
 | [NEXT] | Queued — ready to start after current work |
 | [LATER] | Confirmed future work, not yet scheduled |
-| [IDEA] | Unvalidated — needs discussion |
 | [BLOCKED] | Waiting on dependency or decision |
-| [DONE] | Completed and merged |
-| [SUPERSEDED] | No longer needed; the reason is given inline |
-| [MOVED] | Tracked elsewhere from now on; where is given inline |
+| [DONE] | Completed and merged, or no longer needed or tracked elsewhere; the notes say which |
 
-The format of this file, and what a backlog visualiser can read from it, is
-set out in vizi's format spec:
-https://github.com/factoincognito/vizi/blob/main/docs/BACKLOG-FORMAT.md
-(linked, not copied).
+The format of this file is set by Process P-9 § 2.
 
 The entries marked `DONE` are in [`docs/BACKLOG-DONE.md`](BACKLOG-DONE.md) (`RULES.md` L § 2 (1)).
 
@@ -31,20 +25,6 @@ The entries marked `DONE` are in [`docs/BACKLOG-DONE.md`](BACKLOG-DONE.md) (`RUL
 
 **Goal:** Make v2 a fully usable template — clone it, run the wizard,
 get a working project in any supported language.
-
-- **[SUPERSEDED] PBI-1.4** (2026-10-01: superseded for new projects by PBI-1.14, the turn-key bootstrap script, approved by Adam; if the migration branch is still wanted it becomes its own IDEA. Earlier note: Adam, 2026-10-01, keep LATER; the bootstrapper plus
-  `tools/layout-pack.sh` cover most of it, and a small "lay out pack X"
-  step in the bootstrapper could replace the wizard) — Write the v2 bootstrap wizard (`BOOTSTRAP.md`)
-  — guided setup via Claude chat, branches on new project vs migration
-  from existing project, generates all project files for chosen language,
-  produces Crog setup prompt. Migration branch must ask: source repo,
-  Adam's WHAT call on v1 backlog items, sequencing (spec first, then
-  tests, then src).
-
-- **[SUPERSEDED] PBI-1.8** (2026-10-01: folded into PBI-1.14, which has the licence choice) — Licence choice at project setup: the template
-  offers a set of licences (PolyForm Noncommercial among them) and the
-  project picks one at start. Depends on the wizard (PBI-1.4), unless
-  the licence texts are first added as files under `licenses/`.
 
 - **[NOW] PBI-1.10** (pipeline built in PR #60; done once the v2.1.0
   publish passes the "Done when" checks below. Adam, 2026-10-01: acuteping is not created until the whole toolchain is verifiably working, meaning PBI-1.15 is done and PBI-1.14 is built with Adam's end-to-end runs passed; see PBI-1.14 "Done when") — Build pipeline that
@@ -152,9 +132,7 @@ get a working project in any supported language.
   version for the react-native pack. Follows the PBI-1.6 method: update,
   then run every pack's CI on GitHub's runners.
 
-- **[MOVED] PBI-1.11** (pinned by Adam, 2026-10-01; decided the same day) — Backlog visualiser: a way to see a project's `BACKLOG.md` as a backlog list and as a kanban board. It is a project of its own, bootstrapped from this template, and not a template feature, so it is tracked in the owner's private product office and not here. Nothing is built in this template.
-
-- **[IDEA] PBI-1.12** (pinned by Adam, 2026-10-01) — Delegation level as
+- **[LATER] PBI-1.12** (unvalidated, needs discussion; pinned by Adam, 2026-10-01) — Delegation level as
   a bootstrapper option: when a project is bootstrapped, the product
   owner chooses how much control or delegation the processes give them.
   Adam's own setting today: merges, code-change reviews and more are
@@ -466,13 +444,6 @@ autonomy. Use a real project as the pilot: acuteping (decided
   **Rules that apply.** The README is shipped and its prose is checked by `bootstrap/test.sh`; a README change and its tests: test first, reviewed by Crog. The spec is approved by Adam in chat (§ 29 (2)).
 
   **Done when.** Written when specced.
-- **[SUPERSEDED] PBI-2.1** (the connector was written off 2026-06-28;
-  Clead now uses git and the GitHub API, see memory/decisions.md; also
-  duplicated PBI-4.3) — Confirm GitHub connector write access: verify
-  that Cowork's GitHub connector can post PR comments, not just fetch
-  diffs. The `review.yml` workflow posts a marker comment — confirm
-  this fires correctly and Clead can read it to trigger review.
-
 - **[LATER] PBI-2.2** (Adam, 2026-10-01: not approved as written; both
   design points below stay unresolved, so nothing is built) — Start Clead's review automatically when a PR
   opens, instead of Clead having to notice it. Reworded 2026-09-30:
@@ -529,15 +500,6 @@ that role on 2026-09-30.
 **Goal:** Eliminate Adam's remaining manual touchpoints for doc-only
 changes and session-end writes, and reactivate Copi as a specialist
 third-layer reviewer for complex src PRs.
-
-- **[SUPERSEDED] PBI-4.3** (duplicate of PBI-2.1, superseded the same
-  way) — Verify GitHub connector write access.
-  Confirm Cowork's GitHub connector can post PR comments, not just
-  fetch diffs. Load-bearing for the autonomous review trigger (PR
-  comment as event bus signal). If confirmed, enables Cowork-Clead
-  to post verdicts, fix prompts, and approval comments directly to
-  PRs without Adam relay. See also memory/decisions.md open
-  question #1.
 
 - **[LATER] PBI-4.4** — Wire autonomous src PR loop (Path B).
   GitHub Actions holds Crog's bearer token as an Actions secret.
@@ -614,7 +576,6 @@ The findings of the product office's audit of this project (Process P-6 § 8 (2)
 - **[NEXT] PBI-1.47** (audit of 2026-11-06, finding F6, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 5): L § 8 (2) limits edition PR descriptions against P-2 § 3 (1) and P-2 § 4 (1) without citing them; #372 names no session.
 - **[BLOCKED] PBI-1.48** (audit of 2026-11-06, finding F7, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; a question for the product office's Rules, not this project's to fix; waits for Adam's decision there) — (§ 5): L § 9 (1)'s release pipeline commits directly to `ai-project-bootstrap`'s default branch (`bootstrap/publish.sh` line 88), and no paragraph settles this against § 26 (1) (C).
 - **[NEXT] PBI-1.49** (audit of 2026-11-06, finding F8, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 7): P-2 § 4 (5): #375 and #376 merge comments give the session ID without the link; #372 names no session; commits `ca2925b` and `bc2954d` lack a `Session-ID:` trailer.
-- **[NEXT] PBI-1.51** (audit of 2026-11-06, finding F10, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 7): P-9 § 2 (2) and (3): `docs/BACKLOG.md` uses markers `IDEA`, `SUPERSEDED`, `MOVED` (legend lines 15, 18, 19; six entries) and names vizi's format spec.
 ## Decision log (updated)
 
 | Date | Decision | Rationale |
