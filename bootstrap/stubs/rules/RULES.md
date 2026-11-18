@@ -135,6 +135,7 @@ In these Rules:
 § 26 (C) Every change through a PR
 (1) Every change to a repository goes through a PR. No one commits directly to the default branch.
 (2) The first commit to an empty repository is excepted.
+(3) An output that a pipeline rebuilds and publishes when the product owner pushes a release tag is not committed by a session. The pipeline's push of it to the default branch of the repository that publishes it, in the run that the tag starts, is not a direct commit under (1).
 
 § 27 One PR, one fix
 (1) A PR holds one fix. Unrelated changes never share a PR, and diffs are kept focused.
