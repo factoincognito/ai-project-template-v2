@@ -57,9 +57,7 @@ Process P-11 § 4 (2), with the reason recorded in `memory/decisions.md`.
 **`docs/NEXT_SESSION.md`** is the staging area for reasoning, revised
 assumptions and plan changes that are not yet ready to be a backlog
 item, a decision or a doc change. It is wired into the session routine
-of the Rules: every session reads and triages it at its start (Process
-P-1 § 4 (3)), and every entry touched in a session gets a disposition
-before the session counts as clean (Process P-8 § 4). Why it is
+of the Rules (Process P-1 § 4 (3), Process P-8 § 4). Why it is
 mandatory: in an earlier project the same kind of file was added
 mid-project, never wired into the session start, and went unread for
 nearly a month. The file and its wiring come together; one without the
@@ -91,16 +89,14 @@ by hand (repo owner, once, after the first push of the pack's `ci.yml`):
 5. Tick "Do not allow bypassing the above settings".
 6. Save.
 
-On GitHub's free plan this is only available for public repositories.
+What the free plan allows is in Process P-11 § 3 (1).
 
-**Checking that it works** (Process P-11 § 3 (2)). Open a pull request
-with a deliberately failing test: the merge button must stay blocked
-until the check is green. Then close it without merging.
+**Checking that it works:** Process P-11 § 3 (2).
 
 ### 5. CI/CD
 
-**CI runs on every push to any branch and on every pull request to
-`main`** (GitHub Actions, `.github/workflows/ci.yml`). A new project
+**CI** (GitHub Actions, `.github/workflows/ci.yml`) follows Process
+P-11 § 2 (1). A new project
 starts with a stub `ci.yml` that only checks out the code; the language
 pack's `ci.yml` replaces it. The stub has no test-first check because,
 with no pack, there is no `src/` to define code by.
