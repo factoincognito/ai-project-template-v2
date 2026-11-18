@@ -203,9 +203,8 @@ whole workflow — Clead fetches diffs/files and posts the review verdict
 to the PR through it (see "The two unproven pieces" above and open
 question #1 in decisions.md). This session shows the connector can
 *silently* fail to load at session start while every settings panel
-reads green. Operational takeaway: **at session start, Clead should
-confirm the GitHub tools are actually present before relying on them** —
-a healthy-looking settings page is not proof the tools loaded. Open
+reads green. Operational takeaway: a healthy-looking settings page is not proof the
+tools loaded; Process P-1 § 3 (1) says what a session checks at start. Open
 question #1 (can the connector write PR comments?) remains unconfirmed —
 we could not even exercise read access this session.
 
@@ -232,10 +231,9 @@ Short session, mostly orientation and process. Four things worth keeping:
 
 4. **Communication-style feedback.** Adam: I was overwhelming him with
    facts, options, and perspectives. v1 (Claude Chat as Clead) was
-   smoother. Corrected posture: answer the question asked, one
-   recommendation not a menu, hold caveats unless asked. Saved to Cowork
+   smoother. Corrected posture: § 36 (1) and (2). Saved to Cowork
    auto-memory; recorded here too so it survives across machines/clones
-   (auto-memory is local-only). Default to concise.
+   (auto-memory is local-only).
 
 ---
 
