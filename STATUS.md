@@ -18,7 +18,7 @@ Build and release. v2.9.3 is released (2026-11-18, tag on `a6a6d36`): it ships t
 The rest of PBI-1.54 in [`docs/BACKLOG.md`](https://github.com/factoincognito/ai-project-template-v2/blob/main/docs/BACKLOG.md).
 
 ## Next step
-Run 5: someone who has never used a terminal or gh sets up a project from the bootstrapper's README alone; which tag it runs on is Adam's call.
+Run 5 on v2.9.3 (Adam, 2026-11-18): someone who has never used a terminal or gh sets up a project from the bootstrapper's README alone. The newcomer is not found yet.
 
 ## Blockers
 acuteping waits until run 5 passes.
