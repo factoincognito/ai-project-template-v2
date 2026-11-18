@@ -6,7 +6,22 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.9.3] — 2026-11-18
+
 ### Added
+- Rules edition `2026-11-11-e009519`: session startup gains a paragraph on reading the Rules again after a session's earlier turns have been replaced by a summary (PR #452)
+- Rules edition `2026-11-16-9e09241`: a session chooses the model and effort of the agents it starts, and the default model is the cheaper one, reviews included (PR #453)
+- Rules edition `2026-11-16-aa00f03`: a new edition id, the text unchanged (PR #454)
+- Rules edition `2026-11-17-425b1d0`: the text of one paragraph changed (PR #455)
+- Rules edition `2026-11-17-7e5c44a`: the text of Process P-1 § 1 (2) changed (PR #456)
+- Rules edition `2026-11-17-bb66a05`: a record goes into the PR of its work or into one open records PR per repository, and the end-of-session check, the changelog rule and the status-file rule follow (PR #457)
+- Rules edition `2026-11-17-e55333d`: the session-end process gains a section on one task per session (PR #459)
+- Rules edition `2026-11-17-a112b03`: session startup gains a section on making fewer requests per task, and the merge process changes how a session waits for CI (PR #460)
+- Rules edition `2026-11-17-63c045b`: a rule on how many agents run at once, and a rule on sessions whose earlier turns have been replaced by a summary (PR #461)
+- Rules edition `2026-11-17-9a67d17`: a new edition id, the text unchanged (PR #462)
+- Rules edition `2026-11-18-9f64f5e`: the review process gains one item on what a review's findings are (PR #463)
+- Rules edition `2026-11-18-419596b`: one paragraph of the session-end process says what the first message for a fresh session holds (PR #464)
+- Rules editions `2026-11-18-39911c8`, `2026-11-18-9058ca0`, `2026-11-18-5e0933f`, `2026-11-18-28f88ba` and `2026-11-18-7dc72e8`: new edition ids, the text unchanged (PRs #465 to #469)
 - NEXT_SESSION cut from 134,970 bytes to a short handover: finished entries removed, open ones kept or listed in the new PBI-1.63 (PR #458)
 - NEXT_SESSION: the newcomer pre-check on v2.9.2, the state of the release and what is left of PBI-1.54 (PR #444)
 - `STATUS.md` and NEXT_SESSION after the v2.9.2 tag (PR #446)
