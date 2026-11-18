@@ -566,13 +566,13 @@ test_template_ci_is_not_in_the_manifest() {
 }
 
 # ---------- changelog.yml: the reminder after a merge (shipped) ----------
-# After a merge, changelog.yml asks Crog for a CHANGELOG.md PR. A PR that
+# After a merge, changelog.yml posts a reminder about CHANGELOG.md. A PR that
 # already changed CHANGELOG.md (such as a project's setup PR) gets no
 # reminder. The tests run the step's own run: script with a stub gh on
 # PATH that logs its calls and answers `gh api` with a list of files.
 
 CWF="$REPO/.github/workflows/changelog.yml"
-CHANGELOG_REMINDER="<!-- clead-changelog-step --> PR merged. Crog: open a PR updating CHANGELOG.md."
+CHANGELOG_REMINDER="<!-- clead-changelog-step --> PR merged. CHANGELOG.md: Process P-4 § 5 (1)."
 
 # changelog_step_script <out>: write the step's run: | script to <out>.
 changelog_step_script() {
