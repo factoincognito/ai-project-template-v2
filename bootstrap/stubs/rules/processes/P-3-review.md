@@ -19,7 +19,8 @@ Every review contains, without being asked:
 (3) an explicit second pass on error handling and type validation: edge cases of every validation, every error path caught at the right level, every external input validated, no silent type coercion;
 (4) a check of test quality: the test coverage narrative table is present (requested before approval if missing); each named test asserts what its row claims; every non-trivial error path and its recovery is tested; the red run was shown; the changed tests exercise the changed code; each `Test-exempt:` reason is true;
 (5) for ported code, the same standard as for new code;
-(6) at the end of every approval, an explicit list of what was not verified.
+(6) at the end of every approval, an explicit list of what was not verified;
+(7) its findings, which are only correctness gaps and gaps against the stated requirement (the specification, the item or decision the change carries out, these Rules and the project's standards); of a finding of an earlier round it does not repeat the text and says only whether the change since the last reviewed head fixes it.
 
 P-3 § 4 Verdict
 (1) The reviewer posts its verdict as a comment on the PR. A verdict of Crog reads "Crog review: APPROVE" or "Crog review: CHANGES NEEDED"; a verdict of changes needed lists the required fixes.
