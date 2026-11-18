@@ -40,9 +40,9 @@ Adopted: (1) Adam, 2026-10-29, on Clead's recommendation, `docs/BACKLOG.md` PBI-
 
 L § 8 The Rules edition
 (1) The copy of the Rules that § 21 (5) names is `bootstrap/stubs/rules/`, the edition. A new edition replaces it whole.
-(2) A PR that changes `bootstrap/stubs/rules/` changes nothing else. Its branch is `chore/rules-edition-<id>` and its title `chore(rules): take Rules edition <id>`; its branch, title, description and squash commit message carry only the edition id and what changed, in general words. The `build` check (`check-rules-edition.sh --template`) fails such a PR when it changes another file too, or when the folder does not match its `EDITION`.
+(2) A PR that changes `bootstrap/stubs/rules/` changes nothing else. Its branch is `chore/rules-edition-<id>` and its title `chore(rules): take Rules edition <id>`; its branch, title, description and squash commit message carry only the edition id and what changed, in general words. The `build` check (`check-rules-edition.sh --template`) fails such a PR when it changes another file too, or when the folder does not match its `EDITION`. Overrides Process P-2 § 3 (1) and § 4 (1) for these PRs only.
 (3) Such a PR merges on a green `build`, without a review. Overrides § 28 (1)(b) for these PRs only.
-Adopted: Adam, 2026-11-05, intent approval of the design of the edition, with its decisions as recommended ((3): decision 5), recorded in the product office
+Adopted: Adam, 2026-11-05, intent approval of the design of the edition, with its decisions as recommended ((3): decision 5), recorded in the product office; the citation of the overridden paragraphs in (2), Clead, 2026-11-19, PBI-1.47 (audit finding F6), wording only
 
 L § 9 The bootstrapper
 (1) Projects are made from the bootstrapper, `factoincognito/ai-project-bootstrap`, which the release pipeline (`bootstrapper.yml`) builds from this repository at each `v*` tag. A project is bootstrapped, never forked: it records the template version and commit it came from in its `CHANGELOG.md`, and gets neither this repository's history nor the template's own files (L § 2 (2)). The term is "bootstrap", not "fork".
