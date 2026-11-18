@@ -1,6 +1,6 @@
 # ai-project-template-v2 backlog: done entries
 
-The `DONE` entries of `docs/BACKLOG.md` (`RULES.md` L § 2 (1)), under the section headings they had there. The entries done by 2026-11-08 were moved here that day, unchanged. A citation written before then as "`docs/BACKLOG.md` PBI-n" for one of these entries means its entry here.
+The `DONE` entries of `docs/BACKLOG.md` (`RULES.md` L § 2 (1)), under the section headings they had there. The entries done by 2026-11-08 were moved here that day, unchanged. An entry that was superseded or moved out of the template is marked `DONE` here, and its notes say which. A citation written before then as "`docs/BACKLOG.md` PBI-n" for one of these entries means its entry here.
 
 ---
 
@@ -56,6 +56,15 @@ The `DONE` entries of `docs/BACKLOG.md` (`RULES.md` L § 2 (1)), under the secti
   app.json, tsconfig.json, biome.json, gitignore, vscode settings,
   placeholder test. Adapt to v2 structure.
 
+- **[DONE] PBI-1.4** (2026-10-01: superseded for new projects by PBI-1.14, the turn-key bootstrap script, approved by Adam; if the migration branch is still wanted it becomes its own IDEA. Earlier note: Adam, 2026-10-01, keep LATER; the bootstrapper plus
+  `tools/layout-pack.sh` cover most of it, and a small "lay out pack X"
+  step in the bootstrapper could replace the wizard) — Write the v2 bootstrap wizard (`BOOTSTRAP.md`)
+  — guided setup via Claude chat, branches on new project vs migration
+  from existing project, generates all project files for chosen language,
+  produces Crog setup prompt. Migration branch must ask: source repo,
+  Adam's WHAT call on v1 backlog items, sequencing (spec first, then
+  tests, then src).
+
 - **[DONE] PBI-1.5** (2026-09-30, PR #64) — Write `languages/README.md` — how to add a
   new language pack to v2.
 
@@ -98,11 +107,18 @@ The `DONE` entries of `docs/BACKLOG.md` (`RULES.md` L § 2 (1)), under the secti
   `wrangler.jsonc`; checked with `wrangler deploy --dry-run` only, a
   real deploy is not yet verified.
 
+- **[DONE] PBI-1.8** (superseded, 2026-10-01: folded into PBI-1.14, which has the licence choice) — Licence choice at project setup: the template
+  offers a set of licences (PolyForm Noncommercial among them) and the
+  project picks one at start. Depends on the wizard (PBI-1.4), unless
+  the licence texts are first added as files under `licenses/`.
+
 - **[DONE] PBI-1.9** (2026-09-30) — Fix the README setup steps, which still say to
   "Create a Cowork project" (README.md lines 19-27 and 48-53, plus the
   Team table). Cowork is now part of Claude itself. Keep what still
   holds: one project per repository, and the repo files are Clead's
   memory. Docs only.
+
+- **[DONE] PBI-1.11** (moved to the product office's backlog, where it is tracked; pinned by Adam, 2026-10-01; decided the same day) — Backlog visualiser: a way to see a project's `BACKLOG.md` as a backlog list and as a kanban board. It is a project of its own, bootstrapped from this template, and not a template feature, so it is tracked in the owner's private product office and not here. Nothing is built in this template.
 
 - **[DONE] PBI-1.14** (proposed 2026-10-01 by Clead from Adam's request; spec reviewed by Crog and intent approved by Adam in chat, 2026-10-01, with every open decision answered as recommended; recorded on PR #97; supersedes PBI-1.4 for new projects and absorbs PBI-1.8; built in slices S1-S19 (last: #174), to be tagged v2.4.0; the end-to-end runs are PBI-1.17) — Turn-key bootstrap script.
 
@@ -867,6 +883,13 @@ The `DONE` entries of `docs/BACKLOG.md` (`RULES.md` L § 2 (1)), under the secti
 
 ## Phase 2 — Validate unproven pieces
 
+- **[DONE] PBI-2.1** (superseded: the connector was written off 2026-06-28;
+  Clead now uses git and the GitHub API, see memory/decisions.md; also
+  duplicated PBI-4.3) — Confirm GitHub connector write access: verify
+  that Cowork's GitHub connector can post PR comments, not just fetch
+  diffs. The `review.yml` workflow posts a marker comment — confirm
+  this fires correctly and Clead can read it to trigger review.
+
 - **[DONE] PBI-2.3** (research, 2026-09-30) — Confirm whether Routines
   can use a secret without exposing it. Findings from the current
   Claude Code docs (code.claude.com/docs/en/routines and
@@ -1016,6 +1039,15 @@ The `DONE` entries of `docs/BACKLOG.md` (`RULES.md` L § 2 (1)), under the secti
   can commit directly or must go through Crog. Either path works —
   the event-driven write rules are the same regardless.
 
+- **[DONE] PBI-4.3** (duplicate of PBI-2.1, superseded the same
+  way) — Verify GitHub connector write access.
+  Confirm Cowork's GitHub connector can post PR comments, not just
+  fetch diffs. Load-bearing for the autonomous review trigger (PR
+  comment as event bus signal). If confirmed, enables Cowork-Clead
+  to post verdicts, fix prompts, and approval comments directly to
+  PRs without Adam relay. See also memory/decisions.md open
+  question #1.
+
 ## Process & team documentation
 
 - **[DONE] PBI-P.1** (2026-09-30, CLAUDE.md "Change execution model") — Document the explicit change-control model Adam
@@ -1066,3 +1098,4 @@ The `DONE` entries of `docs/BACKLOG.md` (`RULES.md` L § 2 (1)), under the secti
 - **[DONE] PBI-1.50** (audit of 2026-11-06, finding F9, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 7): P-4 § 5 (1): `CHANGELOG.md` is updated in batches at release prep (#375 for #351 to #374); #376 is not in it and no open PR updates it. Done 2026-11-18: met on `main`. `CHANGELOG.md` line 65 lists #376 (batched in #384), and the file is updated at release prep as Process P-4 § 5 (1) provides.
 - **[DONE] PBI-1.52** (audit of 2026-11-06, finding F11, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 7): `docs/BACKLOG.md` shows PBI-1.29 and PBI-1.30 as `[NEXT]` (lines 1008, 1078) while `docs/NEXT_SESSION.md` lines 215 and 216 record both done on 2026-10-30. Done 2026-11-18: PBI-1.29 and PBI-1.30 are marked done and moved in the same PR.
 - **[DONE] PBI-1.53** (audit of 2026-11-06, finding F12, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 7): P-8 § 4 (1) and § 27 (4): `docs/NEXT_SESSION.md` items 5 and 14, named by #369 as needing a disposition, are unchanged at `9241dab`. Done 2026-11-18: met on `main`. #458 removed items 5 and 14 from `docs/NEXT_SESSION.md` (`git log -S` shows both last present before it); the remaining items are 1 to 4 and 16 to 18.
+- **[DONE] PBI-1.51** (audit of 2026-11-06, finding F10, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 7): P-9 § 2 (2) and (3): `docs/BACKLOG.md` uses markers `IDEA`, `SUPERSEDED`, `MOVED` (legend lines 15, 18, 19; six entries) and names vizi's format spec. Done 2026-11-18 in #481: the six entries now use the markers of Process P-9 § 2 (2): PBI-1.4, 1.8, 1.11, 2.1 and 4.3 (superseded or moved) are marked `DONE` with the reason in their notes and moved to `docs/BACKLOG-DONE.md`; PBI-1.12 (`IDEA`) is `LATER`, unvalidated in its notes; legend and the format reference now cite Process P-9 § 2.
