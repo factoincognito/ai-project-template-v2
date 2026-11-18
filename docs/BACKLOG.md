@@ -701,7 +701,7 @@ Template work that the product office's backlog held until the product owner dec
 
 - **[LATER] PBI-1.64** (Clead, 2026-11-18, from the stub check made for the release prep of v2.9.3, #470) — The header of `bootstrap/stubs/STATUS.md` is the format specification (Process P-9 § 6 (6)), but it does not say what P-9 § 6 (7) requires: in the fields, a reference to a backlog entry, PR, commit, file or repository is written as a Markdown link. Add that to the header. Checked 2026-11-18: every other Rules citation in the stub files resolves in the shipped Rules (`bootstrap/stubs/rules/`). Not checked: the stub files' content beyond their citations.
 
-- **[LATER] PBI-1.65** (Clead's proposal, 2026-11-18, from the release prep of v2.9.3, #470; Adam has not decided it) — Nothing prompts a release when Rules edition PRs merge. The bootstrapper (rebuilt only at a `v*` tag, L § 9 (1)) shipped edition `2026-11-08-9acd383` (v2.9.2) while `main` held `2026-11-18-7dc72e8`: ten days and 17 edition PRs (#452 to #469) behind. Decide whether that needs a rule, a check or nothing, and what it costs. Until decided, a release after the edition PRs is Clead's to propose and Adam's to tag.
+- **[LATER] PBI-1.65** (Clead's proposal, 2026-11-18, from the release prep of v2.9.3, #470; Adam has not decided it) — Nothing prompts a release when Rules edition PRs merge. The bootstrapper (rebuilt only at a `v*` tag, L § 9 (1)) shipped edition `2026-11-08-9acd383` (v2.9.2) while `main` held `2026-11-18-7dc72e8`: ten days and 17 edition PRs (#452 to #469) behind. Decide whether that needs a rule, a check or nothing, and what it costs.
 
 ## Audit findings (2026-11-06)
 
