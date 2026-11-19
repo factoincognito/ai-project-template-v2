@@ -31,5 +31,5 @@ jobs:
             exit 0
           fi
           gh pr comment "$PR_NUMBER" \
-            --body "<!-- clead-changelog-step --> PR merged. Crog: open a PR updating CHANGELOG.md." \
+            --body "<!-- clead-changelog-step --> PR merged. CHANGELOG.md: Process P-4 § 5 (1)." \
             --repo "$REPO"
