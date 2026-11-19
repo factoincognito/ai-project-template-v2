@@ -571,6 +571,24 @@ Template work that the product office's backlog held until the product owner dec
 
 The findings of the product office's audit of this project (Process P-6 § 8 (2)). Adam's decision: conditional accept, 2026-11-06.
 
+## Audit findings (incremental audit, 2026-11-19)
+
+The findings of the product office's incremental audit of this project that are new or not resolved (Process P-6 § 8 (2)). Adam's decision: a new conditional accept, 2026-11-19.
+
+- **[NEXT] PBI-1.66** (incremental audit of 2026-11-19, finding F2, record `audits/ai-project-template-v2.md` in the product office; Adam's new conditional accept, 2026-11-19; due 2026-11-26; earlier entry PBI-1.43) — (§ 4): line 7 of `docs/NEXT_SESSION.md` still carries the disposition rule in other words ("every entry below must get a disposition each session it's touched …", citing Process P-1 § 4 (3) and P-8 § 4), while line 7 of the stub `bootstrap/stubs/docs/NEXT_SESSION.md` is a pointer (#479). Done when: line 7 of `docs/NEXT_SESSION.md` is a pointer to Process P-1 § 4 (3) and Process P-8 § 4, as the stub's.
+
+- **[NEXT] PBI-1.67** (incremental audit of 2026-11-19, finding F9, record `audits/ai-project-template-v2.md` in the product office; Adam's new conditional accept, 2026-11-19; due 2026-11-26; earlier entry PBI-1.50) — (§ 7): Process P-4 § 5 (1): at `e632a30`, `CHANGELOG.md` (`[Unreleased]` empty) names none of the 15 PRs merged after the v2.9.3 tag, #473 to #487; #452 to #469 were first listed by the release prep #470. Done when: `CHANGELOG.md` lists #473 to #487 and every PR merged after them, kept as Process P-4 § 5 (1) says.
+
+- **[NEXT] PBI-1.68** (incremental audit of 2026-11-19, finding F13, record `audits/ai-project-template-v2.md` in the product office; Adam's new conditional accept, 2026-11-19; due 2026-11-26) — (§ 7): Process P-2 § 2 (3), (4): 28 of the 106 PR titles checked (#378 to #487) do not read `<type>(<scope>): <lower-case summary>`: three have no scope (#415, #431, #433) and 25 have a summary starting in upper case (#378, #384, #385, #390, #394, #395, #396, #398, #399, #401, #402, #403, #404, #405, #406, #413, #418, #420, #423, #424, #425, #428, #437, #440, #443). They merged between 2026-11-06 and 2026-11-08; the 44 PRs merged after #443 conform. Done when: the PRs merged after `e632a30` show titles under Process P-2 § 2 (3).
+
+- **[NEXT] PBI-1.69** (incremental audit of 2026-11-19, finding F14, record `audits/ai-project-template-v2.md` in the product office; Adam's new conditional accept, 2026-11-19; due 2026-11-26) — (§ 7): `RULES.md` L § 11 (1): for v2.9.2, #442 (a Rules edition PR) merged after the release prep #441 and before the tag, and #443 listed it to restore the order; for v2.9.3, #471 (a backlog PR) merged after the release prep #470 and before the tag, and #472 listed it. Done when: the first release tagged after this audit keeps L § 11 (1): the release prep PR is the last merge before the tag. If none is tagged by the date, Clead recommends extending this entry (Process P-6 § 11 (4)).
+
+- **[NEXT] PBI-1.70** (incremental audit of 2026-11-19, finding F15, record `audits/ai-project-template-v2.md` in the product office; Adam's new conditional accept, 2026-11-19; due 2026-11-26) — (§ 7): Process P-3 § 1 (2): the APPROVE of #429 on its merged head `af1d951` was posted 2026-11-08T03:33:52Z; that head's `bootstrapper-test` finished at 03:50:16Z and the PR merged at 03:56:31Z. Done when: the PRs merged after `e632a30` show each approval posted after the CI of its head finished.
+
+- **[NEXT] PBI-1.71** (incremental audit of 2026-11-19, finding F16, record `audits/ai-project-template-v2.md` in the product office; Adam's new conditional accept, 2026-11-19; due 2026-11-26) — (§ 7): Process P-2 § 4 (1) to (3): #403 (`RULES.md` L § 7 (3), reviewed by Crog) was opened 2026-11-07T12:20Z with its content and no `[claim]` marker, and went to review without a claim step. Done when: the PRs merged after `e632a30` show a claim step on every PR that goes to review.
+
+- **[NEXT] PBI-1.72** (incremental audit of 2026-11-19, finding F17, record `audits/ai-project-template-v2.md` in the product office; Adam's new conditional accept, 2026-11-19; due 2026-11-26) — (§ 7): Process P-3 § 3 (1): the final verdict on #450, `Crog review: APPROVE` of 2026-11-08T23:26:36Z, is a delta review of one commit and has no threat model statement; its first verdict (CHANGES NEEDED, 23:02:52Z) has one. Done when: the PRs merged after `e632a30` show a threat model in every verdict.
+
 ## Decision log (updated)
 
 | Date | Decision | Rationale |
