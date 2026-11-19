@@ -571,7 +571,6 @@ Template work that the product office's backlog held until the product owner dec
 
 The findings of the product office's audit of this project (Process P-6 § 8 (2)). Adam's decision: conditional accept, 2026-11-06.
 
-- **[NEXT] PBI-1.49** (audit of 2026-11-06, finding F8, record `audits/ai-project-template-v2.md` in the product office; Adam's conditional accept, 2026-11-06; due 2026-11-20) — (§ 7): P-2 § 4 (5): #375 and #376 merge comments give the session ID without the link; #372 names no session; commits `ca2925b` and `bc2954d` lack a `Session-ID:` trailer. Checked 2026-11-19, not closed: of the 35 edition squash commits on `main` (#365 to #482), 26 carry neither `Session-ID:` nor `Claude-Session:`, 1 the link only and 8 both; PRs #474 to #482 and their squash commits name the session by link and ID, #470 to #473 have `Session-ID:` without `Claude-Session:`, and no session comment has been posted on #474 to #482. Whether L § 8 (2)'s limit on an edition PR's squash message is meant to override the trailers of P-2 § 4 (5) is for Adam to decide.
 ## Decision log (updated)
 
 | Date | Decision | Rationale |
