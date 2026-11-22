@@ -18,6 +18,7 @@ A bootstrapped project records the tag it was built from.
 - Backlog: PBI-1.43, PBI-1.50, PBI-1.52 and PBI-1.53 closed, PBI-1.29 and PBI-1.30 marked done (PR #476); PBI-1.42 and PBI-1.44 closed and PBI-1.45 narrowed (PR #480); PBI-1.46 and PBI-1.48 closed (PR #485)
 - `memory/context.md`: two directives replaced by citations of the Rules (PBI-1.44) (PR #477)
 - `STATUS.md`: the comment at the top cites Process P-9 § 6 (PBI-1.42) (PR #478)
+- `docs/NEXT_SESSION.md`: line 7 is a pointer to Process P-1 § 4 (3) and Process P-8 § 4 (PBI-1.66) (PR #493)
 - Shipped docs cite the Rules in place of restating them: `docs/DEV_INFRASTRUCTURE.md` and the `NEXT_SESSION.md` stub (PBI-1.45) (PR #479)
 - Backlog: only the markers of Process P-9 § 2 (2) (PBI-1.51) (PR #481)
 - `RULES.md` L § 8 (2): cites the paragraphs it overrides (PBI-1.47) (PR #483), and keeps the session trailers on edition squash commits (PBI-1.49) (PR #486)
