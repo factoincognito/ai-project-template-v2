@@ -6,7 +6,7 @@ them.
 
 # Status
 
-Last update: 2026-11-18
+Last update: 2026-11-22
 
 ## Phase
 Build and release. v2.9.3 is released (2026-11-18, tag on `a6a6d36`): it ships the Rules edition of 2026-11-18 and the fix of the setup script's stop message ([#445](https://github.com/factoincognito/ai-project-template-v2/pull/445)). The bootstrapper repository has rebuilt at v2.9.3.
@@ -15,7 +15,7 @@ Build and release. v2.9.3 is released (2026-11-18, tag on `a6a6d36`): it ships t
 The rest of PBI-1.54 in [`docs/BACKLOG.md`](https://github.com/factoincognito/ai-project-template-v2/blob/main/docs/BACKLOG.md).
 
 ## Next step
-Run 5 on v2.9.3 (Adam, 2026-11-18): someone who has never used a terminal or gh sets up a project from the bootstrapper's README alone. The newcomer is not found yet.
+Run 5 on v2.9.3 (Adam, 2026-11-18): someone who has never used a terminal or gh sets up a project from the bootstrapper's README alone. The newcomer is found and the run started on 2026-11-22; its result is not in yet.
 
 ## Blockers
 acuteping waits until run 5 passes.
