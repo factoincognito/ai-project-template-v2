@@ -6,6 +6,25 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Added
+- NEXT_SESSION: the newcomer pre-check on the v2.9.3 candidate, two stops, neither a defect (PR #473)
+- `STATUS.md` after the v2.9.3 release (PR #474), and Adam's choice that end-to-end run 5 runs on v2.9.3 (PR #475)
+- Rules edition `2026-11-19-b3a6a7b`: one paragraph added to the Rules, the rest of the text unchanged (PR #482)
+- Rules edition `2026-11-19-c13d97b`: a new edition id, the text unchanged (PR #487)
+- Backlog: PBI-1.66 to PBI-1.72, the findings of the incremental audit of 2026-11-19, due 2026-11-26 (PR #488)
+- NEXT_SESSION and `STATUS.md`: end-to-end run 5 started (PR #489), its result so far (PR #490), the re-run of the end-to-end check (PR #491), and Adam's decision that it passed (PR #492)
+
+### Changed
+- Backlog: PBI-1.43, PBI-1.50, PBI-1.52 and PBI-1.53 closed, PBI-1.29 and PBI-1.30 marked done (PR #476); PBI-1.42 and PBI-1.44 closed and PBI-1.45 narrowed (PR #480); PBI-1.46 and PBI-1.48 closed (PR #485)
+- `memory/context.md`: two directives replaced by citations of the Rules (PBI-1.44) (PR #477)
+- `STATUS.md`: the comment at the top cites Process P-9 § 6 (PBI-1.42) (PR #478)
+- Shipped docs cite the Rules in place of restating them: `docs/DEV_INFRASTRUCTURE.md` and the `NEXT_SESSION.md` stub (PBI-1.45) (PR #479)
+- Backlog: only the markers of Process P-9 § 2 (2) (PBI-1.51) (PR #481)
+- `RULES.md` L § 8 (2): cites the paragraphs it overrides (PBI-1.47) (PR #483), and keeps the session trailers on edition squash commits (PBI-1.49) (PR #486)
+
+### Fixed
+- The changelog reminder that the workflow posts after a merge cites Process P-4 § 5 (1) in place of restating it (PBI-1.45) (PR #484)
+
 ## [2.9.3] — 2026-11-18
 
 ### Added
