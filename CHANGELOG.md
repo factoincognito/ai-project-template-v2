@@ -10,6 +10,8 @@ A bootstrapped project records the tag it was built from.
 - The setup script offers `csharp` as a fifth pack (answer `5`, or `--pack csharp`), with a C# section in `docs/DEV_INFRASTRUCTURE.md` and a guard test that every folder of `languages/` is in the pack lists of the setup and of the end-to-end check (PBI-1.23 part 2) (PR #504)
 - The end-to-end check, `bootstrap/e2e-check.sh`, checks a project made with the `csharp` pack, which needs no `package-lock.json` (PBI-1.23 part 2) (PR #502)
 - Rules edition `2026-11-23-7a5adac` (PR #506)
+- Rules edition `2026-11-23-dbc106a` (PR #505)
+- Rules edition `2026-11-23-633e09d` (PR #503)
 - Rules edition `2026-11-23-56f4746`: the startup process says how much of a project's staging file a session reads at startup (PR #500)
 
 ### Changed
