@@ -6,8 +6,11 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Changed
+- Backlog: PBI-1.75 (the setup's note about the .NET SDK) marked done and moved to `docs/BACKLOG-DONE.md`; PBI-1.76 added for its two non-blocking follow-ups (PR #527)
+
 ### Added
-- NEXT_SESSION: the newcomer pre-check on the v2.11.0 candidate, one stop, not a defect (the release prep is PR #524, which no release lists)
+- NEXT_SESSION: the newcomer pre-check on the v2.11.0 candidate, one stop, not a defect (the release prep is PR #524, which no release lists), and `STATUS.md` after the release (PR #526)
 
 ## [2.11.0] — 2026-11-23
 
