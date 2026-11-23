@@ -17590,10 +17590,22 @@ test_the_dotnet_check_accepts_an_sdk_of_10_0_with_a_patch_of_100_or_higher_and_n
   # Accepted: the first SDK of 10.0, later patches, later feature bands, a
   # pre-release suffix read as its number.
   sdk_verdicts "$SCRIPT" "$d" 10.0.100 10.0.101 10.0.104 10.0.199 10.0.200 10.0.402 10.0.1000 \
-    10.0.100-rc.1.25451.107 10.0.203-preview.7.25380.108 >"$d/got"
+    10.0.100-rc.1.25451.107 10.0.203-preview.7.25380.108 10.0.100+build.1 10.0.250+sha.5114f85 >"$d/got"
   line="$(grep -v ' yes$' "$d/got" || true)"
   [ -z "$line" ] || die "not accepted: $line"
-  [ "$(wc -l <"$d/got" | tr -d ' ')" -eq 9 ] || die "a version was not judged (test is stale)"
+  [ "$(wc -l <"$d/got" | tr -d ' ')" -eq 11 ] || die "a version was not judged (test is stale)"
+  # A patch of ten digits or more is a patch of 100 or higher, and the
+  # check says so without a word on stderr (the number test of `[` does
+  # not take numbers that large: "integer expression expected").
+  d="$(tmpdir)"
+  sdk_verdicts "$SCRIPT" "$d" 10.0.99999999999999999999 10.0.1234567890 >"$d/got" 2>"$d/err"
+  line="$(grep -v ' yes$' "$d/got" || true)"
+  [ -z "$line" ] || die "not accepted: $line"
+  [ "$(wc -l <"$d/got" | tr -d ' ')" -eq 2 ] || die "a version was not judged (test is stale)"
+  [ ! -s "$d/err" ] || {
+    cat "$d/err" >&2
+    die "a patch of 10 digits or more printed on stderr"
+  }
   # Not accepted: an older patch of 10.0, another minor or major version,
   # a pre-release of an older patch, and what is not a version.
   d="$(tmpdir)"
@@ -17839,6 +17851,20 @@ test_with_only_other_sdks_the_note_names_them() {
     expect_out "$d" "Press Enter to continue:"
     expect_out "$d" "    Done. Carrying on without the .NET SDK."
   done
+  # Lines of the listing that are no SDK (a message, a version whose major,
+  # minor or patch is not a number) are not named as "other versions":
+  # only the 9.0.300 is.
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  printf '%s\n' 'No .NET SDKs were found.' '10.x.100 [/usr/share/dotnet/sdk]' '10.0.x [/usr/share/dotnet/sdk]' \
+    '9.0.300 [/usr/share/dotnet/sdk]' 'abc' >"$d/dotnet-sdks"
+  printf '\n' >"$d/in"
+  pre "$d" with_pack csharp preflight_dotnet
+  expect_rc 0 "$d"
+  expect_out "$d" "Only other versions of the .NET SDK are installed on this computer: 9.0.300."
+  expect_no_out "$d" "No,"
+  expect_no_out "$d" "abc"
+  expect_out "$d" "    Done. Carrying on without the .NET SDK."
 }
 
 test_the_dotnet_check_runs_only_for_the_csharp_pack() {

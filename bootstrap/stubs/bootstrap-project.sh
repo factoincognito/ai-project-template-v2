@@ -2542,12 +2542,11 @@ dotnet_sdk_accepted() {
   case "$major" in "" | *[!0-9]*) return 2 ;; esac
   case "$minor" in "" | *[!0-9]*) return 2 ;; esac
   case "$patch" in "" | *[!0-9]*) return 2 ;; esac
-  # Leading zeros are not read as another number (bash would take 010 as
-  # octal): 10.00.100 is not 10.0.100.
+  # The major and the minor are compared as text: 10.00.100 is not 10.0.100.
   [ "$major" = "$DOTNET_SDK_MAJOR" ] && [ "$minor" = "$DOTNET_SDK_MINOR" ] || return 1
-  while [ "${patch#0}" != "$patch" ]; do patch="${patch#0}"; done
+  # A number of ten digits or more is too large for the number test of `[`.
   [ "${#patch}" -le 9 ] || return 0
-  [ "${patch:-0}" -ge "$DOTNET_SDK_MIN_PATCH" ]
+  [ "$patch" -ge "$DOTNET_SDK_MIN_PATCH" ]
 }
 
 # check_dotnet: dotnet lists an SDK of the range (dotnet --list-sdks, or
