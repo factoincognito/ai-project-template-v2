@@ -6,6 +6,8 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.10.0] — 2026-11-23
+
 ### Added
 - The setup script offers `csharp` as a fifth pack (answer `5`, or `--pack csharp`), with a C# section in `docs/DEV_INFRASTRUCTURE.md` and a guard test that every folder of `languages/` is in the pack lists of the setup and of the end-to-end check (PBI-1.23 part 2) (PR #504)
 - The end-to-end check, `bootstrap/e2e-check.sh`, checks a project made with the `csharp` pack, which needs no `package-lock.json` (PBI-1.23 part 2) (PR #502)
@@ -19,6 +21,8 @@ A bootstrapped project records the tag it was built from.
 - Backlog: PBI-1.23 part 2 (the C# pack offered by the setup) specified and approved by Adam (PR #501)
 - Backlog: PBI-1.73 added for the finding F18 of the incremental audit of 2026-11-23 (PR #499)
 - Backlog: PBI-1.69 marked done with the release v2.9.4 as evidence (PR #498)
+- Backlog and `STATUS.md`: PBI-1.23 part 2 recorded as built (PR #508)
+- The changelog lists the Rules editions #503 and #505 (PR #509)
 
 ## [2.9.4] — 2026-11-23
 
