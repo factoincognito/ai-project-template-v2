@@ -40,7 +40,7 @@ POLYFORM_TEXT=licenses/PolyForm-Noncommercial-1.0.0.md
 # Step 16: the protection as read back, and what the spec wants.
 READBACK_JQ='"contexts=\(.required_status_checks.contexts // [] | join(","))", "strict=\(.required_status_checks.strict)", "enforce_admins=\(.enforce_admins.enabled)", "approvals=\(.required_pull_request_reviews.required_approving_review_count)", "restrictions=\(.restrictions)", "allow_force_pushes=\(.allow_force_pushes.enabled)", "allow_deletions=\(.allow_deletions.enabled)"'
 REQUIRE_READBACK="contexts=build strict=false enforce_admins=true approvals=0 restrictions=null allow_force_pushes=false allow_deletions=false"
-PACKS="node web python react-native"
+PACKS="node web python react-native csharp"
 
 # The other GitHub answers read, through gh's --jq.
 REPO_JQ='"\(.full_name)|\(.private)|\(.template_repository.full_name // "-")|\(.delete_branch_on_merge)|\(.allow_squash_merge)"'
@@ -96,6 +96,7 @@ pack_targets() {
       ;;
     python) echo "$common pyproject.toml requirements.txt requirements-dev.txt .pre-commit-config.yaml src/" ;;
     react-native) echo "$common $ts app.json src/" ;;
+    csharp) echo "$common .editorconfig global.json Directory.Build.props Directory.Packages.props Project.slnx src/ tests/" ;;
   esac
 }
 
@@ -668,11 +669,11 @@ check_lockfile() {
     return 0
   fi
   case "$PACK" in
-    python)
+    python | csharp)
       if is_tracked package-lock.json || [ -e "$DIR/package-lock.json" ]; then
-        result FAIL lockfile "The python pack has no npm lockfile, but the project has package-lock.json."
+        result FAIL lockfile "The $PACK pack has no npm lockfile, but the project has package-lock.json."
       else
-        result PASS lockfile "The python pack needs no package-lock.json, and there is none."
+        result PASS lockfile "The $PACK pack needs no package-lock.json, and there is none."
       fi
       ;;
     *)
