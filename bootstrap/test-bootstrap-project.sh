@@ -17916,13 +17916,37 @@ test_the_dotnet_check_comes_right_after_the_npm_check_and_before_the_folder_chec
   [ "$(printf '%s\n' "$body" | sed -n "$((n + 2))p")" = "  preflight_target_dir" ] || die "preflight_target_dir does not follow preflight_dotnet"
 }
 
+# e2e_of <dir>: the output of bootstrap/e2e-check.sh on the project the
+# run in <dir> made, with the stub gh as the gh of the run, written to
+# <dir>/e2e.out with the run's folders named DIR and COPY. The stub gh does
+# not answer every read of GitHub the checker makes (the checks that need
+# those fail, the same way for every project); the checks of the files of
+# the project pass.
+e2e_of() {
+  local d="$1" text c
+  c="$(copy_of "$d")"
+  printf '#!/bin/sh\nexec "%s/gh" "$@"\n' "$d" >"$d/bin/gh"
+  chmod +x "$d/bin/gh"
+  set +e
+  (
+    in_env "$d"
+    "$BASH" "$REPO/bootstrap/e2e-check.sh" octo-user/my-app "$c"
+  ) >"$d/e2e.raw" 2>&1
+  set -e
+  text="$(cat "$d/e2e.raw")"
+  text="${text//"$c"/COPY}"
+  text="${text//"$d"/DIR}"
+  printf '%s\n' "$text" >"$d/e2e.out"
+}
+
 test_a_csharp_project_is_the_same_with_and_without_the_sdk_and_the_note_waits_for_enter() {
   # Done when (a), (c) and (f), in two whole runs. With an SDK the note is
   # not shown and the run goes through. Without one, in an interactive run,
   # the note is shown and "Press Enter to continue" reads one line, and the
   # setup goes on to the same end. The two projects hold the same files
-  # with the same contents, and the setup's own self-check passes in both
-  # (it ends the run at "The setup is finished").
+  # with the same contents, the setup's own self-check passes in both (it
+  # ends the run at "The setup is finished"), and the template's
+  # end-to-end checker, bootstrap/e2e-check.sh, says the same of both.
   local with without a b
   built_bootstrapper
   with="$(tmpdir)"
@@ -17963,9 +17987,19 @@ test_a_csharp_project_is_the_same_with_and_without_the_sdk_and_the_note_waits_fo
   diff -r --exclude=.git "$(copy_of "$with")" "$(copy_of "$without")" >&2 ||
     die "the project made without the SDK differs from the one made with it"
   [ "$(calls_from_create "$with")" = "$(calls_from_create "$without")" ] || die "the gh calls differ"
-  # bootstrap/e2e-check.sh, on a project made for real, is the job of the
-  # end-to-end runs and of bootstrap/test-e2e-check.sh; here the two
-  # projects are the same files.
+  # The template's end-to-end checker on both: the checks of the files of
+  # the project pass, and its whole output is the same for the two. The
+  # checks that read GitHub fail in the harness, whose gh does not answer
+  # every read, the same way for both.
+  e2e_of "$with"
+  e2e_of "$without"
+  expect_same "the output of e2e-check.sh on the two projects" "$with/e2e.out" "$without/e2e.out"
+  for a in pack lockfile placeholders pack-links languages licence line-endings no-keys rules-edition; do
+    [ "$(grep -c "^PASS $a: " "$with/e2e.out")" -eq 1 ] || {
+      cat "$with/e2e.out" >&2
+      die "e2e-check.sh does not pass the check $a on the project made with the SDK"
+    }
+  done
 }
 
 test_the_dotnet_note_comes_again_at_every_start_of_the_setup() {
