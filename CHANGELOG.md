@@ -6,6 +6,15 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Added
+- When the pack is `csharp`, the setup tells the person about the .NET SDK in a note that does not stop it ("Press Enter to continue"), and the pack's `global.json` asks for SDK 10.0.100 or any later 10.0 SDK (`rollForward: latestFeature`); the Windows legs of the bootstrapper tests run in nine shards (PBI-1.75) (PR #519)
+- Rules edition `2026-11-23-f808479` (PR #520)
+- Rules edition `2026-11-23-cae4996` (PR #518)
+
+### Changed
+- Backlog: PBI-1.75 added, specified with a minimum SDK version and put into NOW by Adam (PRs #512, #514, #515, #516, #517)
+- NEXT_SESSION: the newcomer pre-check and the C# end-to-end run on v2.10.0 recorded (PRs #511, #513)
+
 ## [2.10.0] — 2026-11-23
 
 ### Added
