@@ -19,11 +19,13 @@ A bootstrapped project records the tag it was built from.
 - `memory/context.md`: two directives replaced by citations of the Rules (PBI-1.44) (PR #477)
 - `STATUS.md`: the comment at the top cites Process P-9 § 6 (PBI-1.42) (PR #478)
 - `docs/NEXT_SESSION.md`: line 7 is a pointer to Process P-1 § 4 (3) and Process P-8 § 4 (PBI-1.66) (PR #493)
+- Backlog: PBI-1.66 to PBI-1.68 closed, PBI-1.69 to PBI-1.72 given a status line, and the changelog lists #473 to #493 (PBI-1.67) (PR #494)
 - Shipped docs cite the Rules in place of restating them: `docs/DEV_INFRASTRUCTURE.md` and the `NEXT_SESSION.md` stub (PBI-1.45) (PR #479)
 - Backlog: only the markers of Process P-9 § 2 (2) (PBI-1.51) (PR #481)
 - `RULES.md` L § 8 (2): cites the paragraphs it overrides (PBI-1.47) (PR #483), and keeps the session trailers on edition squash commits (PBI-1.49) (PR #486)
 
 ### Fixed
+- `bootstrap/coverage.sh run` removes its temporary folder and stops the suite when it is interrupted (PBI-1.54, item (3)) (PR #495)
 - The changelog reminder that the workflow posts after a merge cites Process P-4 § 5 (1) in place of restating it (PBI-1.45) (PR #484)
 
 ## [2.9.3] — 2026-11-18
