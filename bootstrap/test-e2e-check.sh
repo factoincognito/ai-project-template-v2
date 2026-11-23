@@ -511,7 +511,7 @@ test_finished_node_run_passes_every_check() {
 
 test_finished_runs_of_every_pack_and_licence_pass() {
   local d spec pack lic dep
-  for spec in "web polyform-noncommercial-1.0.0 yes" "web none" "python none" "react-native mit" "node polyform-noncommercial-1.0.0"; do
+  for spec in "web polyform-noncommercial-1.0.0 yes" "web none" "python none" "react-native mit" "node polyform-noncommercial-1.0.0" "csharp mit"; do
     # shellcheck disable=SC2086 # split the case into its words on purpose
     set -- $spec
     pack="$1" lic="$2" dep="${3:-}"
@@ -1118,6 +1118,26 @@ test_pack_file_missing_fails() {
   change_setup "$d" 'git rm -q -r e2e'
   run_check "$d"
   expect_only_fail "$d" pack
+  # PBI-1.23 part 2: a project that names csharp and lacks global.json (a
+  # file) or tests/ (a folder) fails pack, and the reason names it.
+  d="$(tmpdir)"
+  finished "$d" csharp mit
+  change_setup "$d" 'git rm -q global.json'
+  run_check "$d"
+  expect_only_fail "$d" pack
+  reason_of "$d" pack | grep -F 'global.json' >/dev/null || {
+    cat "$d/out" >&2
+    die "the reason does not name global.json"
+  }
+  d="$(tmpdir)"
+  finished "$d" csharp mit
+  change_setup "$d" 'git rm -q -r tests'
+  run_check "$d"
+  expect_only_fail "$d" pack
+  reason_of "$d" pack | grep -F 'tests/' >/dev/null || {
+    cat "$d/out" >&2
+    die "the reason does not name tests/"
+  }
 }
 
 test_web_deploy_files_follow_the_changelog() {
@@ -1145,6 +1165,47 @@ test_lockfile_fails() {
   change_setup "$d" 'printf "{}\n" >package-lock.json'
   run_check "$d"
   expect_only_fail "$d" lockfile
+  reason_of "$d" lockfile | grep -F 'The python pack' >/dev/null || {
+    cat "$d/out" >&2
+    die "the python reason does not name the python pack"
+  }
+}
+
+test_csharp_project_needs_no_package_lock_json() {
+  # PBI-1.23 part 2: csharp joins python in check_lockfile. A correct C#
+  # project has no package-lock.json, passes lockfile, and the reason names
+  # the pack that was read from CHANGELOG.md.
+  local d
+  d="$(tmpdir)"
+  finished "$d" csharp mit
+  [ ! -e "$(COPY "$d")/package-lock.json" ] || die "fixture: a C# project has a package-lock.json"
+  run_check "$d"
+  expect_all_pass "$d"
+  reason_of "$d" lockfile | grep -F 'The csharp pack needs no package-lock.json' >/dev/null || {
+    cat "$d/out" >&2
+    die "the lockfile reason does not name the csharp pack"
+  }
+  ! reason_of "$d" lockfile | grep -F 'python' >/dev/null || {
+    cat "$d/out" >&2
+    die "the lockfile reason of a C# project names python"
+  }
+}
+
+test_csharp_project_with_a_package_lock_json_fails_lockfile() {
+  local d
+  d="$(tmpdir)"
+  finished "$d" csharp mit
+  change_setup "$d" 'printf "{}\n" >package-lock.json'
+  run_check "$d"
+  expect_only_fail "$d" lockfile
+  reason_of "$d" lockfile | grep -F 'The csharp pack' >/dev/null || {
+    cat "$d/out" >&2
+    die "the reason does not name the csharp pack"
+  }
+  ! reason_of "$d" lockfile | grep -F 'python' >/dev/null || {
+    cat "$d/out" >&2
+    die "the reason of a C# project names python"
+  }
 }
 
 test_placeholder_left_fails() {
@@ -1300,6 +1361,26 @@ test_another_packs_section_left_fails() {
   d="$(tmpdir)"
   finished "$d" node mit
   change_setup "$d" 'printf "\n%s\n\n%s\n" "### Python (\`python\` pack)" "Text." >>docs/DEV_INFRASTRUCTURE.md'
+  run_check "$d"
+  expect_only_fail "$d" pack-links
+}
+
+test_csharp_section_or_link_left_in_another_pack_fails() {
+  # PBI-1.23 part 2: PACKS gains csharp, so pack-links judges the C#
+  # section and links too, in a project of another pack.
+  local d
+  d="$(tmpdir)"
+  finished "$d" node mit
+  change_setup "$d" 'printf "\n%s\n\n%s\n" "### C# on .NET (\`csharp\` pack)" "Text." >>docs/DEV_INFRASTRUCTURE.md'
+  run_check "$d"
+  expect_only_fail "$d" pack-links
+  reason_of "$d" pack-links | grep -F 'csharp' >/dev/null || {
+    cat "$d/out" >&2
+    die "the reason does not name csharp"
+  }
+  d="$(tmpdir)"
+  finished "$d" node mit
+  change_setup "$d" 'printf "%s\n" "See \`languages/csharp/code-standards.md\`." >>docs/DEV_INFRASTRUCTURE.md'
   run_check "$d"
   expect_only_fail "$d" pack-links
 }
@@ -1766,7 +1847,7 @@ test_checker_can_be_sourced_without_running() {
 
 test_fill_table_matches_the_script() {
   local pack dep a b
-  for pack in node web python react-native; do
+  for pack in node web python react-native csharp; do
     for dep in "" yes; do
       [ "$pack" = web ] || [ -z "$dep" ] || continue
       a="$(
@@ -1796,7 +1877,7 @@ test_fill_table_matches_the_script() {
 
 test_layout_matches_the_script() {
   local pack dep t kept_s targets_s kept_c targets_c f covered x
-  for pack in node web python react-native; do
+  for pack in node web python react-native csharp; do
     for dep in "" yes; do
       [ "$pack" = web ] || [ -z "$dep" ] || continue
       t="$(tmpdir)"
