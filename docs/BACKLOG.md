@@ -290,6 +290,15 @@ get a working project in any supported language.
 
   **Done when.** Each of the three is fixed or closed with a reason, test-first where it changes a test (`RULES.md` § 30).
 
+- **[LATER] PBI-1.75** (Adam, in chat, 2026-11-23 16:39: "i think the bootstrapper should check for the sdk in the same way a web project checks for npm, or react for node"; not yet specced, reviewed or intent-approved) — The setup checks for the .NET SDK when the pack is `csharp`, as it checks for npm for the `node`, `web` and `react-native` packs.
+
+  **Facts (Clead, 2026-11-23).**
+  - PBI-1.23 Decision 1 (approved) kept the setup free of any SDK check: the setup runs no .NET command, and the reasons given there were that a check for a tool no step uses would stop a setup that needs no SDK, and that a guide for each system (Windows, macOS, Linux, WSL) must be written, tested and kept right. It said that if Adam wants the check, it is a part of its own with its own spec; this is that part.
+  - The npm check is `preflight_npm` in `bootstrap/stubs/bootstrap-project.sh`, which runs `guided_check check_npm guide_npm` only for the packs that need npm. The SDK is first needed when someone builds or tests the project (`languages/csharp/code-standards.md`, "First-time setup": SDK 10.0.1xx, checked with `dotnet --version`).
+  - The end-to-end run of the C# pack on v2.10.0 (2026-11-23) went through; whether the machine that ran the setup had an SDK is not known, and the script runs no .NET command.
+
+  **Done when.** To be written with the spec: what the check tests, the guide for each system, and the tests.
+
 - **[LATER] PBI-1.24** (Adam, 2026-10-29, from a product office session on PO-62; the WHAT is Adam's, the HOW is Clead's; not yet specced, reviewed or intent-approved) — A setup option for whether a project includes Claude support.
 
   **Why (Adam, 2026-10-29).** The person setting up a project chooses whether the AI files are included in the GitHub project. A project without Claude support is the conventional development project that "Working without Claude" in the README describes (PO-62, PR #277).
