@@ -186,6 +186,9 @@ cmd_run() {
   # and run_cleanup can stop the whole suite.
   set -m
   (
+    # Monitor mode is inherited: off here, the suite's processes stay in this
+    # group, where run_cleanup reaches them.
+    set +m
     cd "$ROOT"
     TMPDIR="$tmp/tmp" BOOTSTRAP_TEST_KEEP_COPIES=1 BOOTSTRAP_COVERAGE_DIR="$tmp/result" \
       "${BASHCOV:-bashcov}" --root "$ROOT" --command-name "$name" -- "$@"
