@@ -246,6 +246,14 @@ here first:
   - a folder for the new project that does not exist, or that
     is not empty, or that is a file, or that cannot be written to, or
     that is inside another project that git keeps track of.
+- Before anything is created, the script only tells you, and goes on after Enter:
+  - the .NET SDK not installed, or only other versions of it (only for
+    the csharp pack): the setup does not need it, so it goes on without
+    it, and the note gives the page to get it from,
+    https://dotnet.microsoft.com/download/dotnet/10.0, and says that
+    only a window opened after the install finds it. Enter, or any other
+    input, goes on; there is no q here. With `--non-interactive` the
+    note is printed and the script does not wait.
 - Before anything is created, the script stops and you start it again
   with the command it prints, because it cannot check again in the same
   run:

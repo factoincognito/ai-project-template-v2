@@ -288,18 +288,36 @@ test_csharp_test_project_references_every_project_under_src() {
   [ "$n" -eq 1 ] || die "the test project has $n project references, want only the glob"
 }
 
-test_csharp_global_json_pins_the_sdk_feature_band() {
-  # setup-dotnet reads global.json: sdk.version must be a full SDK version
-  # (it refuses wildcards when rollForward is set), and latestPatch keeps
-  # CI and every developer on the same feature band.
+test_csharp_global_json_asks_for_a_minimum_sdk_and_rolls_forward_by_feature() {
+  # PBI-1.75. setup-dotnet reads global.json: sdk.version must be a full SDK
+  # version (it refuses wildcards when rollForward is set), the first SDK of
+  # a feature band, and latestFeature accepts that version or any later
+  # feature band or patch of the same major and minor, so a developer's
+  # newer 10.0 SDK builds the project. The setup's note takes the same range
+  # (test_the_range_the_dotnet_check_accepts_is_the_one_global_json_asks_for).
   local g="$REPO/languages/csharp/global.json" v r
   v="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sdk"]["version"])' "$g")"
   r="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sdk"]["rollForward"])' "$g")"
   [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]00$ ]] || die "global.json sdk.version is not the first SDK of a feature band: $v"
-  [ "$r" = latestPatch ] || die "global.json rollForward is $r, want latestPatch"
+  [ "$r" = latestFeature ] || die "global.json rollForward is $r, want latestFeature"
   # Without it the .NET 10 SDK refuses dotnet test for xUnit v3 (VSTest mode).
   r="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("test", {}).get("runner", ""))' "$g")"
   [ "$r" = Microsoft.Testing.Platform ] || die "global.json test.runner is '$r', want Microsoft.Testing.Platform"
+}
+
+test_csharp_texts_describe_the_sdk_range_global_json_asks_for() {
+  # PBI-1.75: the pack's text, the infrastructure guide and the READMEs
+  # say a minimum SDK with latestFeature, not the 10.0.1xx band with
+  # latestPatch that global.json asked for before.
+  local f
+  for f in languages/csharp/code-standards.md languages/csharp/ci.yml docs/DEV_INFRASTRUCTURE.md README.md \
+    bootstrap/bootstrapper-README.md; do
+    ! grep -nE '10\.0\.1xx|latestPatch' "$REPO/$f" || die "$f still says 10.0.1xx or latestPatch"
+  done
+  grep -qF 'latestFeature' "$REPO/languages/csharp/code-standards.md" ||
+    die "code-standards.md does not name the roll-forward rule global.json uses"
+  grep -qF '10.0.100' "$REPO/languages/csharp/code-standards.md" ||
+    die "code-standards.md does not name the minimum SDK version"
 }
 
 test_csharp_ci_reads_the_sdk_from_global_json() {

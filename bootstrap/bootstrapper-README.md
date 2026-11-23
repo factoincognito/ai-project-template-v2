@@ -62,6 +62,11 @@ To set up the project (step 0 below installs the tools):
   Free. It runs the tools these kinds of project are built and checked
   with, and the script uses it to set them up. If it is missing, the
   script says so and shows how to install it.
+- **Only for a C# program: the .NET SDK.** Free. You need it to build
+  and test the project on your computer, not for the setup: if it is
+  missing, the script says so and goes on without it. Get it at
+  https://dotnet.microsoft.com/download/dotnet/10.0 (choose the SDK, not
+  the runtime).
 
 To work on the project with Claude afterwards:
 
