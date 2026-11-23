@@ -233,7 +233,7 @@ get a working project in any supported language.
 
   **Rules that apply.** A release-process change: the workflow is code (test-first, reviewed by Crog), the process change needs Adam's intent approval, and CLAUDE.md, `docs/DEV_INFRASTRUCTURE.md` and the release decision rows are updated with it.
 
-- **[NOW] PBI-1.23** (Adam, 2026-10-28; `NOW` again since 2026-11-23, when Adam gave the product office's PO-60 a `NOW` slot; out of `NOW` the evening of 2026-10-28 while part 2 waited on the end-to-end runs, which passed 2026-11-22; the WHAT is Adam's, the HOW is Clead's; part 1 specced and built by Crog, merged 2026-10-28 in PR #271; part 2 specced 2026-11-23 (PR #501) and approved by Adam the same day, 12:20; not yet built) — C# base language pack.
+- **[NOW] PBI-1.23** (Adam, 2026-10-28; `NOW` again since 2026-11-23, when Adam gave the product office's PO-60 a `NOW` slot; out of `NOW` the evening of 2026-10-28 while part 2 waited on the end-to-end runs, which passed 2026-11-22; the WHAT is Adam's, the HOW is Clead's; part 1 specced and built by Crog, merged 2026-10-28 in PR #271; part 2 specced 2026-11-23 (PR #501) and approved by Adam the same day, 12:20; part 2's three PRs built and merged 2026-11-23: #502, #504 and #507; open: "Done when, part 2" (c), the end-to-end run, Adam's call) — C# base language pack.
 
   **Why (Adam, 2026-10-28).** Give users C# capabilities in their own projects. Out of scope for Phase 1 until now ("planned in v1, not yet built").
 
@@ -280,6 +280,15 @@ get a working project in any supported language.
   **Done when.** The pack meets "Rules for a pack" and "Adding a pack" in `languages/README.md`: green on day one on a scratch project, each rule CI enforces proven by a deliberate violation, a job in `.github/workflows/packs.yml`, its files in the bootstrap script's layout table and in `tools/test-layout-pack.sh`, both README tables, and the pack offered by the bootstrap script and checked by `bootstrap/e2e-check.sh`.
 
   **Rules that apply.** Code and config: test-first, reviewed by the role that did not write it.
+
+- **[LATER] PBI-1.74** (Clead, 2026-11-23, from the reviews of #502 and #504, PBI-1.23 part 2; not yet specced, reviewed or intent-approved; no decision of Adam's needed) — Three non-blocking loose ends of part 2's tests, none a correctness gap against its spec.
+
+  **Facts (the reviewers' observations, 2026-11-23).**
+  - `bootstrap/test-e2e-check.sh`, `test_csharp_section_or_link_left_in_another_pack_fails` (#502): the assertion of its link half is weaker than the one of its section half.
+  - `bootstrap/test-durations.txt` (#504): the row of `test_every_pack_leaves_exactly_the_expected_tree` was not raised when the test went from five packs to six; the reviewer measured about 13 s locally against a row of 8.5 s on ubuntu. It affects only how the CI shards balance.
+  - `bootstrap/test-bootstrap-project.sh`, `test_expected_change_accepts_exactly_the_changes_the_setup_makes` (#504) has no `csharp` rows; a stray `package-lock.json` in a C# project is refused through the shared branch that the `python` rows already pin.
+
+  **Done when.** Each of the three is fixed or closed with a reason, test-first where it changes a test (`RULES.md` § 30).
 
 - **[LATER] PBI-1.24** (Adam, 2026-10-29, from a product office session on PO-62; the WHAT is Adam's, the HOW is Clead's; not yet specced, reviewed or intent-approved) — A setup option for whether a project includes Claude support.
 
