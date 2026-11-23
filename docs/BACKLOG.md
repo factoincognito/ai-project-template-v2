@@ -577,8 +577,6 @@ The findings of the product office's audit of this project (Process P-6 § 8 (2)
 
 The findings of the product office's incremental audit of this project that are new or not resolved (Process P-6 § 8 (2)). Adam's decision: a new conditional accept, 2026-11-19.
 
-- **[NEXT] PBI-1.69** (incremental audit of 2026-11-19, finding F14, record `audits/ai-project-template-v2.md` in the product office; Adam's new conditional accept, 2026-11-19; due 2026-11-26) — (§ 7): `RULES.md` L § 11 (1): for v2.9.2, #442 (a Rules edition PR) merged after the release prep #441 and before the tag, and #443 listed it to restore the order; for v2.9.3, #471 (a backlog PR) merged after the release prep #470 and before the tag, and #472 listed it. Done when: the first release tagged after this audit keeps L § 11 (1): the release prep PR is the last merge before the tag. If none is tagged by the date, Clead recommends extending this entry (Process P-6 § 11 (4)). Status 2026-11-23: no release has been tagged since the audit (the latest tag is v2.9.3), and a release tag is Adam's step (§ 11 (1)).
-
 ## Decision log (updated)
 
 | Date | Decision | Rationale |
