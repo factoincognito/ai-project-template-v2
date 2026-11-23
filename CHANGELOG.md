@@ -6,6 +6,9 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Added
+- NEXT_SESSION: the newcomer pre-check on the v2.11.0 candidate, one stop, not a defect (the release prep is PR #524, which no release lists)
+
 ## [2.11.0] — 2026-11-23
 
 ### Added
