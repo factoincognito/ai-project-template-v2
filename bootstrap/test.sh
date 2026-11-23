@@ -2215,6 +2215,67 @@ test_coverage_run_gives_the_suite_its_own_tmpdir_and_removes_it() {
   done
 }
 
+test_coverage_run_removes_its_folder_and_stops_the_suite_when_interrupted() {
+  # A run that gets SIGTERM or SIGHUP while the suite is still going (a
+  # cancelled job, a closed terminal) leaves nothing in the caller's TMPDIR
+  # and no suite behind, and exits 128 plus the signal's number.
+  local d="$WORK/cov" pid sig want i n1 n2
+  cov_repo "$d/repo"
+  cov_fakes "$d"
+  printf '%s\n' '#!/usr/bin/env bash' \
+    "touch \"$d/started\"" \
+    "while [ ! -e \"$d/stop\" ]; do echo beat >>\"$d/beat\"; sleep 0.1; done" >"$d/hang.sh"
+  chmod +x "$d/hang.sh"
+  for sig in TERM HUP; do
+    case "$sig" in TERM) want=143 ;; HUP) want=129 ;; esac
+    rm -rf "$d/results" "$d/tmp" "$d/started" "$d/stop" "$d/beat"
+    mkdir -p "$d/tmp"
+    (
+      unset BOOTSTRAP_TEST_KEEP_COPIES BOOTSTRAP_COVERAGE_DIR BASHCOV
+      cd "$d/repo"
+      env PATH="$d/bin:$PATH" TMPDIR="$d/tmp" BOOTSTRAP_COVERAGE_ROOT="$d/repo" \
+        bash "$COVERAGE" run "$d/results" suite "$d/hang.sh"
+    ) >"$d/out" 2>&1 &
+    pid=$!
+    for ((i = 0; i < 100; i++)); do
+      [ -e "$d/started" ] && break
+      sleep 0.1
+    done
+    [ -e "$d/started" ] || {
+      touch "$d/stop"
+      die "the suite did not start"
+    }
+    kill -s "$sig" "$pid"
+    for ((i = 0; i < 100; i++)); do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 0.1
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+      touch "$d/stop"
+      die "run did not stop on SIG$sig"
+    fi
+    RC=0
+    wait "$pid" || RC=$?
+    # The suite's own exit file (stop) is made only after the checks below,
+    # so that a suite still running is found by its heartbeat.
+    [ "$RC" -eq "$want" ] || {
+      touch "$d/stop"
+      die "run exited $RC on SIG$sig, not $want"
+    }
+    [ -z "$(ls -A "$d/tmp")" ] || {
+      touch "$d/stop"
+      find "$d/tmp" >&2
+      die "run left files in TMPDIR after SIG$sig"
+    }
+    sleep 0.3
+    n1="$(wc -c <"$d/beat")"
+    sleep 0.3
+    n2="$(wc -c <"$d/beat")"
+    touch "$d/stop"
+    [ "$n1" = "$n2" ] || die "the suite was still running after SIG$sig"
+  done
+}
+
 test_coverage_run_refuses_bad_arguments_and_a_missing_result() {
   local d="$WORK/cov" n
   cov_repo "$d/repo"

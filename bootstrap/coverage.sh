@@ -149,6 +149,24 @@ cmd_install() {
   echo "Installed bashcov $BASHCOV_VERSION with simplecov $SIMPLECOV_VERSION: $dir/bin/bashcov"
 }
 
+# run_tmp and run_child: what cmd_run made, for run_cleanup, which runs when
+# the shell exits, also on a signal.
+run_tmp=""
+run_child=""
+
+# run_cleanup: stops the suite's process group, if it is still going, and
+# removes cmd_run's folder.
+run_cleanup() {
+  if [ -n "$run_child" ]; then
+    kill -s TERM -- "-$run_child" 2>/dev/null || true
+    run_child=""
+  fi
+  if [ -n "$run_tmp" ]; then
+    remove "$run_tmp"
+    run_tmp=""
+  fi
+}
+
 cmd_run() {
   [ "$#" -ge 3 ] || usage
   local out="$1" name="$2" tmp rc=0
@@ -157,12 +175,28 @@ cmd_run() {
   mkdir -p "$out"
   out="$(cd "$out" && pwd)"
   tmp="$(mktemp -d "${TMPDIR:-/tmp}/coverage-run.XXXXXX")"
+  run_tmp="$tmp"
+  trap run_cleanup EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   mkdir "$tmp/tmp" "$tmp/result"
+  # In the background, in a process group of its own, so that a signal to
+  # this script is handled at once (a trap waits for a foreground command)
+  # and run_cleanup can stop the whole suite.
+  set -m
   (
+    # Monitor mode is inherited: off here, the suite's processes stay in this
+    # group, where run_cleanup reaches them.
+    set +m
     cd "$ROOT"
     TMPDIR="$tmp/tmp" BOOTSTRAP_TEST_KEEP_COPIES=1 BOOTSTRAP_COVERAGE_DIR="$tmp/result" \
       "${BASHCOV:-bashcov}" --root "$ROOT" --command-name "$name" -- "$@"
-  ) || rc=$?
+  ) &
+  run_child=$!
+  set +m
+  wait "$run_child" || rc=$?
+  run_child=""
   if [ ! -s "$tmp/result/.resultset.json" ]; then
     remove "$tmp"
     die 1 "bashcov wrote no result for $name (the suite exited $rc)"
