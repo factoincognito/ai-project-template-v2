@@ -2256,9 +2256,14 @@ test_coverage_run_removes_its_folder_and_stops_the_suite_when_interrupted() {
     fi
     RC=0
     wait "$pid" || RC=$?
-    touch "$d/stop"
-    [ "$RC" -eq "$want" ] || die "run exited $RC on SIG$sig, not $want"
+    # The suite's own exit file (stop) is made only after the checks below,
+    # so that a suite still running is found by its heartbeat.
+    [ "$RC" -eq "$want" ] || {
+      touch "$d/stop"
+      die "run exited $RC on SIG$sig, not $want"
+    }
     [ -z "$(ls -A "$d/tmp")" ] || {
+      touch "$d/stop"
       find "$d/tmp" >&2
       die "run left files in TMPDIR after SIG$sig"
     }
@@ -2266,6 +2271,7 @@ test_coverage_run_removes_its_folder_and_stops_the_suite_when_interrupted() {
     n1="$(wc -c <"$d/beat")"
     sleep 0.3
     n2="$(wc -c <"$d/beat")"
+    touch "$d/stop"
     [ "$n1" = "$n2" ] || die "the suite was still running after SIG$sig"
   done
 }
