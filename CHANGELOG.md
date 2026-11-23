@@ -6,6 +6,9 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Added
+- Rules edition `2026-11-23-56f4746`: the startup process says how much of a project's staging file a session reads at startup (PR #500)
+
 ### Changed
 - Backlog: PBI-1.23 part 2 (the C# pack offered by the setup) specified, waiting for Adam's approval (PR #501)
 - Backlog: PBI-1.73 added for the finding F18 of the incremental audit of 2026-11-23 (PR #499)
