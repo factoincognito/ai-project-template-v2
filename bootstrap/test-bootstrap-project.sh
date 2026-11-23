@@ -4187,10 +4187,45 @@ second"
 }
 
 test_pack_must_be_one_of_the_four() {
+  # The name says four; since PBI-1.23 part 2 the packs are five.
   local p
   refuses --pack ruby nodejs 2
-  for p in node web python react-native; do accepts --pack "$p" "PACK=$p"; done
+  for p in node web python react-native csharp; do accepts --pack "$p" "PACK=$p"; done
   accepts --pack Web PACK=web
+  accepts --pack CSharp PACK=csharp
+}
+
+test_a_wrong_pack_gets_the_message_that_names_all_five_packs() {
+  # As an option (refused, exit 2) and as an answer (asked again).
+  local d want="Choose one of the packs: node, web, python, react-native or csharp."
+  d="$(tmpdir)"
+  inputs "$d" --non-interactive "${REQUIRED_OPTS[@]}" --owner acme --po-name Ada --pack ruby
+  expect_refused "$d" --pack
+  grep -qF -- "    - --pack: $want" "$d/err" || {
+    cat "$d/err" >&2
+    die "the refused --pack did not give: $want"
+  }
+  d="$(tmpdir)"
+  printf '%s\n' my-app "" "Lends tools." "" "" ruby 5 "" 1 "" "" "" >"$d/in"
+  inputs "$d"
+  expect_inputs "$d" PACK=csharp
+  grep -qF -- "$want Please try again." "$d/out" || {
+    cat "$d/out" >&2
+    die "the wrong answer did not give: $want"
+  }
+}
+
+test_the_help_names_csharp_on_its_pack_line() {
+  # The help lists the packs on the --pack line (the layout-pack lines
+  # name them too, so the whole help would not show a missed line).
+  local d line p
+  d="$(tmpdir)"
+  bash "$SCRIPT" --help </dev/null >"$d/out" 2>"$d/err" || die "--help failed"
+  line="$(grep -F -- '--pack <pack>' "$d/out")"
+  [ -n "$line" ] || die "the help has no --pack line"
+  for p in node web python react-native csharp; do
+    case "$line" in *"$p"*) ;; *) die "the --pack line of the help lacks $p: $line" ;; esac
+  done
 }
 
 test_with_deploy_is_only_for_the_web_pack() {
@@ -4472,6 +4507,15 @@ test_pack_and_licence_can_be_chosen_by_number_or_name() {
   printf '%s\n' my-app "" "Lends tools." "" "" python 2 agpl-3.0 "" "" "" "" >"$d/in"
   inputs "$d"
   expect_inputs "$d" PACK=python VISIBILITY=private LICENSE=agpl-3.0
+  # PBI-1.23 part 2: 5 answers csharp, and so does the name.
+  d="$(tmpdir)"
+  printf '%s\n' my-app "" "Lends tools." "" "" 5 "" 1 "" "" "" >"$d/in"
+  inputs "$d"
+  expect_inputs "$d" PACK=csharp LICENSE=none
+  d="$(tmpdir)"
+  printf '%s\n' my-app "" "Lends tools." "" "" csharp "" 1 "" "" "" >"$d/in"
+  inputs "$d"
+  expect_inputs "$d" PACK=csharp LICENSE=none
 }
 
 test_every_numbered_choice_gives_its_value_and_a_refused_visibility_is_asked_again() {
@@ -4618,15 +4662,19 @@ test_pack_and_licence_questions_explain_each_choice() {
   local d c line
   d="$(tmpdir)"
   full_transcript "$d"
-  for c in '1) node' '2) web' '3) python' '4) react-native' '1) none' '2) mit' '3) apache-2.0' \
+  for c in '1) node' '2) web' '3) python' '4) react-native' '5) csharp' '1) none' '2) mit' '3) apache-2.0' \
     '4) gpl-3.0' '5) bsd-3-clause' '6) polyform-noncommercial-1.0.0'; do
-    line="$(grep -F -- "  $c: " "$d/out" | head -1)"
+    line="$(grep -F -- "  $c: " "$d/out" | head -1 || true)"
     [ -n "$line" ] || {
       cat "$d/out" >&2
       die "choice not shown: $c"
     }
     [ "$(printf '%s\n' "${line#*: }" | wc -w | tr -d ' ')" -ge 5 ] || die "choice not explained in words: $line"
   done
+  grep -qxF -- "  5) csharp: a program written in C#, for example a command-line tool or a code library" "$d/out" || {
+    cat "$d/out" >&2
+    die "the fifth choice does not read as the spec has it"
+  }
 }
 
 # ---------- guided preflight: checks on this computer ----------
@@ -5840,18 +5888,20 @@ test_a_gh_too_old_to_read_checks_or_merge_stops_before_anything_is_made() {
 
 test_npm_is_needed_only_for_node_web_and_react_native() {
   local d p
-  d="$(tmpdir)"
-  missing "$d" npm
-  pre "$d" ni with_pack python preflight_npm
-  expect_rc 0 "$d"
-  [ ! -e "$d/tools.log" ] || {
-    cat "$d/tools.log" >&2
-    die "npm was checked for python"
-  }
-  [ ! -s "$d/out" ] || {
-    cat "$d/out" >&2
-    die "python printed an npm check"
-  }
+  for p in python csharp; do
+    d="$(tmpdir)"
+    missing "$d" npm
+    pre "$d" ni with_pack "$p" preflight_npm
+    expect_rc 0 "$d"
+    [ ! -e "$d/tools.log" ] || {
+      cat "$d/tools.log" >&2
+      die "npm was checked for $p"
+    }
+    [ ! -s "$d/out" ] || {
+      cat "$d/out" >&2
+      die "$p printed an npm check"
+    }
+  done
   for p in node web react-native; do
     d="$(tmpdir)"
     on_os "$d" linux debian
@@ -11105,7 +11155,7 @@ expect_setup_tree() {
   # nothing points to the template. A second statement of the cut, on
   # purpose (the script's is remove_pack_section).
   cp "$BUILT/docs/DEV_INFRASTRUCTURE.md" "$d/dev"
-  for other in node web python react-native; do
+  for other in node web python react-native csharp; do
     [ "$other" != "$p" ] || continue
     grep -qF "(\`$other\` pack)" "$d/dev" || die "the doc has no section for $other (test is stale)"
     HEAD_END="(\`$other\` pack)" awk '
@@ -11188,7 +11238,7 @@ test_every_pack_leaves_exactly_the_expected_tree() {
   # the fill rows of the spec's table applied (want_fill_rows).
   local d p deploy
   built_bootstrapper
-  for p in node web python react-native web+deploy; do
+  for p in node web python react-native csharp web+deploy; do
     deploy=""
     [ "$p" != web+deploy ] || {
       p=web
@@ -11895,6 +11945,37 @@ test_the_npm_packs_get_a_lockfile_made_by_npm_after_the_fill() {
     die "python: npm ran"
   }
   [ ! -e "$(copy_of "$d")/package-lock.json" ] || die "python: a lockfile was made"
+}
+
+test_the_csharp_pack_needs_no_npm_makes_no_lockfile_and_lays_out_its_files() {
+  # PBI-1.23 part 2, decision 1: the setup runs no .NET command and no npm
+  # for csharp, so a computer without npm (a fake npm that fails as a
+  # missing command, as in the preflight tests) passes the checks of this
+  # computer, no npm is called, and the project has no package-lock.json.
+  # It has the layout table's files.
+  local d c f
+  built_bootstrapper
+  d="$(tmpdir)"
+  missing "$d" npm
+  setup_run "$d" --non-interactive --yes --pack csharp
+  expect_rc 0 "$d"
+  grep -qxF "$FINISHED" "$d/out" || {
+    cat "$d/out" "$d/err" >&2
+    die "csharp: did not reach the end"
+  }
+  expect_no_out "$d" "npm (part of Node.js) is not installed."
+  [ ! -s "$d/npm.log" ] || {
+    cat "$d/npm.log" >&2
+    die "csharp: npm ran"
+  }
+  c="$(copy_of "$d")"
+  [ ! -e "$c/package-lock.json" ] || die "csharp: a lockfile was made"
+  [ ! -e "$c/package.json" ] || die "csharp: a package.json was laid out"
+  for f in .github/workflows/ci.yml .gitignore .vscode/settings.json .vscode/extensions.json .editorconfig global.json \
+    Directory.Build.props Directory.Packages.props Project.slnx src tests languages/csharp/code-standards.md; do
+    [ -e "$c/$f" ] || die "csharp: $f is not in the project"
+  done
+  expect_setup_tree "$d" "$c" csharp
 }
 
 test_a_failed_npm_is_explained_with_its_text_for_support() {
@@ -17275,6 +17356,22 @@ test_remove_pack_section_cuts_to_the_next_heading_outside_a_code_block() {
   ) || die "react-native: returned $?"
   printf '%s\n' '# Doc' '## Next' 'Next text.' '### Node (`node` pack)' 'Node text.' '```' '### Py (`python` pack)' '```' >"$d/want"
   expect_same "the ## end, the code blocks and the last blank line" "$d/want" "$d/c"
+  # PBI-1.23 part 2: a heading with a # and a . in it, as the C# section's
+  # "### C# on .NET (`csharp` pack)", is found by its end, and only it goes.
+  printf '%s\n' '# Doc' '## Part 2' '### C# on .NET (`csharp` pack)' 'C# text.' '### Node (`node` pack)' 'Node text.' >"$d/e"
+  (
+    load_script
+    remove_pack_section "$d/e" csharp
+  ) || die "csharp: returned $?"
+  printf '%s\n' '# Doc' '## Part 2' '### Node (`node` pack)' 'Node text.' >"$d/want"
+  expect_same "the C# section" "$d/want" "$d/e"
+  printf '%s\n' '# Doc' '## Part 2' '### Node (`node` pack)' 'Node text.' '### C# on .NET (`csharp` pack)' 'C# text.' >"$d/e"
+  (
+    load_script
+    remove_pack_section "$d/e" node
+  ) || die "node: returned $?"
+  printf '%s\n' '# Doc' '## Part 2' '### C# on .NET (`csharp` pack)' 'C# text.' >"$d/want"
+  expect_same "the C# section stays when another pack's goes" "$d/want" "$d/e"
 }
 
 test_the_tidy_up_goes_on_when_another_packs_section_is_missing() {
@@ -17305,6 +17402,46 @@ test_the_tidy_up_goes_on_when_another_packs_section_is_missing() {
   printf '%s\n' '# Doc' '## Part 2' '### Node (`node` pack)' 'Node text.' >"$d/want"
   expect_same "DEV_INFRASTRUCTURE.md" "$d/want" "$d/c/docs/DEV_INFRASTRUCTURE.md"
   [ ! -e "$d/c/languages/web" ] || die "the other pack's folder is left"
+}
+
+test_the_tidy_up_keeps_only_the_section_of_the_projects_pack_in_the_real_dev_infrastructure_doc() {
+  # PBI-1.23 part 2 (the reviewer's note on part 1): the template's own
+  # docs/DEV_INFRASTRUCTURE.md has one section for each of the five packs,
+  # headed "### ... (`<pack>` pack)", and a project of each pack keeps its
+  # section only: a C# project keeps the C# one and the four other
+  # packs' projects lose it.
+  local d p other n
+  for p in node web python react-native csharp; do
+    n="$(grep -c "^### .*(\`$p\` pack)\$" "$REPO/docs/DEV_INFRASTRUCTURE.md" || true)"
+    [ "$n" -eq 1 ] || die "docs/DEV_INFRASTRUCTURE.md has $n sections for $p, want 1"
+  done
+  grep -qxF '### C# on .NET (`csharp` pack)' "$REPO/docs/DEV_INFRASTRUCTURE.md" || die "the C# section's heading is not '### C# on .NET (\`csharp\` pack)'"
+  for p in node web python react-native csharp; do
+    d="$(tmpdir)"
+    mkdir -p "$d/c/docs" "$d/c/languages/$p" "$d/c/.github"
+    printf '%s\n' '# App' '## Finishing the setup' 'x' '## Setup' 'y' >"$d/c/README.md"
+    printf '%s\n' 'standards' >"$d/c/languages/$p/code-standards.md"
+    cp "$REPO/docs/DEV_INFRASTRUCTURE.md" "$d/c/docs/DEV_INFRASTRUCTURE.md"
+    (
+      load_script
+      IN_DIR="$d/c"
+      IN_PACK="$p"
+      LP_KEPT="code-standards.md"
+      tidy_up
+    ) >"$d/out" 2>&1 || {
+      cat "$d/out" >&2
+      die "$p: the tidy-up failed"
+    }
+    for other in node web python react-native csharp; do
+      n="$(grep -c "^### .*(\`$other\` pack)\$" "$d/c/docs/DEV_INFRASTRUCTURE.md" || true)"
+      if [ "$other" = "$p" ]; then
+        [ "$n" -eq 1 ] || die "$p: its own section is gone from the project's doc"
+        grep -qF "\`languages/$p/code-standards.md\`" "$d/c/docs/DEV_INFRASTRUCTURE.md" || die "$p: its own section lost its pointer to code-standards.md"
+      else
+        [ "$n" -eq 0 ] || die "$p: the section of the $other pack is left in the project's doc"
+      fi
+    done
+  done
 }
 
 test_dev_infrastructure_says_the_script_turns_protection_on() {

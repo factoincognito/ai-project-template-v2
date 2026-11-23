@@ -95,6 +95,7 @@ test_a_wait_in_seconds_is_said_in_minutes_and_seconds 0.1 0.1 0.1 0.1
 test_a_winget_install_that_ran_is_not_offered_again_in_this_window 0.4 0.6 3.7 0.4
 test_a_word_that_is_not_an_option_gets_what_happened_and_what_to_do_next 0.1 0.1 0.3 0.1
 test_a_wrong_answer_is_explained_and_asked_again 0.1 0.2 1.1 0.1
+test_a_wrong_pack_gets_the_message_that_names_all_five_packs 0.3 0.6 3.0 0.4
 test_actions_turned_off_stop_before_the_copy_with_their_guide 1.9 4.0 25.3 2.3
 test_actions_turned_on_are_checked_right_after_protection 1.0 2.8 11.4 1.4
 test_after_the_script_points_to_claudes_help_pages_and_names_the_github_steps 0.1 0.1 0.4 0.1
@@ -361,6 +362,7 @@ test_the_command_to_continue_is_shown_after_yes_and_before_the_project_is_create
 test_the_commands_shown_carry_a_no_to_the_publishing_files 24.9 33.9 37.2 60.3
 test_the_continue_command_carries_every_answer_given_at_the_questions 24.7 32.8 35.1 49.6
 test_the_copy_is_made_by_gh_and_checked_against_the_script_version 1.0 2.3 14.9 1.1
+test_the_csharp_pack_needs_no_npm_makes_no_lockfile_and_lays_out_its_files 2.2 4.5 20.0 2.5
 test_the_discard_comes_before_the_question_is_shown 0.1 0.2 1.1 0.2
 test_the_edit_request_check_catches_the_old_heading 0.1 0.1 0.1 0.1
 test_the_every_guide_checks_catch_what_they_look_for 0.1 0.1 0.4 0.1
@@ -378,6 +380,7 @@ test_the_git_folder_of_a_run_holds_only_git_and_its_helpers 0.1 0.1 0.6 0.1
 test_the_git_name_and_email_are_checked_before_the_change_is_saved 3.4 6.6 46.3 3.6
 test_the_git_name_and_email_are_written_into_the_copy_only 1.0 2.2 14.0 1.2
 test_the_harness_fill_copies_an_ampersand_literally 0.1 0.1 0.1 0.1
+test_the_help_names_csharp_on_its_pack_line 0.1 0.2 0.5 0.1
 test_the_home_folder_is_shown_as_a_tilde_and_an_empty_word_as_two_quotes 0.1 0 0.1 0.1
 test_the_jq_expressions_read_githubs_documented_answers 0.1 0.1 0.6 0.1
 test_the_licence_is_checked_with_github_before_anything_is_created 1.1 2.6 11.9 1.6
@@ -420,6 +423,7 @@ test_the_step_16_refusal_holds_with_the_decision_row_in_the_change 99.6 129.3 10
 test_the_steps_of_the_plan_are_marked_from_the_resume_state 0.3 0.5 2.5 0.4
 test_the_tests_carriage_return_check_sees_one_wherever_it_is 0.1 0.1 0.4 0.1
 test_the_tidy_up_goes_on_when_another_packs_section_is_missing 0.1 0.1 0.6 0.1
+test_the_tidy_up_keeps_only_the_section_of_the_projects_pack_in_the_real_dev_infrastructure_doc 0.6 1.2 5.0 0.7
 test_the_tool_checks_print_a_start_and_a_done_line 0.1 0.1 0.5 0.1
 test_the_wait_for_build_ends_after_the_ci_timeout_with_the_proposed_change_open 2.0 4.0 27.3 2.3
 test_the_wait_says_its_limit_where_to_follow_the_check_and_each_check 2.1 4.8 21.0 2.8

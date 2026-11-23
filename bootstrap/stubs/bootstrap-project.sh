@@ -123,7 +123,7 @@ show_help() {
     "  --description <text>       one line that says what the project is for (needed)" \
     "  --po-name <text>           the product owner's name (default: your GitHub" \
     "                             profile name, or your account name)" \
-    "  --pack <pack>              node, web, python or react-native (needed)" \
+    "  --pack <pack>              node, web, python, react-native or csharp (needed)" \
     "  --with-deploy              web only: also add the files that publish the website" \
     "  --without-deploy           web only: leave those files out (the default)" \
     "  --public, --private        who can see the project (default: public)" \
@@ -1227,9 +1227,9 @@ check_pack() {
   trim_into "$1"
   CHECKED="$(lower "$TRIMMED")"
   case "$CHECKED" in
-    node | web | python | react-native) return 0 ;;
+    node | web | python | react-native | csharp) return 0 ;;
   esac
-  PROBLEM="Choose one of the packs: node, web, python or react-native."
+  PROBLEM="Choose one of the packs: node, web, python, react-native or csharp."
   return 1
 }
 
@@ -1327,6 +1327,7 @@ check_pack_answer() {
     2) set -- web ;;
     3) set -- python ;;
     4) set -- react-native ;;
+    5) set -- csharp ;;
   esac
   check_pack "$1"
 }
@@ -1548,7 +1549,8 @@ collect_inputs() {
       "1) node: a program or service that runs on a computer or server, written in TypeScript" \
       "2) web: a website or web app that people open in their browser" \
       "3) python: a program written in Python, for example for data work or automation" \
-      "4) react-native: a mobile app for phones and tablets (iPhone and Android)" || true
+      "4) react-native: a mobile app for phones and tablets (iPhone and Android)" \
+      "5) csharp: a program written in C#, for example a command-line tool or a code library" || true
     IN_PACK="$CHECKED"
     check_deploy_pack
     stop_if_problems
@@ -3902,7 +3904,7 @@ check_actions() {
 # self-check, saving, sending and proposing the change".
 
 SETUP_BRANCH=bootstrap-setup
-PACKS="node web python react-native"
+PACKS="node web python react-native csharp"
 
 # clone_project: spec step 4. gh repo clone gives no HTTP status, so a
 # failure is read from gh's exit code (4: not signed in) and from git's

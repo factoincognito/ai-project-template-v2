@@ -4061,7 +4061,7 @@ test_shipped_project_script_lays_out_from_its_own_languages_dir() {
   # with no PACKS_DIR, and lays out what the template's wrapper does.
   local out="$WORK/real.$RANDOM" p a b
   bash "$BUILD" "$out" v2.1.0 "$SHA" >/dev/null || die "real build failed"
-  for p in node web python react-native; do
+  for p in node web python react-native csharp; do
     a="$WORK/shipped.$p.$RANDOM"
     b="$WORK/wrapper.$p.$RANDOM"
     (
@@ -4075,6 +4075,61 @@ test_shipped_project_script_lays_out_from_its_own_languages_dir() {
     ) >/dev/null || die "wrapper $p failed"
     diff -r "$a" "$b" >&2 || die "$p: shipped script and wrapper lay out different trees"
   done
+}
+
+# packs_of <script>: the packs a script's own PACKS line lists, one per
+# line. The line is the only one that starts with PACKS= and has the
+# list in double quotes, in both scripts the guard below reads. The
+# caller reads it into a variable first, so a refusal here (exit 1) stops
+# the test.
+packs_of() {
+  local line
+  [ "$(grep -c '^PACKS="[a-z -]*"$' "$1")" -eq 1 ] || {
+    echo "$1 has not exactly one PACKS=\"...\" line" >&2
+    return 1
+  }
+  line="$(grep '^PACKS="[a-z -]*"$' "$1")"
+  line="${line#PACKS=\"}"
+  line="${line%\"}"
+  # shellcheck disable=SC2086 # one pack name per word
+  printf '%s\n' $line
+}
+
+test_every_language_pack_folder_is_in_packs_of_the_setup_and_of_the_e2e_checker() {
+  # PBI-1.23 part 2: a pack added to languages/ and left out of the PACKS
+  # of one of the two scripts is not offered by the setup (and its section
+  # of docs/DEV_INFRASTRUCTURE.md is not removed), or is not checked by the
+  # end-to-end checker. This guard fails for the next pack too, until both
+  # lists name it.
+  local d name n=0 script list
+  for script in "$PROJECT_SCRIPT" "$HERE/e2e-check.sh"; do
+    list="$(packs_of "$script")"
+    n=0
+    for d in "$REPO"/languages/*/; do
+      name="$(basename "$d")"
+      n=$((n + 1))
+      grep -qxF -- "$name" <<<"$list" || die "the pack folder languages/$name is not in PACKS of ${script#"$REPO/"}"
+    done
+    [ "$n" -ge 5 ] || die "found only $n pack folders in languages/ (the guard is broken)"
+    # The reverse: a name in PACKS that has no folder.
+    for name in $list; do
+      [ -d "$REPO/languages/$name" ] || die "PACKS of ${script#"$REPO/"} names $name, which has no folder in languages/"
+    done
+  done
+}
+
+test_the_pack_list_reader_of_the_guard_lists_the_packs_and_refuses_no_line_or_two() {
+  # The guard above is only as good as its reader: it lists what a PACKS
+  # line holds, and refuses a file with no such line or with two.
+  local d="$WORK/guard" got
+  mkdir -p "$d"
+  printf '%s\n' 'PACKS="a b-c d"' 'PACKS_DIR="x y"' >"$d/one"
+  got="$(packs_of "$d/one" | tr '\n' ' ')"
+  [ "$got" = "a b-c d " ] || die "the reader listed '$got', want 'a b-c d '"
+  printf '%s\n' 'echo no list here' >"$d/none"
+  ! packs_of "$d/none" >/dev/null 2>&1 || die "the reader accepted a file with no PACKS line"
+  printf '%s\n' 'PACKS="a b"' 'PACKS="c d"' >"$d/two"
+  ! packs_of "$d/two" >/dev/null 2>&1 || die "the reader accepted a file with two PACKS lines"
 }
 
 test_shipped_project_script_ignores_the_users_cdpath() {
