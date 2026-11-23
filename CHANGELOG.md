@@ -6,6 +6,9 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+### Changed
+- Backlog: PBI-1.69 marked done with the release v2.9.4 as evidence (PR #498)
+
 ## [2.9.4] — 2026-11-23
 
 ### Added
