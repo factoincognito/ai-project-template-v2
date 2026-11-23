@@ -295,7 +295,7 @@ get a working project in any supported language.
   **Facts (Clead, 2026-11-23).**
   - PBI-1.23 Decision 1 (approved) kept the setup free of any SDK check: the setup runs no .NET command, and the reasons given there were that a check for a tool no step uses would stop a setup that needs no SDK, and that a guide for each system (Windows, macOS, Linux, WSL) must be written, tested and kept right. It said that if Adam wants the check, it is a part of its own with its own spec; this is that part.
   - The npm check is `preflight_npm` in `bootstrap/stubs/bootstrap-project.sh`, which runs `guided_check check_npm guide_npm` only for the packs that need npm. The SDK is first needed when someone builds or tests the project (`languages/csharp/code-standards.md`, "First-time setup": SDK 10.0.1xx, checked with `dotnet --version`).
-  - The end-to-end run of the C# pack on v2.10.0 (2026-11-23) needed no SDK on the machine that ran the setup.
+  - The end-to-end run of the C# pack on v2.10.0 (2026-11-23) went through; whether the machine that ran the setup had an SDK is not known, and the script runs no .NET command.
 
   **Done when.** To be written with the spec: what the check tests, the guide for each system, and the tests.
 
