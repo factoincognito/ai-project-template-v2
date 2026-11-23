@@ -5,9 +5,10 @@
 #
 # Built so far: the inputs (options, questions, checks and defaults), the
 # guided checks of this computer (bash, git, gh, npm, the git name and
-# email, the target folder), the guided checks on GitHub (signed in, the
-# current version of this script, the permissions gh has, the project
-# name still free, the licence name), the plan and its "Proceed?"
+# email, the target folder), the note about the .NET SDK of the csharp
+# pack, the guided checks on GitHub (signed in, the current version of
+# this script, the permissions gh has, the project name still free, the
+# licence name), the plan and its "Proceed?"
 # question, creating the project on GitHub and protecting its main
 # version, the check that GitHub Actions is turned on for it, the copy of
 # the project on this computer (with the git name and email, the line of work
@@ -66,6 +67,9 @@
 #   BOOTSTRAP_NPM  the npm the lockfile step runs (default: npm on the
 #                  PATH), so the tests never reach the npm registry. The
 #                  check that npm is installed runs the npm on the PATH.
+#   BOOTSTRAP_DOTNET  the dotnet the check for the .NET SDK runs, with
+#                  --list-sdks (default: dotnet on the PATH), so the tests
+#                  do not depend on the SDKs of the computer.
 #   BOOTSTRAP_COLOR  set (not empty): the lines the user acts on are in
 #                  colour as at a terminal, though the output goes to a
 #                  file. NO_COLOR, set and not empty, and TERM=dumb still
@@ -609,6 +613,29 @@ wait_for_enter() {
   case "$(lower "$TRIMMED")" in
     q | quit | stop) return 1 ;;
   esac
+  return 0
+}
+
+# wait_to_continue: the pause after the note. Any line continues, q
+# included, and so does the end of the input: nothing here stops the
+# setup. Keys typed before the pause was shown are discarded
+# (discard_typeahead), as at the other pauses.
+wait_to_continue() {
+  local got="" before="$CURRENT_STEP"
+  waiting_for 'Press Enter to continue'
+  block_start
+  discard_typeahead
+  answer_line 'Press Enter to continue:'
+  printf ' '
+  if ! IFS= read -r got && [ -z "$got" ]; then
+    CURRENT_STEP="$before"
+    printf '\n'
+    LOG_GAP=1
+    return 0
+  fi
+  CURRENT_STEP="$before"
+  [ -t 0 ] || printf '\n'
+  LOG_GAP=1
   return 0
 }
 
@@ -2487,6 +2514,96 @@ preflight_npm() {
   step_start "Checking that npm is installed (the $IN_PACK pack needs it)"
   guided_check check_npm guide_npm
   step_end "npm is installed."
+}
+
+# ---- the .NET SDK (csharp pack): a note, never a stop ----
+
+# The csharp pack's project is built and tested with the .NET
+# SDK, but no step of the setup needs it, so the setup only tells the
+# person and goes on: no guide, no check again, no q. The range is the
+# one languages/csharp/global.json asks for (version 10.0.100 with
+# rollForward latestFeature): the SDK of major 10, minor 0 and a patch of
+# 100 or higher. A test keeps the two equal.
+DOTNET_SDK_MAJOR=10
+DOTNET_SDK_MINOR=0
+DOTNET_SDK_MIN_PATCH=100
+DOTNET_SDK_LINK="https://dotnet.microsoft.com/download/dotnet/10.0"
+# The versions check_dotnet found that are not in the range, as printed.
+DOTNET_SEEN=""
+
+# dotnet_sdk_accepted <version>: the version is an SDK of the range. A
+# pre-release suffix ("10.0.100-rc.1.25451.107") is read as its number.
+# A version whose first three parts are not all numbers is no SDK at all
+# (return 2), so the note never names it.
+dotnet_sdk_accepted() {
+  local v="${1%%-*}" major minor patch rest
+  v="${v%%+*}"
+  IFS=. read -r major minor patch rest <<<"$v"
+  case "$major" in "" | *[!0-9]*) return 2 ;; esac
+  case "$minor" in "" | *[!0-9]*) return 2 ;; esac
+  case "$patch" in "" | *[!0-9]*) return 2 ;; esac
+  # Leading zeros are not read as another number (bash would take 010 as
+  # octal): 10.00.100 is not 10.0.100.
+  [ "$major" = "$DOTNET_SDK_MAJOR" ] && [ "$minor" = "$DOTNET_SDK_MINOR" ] || return 1
+  while [ "${patch#0}" != "$patch" ]; do patch="${patch#0}"; done
+  [ "${#patch}" -le 9 ] || return 0
+  [ "${patch:-0}" -ge "$DOTNET_SDK_MIN_PATCH" ]
+}
+
+# check_dotnet: dotnet lists an SDK of the range (dotnet --list-sdks, or
+# BOOTSTRAP_DOTNET). Returns 1 when none is listed, when dotnet is not
+# there and when it fails; DOTNET_SEEN holds the listed SDKs outside the
+# range, comma and space between them, for the note.
+check_dotnet() {
+  local out="" line version found="" rc=0
+  DOTNET_SEEN=""
+  out="$("${BOOTSTRAP_DOTNET:-dotnet}" --list-sdks 2>/dev/null)" || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    version="${line%% *}"
+    rc=0
+    dotnet_sdk_accepted "$version" || rc=$?
+    case "$rc" in
+      0) found=1 ;;
+      1) DOTNET_SEEN="${DOTNET_SEEN:+$DOTNET_SEEN, }$version" ;;
+    esac
+  done <<<"$out"
+  [ -n "$found" ]
+}
+
+# note_dotnet: what the person reads when no SDK of the range is found:
+# one block of text in the read colour, not a guide (no steps, no check
+# again). It says what the SDK is and that the setup goes on without it,
+# where to get it and what to choose, the new window, and that the
+# project's checks on GitHub install it themselves.
+note_dotnet() {
+  local min="$DOTNET_SDK_MAJOR.$DOTNET_SDK_MINOR.$DOTNET_SDK_MIN_PATCH" window
+  block_start
+  if [ -n "$DOTNET_SEEN" ]; then
+    say_note "Only other versions of the .NET SDK are installed on this computer: $DOTNET_SEEN."
+  else
+    say_note "The .NET SDK is not installed on this computer."
+  fi
+  say_note "The .NET SDK is a set of programs from Microsoft that builds and tests programs written in C#. A project made with the csharp pack needs version $min or a later $DOTNET_SDK_MAJOR.$DOTNET_SDK_MINOR version of it to be built and tested on this computer."
+  say_note "The setup does not need it and goes on without it. The project's checks on GitHub install it themselves."
+  say_note "To install it, open $DOTNET_SDK_LINK in your browser. Choose the SDK, not the runtime (the runtime only runs programs that are already built). On Windows, choose the installer for the SDK and run it. On Linux, choose the package manager instructions for your system and follow them."
+  case "$OS_KIND" in
+    windows) window="After the install, only a new window finds it. Open it from the Start menu, not from this window: a window opened from another one keeps the old list of the folders where programs are found." ;;
+    *) window="After the install, only a new terminal window finds it." ;;
+  esac
+  say_note "$window"
+}
+
+preflight_dotnet() {
+  [ "$IN_PACK" = csharp ] || return 0
+  step_start "Checking whether the .NET SDK is installed (the csharp pack uses it)"
+  if check_dotnet; then
+    step_end "The .NET SDK is installed."
+    return 0
+  fi
+  note_dotnet
+  [ -n "$OPT_NON_INTERACTIVE" ] || wait_to_continue
+  step_end "Carrying on without the .NET SDK."
 }
 
 # ---- the target folder ----
@@ -5938,7 +6055,7 @@ stop_on_macos() {
 
 # cmd_setup <options...>: the setup. The options are checked first, then
 # the checks that need no answer (the tools, the GitHub sign-in and the
-# current version), so that nothing is asked in vain; the npm, folder,
+# current version), so that nothing is asked in vain; the npm, .NET SDK, folder,
 # permission and name checks need answers, so they follow the questions.
 # Then a new setup shows its plan, asks "Proceed?" and creates the
 # project; --resume works out where the setup stopped and goes on from
@@ -5964,6 +6081,7 @@ cmd_setup() {
   preflight_published_version
   collect_inputs
   preflight_npm
+  preflight_dotnet
   preflight_target_dir
   preflight_github_permissions
   preflight_project_absent

@@ -49,7 +49,8 @@ bootstrapper. TEXT 2 is everything the newcomer sees in the window while
 they use the setup script: it shows what the script prints, and after a
 question's colon what the newcomer typed (nothing after it means the
 newcomer pressed Enter). A line of dashes in TEXT 2 only marks that the
-window was closed and a new one opened; the script did not print it.
+window was closed and a new one opened, or that the setup was started
+again from the start in a new window; the script did not print it.
 
 Go through TEXT 1 first, and then TEXT 2, in order, from the first line
 to the end, as the persona would: read carefully and follow the written
@@ -115,11 +116,12 @@ Clead does this.
    different count means the test was not run).
 
    The test builds the bootstrapper from the commit with the harness's
-   stand-ins, runs the built script twice as a newcomer meets it, and
-   writes two files to the folder: `README.md` (the bootstrapper's
-   README as the build writes it, `.github/README.md`, Markdown text) and
-   `screen.txt`. Both must come from one run of the test on one build. If
-   the test fails, nothing is given to the persona.
+   stand-ins, runs the built script as a newcomer meets it (the three
+   runs below), and writes two files to the folder: `README.md` (the
+   bootstrapper's README as the build writes it, `.github/README.md`,
+   Markdown text) and `screen.txt` (the three runs, one after the other).
+   Both must come from one run of the test on one build. If the test
+   fails, nothing is given to the persona.
    - The first run starts where the README leaves a newcomer, on Windows
      in Git Bash with Node.js not installed. The newcomer answers every
      question (project name `tool-share`, display name `Tool Share`,
@@ -130,6 +132,14 @@ Clead does this.
    - The second run is the command that stop shows, run in a new window
      with npm present; it asks "Proceed?", the newcomer types `yes`, and
      the setup goes through.
+   - The third run (PBI-1.75) is a run of the built script in a window
+     of its own, on a computer where the .NET SDK is not installed,
+     started again from the start: the newcomer gives the same answers
+     but chooses the language pack `csharp`, meets the note about the
+     .NET SDK, presses Enter at "Press Enter to continue", sees the plan,
+     and types `no` at "Proceed?", so the run ends there and creates
+     nothing. The persona reads the note in full, with the questions and
+     the checks before it and the plan after it.
 3. **Start the persona.** A fresh agent that has seen nothing of the work,
    on the smallest model Clead's agent tool offers (Haiku at the time of
    writing) at low effort, with the instruction above as its whole
@@ -165,6 +175,12 @@ these values; a stop at one of them is a stand-in artefact:
   signed in to, and the stand-in git name and email in the suggested
   answers (`Test Person`, `test@example.com`);
 - the stand-in `gh`, whose version (`0.0.0`) the screen does not show;
+- the stand-in `dotnet` of the third run, which lists no SDK, so the
+  note is shown whatever the computer has;
+- the `no` at "Proceed?" that ends the third run: the newcomer stops
+  there so that nothing is created, and the script's stop ("You answered
+  no") follows; the folder after `cd` in the command that stop shows is,
+  as above, the test's;
 - the bash version in the first check, which is the one that ran the
   test;
 - the folder after `cd` in the command the script shows to start again

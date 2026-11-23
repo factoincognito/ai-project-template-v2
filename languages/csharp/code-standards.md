@@ -1,9 +1,9 @@
 ## C# Code Standards
 
-- **.NET 10 SDK** (the long-term support release). `global.json` asks for SDK `10.0.100` with `rollForward: latestPatch`: any 10.0.1xx SDK from 10.0.100 up builds the project, the newest one installed is used, and CI installs the newest 10.0.1xx that `actions/setup-dotnet` offers. Use a 10.0.1xx SDK locally too. A newer feature band (10.0.2xx) is not used until `global.json` says so.
+- **.NET 10 SDK** (the long-term support release). `global.json` asks for SDK `10.0.100` with `rollForward: latestFeature`: that SDK or any later feature band or patch of 10.0 (10.0.2xx, 10.0.4xx and so on) builds the project, and the newest one installed is used. CI installs the newest 10.0 SDK that `actions/setup-dotnet` resolves from it. An 11.0 SDK is not accepted: `latestFeature` never rolls forward to another minor version, and the pack is not tested with 11.0 until `global.json` says so.
 - **C# with nullable reference types** (`Nullable` is `enable` for every project, in `Directory.Build.props`). Mark what may be null with `?`; a possible null where none is allowed (for example `CS8600`, `CS8602`) fails the build.
 - **Every warning is an error** (`TreatWarningsAsErrors`): a compiler warning, an analyzer warning or a code style warning fails `dotnet build` and CI.
-- **Analyzers:** the .NET 10 recommended rule set (`AnalysisLevel` `10.0-recommended`), fixed to 10.0 so a newer SDK does not add rules by itself. Raise it on purpose, in its own change. This fixes the quality rules (`CA`) only: the code style rules (`IDE`) and the formatter come with the SDK, so a newer 10.0.1xx patch can in rare cases report something the one before did not.
+- **Analyzers:** the .NET 10 recommended rule set (`AnalysisLevel` `10.0-recommended`), fixed to 10.0 so a newer SDK does not add rules by itself. Raise it on purpose, in its own change. This fixes the quality rules (`CA`) only: the code style rules (`IDE`) and the formatter come with the SDK, so a newer 10.0 SDK can in rare cases report something the one before did not.
 - **`dotnet format`** for formatting and code style, from `.editorconfig`: four spaces, LF line endings, file-scoped namespaces (`namespace Example;`), braces on every `if`, `else`, `for`, `foreach`, `while` and `using`, no unused `using` directives, private members or parameters, `System` usings first. `dotnet format --verify-no-changes` is the format check that is clean before a push (Process P-11 § 5 (2)). The build checks the same rules (`EnforceCodeStyleInBuild`), except the order of the usings and the line endings, which only `dotnet format` checks.
 - **XML doc comments** (`///`) on every public type and member in `src/`: a public member without one is `CS1591`, an error. Explain intent, not mechanics. Test projects do not need them.
 - **xUnit v3** for testing, on Microsoft.Testing.Platform (`global.json`, `"test"`), with **coverlet** measuring it: the line coverage gate of Process P-11 § 5 (2) over the code under `src/`, all of it counted together, enforced in CI. The test projects themselves are not counted. coverlet measures only the assemblies a test project loads, so `tests/Example.Tests/Example.Tests.csproj` references every project under `src/` with one glob (`../../src/**/*.csproj`): a new project there is counted at once, at 0% until it has tests. Keep that glob; a further test project that references only some projects adds no gap, as long as this one stays.
@@ -16,7 +16,7 @@
 | Path | What it is |
 |---|---|
 | `Project.slnx` | The solution: every project, so that `dotnet restore`, `format`, `build` and `test` in the project root reach all of them |
-| `global.json` | The SDK feature band and the test runner |
+| `global.json` | The minimum SDK and the test runner |
 | `Directory.Build.props` | The settings every project shares: `net10.0`, nullable, warnings as errors, the analyzers, XML docs |
 | `Directory.Packages.props` | Every package version |
 | `.editorconfig` | Formatting and code style |
@@ -28,7 +28,7 @@
 
 ### First-time setup
 
-Install the .NET 10 SDK: https://dotnet.microsoft.com/download/dotnet/10.0. Check it with `dotnet --version` in the project root, which prints the SDK `global.json` picks; it must be 10.0.1xx.
+Install the .NET 10 SDK: https://dotnet.microsoft.com/download/dotnet/10.0. Check it with `dotnet --version` in the project root, which prints the SDK `global.json` picks; it must be 10.0.100 or higher, and start with 10.0.
 
 There is no lockfile. `Directory.Packages.props` pins every direct dependency exactly; their own dependencies are not pinned, so two restores on different days can differ below the top level. If the project needs fully repeatable restores, turn on NuGet's lockfile (`RestorePackagesWithLockFile`) and commit the `packages.lock.json` files.
 

@@ -943,6 +943,30 @@ printf '\nup to date in 2s\n'
 STUB
 make_stub_npm() { write_stand_in "$1" "$STUB_NPM_TEXT"; }
 
+# ---------- stub dotnet ----------
+# A stand-in for dotnet, selected with BOOTSTRAP_DOTNET (PBI-1.75), so no
+# test depends on the .NET SDKs of the computer it runs on. Every call
+# appends its arguments, one line, to $STUB_DOTNET_LOG. It emulates only
+# `--list-sdks`, as dotnet prints it: one line for each SDK, "<version>
+# [<folder>]", from the file dotnet-sdks next to the log (no file: no SDK,
+# as on a computer that has only a runtime, no output and exit 0). Any
+# other call fails loudly (exit 64). STUB_DOTNET_RC=<n>: it prints nothing
+# and exits with n (127: as a missing command does). STUB_DOTNET_CRLF set:
+# its lines end in CR LF, as dotnet's do on Windows.
+IFS= read -r -d '' STUB_DOTNET_TEXT <<'STUB' || true
+set -euo pipefail
+: "${STUB_DOTNET_LOG:?stub dotnet: STUB_DOTNET_LOG is not set}"
+printf '%s\n' "$*" >>"$STUB_DOTNET_LOG"
+if [ "$*" != "--list-sdks" ]; then
+  echo "stub dotnet: no emulation for: $*" >&2; exit 64
+fi
+[ -z "${STUB_DOTNET_RC:-}" ] || exit "$STUB_DOTNET_RC"
+f="${STUB_DOTNET_LOG%/*}/dotnet-sdks"
+[ -f "$f" ] || exit 0
+if [ -n "${STUB_DOTNET_CRLF:-}" ]; then awk '{ printf "%s\r\n", $0 }' "$f"; else cat "$f"; fi
+STUB
+make_stub_dotnet() { write_stand_in "$1" "$STUB_DOTNET_TEXT"; }
+
 # ---------- safe defaults for the hooks ----------
 # Every test runs with the hooks pointing at stubs that refuse: they log
 # the call to $REFUSE_LOG, say which hook to set, and exit 70. So a test
@@ -962,7 +986,9 @@ mkdir -p "$WORK/refuse"
 make_refuser "$WORK/refuse/run" BOOTSTRAP_RUN
 make_refuser "$WORK/refuse/gh" BOOTSTRAP_GH
 make_refuser "$WORK/refuse/npm" BOOTSTRAP_NPM
-export BOOTSTRAP_RUN="$WORK/refuse/run" BOOTSTRAP_GH="$WORK/refuse/gh" BOOTSTRAP_NPM="$WORK/refuse/npm"
+make_refuser "$WORK/refuse/dotnet" BOOTSTRAP_DOTNET
+export BOOTSTRAP_RUN="$WORK/refuse/run" BOOTSTRAP_GH="$WORK/refuse/gh" BOOTSTRAP_NPM="$WORK/refuse/npm" \
+  BOOTSTRAP_DOTNET="$WORK/refuse/dotnet"
 # The pause between two checks of GitHub (BOOTSTRAP_SLEEP): a stand-in
 # that waits for nothing, so no test waits for real. It appends the
 # seconds it was asked to wait to $STUB_SLEEP_LOG (default $WORK/sleep.log).
@@ -3036,7 +3062,7 @@ test_run_offered_runs_with_gh_prompts_enabled() {
 test_a_test_that_forgets_the_hooks_runs_nothing_real() {
   # Review round 1: CI must be safe by structure, not by each test
   # remembering the hooks. A test that sets no hook runs no real
-  # install, login, gh or npm: the harness defaults each to a stub that
+  # install, login, gh, npm or dotnet: the harness defaults each to a stub that
   # refuses loudly (non-zero exit), so the forgetful test fails.
   local d rc
   d="$(tmpdir)"
@@ -3081,7 +3107,23 @@ test_a_test_that_forgets_the_hooks_runs_nothing_real() {
     cat "$d/err" >&2
     die "the npm refusal does not name the hook to set"
   }
-  [ "$(wc -l <"$d/refused.log" | tr -d ' ')" -eq 3 ] || die "refusals not logged"
+  # The SDK check's dotnet (BOOTSTRAP_DOTNET, PBI-1.75), likewise: the
+  # refusal counts as no SDK, and names the hook to set.
+  printf '%s\ntouch "%s/real-dotnet-ran"\n' "$STAND_IN_SHEBANG" "$d" >"$d/bin/dotnet"
+  chmod +x "$d/bin/dotnet"
+  rc=0
+  (
+    load_script
+    export REFUSE_LOG="$d/refused.log" PATH="$d/bin:$PATH"
+    check_dotnet
+  ) 2>>"$d/err" || rc=$?
+  [ ! -e "$d/real-dotnet-ran" ] || die "check_dotnet ran the dotnet on PATH in a test that set no hook"
+  [ "$rc" -ne 0 ] || die "check_dotnet without a hook found an SDK; a forgetful test would pass"
+  grep -qxF 'BOOTSTRAP_DOTNET --list-sdks' "$d/refused.log" || {
+    cat "$d/refused.log" >&2
+    die "the dotnet refusal is not logged with the hook to set"
+  }
+  [ "$(wc -l <"$d/refused.log" | tr -d ' ')" -eq 4 ] || die "refusals not logged"
 }
 
 # ---------- plain language ----------
@@ -4693,12 +4735,14 @@ test_pack_and_licence_questions_explain_each_choice() {
 # `pre <dir> <command...>` runs a function of the loaded script after
 # detect_os, with PATH="<dir>/bin:<GIT_ONLY_DIR>:/usr/bin:/bin" (so only
 # the fake tools a test makes, git, and the system's own are found:
-# no brew or winget unless faked), a stub gh, a stub runner and a stub npm (BOOTSTRAP_NPM, the
+# no brew or winget unless faked), a stub gh, a stub runner, a stub npm (BOOTSTRAP_NPM, the
 # npm the lockfile step runs; the check that npm is installed uses a fake
-# npm on PATH), stdin from <dir>/in, the terminal from <dir>/tty and the
+# npm on PATH) and a stub dotnet (BOOTSTRAP_DOTNET; the SDKs it lists are
+# the lines of <dir>/dotnet-sdks, none when there is no file), stdin from <dir>/in, the terminal from <dir>/tty and the
 # Linux release file from <dir>/os-release when they exist, in <dir>/cwd
 # with the fake home <dir>/home. stdout goes to <dir>/out, stderr to
-# <dir>/err, the runner's log to <dir>/run.log, npm's to <dir>/npm.log.
+# <dir>/err, the runner's log to <dir>/run.log, npm's to <dir>/npm.log and
+# dotnet's to <dir>/dotnet.log.
 # `whole <dir> <options...>` does the same for the whole script (or for
 # $RUN_SCRIPT when a test sets it: see use_built).
 
@@ -4708,10 +4752,12 @@ prepare() {
   [ -x "$d/gh" ] || make_stub_gh "$d/gh"
   [ -x "$d/run" ] || make_stub_run "$d/run"
   [ -x "$d/npm" ] || make_stub_npm "$d/npm"
+  [ -x "$d/dotnet" ] || make_stub_dotnet "$d/dotnet"
   [ -d "$d/home" ] || fake_home "$d/home" "Test Person" test@example.com
   [ -d "$d/cwd" ] && [ -d "$d/bin" ] || mkdir -p "$d/cwd" "$d/bin"
   : >>"$d/run.log"
   : >>"$d/npm.log"
+  : >>"$d/dotnet.log"
 }
 
 # in_env <dir>: the environment of a run, in the current subshell.
@@ -4721,7 +4767,7 @@ in_env() {
   use_home "$d/home"
   export PATH="$d/bin:$GIT_ONLY_DIR:/usr/bin:/bin" STUB_GH_LOG="$d/gh.log" BOOTSTRAP_GH="$d/gh" \
     STUB_RUN_LOG="$d/run.log" BOOTSTRAP_RUN="$d/run" STUB_SLEEP_LOG="$d/sleep.log" \
-    STUB_NPM_LOG="$d/npm.log" BOOTSTRAP_NPM="$d/npm"
+    STUB_NPM_LOG="$d/npm.log" BOOTSTRAP_NPM="$d/npm" STUB_DOTNET_LOG="$d/dotnet.log" BOOTSTRAP_DOTNET="$d/dotnet"
   # git never looks above the harness's own temp folder for a project,
   # so a test sees only the git projects it made itself.
   export GIT_CEILING_DIRECTORIES="$WORK"
@@ -11948,9 +11994,11 @@ test_the_npm_packs_get_a_lockfile_made_by_npm_after_the_fill() {
 }
 
 test_the_csharp_pack_needs_no_npm_makes_no_lockfile_and_lays_out_its_files() {
-  # PBI-1.23 part 2, decision 1: the setup runs no .NET command and no npm
-  # for csharp, so a computer without npm (a fake npm that fails as a
-  # missing command, as in the preflight tests) passes the checks of this
+  # PBI-1.23 part 2, decision 1, as PBI-1.75 changes it: the setup runs no
+  # .NET command except the one that lists the SDKs (the stand-in lists
+  # none here, so the note is printed and the run goes on), and no npm for
+  # csharp, so a computer without npm (a fake npm that fails as a missing
+  # command, as in the preflight tests) passes the checks of this
   # computer, no npm is called, and the project has no package-lock.json.
   # It has the layout table's files.
   local d c f
@@ -17453,6 +17501,539 @@ test_dev_infrastructure_says_the_script_turns_protection_on() {
   grep -qF 'Settings, Branches' <<<"$body" || die "the manual steps are gone"
 }
 
+# ---------- the note about the .NET SDK (PBI-1.75) ----------
+# For the csharp pack the setup tells the person that the .NET SDK is
+# needed to build and test the project on this computer, and never
+# stops for it: the note is printed, then "Press Enter to continue"
+# (not with --non-interactive), and the setup goes on. The check runs
+# `dotnet --list-sdks` (BOOTSTRAP_DOTNET) and accepts an SDK of major 10,
+# minor 0 and patch 100 or higher: what languages/csharp/global.json
+# asks for with latestFeature.
+
+# sdk_lines <dir> <version...>: the SDKs the stand-in dotnet of <dir>
+# lists, as dotnet prints them: the version, then the folder in brackets.
+sdk_lines() {
+  local d="$1" v
+  shift
+  : >"$d/dotnet-sdks"
+  for v in "$@"; do printf '%s [/usr/share/dotnet/sdk]\n' "$v" >>"$d/dotnet-sdks"; done
+}
+
+# sdk_verdicts <script> <dir> <version...>: with each version alone as
+# the SDK the stand-in lists, "<version> yes" or "<version> no": whether
+# check_dotnet of that script accepts it. One line each, in the order given.
+sdk_verdicts() {
+  local script="$1" d="$2" v
+  shift 2
+  prepare "$d"
+  (
+    SCRIPT="$script"
+    load_script
+    in_env "$d"
+    for v in "$@"; do
+      printf '%s [/usr/share/dotnet/sdk]\n' "$v" >"$d/dotnet-sdks"
+      if check_dotnet; then printf '%s yes\n' "$v"; else printf '%s no\n' "$v"; fi
+    done
+  )
+}
+
+# global_json_range <file>: "<version> <rollForward>" of the SDK that a
+# global.json asks for.
+global_json_range() {
+  printf '%s %s\n' \
+    "$(sed -n 's/^.*"version": *"\([^"]*\)".*$/\1/p' "$1" | head -1)" \
+    "$(sed -n 's/^.*"rollForward": *"\([^"]*\)".*$/\1/p' "$1" | head -1)"
+}
+
+# range_mismatches <script> <global.json> <dir> [edge]: the versions around the
+# edges of the range that the global.json gives (its version and its
+# rollForward) on which check_dotnet of the script and the range differ,
+# one "<version>: the check says yes|no, global.json says the other" per
+# line; none when the check accepts exactly the range. The range of
+# latestFeature is the version or any later feature band or patch of the
+# same major and minor (Microsoft's global.json page); another rollForward
+# is not known here, so the test fails until it is added. With "edge" only
+# the versions of the same major and minor are tried (a quicker look, for
+# the stand-ins that show the test can fail).
+range_mismatches() {
+  local script="$1" g="$2" d="$3" edge="${4:-}" want_v rf maj min pat dm dn dp v got want
+  read -r want_v rf <<<"$(global_json_range "$g")"
+  [ "$rf" = latestFeature ] || {
+    printf 'rollForward is %s: this test knows only latestFeature, so teach it that rule and the check with it\n' "${rf:-missing}"
+    return 0
+  }
+  IFS=. read -r maj min pat <<<"$want_v"
+  local candidates=""
+  for dm in -1 0 1; do
+    for dn in 0 1; do
+      [ -z "$edge" ] || [ "$dm$dn" = 00 ] || continue
+      for dp in -1 0 1 300 900; do
+        candidates="$candidates $((maj + dm)).$((min + dn)).$((pat + dp)) $((maj + dm)).$((min + dn)).$((dp > 0 ? dp : 0))"
+      done
+    done
+  done
+  # shellcheck disable=SC2086 # the words are versions, one each
+  set -- $candidates
+  sdk_verdicts "$script" "$d" "$@" | while read -r v got; do
+    IFS=. read -r a b c <<<"$v"
+    if [ "$a" -eq "$maj" ] && [ "$b" -eq "$min" ] && [ "$c" -ge "$pat" ]; then want=yes; else want=no; fi
+    [ "$got" = "$want" ] || printf '%s: the check says %s, global.json says %s\n' "$v" "$got" "$want"
+  done
+}
+
+test_the_dotnet_check_accepts_an_sdk_of_10_0_with_a_patch_of_100_or_higher_and_no_other() {
+  local d line
+  d="$(tmpdir)"
+  # Accepted: the first SDK of 10.0, later patches, later feature bands, a
+  # pre-release suffix read as its number.
+  sdk_verdicts "$SCRIPT" "$d" 10.0.100 10.0.101 10.0.104 10.0.199 10.0.200 10.0.402 10.0.1000 \
+    10.0.100-rc.1.25451.107 10.0.203-preview.7.25380.108 >"$d/got"
+  line="$(grep -v ' yes$' "$d/got" || true)"
+  [ -z "$line" ] || die "not accepted: $line"
+  [ "$(wc -l <"$d/got" | tr -d ' ')" -eq 9 ] || die "a version was not judged (test is stale)"
+  # Not accepted: an older patch of 10.0, another minor or major version,
+  # a pre-release of an older patch, and what is not a version.
+  d="$(tmpdir)"
+  sdk_verdicts "$SCRIPT" "$d" 10.0.99 10.0.50 10.0.1 10.0.0 10.0.50-rc.1.25451.107 10.1.100 10.1.0 11.0.100 \
+    11.0.0 9.0.300 9.0.100 8.0.404 100.0.100 1.0.100 10.0 10.0.x 10.0.100x 10.00.100 abc >"$d/got"
+  line="$(grep -v ' no$' "$d/got" || true)"
+  [ -z "$line" ] || die "accepted: $line"
+  [ "$(wc -l <"$d/got" | tr -d ' ')" -eq 19 ] || die "a version was not judged (test is stale)"
+}
+
+test_the_dotnet_check_reads_dotnets_output_as_it_comes_and_fails_as_a_missing_dotnet() {
+  # Error paths and output shapes: any listed SDK in range is enough; the
+  # output may have CR LF line ends (Windows) and lines that are not
+  # SDKs; no SDK, a dotnet that fails (127: not found) and one that lists
+  # an SDK but exits with an error all count as no SDK.
+  local d
+  d="$(tmpdir)"
+  prepare "$d"
+  # chk [VAR=value...]: check_dotnet in the run's environment, with the
+  # variables set for it (OVERRIDE: the program BOOTSTRAP_DOTNET names).
+  chk() {
+    local kv
+    (
+      for kv in "$@"; do export "${kv%%=*}=${kv#*=}"; done
+      load_script
+      in_env "$d"
+      [ -z "${OVERRIDE:-}" ] || BOOTSTRAP_DOTNET="$OVERRIDE"
+      check_dotnet
+    )
+  }
+  sdk_lines "$d" 9.0.300 11.0.100 10.0.104
+  chk || die "10.0.104 among others was not found"
+  sdk_lines "$d" 9.0.300 11.0.100
+  ! chk || die "9.0.300 and 11.0.100 were accepted"
+  printf '%s\n' 'No .NET SDKs were found.' '' '10.0.100 [C:\Program Files\dotnet\sdk]' >"$d/dotnet-sdks"
+  chk || die "a line that is no SDK hid the one that is"
+  printf '%s\n' 'No .NET SDKs were found.' >"$d/dotnet-sdks"
+  ! chk || die "text that is no SDK was taken for one"
+  : >"$d/dotnet-sdks"
+  ! chk || die "an empty list was accepted"
+  rm "$d/dotnet-sdks"
+  ! chk || die "no listing was accepted"
+  sdk_lines "$d" 10.0.100
+  chk STUB_DOTNET_CRLF=1 || die "10.0.100 with CR LF line ends was not accepted"
+  sdk_lines "$d" 10.0.99
+  ! chk STUB_DOTNET_CRLF=1 || die "10.0.99 with CR LF line ends was accepted"
+  sdk_lines "$d" 10.0.100
+  ! chk STUB_DOTNET_RC=127 || die "a dotnet that is not found was accepted"
+  ! chk STUB_DOTNET_RC=1 || die "a dotnet that listed an SDK and failed was accepted"
+  # A missing program at the place BOOTSTRAP_DOTNET names fails the same way.
+  ! chk "OVERRIDE=$d/not-there" || die "a missing dotnet was accepted"
+}
+
+test_the_range_the_dotnet_check_accepts_is_the_one_global_json_asks_for() {
+  # PBI-1.75, HOW 5: the day the pack's global.json moves, this fails
+  # until the check moves with it. The check is the script's, the range
+  # is the pack's own global.json; two stand-ins show that the test can
+  # fail: a check with another lowest patch, and a global.json that asks
+  # for another version or rolls forward by another rule.
+  local d g bad
+  d="$(tmpdir)"
+  g="$REPO/languages/csharp/global.json"
+  [ -z "$(range_mismatches "$SCRIPT" "$g" "$d")" ] || {
+    range_mismatches "$SCRIPT" "$g" "$d" >&2
+    die "the check does not accept exactly the range global.json asks for"
+  }
+  # A check that wants patch 200: the edge of the range is wrong.
+  bad="$d/bootstrap-project.sh"
+  sed 's/^DOTNET_SDK_MIN_PATCH=100$/DOTNET_SDK_MIN_PATCH=200/' "$SCRIPT" >"$bad"
+  ! cmp -s "$bad" "$SCRIPT" || die "the planted check is no different (test is stale)"
+  [ -n "$(range_mismatches "$bad" "$g" "$(tmpdir)" edge)" ] || die "a check with the lowest patch 200 was not caught"
+  # A global.json that asks for 10.0.200.
+  mkdir -p "$d/g1"
+  sed 's/"10.0.100"/"10.0.200"/' "$g" >"$d/g1/global.json"
+  [ -n "$(range_mismatches "$SCRIPT" "$d/g1/global.json" "$(tmpdir)" edge)" ] || die "a global.json with 10.0.200 was not caught"
+  # A global.json that asks for 11.0.100.
+  mkdir -p "$d/g2"
+  sed 's/"10.0.100"/"11.0.100"/' "$g" >"$d/g2/global.json"
+  [ -n "$(range_mismatches "$SCRIPT" "$d/g2/global.json" "$(tmpdir)" edge)" ] || die "a global.json with 11.0.100 was not caught"
+  # A global.json with another roll-forward rule.
+  mkdir -p "$d/g3"
+  sed 's/latestFeature/latestMinor/' "$g" >"$d/g3/global.json"
+  bad="$(range_mismatches "$SCRIPT" "$d/g3/global.json" "$(tmpdir)" edge)"
+  case "$bad" in
+    *'this test knows only latestFeature'*) ;;
+    *) die "a global.json with latestMinor was not caught" ;;
+  esac
+}
+
+test_with_an_sdk_found_the_dotnet_step_says_so_and_prints_no_note() {
+  # Done when (c): no note, no wait, the step ends with Done.
+  local d
+  d="$(tmpdir)"
+  sdk_lines "$d" 9.0.300 10.0.104
+  printf 'left over\n' >"$d/in"
+  on_os "$d" linux debian
+  pre "$d" with_pack csharp preflight_dotnet
+  expect_rc 0 "$d"
+  [ "$(sed -n 1p "$d/out")" = "==> Checking whether the .NET SDK is installed (the csharp pack uses it)" ] ||
+    {
+      cat "$d/out" >&2
+      die "the step does not start as the other checks do"
+    }
+  expect_out "$d" "    Done. The .NET SDK is installed."
+  [ "$(wc -l <"$d/out" | tr -d ' ')" -eq 2 ] || {
+    cat "$d/out" >&2
+    die "more than the step's two lines was printed"
+  }
+  [ "$(cat "$d/dotnet.log")" = "--list-sdks" ] || {
+    cat "$d/dotnet.log" >&2
+    die "dotnet was run with more than --list-sdks"
+  }
+  [ ! -s "$d/err" ] || {
+    cat "$d/err" >&2
+    die "wrote to stderr"
+  }
+}
+
+# waits_for <dir> <what: the lines after the one the step reads>: the
+# step, then what is left on stdin: prints it as "<left>".
+after_the_step_left() {
+  local rest=""
+  preflight_dotnet
+  IFS= read -r rest || true
+  printf '<%s>\n' "$rest" >>"$1/left"
+}
+
+test_without_an_sdk_the_note_is_shown_and_enter_or_any_input_continues() {
+  # Done when (a): the note, "Press Enter to continue", one line read,
+  # then the setup goes on. No q: q is an input like any other. The step
+  # reads exactly one line (the next line is still on stdin), and the end
+  # of the input continues too.
+  local d input a b c
+  for input in '' 'q' 'quit' 'stop' 'no thanks' '  '; do
+    d="$(tmpdir)"
+    on_os "$d" linux debian
+    printf '%s\nthe next answer\n' "$input" >"$d/in"
+    : >"$d/left"
+    pre "$d" with_pack csharp after_the_step_left "$d"
+    expect_rc 0 "$d"
+    expect_out "$d" "The .NET SDK is not installed on this computer."
+    expect_out "$d" "Press Enter to continue: "
+    expect_out "$d" "    Done. Carrying on without the .NET SDK."
+    [ "$(cat "$d/left")" = "<the next answer>" ] || {
+      cat "$d/left" "$d/out" >&2
+      die "input [$input]: the step did not read exactly one line"
+    }
+    expect_no_out "$d" "type q"
+    expect_no_out "$d" "check again"
+    [ ! -s "$d/err" ] || {
+      cat "$d/err" >&2
+      die "input [$input]: wrote to stderr"
+    }
+  done
+  # No input at all: the end of stdin continues too.
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  : >"$d/in"
+  pre "$d" with_pack csharp preflight_dotnet
+  expect_rc 0 "$d"
+  expect_out "$d" "Press Enter to continue:"
+  expect_out "$d" "    Done. Carrying on without the .NET SDK."
+  # The prompt comes after the note, and the step ends after the prompt.
+  a="$(first_line_of "$d/out" "The .NET SDK is not installed on this computer.")"
+  b="$(first_line_of "$d/out" "Press Enter to continue:")"
+  c="$(first_line_of "$d/out" "    Done. Carrying on without the .NET SDK.")"
+  [ "$a" -lt "$b" ] && [ "$b" -lt "$c" ] || {
+    cat "$d/out" >&2
+    die "the note, the prompt and the end of the step are not in that order"
+  }
+}
+
+test_a_dotnet_that_fails_is_the_same_as_no_sdk() {
+  local d rc
+  for rc in 127 1; do
+    d="$(tmpdir)"
+    on_os "$d" linux debian
+    sdk_lines "$d" 10.0.100
+    : >"$d/in"
+    export STUB_DOTNET_RC="$rc"
+    pre "$d" with_pack csharp preflight_dotnet
+    unset STUB_DOTNET_RC
+    expect_rc 0 "$d"
+    expect_out "$d" "The .NET SDK is not installed on this computer."
+    expect_no_out "$d" "Only other versions"
+    expect_out "$d" "    Done. Carrying on without the .NET SDK."
+  done
+}
+
+test_with_non_interactive_the_note_is_printed_and_nothing_waits() {
+  # Done when (b). Also with no SDK and other versions: no prompt, and
+  # nothing read from stdin.
+  local d
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  printf 'the next answer\n' >"$d/in"
+  : >"$d/left"
+  pre "$d" ni with_pack csharp after_the_step_left "$d"
+  expect_rc 0 "$d"
+  expect_out "$d" "The .NET SDK is not installed on this computer."
+  expect_out "$d" "https://dotnet.microsoft.com/download/dotnet/10.0"
+  expect_out "$d" "    Done. Carrying on without the .NET SDK."
+  expect_no_out "$d" "Press Enter"
+  [ "$(cat "$d/left")" = "<the next answer>" ] || die "the step read a line of stdin with --non-interactive"
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  sdk_lines "$d" 9.0.300
+  pre_from_stdin "$d" ni with_pack csharp preflight_dotnet </dev/null
+  expect_rc 0 "$d"
+  expect_out "$d" "Only other versions of the .NET SDK are installed on this computer: 9.0.300."
+  expect_no_out "$d" "Press Enter"
+}
+
+test_with_only_other_sdks_the_note_names_them() {
+  # Done when (d) and (e2): an SDK of 11.0 or 9.0, one of 10.0 below the
+  # first of its range, one of 10.1 and several together: the note names
+  # each, and the step goes on.
+  local d c
+  for c in '9.0.300|9.0.300' '11.0.100|11.0.100' '10.0.99|10.0.99' '10.1.100|10.1.100' \
+    '8.0.404 9.0.300 11.0.100|8.0.404, 9.0.300, 11.0.100'; do
+    d="$(tmpdir)"
+    on_os "$d" linux debian
+    # shellcheck disable=SC2086 # the words are versions, one each
+    sdk_lines "$d" ${c%%|*}
+    printf '\n' >"$d/in"
+    pre "$d" with_pack csharp preflight_dotnet
+    expect_rc 0 "$d"
+    expect_out "$d" "Only other versions of the .NET SDK are installed on this computer: ${c#*|}."
+    expect_no_out "$d" "The .NET SDK is not installed on this computer."
+    expect_out "$d" "10.0.100 or a later 10.0 version"
+    expect_out "$d" "Press Enter to continue:"
+    expect_out "$d" "    Done. Carrying on without the .NET SDK."
+  done
+}
+
+test_the_dotnet_check_runs_only_for_the_csharp_pack() {
+  # Done when (e): no other pack runs it, shows anything, or runs dotnet.
+  local d p
+  for p in python node web react-native; do
+    d="$(tmpdir)"
+    pre "$d" ni with_pack "$p" preflight_dotnet
+    expect_rc 0 "$d"
+    [ ! -s "$d/out" ] || {
+      cat "$d/out" >&2
+      die "$p printed a .NET check"
+    }
+    [ ! -s "$d/dotnet.log" ] || {
+      cat "$d/dotnet.log" >&2
+      die "dotnet was run for $p"
+    }
+  done
+}
+
+test_the_dotnet_note_tells_a_newcomer_what_to_do_in_plain_words() {
+  # The wording is for a reader who has never seen the words SDK or
+  # runtime: each is explained where it comes up. The link, what to
+  # choose on each system, the new window, that the setup goes on, and
+  # that the project's checks on GitHub install it.
+  local d os
+  for os in linux windows; do
+    d="$(tmpdir)"
+    on_os "$d" "$os"
+    pre "$d" ni with_pack csharp preflight_dotnet
+    expect_rc 0 "$d"
+    expect_out "$d" "The .NET SDK is a set of programs from Microsoft that builds and tests programs written in C#."
+    expect_out "$d" "needs version 10.0.100 or a later 10.0 version of it to be built and tested on this computer."
+    expect_out "$d" "The setup does not need it and goes on without it. The project's checks on GitHub install it themselves."
+    expect_out "$d" "To install it, open https://dotnet.microsoft.com/download/dotnet/10.0 in your browser. Choose the SDK, not the runtime (the runtime only runs programs that are already built). On Windows, choose the installer for the SDK and run it. On Linux, choose the package manager instructions for your system and follow them."
+  done
+  expect_out "$d" "After the install, only a new window finds it. Open it from the Start menu, not from this window: a window opened from another one keeps the old list of the folders where programs are found."
+  expect_no_out "$d" "terminal window"
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  pre "$d" ni with_pack csharp preflight_dotnet
+  expect_out "$d" "After the install, only a new terminal window finds it."
+  expect_no_out "$d" "Start menu"
+  # A note, not a guide: no numbered steps, no title, no check to run again.
+  expect_no_out "$d" "Why this is needed"
+  expect_no_out "$d" "How the script checks it"
+  expect_no_out "$d" "  1. "
+}
+
+test_the_dotnet_note_and_its_prompt_are_in_the_colours_of_the_other_texts() {
+  # The note is text to read (READ_COLOUR, like say_note); the line where
+  # the user types is in the answer colour, as wait_for_enter's.
+  local d line text
+  d="$(tmpdir)"
+  on_os "$d" linux debian
+  printf '\n' >"$d/in"
+  export TERM=xterm BOOTSTRAP_COLOR=1
+  unset NO_COLOR
+  pre "$d" with_pack csharp preflight_dotnet
+  expect_rc 0 "$d"
+  grep -qxF "${READ_ON}The .NET SDK is not installed on this computer.${COLOUR_OFF}" "$d/out" || {
+    cat -v "$d/out" >&2
+    die "the first line of the note is not in the read colour"
+  }
+  grep -qxF "${COLOUR_ON}Press Enter to continue:${COLOUR_OFF} " "$d/out" || {
+    cat -v "$d/out" >&2
+    die "the prompt is not in the answer colour, ending before the space"
+  }
+  text="$(cat "$d/out")"
+  while IFS= read -r line; do
+    case "$line" in
+      "" | "${COLOUR_ON}Press Enter"* | "${LOG_ON}"* | "${READ_ON}"*) ;;
+      "    ${LOG_ON}Done. "*) ;;
+      *)
+        printf '%s\n' "$text" | cat -v >&2
+        die "a line is in no colour of the others: $line"
+        ;;
+    esac
+  done <<<"$text"
+}
+
+test_the_dotnet_check_comes_right_after_the_npm_check_and_before_the_folder_check() {
+  # HOW 1: called right after preflight_npm, before anything is created.
+  local body n
+  body="$(awk '/^cmd_setup\(\) \{/ { on = 1 } on { print } on && /^}/ { exit }' "$SCRIPT")"
+  [ -n "$body" ] || die "cmd_setup not found"
+  n="$(printf '%s\n' "$body" | grep -n -x '  preflight_npm' | cut -d: -f1)"
+  [ -n "$n" ] || die "preflight_npm is not called in cmd_setup"
+  [ "$(printf '%s\n' "$body" | sed -n "$((n + 1))p")" = "  preflight_dotnet" ] || die "preflight_dotnet is not right after preflight_npm"
+  [ "$(printf '%s\n' "$body" | sed -n "$((n + 2))p")" = "  preflight_target_dir" ] || die "preflight_target_dir does not follow preflight_dotnet"
+}
+
+test_a_csharp_project_is_the_same_with_and_without_the_sdk_and_the_note_waits_for_enter() {
+  # Done when (a), (c) and (f), in two whole runs. With an SDK the note is
+  # not shown and the run goes through. Without one, in an interactive run,
+  # the note is shown and "Press Enter to continue" reads one line, and the
+  # setup goes on to the same end. The two projects hold the same files
+  # with the same contents, and the setup's own self-check passes in both
+  # (it ends the run at "The setup is finished").
+  local with without a b
+  built_bootstrapper
+  with="$(tmpdir)"
+  sdk_lines "$with" 10.0.100
+  setup_run "$with" --non-interactive --yes --pack csharp
+  expect_rc 0 "$with"
+  grep -qxF "$FINISHED" "$with/out" || {
+    cat "$with/out" "$with/err" >&2
+    die "with the SDK: did not reach the end"
+  }
+  expect_no_out "$with" "The .NET SDK is not installed"
+  expect_no_out "$with" "Press Enter to continue"
+  expect_out "$with" "    Done. The .NET SDK is installed."
+  without="$(tmpdir)"
+  printf '\n' >"$without/in"
+  setup_run "$without" --yes --pack csharp
+  expect_rc 0 "$without"
+  grep -qxF "$FINISHED" "$without/out" || {
+    cat "$without/out" "$without/err" >&2
+    die "without the SDK: did not reach the end"
+  }
+  expect_out "$without" "The .NET SDK is not installed on this computer."
+  expect_out "$without" "Press Enter to continue:"
+  [ "$(cat "$without/dotnet.log")" = "--list-sdks" ] || {
+    cat "$without/dotnet.log" >&2
+    die "dotnet was run other than once with --list-sdks"
+  }
+  # The note comes in the checks that follow the questions (as the npm
+  # check does), before the check of the folder and the plan.
+  a="$(first_line_of "$without/out" "==> Checking whether the .NET SDK is installed")"
+  b="$(first_line_of "$without/out" "==> Checking the folder for the copy of your project")"
+  [ "$a" -lt "$b" ] || {
+    cat "$without/out" >&2
+    die "the SDK note does not come before the folder check"
+  }
+  expect_setup_tree "$with" "$(copy_of "$with")" csharp
+  expect_setup_tree "$without" "$(copy_of "$without")" csharp
+  diff -r --exclude=.git "$(copy_of "$with")" "$(copy_of "$without")" >&2 ||
+    die "the project made without the SDK differs from the one made with it"
+  [ "$(calls_from_create "$with")" = "$(calls_from_create "$without")" ] || die "the gh calls differ"
+  # bootstrap/e2e-check.sh, on a project made for real, is the job of the
+  # end-to-end runs and of bootstrap/test-e2e-check.sh; here the two
+  # projects are the same files.
+}
+
+test_the_dotnet_note_comes_again_at_every_start_of_the_setup() {
+  # HOW 4: --again and --resume show it too, as the other checks do. A
+  # first run stops at the folder check (the folder has files in it, after
+  # the note), and the command it shows (--again) is run again once the
+  # folder is empty, as a dry run: the note is in both runs. A run with
+  # --resume reaches the note as well, before the check that finds no
+  # project to continue.
+  local d
+  d="$(tmpdir)"
+  mkdir -p "$d/cwd/my-app"
+  touch "$d/cwd/my-app/x"
+  setup_run "$d" --non-interactive --yes --pack csharp
+  expect_rc 3 "$d"
+  expect_out "$d" "The .NET SDK is not installed on this computer."
+  expect_out "$d" "The folder ./my-app already has files in it."
+  rm "$d/cwd/my-app/x"
+  again "$d" --dry-run
+  expect_rc 0 "$d"
+  expect_out "$d" "This was a dry run (--dry-run): the checks passed, and nothing was created."
+  expect_out "$d" "The .NET SDK is not installed on this computer."
+  [ "$(wc -l <"$d/dotnet.log" | tr -d ' ')" -eq 2 ] || {
+    cat "$d/dotnet.log" >&2
+    die "dotnet was not run once for each start"
+  }
+  d="$(tmpdir)"
+  setup_run "$d" --non-interactive --yes --pack csharp --resume
+  expect_rc 3 "$d"
+  expect_out "$d" "The .NET SDK is not installed on this computer."
+  expect_out "$d" "==> Checking that the project octo-user/my-app is on GitHub"
+}
+
+test_the_setup_runs_no_dotnet_command_but_the_one_that_lists_the_sdks() {
+  # PBI-1.23 part 2 Decision 1, as PBI-1.75 changes it: the only command
+  # of dotnet the setup runs is --list-sdks, and it names it only through
+  # BOOTSTRAP_DOTNET (default dotnet), in one place.
+  local n
+  n="$(grep -v '^[[:space:]]*#' "$SCRIPT" | grep -c -i 'dotnet --\|dotnet restore\|dotnet build\|dotnet test\|dotnet new\|dotnet format' || true)"
+  [ "$n" -eq 0 ] || die "the script runs a dotnet command other than through BOOTSTRAP_DOTNET"
+  n="$(grep -v '^[[:space:]]*#' "$SCRIPT" | grep -c 'BOOTSTRAP_DOTNET:-dotnet}" --list-sdks' || true)"
+  [ "$n" -eq 1 ] || die "BOOTSTRAP_DOTNET runs --list-sdks in $n places, want 1"
+  n="$(grep -v '^[[:space:]]*#' "$SCRIPT" | grep -c 'BOOTSTRAP_DOTNET' || true)"
+  [ "$n" -eq 1 ] || die "BOOTSTRAP_DOTNET is used in $n places, want 1"
+}
+
+test_the_readme_has_the_dotnet_sdk_line_and_the_note_in_its_own_list() {
+  # HOW 8, Done when (h): "What you need" has a line for a C# program
+  # (the SDK, for building and testing on this computer, not for the
+  # setup, with the link); "What the script guides you through" has the
+  # note in a list of its own, the things the script only tells you.
+  local boot="$REPO/bootstrap/bootstrapper-README.md" need list
+  need="$(sed -n '/^## What you need, and what it costs/,/^To work on the project with Claude afterwards:/p' "$boot" | tr '\n' ' ' | sed 's/  */ /g')"
+  case "$need" in
+    *"**Only for a C# program: the .NET SDK.** Free."*"to build and test the project on your computer, not for the setup"*"https://dotnet.microsoft.com/download/dotnet/10.0"*) ;;
+    *) die "What you need has no line for the .NET SDK of a C# program: $need" ;;
+  esac
+  list="$(sed -n '/^\*\*What the script guides you through\.\*\*/,/^<!-- bootstrapper-readme: end -->/p' "$TEMPLATE_README" | tr '\n' ' ' | sed 's/  */ /g')"
+  case "$list" in
+    *"- Before anything is created, the script only tells you, and goes on after Enter:"*"the .NET SDK not installed, or only other versions of it (only for the csharp pack)"*"the setup does not need it"*"https://dotnet.microsoft.com/download/dotnet/10.0"*) ;;
+    *) die "What the script guides you through has no list with the .NET SDK note: $list" ;;
+  esac
+  # The built README (what a newcomer reads) has both.
+  built_bootstrapper
+  grep -qF -- '**Only for a C# program: the .NET SDK.**' "$BUILT/.github/README.md" || die "the built README lacks the SDK line"
+  grep -qF -- 'the .NET SDK not installed, or only other versions of it' "$BUILT/.github/README.md" || die "the built README lacks the note's list"
+}
+
 # ---------- the screen a newcomer meets (PBI-1.30) ----------
 # docs/NEWCOMER_PRECHECK.md: before each human end-to-end run, a persona
 # on a small model reads two texts made by the build of the commit
@@ -17507,13 +18088,19 @@ with_answers() {
 # empty one is Enter, which takes the answer the script suggests.
 NEWCOMER_FIRST_RUN=(tool-share 'Tool Share' 'Lets neighbours lend each other tools.' '' '' web '' '' mit '' '' '' '' q)
 NEWCOMER_SECOND_RUN=(yes)
+# The third part (PBI-1.75): the same answers, but the pack is csharp, on a
+# computer without the .NET SDK. The note is read and Enter is pressed, the
+# plan comes, and the newcomer does not go on: no at "Proceed?".
+NEWCOMER_THIRD_RUN=(tool-share 'Tool Share' 'Lets neighbours lend each other tools.' '' '' csharp '' mit '' '' '' '' '' no)
 
 test_the_screen_of_the_setup_a_newcomer_meets_is_written_for_the_precheck() {
   # PBI-1.30. Two runs of the built script, as on Windows in Git Bash,
   # starting where the README leaves a newcomer, with Node.js not
   # installed: the first shows the Windows guide for Node.js and stops at
   # its pause with q; the second, started with the command that stop
-  # shows, in a new window with npm present, goes through. The files
+  # shows, in a new window with npm present, goes through. A third run
+  # (PBI-1.75, the end of this test) chooses the csharp pack on a computer
+  # without the .NET SDK and shows the note about it. The files
   # written to BOOTSTRAP_NEWCOMER_SCREEN (a folder of your choice; if it
   # is not set, a folder of this test) are what the persona is given.
   local d dest cmd line a b c
@@ -17659,6 +18246,56 @@ test_the_screen_of_the_setup_a_newcomer_meets_is_written_for_the_precheck() {
   grep -qxF 'The setup is finished.' "$dest/screen.txt" || {
     cat "$dest/screen.txt" >&2
     die "the screen lacks the end of the second run"
+  }
+
+  # The third part (PBI-1.75): a newcomer who chooses the C# pack on a
+  # computer without the .NET SDK meets the note, presses Enter, and the
+  # setup goes on to its plan; here it is declined at "Proceed?", so
+  # nothing is created. The stand-in dotnet lists no SDK. It is a window of
+  # its own, on its own stand-ins, started as the README says.
+  local d3
+  d3="$(tmpdir)"
+  on_os "$d3" windows
+  working_git "$d3"
+  use_built "$d3"
+  prepare "$d3"
+  : >"$d3/tty"
+  cp "$RUN_SCRIPT" "$d3/cwd/bootstrap-project.sh"
+  printf '%s\n' "${NEWCOMER_THIRD_RUN[@]}" >"$d3/in"
+  in_one_stream "$d3" "$d3/in" "$d3/stream3" "$BASH" bootstrap-project.sh
+  [ "$RC" -eq 1 ] || {
+    cat "$d3/stream3" >&2
+    die "the third run ended with $RC, want 1 (no at Proceed?)"
+  }
+  [ -z "$(calls_from_create "$d3")" ] || {
+    cat "$d3/gh.log" >&2
+    die "the project was created in the third run"
+  }
+  printf '%s\n' "${NEWCOMER_THIRD_RUN[@]}" >"$d3/answers3"
+  with_answers "$d3/stream3" "$d3/answers3" "$d3/counts3" >"$d3/shown3"
+  [ "$(cat "$d3/counts3")" = "${#NEWCOMER_THIRD_RUN[@]} ${#NEWCOMER_THIRD_RUN[@]}" ] ||
+    {
+      cat "$d3/stream3" >&2
+      die "the third run asked $(cut -d' ' -f1 <"$d3/counts3") questions, with ${#NEWCOMER_THIRD_RUN[@]} answers given"
+    }
+  {
+    printf '\n%s\n\n' '----- Another time, in a new Git Bash window opened from the Start menu on a computer where the .NET SDK is not installed, the setup is started again from the start, and this time the language pack is csharp: -----'
+    cat "$d3/shown3"
+  } >>"$dest/screen.txt"
+  for line in \
+    'Language pack (type the number or the name): csharp' \
+    'The .NET SDK is not installed on this computer.' \
+    'Press Enter to continue: ' \
+    'Proceed? (yes or no) [no]: no'; do
+    [ "$(grep -cxF -- "$line" "$dest/screen.txt")" -eq 1 ] ||
+      {
+        cat "$dest/screen.txt" >&2
+        die "the screen lacks, once, the line: $line"
+      }
+  done
+  grep -qF 'open https://dotnet.microsoft.com/download/dotnet/10.0 in your browser' "$dest/screen.txt" || {
+    cat "$dest/screen.txt" >&2
+    die "the screen lacks the link of the note"
   }
 }
 
