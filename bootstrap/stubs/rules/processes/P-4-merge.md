@@ -13,6 +13,7 @@ P-4 § 2 Who merges
 (2) The verdict comment is posted before the merge, never as a later step.
 (3) A merge-only agent checks the head, the checks and the approval comment again before it merges.
 (4) PRs are squash-merged, with the commit title set in accordance with Process P-2 § 2 (4).
+(5) A merge and its verification under Process P-4 § 3 (1) are one step. Where the session merges, the merge call and the verification call follow each other with no text between them; where a merge-only agent merges, the session writes nothing about the merge until its own verification has run.
 
 P-4 § 3 Verification
 (1) Every merge is verified through the GitHub API (merged, merge commit, changed files) before it is reported. A merge agent's report is a relay and is not verification.
