@@ -290,7 +290,7 @@ get a working project in any supported language.
 
   **Done when.** Each of the three is fixed or closed with a reason, test-first where it changes a test (`RULES.md` § 30).
 
-- **[LATER] PBI-1.75** (Adam, in chat, 2026-11-23; the WHAT is Adam's, the HOW is Clead's; spec written 2026-11-23, not yet approved, built or reviewed) — When the pack is `csharp`, the setup tells the person about the .NET SDK, without stopping the setup, and the pack accepts any 10.0 SDK from 10.0.100 up.
+- **[NOW] PBI-1.75** (Adam, in chat, 2026-11-23; `NOW` since 2026-11-23 17:13, Adam, "go"; the WHAT is Adam's, the HOW is Clead's; spec written 2026-11-23 and approved by Adam at 17:06, "apyr"; not yet built or reviewed) — When the pack is `csharp`, the setup tells the person about the .NET SDK, without stopping the setup, and the pack accepts any 10.0 SDK from 10.0.100 up.
 
   **What Adam wants.** First wish, 2026-11-23 16:39: "i think the bootstrapper should check for the sdk in the same way a web project checks for npm, or react for node". Changed by Adam, 16:55: "i suggest we make the SDK check as information to the user... if setting up a C# project and no local SDK found then the user is informed about the requirement and provided a link from where it can be downloaded. the user is also informed that the SDK is not required for the setup to complete. Press Enter to conitune...". The second wish is the one this entry specs: a note, not a stop.
 
