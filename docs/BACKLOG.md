@@ -577,6 +577,12 @@ The findings of the product office's audit of this project (Process P-6 § 8 (2)
 
 The findings of the product office's incremental audit of this project that are new or not resolved (Process P-6 § 8 (2)). Adam's decision: a new conditional accept, 2026-11-19.
 
+## Audit findings (incremental audit, 2026-11-23)
+
+The finding of the product office's incremental audit of this project that is new (Process P-6 § 8 (2)). Adam's decision: a new conditional accept, 2026-11-23.
+
+- **[NEXT] PBI-1.73** (incremental audit of 2026-11-23, finding F18, record `audits/ai-project-template-v2.md` in the product office; Adam's new conditional accept, 2026-11-23; due 2026-11-30) — (§ 7): P-2 § 4 (5): commit `f6c7264` on #494's branch, a merge of `origin/main` into it, has neither `Claude-Session:` nor `Session-ID:`; all other commits of #488 to #498 and all 11 squash commits have both. Done when: the PRs merged after #498 have every commit, merge commits of `main` included, carry both trailers (a session that merges `main` into its branch gives the merge commit a message with both), or merge nothing into their branches; checked by an incremental audit of those PRs. If it is not met by the date, Clead recommends extending this entry (Process P-6 § 11 (4)).
+
 ## Decision log (updated)
 
 | Date | Decision | Rationale |
