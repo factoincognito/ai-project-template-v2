@@ -29,7 +29,7 @@ What a new machine needs is Process P-11 § 4 (1); the steps:
    in VS Code.
 2. Install the runtime for the project's language pack (Part 2):
    Node.js 24 for `node`, `web` and `react-native`, Python 3.14 for
-   `python`.
+   `python`, the .NET 10 SDK (10.0.1xx) for `csharp`.
 3. Clone the repo and open the folder in VS Code. Accept the
    recommended extensions when VS Code offers them
    (`.vscode/extensions.json`, from the pack).
@@ -253,3 +253,12 @@ platform tooling (Xcode needs macOS) or an Expo account. Try changes
 the tests cannot see on a phone with Expo Go. Setup, commands and the
 full list of what CI does not check:
 `languages/react-native/code-standards.md`.
+
+### C# on .NET (`csharp` pack)
+
+The .NET 10 SDK (10.0.1xx), C# with nullable reference types and every
+warning an error, `dotnet format`, and xUnit v3 with coverlet under an
+80% line coverage gate. A console app and a class library are the
+starter. There is no lockfile and no npm: the setup runs no .NET
+command, so the SDK is needed when someone works on the project. Setup,
+commands and the project layout: `languages/csharp/code-standards.md`.
