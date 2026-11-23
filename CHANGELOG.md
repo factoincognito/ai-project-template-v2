@@ -7,6 +7,7 @@ A bootstrapped project records the tag it was built from.
 ## [Unreleased]
 
 ### Changed
+- Backlog: PBI-1.23 part 2 (the C# pack offered by the setup) specified, waiting for Adam's approval (PR #501)
 - Backlog: PBI-1.73 added for the finding F18 of the incremental audit of 2026-11-23 (PR #499)
 - Backlog: PBI-1.69 marked done with the release v2.9.4 as evidence (PR #498)
 
