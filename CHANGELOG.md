@@ -13,6 +13,7 @@ A bootstrapped project records the tag it was built from.
 
 ### Changed
 - Backlog: PBI-1.75 added, specified with a minimum SDK version and put into NOW by Adam (PRs #512, #514, #515, #516, #517)
+- Backlog: PBI-1.23 (the C# pack) marked done, with the end-to-end run of 2026-11-23 as evidence, and moved to `docs/BACKLOG-DONE.md` (PR #522)
 - NEXT_SESSION: the newcomer pre-check and the C# end-to-end run on v2.10.0 recorded (PRs #511, #513)
 
 ## [2.10.0] — 2026-11-23
