@@ -6,6 +6,8 @@ A bootstrapped project records the tag it was built from.
 
 ## [Unreleased]
 
+## [2.9.4] — 2026-11-23
+
 ### Added
 - NEXT_SESSION: the newcomer pre-check on the v2.9.3 candidate, two stops, neither a defect (PR #473)
 - `STATUS.md` after the v2.9.3 release (PR #474), and Adam's choice that end-to-end run 5 runs on v2.9.3 (PR #475)
@@ -20,6 +22,7 @@ A bootstrapped project records the tag it was built from.
 - `STATUS.md`: the comment at the top cites Process P-9 § 6 (PBI-1.42) (PR #478)
 - `docs/NEXT_SESSION.md`: line 7 is a pointer to Process P-1 § 4 (3) and Process P-8 § 4 (PBI-1.66) (PR #493)
 - Backlog: PBI-1.66 to PBI-1.68 closed, PBI-1.69 to PBI-1.72 given a status line, and the changelog lists #473 to #493 (PBI-1.67) (PR #494)
+- Backlog: PBI-1.70 to PBI-1.72 closed with #495 as evidence, PBI-1.54 item (3) recorded (PR #496)
 - Shipped docs cite the Rules in place of restating them: `docs/DEV_INFRASTRUCTURE.md` and the `NEXT_SESSION.md` stub (PBI-1.45) (PR #479)
 - Backlog: only the markers of Process P-9 § 2 (2) (PBI-1.51) (PR #481)
 - `RULES.md` L § 8 (2): cites the paragraphs it overrides (PBI-1.47) (PR #483), and keeps the session trailers on edition squash commits (PBI-1.49) (PR #486)
