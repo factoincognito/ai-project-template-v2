@@ -17936,6 +17936,9 @@ e2e_of() {
   text="$(cat "$d/e2e.raw")"
   text="${text//"$c"/COPY}"
   text="${text//"$d"/DIR}"
+  # The folder of the stand-in GitHub project as the checker names it (on
+  # Windows in the form the system writes it, not the one $d has).
+  text="$(printf '%s\n' "$text" | sed 's|a copy of .*/remotes/octo-user/my-app.git|a copy of REMOTE|')"
   printf '%s\n' "$text" >"$d/e2e.out"
 }
 

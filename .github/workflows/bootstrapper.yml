@@ -176,14 +176,15 @@ jobs:
           - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 6, of: 8 }
           - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 7, of: 8 }
           - { leg: ubuntu-bash32, os: ubuntu-latest, shard: 8, of: 8 }
-          - { leg: windows-latest, os: windows-latest, shard: 1, of: 8 }
-          - { leg: windows-latest, os: windows-latest, shard: 2, of: 8 }
-          - { leg: windows-latest, os: windows-latest, shard: 3, of: 8 }
-          - { leg: windows-latest, os: windows-latest, shard: 4, of: 8 }
-          - { leg: windows-latest, os: windows-latest, shard: 5, of: 8 }
-          - { leg: windows-latest, os: windows-latest, shard: 6, of: 8 }
-          - { leg: windows-latest, os: windows-latest, shard: 7, of: 8 }
-          - { leg: windows-latest, os: windows-latest, shard: 8, of: 8 }
+          - { leg: windows-latest, os: windows-latest, shard: 1, of: 9 }
+          - { leg: windows-latest, os: windows-latest, shard: 2, of: 9 }
+          - { leg: windows-latest, os: windows-latest, shard: 3, of: 9 }
+          - { leg: windows-latest, os: windows-latest, shard: 4, of: 9 }
+          - { leg: windows-latest, os: windows-latest, shard: 5, of: 9 }
+          - { leg: windows-latest, os: windows-latest, shard: 6, of: 9 }
+          - { leg: windows-latest, os: windows-latest, shard: 7, of: 9 }
+          - { leg: windows-latest, os: windows-latest, shard: 8, of: 9 }
+          - { leg: windows-latest, os: windows-latest, shard: 9, of: 9 }
     runs-on: ${{ matrix.os }}
     # PBI-1.36: GitHub's default is 6 hours. The slowest shard takes about
     # 12 min, plus about 3 when bash 3.2 is built; a stalled job is
