@@ -950,9 +950,11 @@ make_stub_npm() { write_stand_in "$1" "$STUB_NPM_TEXT"; }
 # `--list-sdks`, as dotnet prints it: one line for each SDK, "<version>
 # [<folder>]", from the file dotnet-sdks next to the log (no file: no SDK,
 # as on a computer that has only a runtime, no output and exit 0). Any
-# other call fails loudly (exit 64). STUB_DOTNET_RC=<n>: it prints nothing
-# and exits with n (127: as a missing command does). STUB_DOTNET_CRLF set:
-# its lines end in CR LF, as dotnet's do on Windows.
+# other call fails loudly (exit 64). STUB_DOTNET_RC=<n>: it prints the
+# listing, as without it, and then exits with n (127: as a missing command
+# does; a listing with a failing exit code is what a dotnet that breaks
+# half way gives). STUB_DOTNET_CRLF set: its lines end in CR LF, as
+# dotnet's do on Windows.
 IFS= read -r -d '' STUB_DOTNET_TEXT <<'STUB' || true
 set -euo pipefail
 : "${STUB_DOTNET_LOG:?stub dotnet: STUB_DOTNET_LOG is not set}"
@@ -960,10 +962,11 @@ printf '%s\n' "$*" >>"$STUB_DOTNET_LOG"
 if [ "$*" != "--list-sdks" ]; then
   echo "stub dotnet: no emulation for: $*" >&2; exit 64
 fi
-[ -z "${STUB_DOTNET_RC:-}" ] || exit "$STUB_DOTNET_RC"
 f="${STUB_DOTNET_LOG%/*}/dotnet-sdks"
-[ -f "$f" ] || exit 0
-if [ -n "${STUB_DOTNET_CRLF:-}" ]; then awk '{ printf "%s\r\n", $0 }' "$f"; else cat "$f"; fi
+if [ -f "$f" ]; then
+  if [ -n "${STUB_DOTNET_CRLF:-}" ]; then awk '{ printf "%s\r\n", $0 }' "$f"; else cat "$f"; fi
+fi
+exit "${STUB_DOTNET_RC:-0}"
 STUB
 make_stub_dotnet() { write_stand_in "$1" "$STUB_DOTNET_TEXT"; }
 
@@ -17633,13 +17636,25 @@ test_the_dotnet_check_reads_dotnets_output_as_it_comes_and_fails_as_a_missing_do
   ! chk || die "an empty list was accepted"
   rm "$d/dotnet-sdks"
   ! chk || die "no listing was accepted"
+  # CR LF line ends, both ways: the folder form (the CR is after the
+  # space) and a bare version, where the CR is part of the last word.
   sdk_lines "$d" 10.0.100
-  chk STUB_DOTNET_CRLF=1 || die "10.0.100 with CR LF line ends was not accepted"
+  chk STUB_DOTNET_CRLF=1 || die "10.0.100 [folder] with CR LF line ends was not accepted"
   sdk_lines "$d" 10.0.99
-  ! chk STUB_DOTNET_CRLF=1 || die "10.0.99 with CR LF line ends was accepted"
+  ! chk STUB_DOTNET_CRLF=1 || die "10.0.99 [folder] with CR LF line ends was accepted"
+  printf '%s\n' 10.0.100 >"$d/dotnet-sdks"
+  chk STUB_DOTNET_CRLF=1 || die "a bare 10.0.100 with CR LF line ends was not accepted"
+  printf '%s\n' 10.0.99 >"$d/dotnet-sdks"
+  ! chk STUB_DOTNET_CRLF=1 || die "a bare 10.0.99 with CR LF line ends was accepted"
+  printf '%s\n' 9.0.300 10.0.404 >"$d/dotnet-sdks"
+  chk STUB_DOTNET_CRLF=1 || die "10.0.404 after another SDK, with CR LF line ends, was not accepted"
+  # A dotnet that lists an in-range SDK and then exits with an error
+  # (127: as a missing command does; 1) is no SDK: the listing of a
+  # failing dotnet is not trusted.
   sdk_lines "$d" 10.0.100
-  ! chk STUB_DOTNET_RC=127 || die "a dotnet that is not found was accepted"
-  ! chk STUB_DOTNET_RC=1 || die "a dotnet that listed an SDK and failed was accepted"
+  chk || die "the listing alone was not accepted (test is stale)"
+  ! chk STUB_DOTNET_RC=127 || die "a dotnet that lists 10.0.100 and exits 127 was accepted"
+  ! chk STUB_DOTNET_RC=1 || die "a dotnet that lists 10.0.100 and exits 1 was accepted"
   # A missing program at the place BOOTSTRAP_DOTNET names fails the same way.
   ! chk "OVERRIDE=$d/not-there" || die "a missing dotnet was accepted"
 }

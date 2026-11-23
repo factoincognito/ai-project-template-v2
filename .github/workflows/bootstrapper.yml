@@ -31,8 +31,10 @@
 #   Each leg runs as shards (PBI-1.18; one leg took up to 76 min
 #   on Windows), as many as that OS's total test time needs (PBI-1.25:
 #   4 on ubuntu, 8 on the bash 3.2 leg, whose tests took 1061 to 1271 s a
-#   shard with 4 (about 2.4 times ubuntu's), 8 on Windows, whose tests
-#   take about 2.5 times as long as ubuntu's), split by the measured time
+#   shard with 4 (about 2.4 times ubuntu's), 9 on Windows, whose tests
+#   take about 2.5 times as long as ubuntu's: with 8, the slowest shard
+#   was about 670 s, above the 660 s that bootstrap/test.sh allows), split
+#   by the measured time
 #   of each test on that leg (bootstrap/test-durations.txt, PBI-1.22; the
 #   bash 3.2 leg has a column of its own, PBI-1.36; the macos-latest
 #   column is kept for PBI-1.27); each shard records the

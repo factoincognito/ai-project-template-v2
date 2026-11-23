@@ -192,7 +192,7 @@ these values; a stop at one of them is a stand-in artefact:
 - the checks of GitHub are instant, so the wait for `build` shows no
   signs of life;
 - the answers are written after their questions by the test, as a
-  terminal would show them; the line of dashes between the two runs is
+  terminal would show them; the lines of dashes between the runs are
   the test's.
 
 ## The pass rule
