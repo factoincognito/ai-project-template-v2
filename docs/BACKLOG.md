@@ -249,6 +249,18 @@ get a working project in any supported language.
 
   **Done when.** Written when specced.
 
+- **[LATER] PBI-1.77** (Adam, 2026-11-23 23:41, in chat, "lets ignore it for now. make a later pbi for it", after Clead's recommendation of 23:38; not yet specced, reviewed or intent-approved; Adam's decision needed on what the script offers) — A private project on a plan that cannot protect it: offer the ways on as one choice at the terminal, in the run that meets GitHub's refusal.
+
+  **Facts (read in `bootstrap/stubs/bootstrap-project.sh` at `c0880fc`, 2026-11-23; the script was not run for this entry).**
+  - `protect_main` stops on GitHub's 403 for a private project on a plan without protection. Its guide (`guide_protect`) names three ways on: upgrade the plan, make the project public, or carry on without protection with `--allow-unprotected`.
+  - At a terminal, `offer_public` then asks only "Make the project public now?", the one way that cannot be undone. On "no" the run ends with the plain `--again` command, which meets the same refusal again; the `--allow-unprotected` command appears only in the guide printed above it.
+  - The script cannot read the plan before it creates the project (the design in `docs/BACKLOG-DONE.md`, "Private repo, no protection possible"), so on a free plan it warns before creating the project and stops right after.
+  - A person who ran the setup on a private project in a free-plan organisation hit it on 2026-11-23, said no to going public, and had to find the other command in the guide.
+
+  **Proposal (Clead's; Adam has not decided it).** Replace the yes/no with a choice of the three ways at a terminal, acted on in the same run: (a) carry on unprotected, which writes the decision into the project's `memory/decisions.md` as `--allow-unprotected` does today; (b) make the project public, still behind its own typed `yes` that `--yes` does not cover; (c) stop to upgrade the plan. The closing command matches the choice. `--non-interactive` keeps today's behaviour.
+
+  **Done when.** Adam has decided what the script offers; a specification is approved; the change is made test-first (`RULES.md` § 30, L § 5) with a test for each choice.
+
 
 - **[LATER] PBI-1.24** (Adam, 2026-10-29, from a product office session on PO-62; the WHAT is Adam's, the HOW is Clead's; not yet specced, reviewed or intent-approved) — A setup option for whether a project includes Claude support.
 
