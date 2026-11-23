@@ -24,7 +24,7 @@
 | `src/Example.App/` | A console app that uses the library. `Program.Main` hands its work to `Program.Run`, which takes the output writer, so tests can call it |
 | `tests/Example.Tests/` | The xUnit v3 test project, for both |
 
-`Example` is a starter: rename the projects, folders and namespaces to the project's own (and the paths in `Project.slnx` with them), and replace the starter code and its tests. A new project goes under `src/` (a test project under `tests/`), and into the solution: `dotnet sln add src/<Name>/<Name>.csproj`. The test project's glob picks it up, so its code needs tests before the gate passes.
+`Example` is a starter: rename the projects, folders and namespaces to the project's own (and the paths in `Project.slnx` with them), and replace the starter code and its tests. A new project goes under `src/` (a test project under `tests/`), and into the solution: `dotnet sln add src/<Name>/<Name>.csproj`. The test project's glob picks it up, so its code needs tests before the gate passes. Every project under `src/` must therefore target a framework the `net10.0` test project can reference; web, desktop and mobile projects are outside this pack.
 
 ### First-time setup
 
