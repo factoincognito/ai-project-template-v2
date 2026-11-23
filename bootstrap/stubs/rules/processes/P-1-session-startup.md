@@ -20,7 +20,7 @@ P-1 § 3 Capabilities
 P-1 § 4 State of the work
 (1) The session reads the project's decisions file and its `STATUS.md` in full, in the way P-1 § 9 sets out. Of the project's backlog it reads the open entries: the section "Waiting for the product owner" and the entries marked `NOW`, `NEXT` and `BLOCKED`.
 (2) It lists the open PRs and the branches other than the default branch in this repository, and in each other repository its work touches, and checks whether a review is waiting.
-(3) Where a project keeps a staging file (`docs/NEXT_SESSION.md`), the session reads and triages it; every entry it touches gets a disposition in accordance with Process P-8 § 4.
+(3) Where a project its work touches keeps a staging file (`docs/NEXT_SESSION.md`), the session finds the entries its task touches by searching the file for the task's subject, reads those entries and not the rest (P-1 § 11 (1)). It does this before the startup report of P-1 § 10 where the product owner's first message names the task, and otherwise before it first changes a file of that project. Every entry it touches gets a disposition in accordance with Process P-8 § 4.
 (4) It derives the current item from the open PRs and the project's backlog.
 (5) In its first reply, a session the product owner starts names every entry of the project's backlog not marked `DONE` that is due within the next seven days or overdue, with its date.
 
