@@ -24,8 +24,8 @@ project's files and every change to them) and a copy of it on your
 computer. In it:
 
 - The starting files for the kind of software you choose: a website or
-  web app, a program in TypeScript, a program in Python, or a mobile
-  app for phones and tablets.
+  web app, a program in TypeScript, a program in Python, a program in
+  C#, or a mobile app for phones and tablets.
 - Checks that GitHub runs on every proposed change, and a main version
   that only takes a change once its checks have passed.
 - Files where Claude keeps the plan, the decisions and the status of
