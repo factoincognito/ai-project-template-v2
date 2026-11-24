@@ -171,6 +171,7 @@ In these Rules:
 
 § 32 Engineering standards
 (1) A project's code meets the code standards of the language pack it uses. Its CI, branch protection and development setup follow Process P-11.
+(2) A public repository to whose content AI contributed says so in its README, in one sentence that names the AI and leaves the extent open. A private repository says so when it becomes public.
 
 ## Chapter 7. Sessions and agents
 
