@@ -9,6 +9,10 @@ the entry point. A project made from it gets everything its agents need:
 the public edition of the Rules in `rules/`, its own `RULES.md` and a
 `CLAUDE.md` that points to both.
 
+This project was developed with the assistance of AI (Claude, by
+Anthropic); the extent varies by contribution, and commits made with it
+carry a Co-Authored-By trailer.
+
 ## Setup
 
 ### Prerequisites
