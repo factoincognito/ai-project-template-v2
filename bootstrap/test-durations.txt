@@ -337,6 +337,7 @@ test_stopping_at_a_guide_prints_the_command_to_start_again 0.4 0.6 4.0 0.5
 test_stub_gh_fails_loudly_without_a_log 0.1 0.1 0.1 0.1
 test_stub_readme_branch_protection_points_to_the_runbook 0.1 0.1 0.1 0.1
 test_stub_readme_keeps_the_setup_heading_and_its_setup_boundary 0.1 0.1 0.1 0.1
+test_stub_readme_says_the_project_was_developed_with_ai 0.1 0.1 0.4 0.1
 test_stub_readme_setup_section_has_no_pack_table_and_no_numbered_steps 0.1 0.1 0.1 0.1
 test_stub_readme_setup_section_is_three_lines_with_the_resume_command 0.1 0.1 0.2 0.1
 test_stub_readme_working_from_another_computer 0.1 0.1 0.4 0.1
