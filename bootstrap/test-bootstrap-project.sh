@@ -17291,6 +17291,19 @@ test_bootstrapper_readme_draft_has_no_banned_words_and_the_stubs_resume_command(
   [ "$(sed 's/^ *//' "$STUB_README" | grep -cxF -- "$want" || true)" -eq 1 ] || die "the stub README lacks the line: $want"
 }
 
+test_stub_readme_says_the_project_was_developed_with_ai() {
+  # RULES.md § 32 (2) of the product office: a public repository to whose
+  # content AI contributed says so in its README. The stub is the README a
+  # new project starts with, so it carries the sentence.
+  local want joined
+  want='This project was developed with the assistance of AI (Claude, by Anthropic); the extent varies by contribution, and commits made with it carry a Co-Authored-By trailer.'
+  joined="$(tr '\n' ' ' <"$STUB_README" | sed 's/  */ /g')"
+  case "$joined" in
+    *"$want"*) ;;
+    *) die "the stub README lacks the AI-assistance sentence" ;;
+  esac
+}
+
 test_stub_readme_working_from_another_computer() {
   # PBI-1.29 item 7: written steps for another computer: step 0 of the
   # bootstrapper's README, never its step 1, a copy with gh repo clone,

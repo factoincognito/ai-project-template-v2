@@ -7,6 +7,10 @@ A project run with the Clead + Crog workflow. The product owner,
 how, and Crog (Claude Code, Senior Developer) implements. Everything
 the agents need lives in this repo: `CLAUDE.md` is the entry point.
 
+This project was developed with the assistance of AI (Claude, by
+Anthropic); the extent varies by contribution, and commits made with it
+carry a Co-Authored-By trailer.
+
 ## Finishing the setup
 
 If you see this, the setup of this project has not finished. Until it has, this project's GitHub page shows the bootstrapper's README (the file `.github/README.md`): do its step 0 to install gh and sign in, then run the command below in Git Bash (Windows) or a terminal (Linux; the setup does not support macOS for now), with OWNER and NAME taken from this project's web address, https://github.com/OWNER/NAME:
