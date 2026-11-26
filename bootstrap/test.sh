@@ -2181,6 +2181,71 @@ test_coverage_run_maps_only_true_copies_onto_their_scripts() {
   grep -E '^ *[0-9.]+% ' "$d/gate.out" | diff "$d/want" - >&2 || die "the per-script figures differ (want, then got)"
 }
 
+test_coverage_run_maps_a_stamped_copy_only_for_the_stamps_build_sh_writes() {
+  # build.sh stamps a version of the form vN.N.N and a commit of 40 hex
+  # digits, in either case (its commit check accepts both). run maps a
+  # stamped copy only when each stamp has exactly that form and the rest of
+  # the line is the script's: a version without the v, with a part more or
+  # less, a suffix or a letter, a commit one digit short or long or holding
+  # a letter that is no digit, an empty stamp, and text before or after the
+  # stamp on its line are no copies. One suite run per copy, so that the
+  # run's own count says which way it went. tools/p.sh has its stamp at the
+  # end of a line, which the end of the pattern must hold.
+  local d="$WORK/cov" want script v c lead base n=0 lo hi mix
+  lo=0123456789abcdef0123456789abcdef01234567
+  hi=0123456789ABCDEF0123456789ABCDEF01234567
+  mix=0123456789abcdefABCDEF0123456789abcdef01
+  cov_repo "$d/repo"
+  printf '%s\n' '#!/usr/bin/env bash' '# stamp: {{TEMPLATE_COMMIT}}' >"$d/repo/tools/p.sh"
+  cov_fakes "$d"
+  # want|script|version|commit|text put before the second line
+  while IFS='|' read -r want script v c lead; do
+    [ -n "$want" ] || continue
+    n=$((n + 1))
+    base="$(basename "$script")"
+    cat >"$d/suite.sh" <<FAKE
+#!/usr/bin/env bash
+set -e
+mkdir -p "\$TMPDIR/x1"
+sed -e 's/{{TEMPLATE_VERSION}}/$v/' -e 's/{{TEMPLATE_COMMIT}}/$c/' -e '2s/^/$lead/' "$d/repo/$script" >"\$TMPDIR/x1/$base"
+FAKE
+    printf '{"suite": {"coverage": {"@TMP@/x1/%s": {"lines": [null, 1, 1, 1]}}, "timestamp": 1}}\n' "$base" >"$d/result"
+    rm -rf "$d/results" "$d/tmp"
+    cov_run "$d"
+    [ "$RC" -eq 0 ] || {
+      cat "$d/out" >&2
+      die "row $n ($script, version '$v', commit '$c', before '$lead'): run failed (exit $RC)"
+    }
+    if [ "$want" = map ]; then
+      got='suite: 1 copies mapped onto their scripts, 0 files named like a counted script left out (not copies)'
+    else
+      got='suite: 0 copies mapped onto their scripts, 1 files named like a counted script left out (not copies)'
+    fi
+    grep -qF "$got" "$d/out" || {
+      cat "$d/out" >&2
+      die "row $n ($script, version '$v', commit '$c', before '$lead'): want it $want"
+    }
+  done <<ROWS
+map|bootstrap/stubs/s.sh|v1.2.3|$lo|
+map|bootstrap/stubs/s.sh|v10.20.30|$hi|
+map|bootstrap/stubs/s.sh|v1.2.3|$mix|
+drop|bootstrap/stubs/s.sh|v1.2|$lo|
+drop|bootstrap/stubs/s.sh|1.2.3|$lo|
+drop|bootstrap/stubs/s.sh|v1.2.3.4|$lo|
+drop|bootstrap/stubs/s.sh|v1.2.3-rc1|$lo|
+drop|bootstrap/stubs/s.sh|va.b.c|$lo|
+drop|bootstrap/stubs/s.sh||$lo|
+drop|bootstrap/stubs/s.sh|v1.2.3|${lo%?}|
+drop|bootstrap/stubs/s.sh|v1.2.3|${lo}8|
+drop|bootstrap/stubs/s.sh|v1.2.3|g${lo#?}|
+drop|bootstrap/stubs/s.sh|v1.2.3||
+map|tools/p.sh||$lo|
+drop|tools/p.sh||${lo}x|
+drop|tools/p.sh||$lo|x
+ROWS
+  [ "$n" -eq 16 ] || die "the table has $n rows, want 16"
+}
+
 test_coverage_run_gives_the_suite_its_own_tmpdir_and_removes_it() {
   # The suite runs with BOOTSTRAP_TEST_KEEP_COPIES=1 (its harness keeps
   # the copies) and a TMPDIR of its own, which run removes once the copies
