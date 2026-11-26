@@ -14,6 +14,9 @@ A bootstrapped project records the tag it was built from.
 ### Added
 - NEXT_SESSION: the newcomer pre-check on the v2.11.0 candidate, one stop, not a defect (the release prep is PR #524, which no release lists), and `STATUS.md` after the release (PR #526)
 
+### Fixed
+- The line coverage run (`bootstrap/coverage.rb`) maps a stamped copy of a script whose commit stamp has upper-case hex digits, as `bootstrap/build.sh` accepts them, and a test pins the shapes of both stamps on the side where a copy is refused (PBI-1.54, item (3)) (PR #537)
+
 ## [2.11.0] — 2026-11-23
 
 ### Added
