@@ -2237,15 +2237,23 @@ drop|bootstrap/stubs/s.sh|va.b.c|$lo|
 drop|bootstrap/stubs/s.sh|v1..3|$lo|
 drop|bootstrap/stubs/s.sh|v1.2.|$lo|
 drop|bootstrap/stubs/s.sh||$lo|
+drop|bootstrap/stubs/s.sh|v.2.3|$lo|
+drop|bootstrap/stubs/s.sh|va.2.3|$lo|
+drop|bootstrap/stubs/s.sh|v1.b.3|$lo|
+drop|bootstrap/stubs/s.sh|v1.2.c|$lo|
+drop|bootstrap/stubs/s.sh|v1x2.3|$lo|
+drop|bootstrap/stubs/s.sh|v1.2x3|$lo|
+drop|bootstrap/stubs/s.sh|V1.2.3|$lo|
 drop|bootstrap/stubs/s.sh|v1.2.3|${lo%?}|
 drop|bootstrap/stubs/s.sh|v1.2.3|${lo}8|
 drop|bootstrap/stubs/s.sh|v1.2.3|g${lo#?}|
+drop|bootstrap/stubs/s.sh|v1.2.3|G${lo#?}|
 drop|bootstrap/stubs/s.sh|v1.2.3||
 map|tools/p.sh||$lo|
 drop|tools/p.sh||${lo}x|
 drop|tools/p.sh||$lo|x
 ROWS
-  [ "$n" -eq 18 ] || die "the table has $n rows, want 18"
+  [ "$n" -eq 26 ] || die "the table has $n rows, want 26"
 }
 
 test_coverage_run_gives_the_suite_its_own_tmpdir_and_removes_it() {
