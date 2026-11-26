@@ -22,7 +22,7 @@ def add(a, b)
   end
 end
 
-STAMPS = { "{{TEMPLATE_VERSION}}" => "v[0-9]+\\.[0-9]+\\.[0-9]+", "{{TEMPLATE_COMMIT}}" => "[0-9a-f]{40}" }.freeze
+STAMPS = { "{{TEMPLATE_VERSION}}" => "v[0-9]+\\.[0-9]+\\.[0-9]+", "{{TEMPLATE_COMMIT}}" => "[0-9a-fA-F]{40}" }.freeze
 
 def copy_of?(copy, script)
   c = begin
