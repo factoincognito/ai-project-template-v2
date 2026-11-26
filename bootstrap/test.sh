@@ -2234,6 +2234,8 @@ drop|bootstrap/stubs/s.sh|1.2.3|$lo|
 drop|bootstrap/stubs/s.sh|v1.2.3.4|$lo|
 drop|bootstrap/stubs/s.sh|v1.2.3-rc1|$lo|
 drop|bootstrap/stubs/s.sh|va.b.c|$lo|
+drop|bootstrap/stubs/s.sh|v1..3|$lo|
+drop|bootstrap/stubs/s.sh|v1.2.|$lo|
 drop|bootstrap/stubs/s.sh||$lo|
 drop|bootstrap/stubs/s.sh|v1.2.3|${lo%?}|
 drop|bootstrap/stubs/s.sh|v1.2.3|${lo}8|
@@ -2243,7 +2245,7 @@ map|tools/p.sh||$lo|
 drop|tools/p.sh||${lo}x|
 drop|tools/p.sh||$lo|x
 ROWS
-  [ "$n" -eq 16 ] || die "the table has $n rows, want 16"
+  [ "$n" -eq 18 ] || die "the table has $n rows, want 18"
 }
 
 test_coverage_run_gives_the_suite_its_own_tmpdir_and_removes_it() {
